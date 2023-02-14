@@ -68,14 +68,17 @@ THIRD_PARTY_APPS = [
 ]
 
 LOCAL_APPS = [
+    'usuario',
+    'dados_comuns',
     'bem_patrimonial',
-    'dados_comuns'
 ]
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
+
+AUTH_USER_MODEL = 'usuario.Usuario'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -234,3 +237,8 @@ LOGGING = {
     },
     "root": {"level": "INFO", "handlers": ["console"]},
 }
+
+
+ADMIN_SITE_TITLE = 'Bens Físicos'
+ADMIN_SITE_HEADER = 'Bens Físicos'
+ADMIN_INDEX_TITLE = 'Bens Físicos'
