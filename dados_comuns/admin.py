@@ -1,3 +1,5 @@
 from django.contrib import admin
+from django import forms
+from dados_comuns.models import UnidadeAdministrativa
 
-# Register your models here.
+admin.site.register(UnidadeAdministrativa)
