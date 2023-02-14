@@ -7,7 +7,7 @@ from rangefilter.filters import DateRangeFilter
 
 class BemPatrimonialAdmin(ImportExportModelAdmin):
     model = BemPatrimonial
-    list_display = ('id', 'descricao', 'criado_em', )
+    list_display = ('id', 'descricao', 'criado_por', 'criado_em', )
     search_fields = ('nome', 'descricao', 'marca', 'modelo', 'localizacao', )
     search_help_text = 'Pesquise por nome, descrição, marca, modelo ou localização.'
 
@@ -26,6 +26,13 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         'localizacao',
         'numero_serie',
     )
+
+    def save_model(self, request, obj, form, change):
+        if obj.id is None:
+            obj.criado_por = request.user
+            super().save_model(request, obj, form, change)
+        else:
+            super().save_model(request, obj, form, change)
 
 
 admin.site.register(BemPatrimonial, BemPatrimonialAdmin)

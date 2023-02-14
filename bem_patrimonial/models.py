@@ -1,5 +1,6 @@
 from datetime import datetime
 from django.db import models
+from usuario.models import Usuario
 
 ORIGENS = (
     (1, "Repasse de verba"),
@@ -30,6 +31,7 @@ class BemPatrimonial(models.Model):
     localizacao = models.CharField("Localização", max_length=255, null=True, blank=True)
     numero_serie = models.PositiveIntegerField("Número de série", null=True, blank=True)
     # controle
+    criado_por = models.ForeignKey(Usuario, verbose_name="Criado por", on_delete=models.SET_NULL, null=True, blank=True)
     criado_em = models.DateTimeField("Criado em", auto_now=True)
     atualizado_em = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
 
