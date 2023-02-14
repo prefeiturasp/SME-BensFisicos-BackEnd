@@ -67,7 +67,10 @@ THIRD_PARTY_APPS = [
     'rangefilter',
 ]
 
-LOCAL_APPS = []
+LOCAL_APPS = [
+    'bem_patrimonial',
+    'dados_comuns'
+]
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
 
