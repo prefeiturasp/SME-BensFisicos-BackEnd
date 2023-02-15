@@ -1,6 +1,4 @@
-# API e Admin para site Projetos Rápidos
-
-> COTIC-DISIS tem uma equipe exclusiva para realização de pequenas demandas da Secretaria Municipal de Educação de São Paulo. Esta frente de desenvolvimento é focada em demandas mais simples, mas que apoiarão uma parte de seu trabalho no dia a dia ou que ajudarão você e sua equipe em iniciativas pontuais.
+# Sistema de cadastro de bens físicos para o setor de Bens Patrimoniais da SME.
 
 ## Prerequisitos
 
@@ -28,15 +26,9 @@ Pronto. Agora você pode acessar seu localhost/admin e logar com as credenciais 
 
 ## Funcionalidades
 
-Via Django Admin
-
-- CRUD solicitações, mensagens de contato e seções.
-- Filtros solicitações
-- Exportação de relatórios
-
-Via API
-
-- Criação de solicitação, criação de mensagem e busca de seções da landing page.
+- CRUD de bens patrimoniais
+- CRUD de usuários
+- CRUD de unidades administrativas
 
 ## Rodar os testes
 
