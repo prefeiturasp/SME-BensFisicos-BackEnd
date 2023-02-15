@@ -26,7 +26,7 @@ pipeline {
           steps {
               withSonarQubeEnv('sonarqube-local'){
                 sh 'echo "[ INFO ] Iniciando analise Sonar..." && sonar-scanner \
-                -Dsonar.projectKey=SME-ProjetosRapidos-BackEnd \
+                -Dsonar.projectKey=SME-BensFisicos-BackEnd \
                 -Dsonar.sources=.'
             }
           }
@@ -36,7 +36,7 @@ pipeline {
           when { anyOf { branch 'master'; branch 'main'; branch "story/*"; branch 'development'; branch 'develop'; branch 'release'; branch 'homolog';  } } 
           steps {
             script {
-              imagename1 = "registry.sme.prefeitura.sp.gov.br/${env.branchname}/projetosrapidos-back"
+              imagename1 = "registry.sme.prefeitura.sp.gov.br/${env.branchname}/bensfisicos-back"
               dockerImage1 = docker.build(imagename1, "-f Dockerfile .")
               docker.withRegistry( 'https://registry.sme.prefeitura.sp.gov.br', registryCredential ) {
               dockerImage1.push()
@@ -52,7 +52,7 @@ pipeline {
                 script{                        
                     withCredentials([file(credentialsId: "${kubeconfig}", variable: 'config')]){
                         sh('cp $config '+"$home"+'/.kube/config')
-                        sh 'kubectl rollout restart deployment/projetosrapidos-back -n sme-projetosrapidos'                            
+                        sh 'kubectl rollout restart deployment/bensfisicos-back -n sme-bensfisicos'                            
                     }                    
                 }
             }           
