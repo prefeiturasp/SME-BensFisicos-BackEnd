@@ -1,0 +1,306 @@
+{% extends "admin/base.html" %}
+
+{% block extrastyle %}
+<style>
+  /* :root {
+    --primary-color: rgb(0 92 172);
+    --primary-color-faded: rgb(0 92 172);
+    --secondary-color: rgb(0 92 172);
+    --button-color: rgb(0 92 172);
+    --button-secundary-color: rgb(0 92 172);
+  } */
+  html[data-theme="light"],
+  /* html[data-theme="dark"], */
+  :root {
+    --primary: rgb(20, 159, 103);
+    --secondary: rgb(20, 159, 103);
+    --accent: #73cba4;
+    --primary-fg: #fff;
+    --header-color: #ccffe8;
+    --darkened-bg: #f5fffa;
+
+    --header-color: #ffc;
+    --header-branding-color: var(--accent);
+    --header-bg: var(--secondary);
+    --header-link-color: var(--primary-fg);
+
+    --breadcrumbs-fg: #c4dce8;
+    --breadcrumbs-link-fg: var(--body-bg);
+    --breadcrumbs-bg: var(--primary);
+
+    --link-fg: #417893;
+    --link-hover-color: #036;
+    --link-selected-fg: #5b80b2;
+
+    --hairline-color: #e8e8e8;
+    --border-color: #ccc;
+
+    --error-fg: #ba2121;
+
+    --message-success-bg: #dfd;
+    --message-warning-bg: #ffc;
+    --message-error-bg: #ffefef;
+
+    --darkened-bg: #f8f8f8; /* A bit darker than --body-bg */
+    --selected-bg: #e4e4e4; /* E.g. selected table cells */
+    --selected-row: #ffc;
+
+    --button-fg: #fff;
+    --button-bg: var(--primary);
+    --button-hover-bg: #609ab6;
+    --default-button-bg: var(--secondary);
+    --default-button-hover-bg: #205067;
+    --close-button-bg: #747474;
+    --close-button-hover-bg: #333;
+    --delete-button-bg: #ba2121;
+    --delete-button-hover-bg: #a41515;
+
+    --object-tools-fg: var(--button-fg);
+    --object-tools-bg: var(--close-button-bg);
+    --object-tools-hover-bg: var(--close-button-hover-bg);
+  }
+
+  /* LINKS */
+
+a:link, a:visited {
+    color: var(--link-fg);
+    text-decoration: none;
+    transition: color 0.15s, background 0.15s;
+}
+
+a:focus, a:hover {
+    color: var(--link-hover-color);
+}
+
+a:focus {
+    text-decoration: underline;
+}
+
+a img {
+    border: none;
+}
+
+a.section:link, a.section:visited {
+    color: var(--header-link-color);
+    text-decoration: none;
+}
+
+a.section:focus, a.section:hover {
+    text-decoration: underline;
+}
+
+/* GLOBAL DEFAULTS */
+
+p, ol, ul, dl {
+    margin: .2em 0 .8em 0;
+}
+
+p {
+    padding: 0;
+    line-height: 140%;
+}
+
+h1,h2,h3,h4,h5 {
+    font-weight: bold;
+}
+
+h1 {
+    margin: 0 0 20px;
+    font-weight: 300;
+    font-size: 1.25rem;
+    color: var(--body-quiet-color);
+}
+
+h2 {
+    font-size: 1rem;
+    margin: 1em 0 .5em 0;
+}
+
+h2.subhead {
+    font-weight: normal;
+    margin-top: 0;
+}
+
+h3 {
+    font-size: 0.875rem;
+    margin: .8em 0 .3em 0;
+    color: var(--body-quiet-color);
+    font-weight: bold;
+}
+
+h4 {
+    font-size: 0.75rem;
+    margin: 1em 0 .8em 0;
+    padding-bottom: 3px;
+}
+
+h5 {
+    font-size: 0.625rem;
+    margin: 1.5em 0 .5em 0;
+    color: var(--body-quiet-color);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+ul > li {
+    list-style-type: square;
+    padding: 1px 0;
+}
+
+li ul {
+    margin-bottom: 0;
+}
+
+li, dt, dd {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+
+dt {
+    font-weight: bold;
+    margin-top: 4px;
+}
+
+dd {
+    margin-left: 0;
+}
+
+form {
+    margin: 0;
+    padding: 0;
+}
+
+fieldset {
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    border-top: 1px solid var(--hairline-color);
+}
+
+blockquote {
+    font-size: 0.6875rem;
+    color: #777;
+    margin-left: 2px;
+    padding-left: 10px;
+    border-left: 5px solid #ddd;
+}
+
+code, pre {
+    font-family: var(--font-family-monospace);
+    color: var(--body-quiet-color);
+    font-size: 0.75rem;
+    overflow-x: auto;
+}
+
+pre.literal-block {
+    margin: 10px;
+    background: var(--darkened-bg);
+    padding: 6px 8px;
+}
+
+code strong {
+    color: #930;
+}
+
+hr {
+    clear: both;
+    color: var(--hairline-color);
+    background-color: var(--hairline-color);
+    height: 1px;
+    border: none;
+    margin: 0;
+    padding: 0;
+    line-height: 1px;
+}
+
+  /* ::selection {
+    background: var(--secondary-color);
+    color:var(--primary-color);
+    opacity:1
+  }
+
+  ::-moz-selection {
+    background: var(--secondary-color);
+    color:var(--primary-color);
+    opacity:1
+  } */
+  body {
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        'Segoe UI',
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif,
+        'Apple Color Emoji',
+        'Segoe UI Emoji',
+        'Segoe UI Symbol';
+  }
+  /* #header {
+    background: #f1f1f1;
+  }
+  .theme-toggle svg.theme-icon-when-dark, .theme-toggle svg.theme-icon-when-light{
+    color: var(--primary-color-faded);
+  }
+  #user-tools{
+    background-color: var(--primary-color-faded);
+    padding: 16px;
+    border-radius: 12px;
+  }
+  .module h2, .module caption, .inline-group h2 {
+    background-color: var(--primary-color-faded);
+  }
+  div.breadcrumbs {
+    background: var(--primary-color-faded);
+  }
+  a:link, a:visited {
+    color: var(--primary-color-faded);
+  }
+  .object-tools a:focus, .object-tools a:hover{
+    background-color: var(--primary-color);
+  }
+  .selector-chosen h2 {
+    background: var(--primary-color-faded) !important;
+  }
+  .button, input[type=submit], input[type=button], .submit-row input, a.button {
+    background: var(--button-color);
+  }
+  .button.default, input[type=submit].default, .submit-row input.default {
+    background: var(--primary-color);
+  }
+  .button:active, input[type=submit]:active, input[type=button]:active, .button:focus, input[type=submit]:focus, input[type=button]:focus, .button:hover, input[type=submit]:hover, input[type=button]:hover {
+    background: var(--button-secundary-color);
+    opacity: 0.8;
+  }
+  .button.default:active, input[type=submit].default:active, .button.default:focus, input[type=submit].default:focus, .button.default:hover, input[type=submit].default:hover {
+    background: var(--primary-color);
+    opacity: 0.8;
+  } 
+  #header{
+    padding: 25px 40px;
+  }
+  #branding img{
+    width: 100%;
+    height: 45px;
+    object-fit: contain;
+    border-radius: 33px;
+    overflow: initial;
+  } */
+</style>
+{% endblock %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Projetos Rápidos') }}{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block dark-mode-vars %}
+{{ block.super }}
+{% include "admin/color_theme_dark_mode.html" %}
+{% endblock %}
+
+{% block userlinks %}
+{{ block.super }}
+{% include "admin/color_theme_toggle.html" %}
+{% endblock %}
