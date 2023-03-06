@@ -1,8 +1,9 @@
 from django.contrib import admin
 from django import forms
-from bem_patrimonial.models import BemPatrimonial, HistoricoStatusBemPatrimonial, APROVADO
+from bem_patrimonial.models import BemPatrimonial, HistoricoStatusBemPatrimonial, APROVADO, NAO_APROVADO
 from import_export.admin import ImportExportModelAdmin
 from rangefilter.filters import DateRangeFilter
+from bem_patrimonial.emails import envia_email_cadastro_nao_aprovado
 
 
 class HistoricoStatusBemPatrimonialInline(admin.TabularInline):
@@ -57,6 +58,10 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             return BemPatrimonial.objects.filter(status=APROVADO, unidade_administrativa=request.user.unidade_administrativa)
         return BemPatrimonial.objects.filter(status=APROVADO)
 
+    def check_status(self, instance):
+        if instance.status is NAO_APROVADO:
+            envia_email_cadastro_nao_aprovado(instance)
+
     def save_formset(self, request, form, formset, change):
         # print(formset.model)
         instances = formset.save(commit=False)
@@ -65,6 +70,8 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         for instance in instances:
             instance.atualizado_por = request.user
             instance.save()
+            self.check_status(instance)
+
         formset.save_m2m()
 
 
