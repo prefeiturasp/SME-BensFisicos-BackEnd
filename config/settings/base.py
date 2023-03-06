@@ -242,3 +242,6 @@ LOGGING = {
 ADMIN_SITE_TITLE = 'Bens Físicos'
 ADMIN_SITE_HEADER = 'Bens Físicos'
 ADMIN_INDEX_TITLE = 'Bens Físicos Admin'
+
+
+LOGIN_REDIRECT_URL = '/admin'
