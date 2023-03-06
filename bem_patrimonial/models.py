@@ -61,7 +61,8 @@ class BemPatrimonial(models.Model):
 
     def save(self, *args, **kwargs):
         self.atualizado_em = datetime.now()
-        self.unidade_administrativa = self.criado_por.unidade_administrativa
+        if self.criado_por:
+            self.unidade_administrativa = self.criado_por.unidade_administrativa
         return super(BemPatrimonial, self).save(*args, **kwargs)
 
 
