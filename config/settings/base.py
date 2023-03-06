@@ -65,12 +65,14 @@ THIRD_PARTY_APPS = [
     'import_export',
     'django_admin_listfilter_dropdown',
     'rangefilter',
+    'nested_admin'
 ]
 
 LOCAL_APPS = [
     'usuario',
     'dados_comuns',
     'bem_patrimonial',
+    'agendamento_suporte'
 ]
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
