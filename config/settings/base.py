@@ -245,3 +245,6 @@ ADMIN_INDEX_TITLE = 'Bens Físicos Admin'
 
 
 LOGIN_REDIRECT_URL = '/admin'
+
+
+ADMIN_URL = env('DJANGO_ADMIN_URL')

@@ -1,10 +1,13 @@
 import datetime
 from django.test import TestCase
-from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial.models import BemPatrimonial, APROVADO, NAO_APROVADO, AGUARDANDO_APROVACAO
+from usuario.tests import tests_models as usuariotests_models
 
 
 class SetupData:
     def create_instance(self):
+        setup_usuario = usuariotests_models.SetupData()
+        criado_por = setup_usuario.create_instance()
 
         obj = {
             "nome": "Mesa reta",
@@ -21,8 +24,9 @@ class SetupData:
             "numero_cimbpm": 4354534,
             "numero_patrimonial": None,
             "localizacao": "Escritório",
-            "numero_serie": None
-        }      
+            "numero_serie": None,
+            "criado_por": criado_por
+        }
         BemPatrimonial.objects.create(**obj)
 
 
@@ -36,6 +40,7 @@ class BemPatrimonialTestCase(TestCase):
     def test_get(self):
         instance = self.entity.objects.first()
         self.assertIsInstance(instance, self.entity)
+        self.assertEqual(instance.status, AGUARDANDO_APROVACAO)
 
     def test_update(self):
         instance = self.entity.objects.first()
@@ -49,3 +54,19 @@ class BemPatrimonialTestCase(TestCase):
 
         self.assertFalse(instance.id)
         self.assertIsInstance(instance, self.entity)
+
+    def test_nao_aprovado_status_change_sync(self):
+        instance = self.entity.objects.first()
+        instance.historicostatusbempatrimonial_set.create(
+            status=NAO_APROVADO
+        )
+        self.assertEqual(instance.status, instance.historicostatusbempatrimonial_set.last().status)
+        self.assertEqual(instance.status, NAO_APROVADO)
+
+    def test_aprovado_status_change_sync(self):
+        instance = self.entity.objects.first()
+        instance.historicostatusbempatrimonial_set.create(
+            status=APROVADO
+        )
+        self.assertEqual(instance.status, instance.historicostatusbempatrimonial_set.last().status)
+        self.assertEqual(instance.status, APROVADO)
