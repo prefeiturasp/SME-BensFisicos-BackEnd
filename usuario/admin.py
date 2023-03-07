@@ -5,6 +5,7 @@ from rangefilter.filters import DateRangeFilter
 from usuario.models import Usuario
 
 
+# TODO ajusta retorno de usuarios conforme GRUPO
 class CustomUserModelAdmin(UserAdmin):
     model = Usuario
     list_display = ('id', 'nome', 'email', 'unidade_administrativa', 'date_joined', )
