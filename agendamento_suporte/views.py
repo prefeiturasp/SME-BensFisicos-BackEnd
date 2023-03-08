@@ -17,6 +17,7 @@ class ConfigAgendaSuporteViewSet(viewsets.ViewSet):
         try:
             dia_semana = agenda.diasemana_set.get(dia_semana=dia)
         except Exception as e:
+            dia_semana = None
             print(e)
 
         horarios = []
@@ -27,9 +28,9 @@ class ConfigAgendaSuporteViewSet(viewsets.ViewSet):
                 _horarios = gerar_horarios(item.hora_inicio, item.hora_fim)
                 for _hr in _horarios:
                     horario_ja_esta_agendado = AgendamentoSuporte.objects.filter(data_agendada=data, hora_agendada=_hr).exists()
-                    if not horario_ja_esta_agendado:
+                    horario_valido = datetime.datetime.now().time() < datetime.datetime.strptime(_hr, '%H:%M').time()
+                    if not horario_ja_esta_agendado and horario_valido:
                         horarios.append(_hr)
 
         horarios_ordenados = sorted(horarios, key=lambda x: datetime.datetime.strptime(x, '%H:%M'))
-        # TODO retornar somente horários futuros.
         return Response(horarios_ordenados)
