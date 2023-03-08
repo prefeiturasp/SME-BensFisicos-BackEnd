@@ -2,13 +2,14 @@ import datetime
 from datetime import timedelta
 from django import forms
 from django.contrib import admin
-
+from django.conf import settings
 from agendamento_suporte.models import AgendamentoSuporte, ConfigAgendaSuporte, DiaSemana, IntervaloHoras
 from agendamento_suporte.emails import envia_email_alerta_novo_agendamento
 import nested_admin
 
 
 class AgendamentoSuporteForm(forms.ModelForm):
+    url = forms.CharField()
     data_agendada = forms.DateField(widget=forms.DateInput(
         attrs={
             'type': 'date',
@@ -21,9 +22,12 @@ class AgendamentoSuporteForm(forms.ModelForm):
 
     class Media:
         js = ('js/agendamento_suporte/select_horas.js', )
+        fields = ('url', )
 
     def __init__(self, *args, **kwargs):
         super(AgendamentoSuporteForm, self).__init__(*args, **kwargs)
+        self.initial['url'] = settings.API_URL
+
         if self.instance.pk:
             self.initial['data_agendada'] = self.instance.data_agendada.strftime('%Y-%m-%d')
             self.initial['hora_agendada'] = self.instance.hora_agendada.strftime('%H:%M')
@@ -32,7 +36,7 @@ class AgendamentoSuporteForm(forms.ModelForm):
 class AgendamentoSuporteAdmin(admin.ModelAdmin):
     model = AgendamentoSuporte
     list_display = ('id', 'agendado_por', 'data_agendada', 'hora_agendada', 'observacao', )
-    fields = ('data_agendada', 'hora_agendada', 'observacao', )
+    fields = ('data_agendada', 'hora_agendada', 'observacao', 'url',)
     form = AgendamentoSuporteForm
 
     def get_queryset(self, request):
