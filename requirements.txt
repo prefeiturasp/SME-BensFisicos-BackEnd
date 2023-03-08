@@ -12,6 +12,7 @@ django-excel-base==1.0.5
 django-excel-response2==3.0.3
 django-filter==22.1
 django-import-export==3.0.2
+django-nested-admin==4.0.2
 django-six==1.0.4
 djangorestframework==3.14.0
 et-xmlfile==1.1.0
@@ -23,9 +24,11 @@ Pillow==9.4.0
 psycopg2==2.9.5
 pycodestyle==2.10.0
 python-environ==0.4.54
+python-monkey-business==1.0.0
 pytz==2022.6
 PyYAML==6.0
 screen==1.0.1
+six==1.16.0
 sqlparse==0.4.3
 tablib==3.3.0
 tomli==2.0.1
