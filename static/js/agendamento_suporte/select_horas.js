@@ -1,14 +1,12 @@
 window.onload = function(){
-    // esconde campo timefield para trabalhar campo dinamico 
-    // field-horarios e atribuir o valor por debaixo dos panos.
+    // esconde campo hora agendada e utiliza apenas para pegar valor atual na edição
     document.getElementsByClassName('field-hora_agendada')[0].style.display = "none";
+    // esconde campo que define a url da api dinamicamente
+    document.getElementsByClassName('field-url')[0].style.display = "none";
 
-    let fieldset = document.getElementsByTagName('fieldset')[0]
-    let inputObs = document.getElementsByClassName('field-observacao')[0];
-    
+    // criação input select com label e opção padrão
     let divSelectHorarios = document.createElement('div');
-    divSelectHorarios.id = 'block';
-    divSelectHorarios.className = 'form-row field-horarios';
+    divSelectHorarios.className = 'form-row field-select_hora_agendada';
     
     let label = document.createElement('label')
     label.class = "required"
@@ -25,19 +23,24 @@ window.onload = function(){
     divSelectHorarios.appendChild(select);
 
     appendDefaultOption(select);
-
+    
+    // Adiciona campo select no formulário
+    let fieldset = document.getElementsByTagName('fieldset')[0]
+    let inputObs = document.getElementsByClassName('field-observacao')[0];
     fieldset.insertBefore(divSelectHorarios, inputObs);
 
     setupChangeForm();
 };
 
+// Sincroniza valor do input hora_agendada ao selecionar um horário.
 function onChangeSelect(){
     let select = document.getElementById('id_select_hora_agendada');
     let inputHoraAgendada = document.getElementById('id_hora_agendada');
     inputHoraAgendada.value = select.value;
 };
 
-// ON UPDATE FORM
+// Atualiza horários disponíveis, caso já tenha data preenchida.
+// Adiciona valor atual do select.
 function setupChangeForm(){
     let inputHoraAgendada = document.getElementById('id_hora_agendada');
     if (inputHoraAgendada.value){
@@ -45,6 +48,7 @@ function setupChangeForm(){
         appendOptionSelected(inputHoraAgendada.value)
     }
 }
+
 function appendOptionSelected(value) { 
     let select = document.getElementById('id_select_hora_agendada');
     let opt = document.createElement('option');
@@ -56,15 +60,15 @@ function appendOptionSelected(value) {
 
 function appendOptions(list) {
     let select = document.getElementById('id_select_hora_agendada');
-    
-    if(list.length){
-        for(let i = 0; i < list.length; i++){
-            let opt = document.createElement('option');
-            opt.value = list[i]
-            opt.innerHTML = list[i]
-            select.appendChild(opt);
-        }
-    } else {
+
+    for(let i = 0; i < list.length; i++){
+        let opt = document.createElement('option');
+        opt.value = list[i]
+        opt.innerHTML = list[i]
+        select.appendChild(opt);
+    }
+    // Reset select caso não tenha nenhum horário disponível
+    if(!list.length) {
         removeAllChildNodes(select);
         appendDefaultOption(select);
     }
@@ -86,8 +90,9 @@ function removeAllChildNodes(parent) {
 
 function onChangeDate(){
     inputDate = document.getElementById("id_data_agendada");
+    apiUrl = document.getElementById('id_url').value;
 
-    fetch(`http://localhost:8000/api/agenda/horarios_disponiveis/?data=${inputDate.value}`)
+    fetch(`${apiUrl}/agenda/horarios_disponiveis/?data=${inputDate.value}`)
     .then(function(response) {
         return response.json();
     })
