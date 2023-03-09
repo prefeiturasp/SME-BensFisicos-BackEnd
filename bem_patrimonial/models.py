@@ -75,6 +75,14 @@ class BemPatrimonial(models.Model):
             self.unidade_administrativa = self.criado_por.unidade_administrativa
         return super(BemPatrimonial, self).save(*args, **kwargs)
 
+    def atualizar_historico_unidade_administrativa(self, unidade, solicitacao=None):
+        self.unidade_administrativa = unidade
+        self.historicomovimentacaobempatrimonial_set.create(
+            unidade_administrativa=unidade,
+            solicitacao_movimentacao=solicitacao
+        )
+        self.save()
+
 
 class HistoricoStatusBemPatrimonial(models.Model):
     "Classe que representa o histórico de mudança de status do bem patrimonial"
@@ -126,6 +134,9 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
     criado_em = models.DateTimeField("Criado em", auto_now=True)
     atualizado_em = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
 
+    def __str__(self) -> str:
+        return "Solicitação #{}".format(str(self.pk))
+
     class Meta:
         verbose_name = 'solicitação de movimentação de bem patrimonial'
         verbose_name_plural = 'solicitações de movimentação de bem patrimonial'
@@ -133,6 +144,23 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
     def save(self, *args, **kwargs):
         self.atualizado_em = datetime.now()
         return super(SolicitacaoMovimentacaoBemPatrimonial, self).save(*args, **kwargs)
+
+    def aprovar_solicitacao_e_atualizar_historico(self, usuario):
+        if self.status is not ACEITA:
+            self.status = ACEITA
+            self.aprovado_por = usuario
+            self.save()
+
+            self.bem_patrimonial.atualizar_historico_unidade_administrativa(
+                self.unidade_administrativa_destino,
+                self
+            )
+
+    def rejeitar_solicitacao(self, usuario):
+        if self.status is not REJEITADA:
+            self.status = REJEITADA
+            self.rejeitado_por = usuario
+            self.save()
 
 
 class HistoricoMovimentacaoBemPatrimonial(models.Model):
@@ -146,6 +174,9 @@ class HistoricoMovimentacaoBemPatrimonial(models.Model):
                                                  on_delete=models.SET_NULL, null=True, blank=True)
     criado_em = models.DateTimeField("Criado em", auto_now=True)
     atualizado_em = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
+
+    def __str__(self) -> str:
+        return str(self.pk)
 
     class Meta:
         verbose_name = 'histórico de movimentação de bem patrimonial'
@@ -162,4 +193,12 @@ def cria_primeiro_historico_status(sender, instance, created, **kwargs):
         instance.historicostatusbempatrimonial_set.create(
             status=AGUARDANDO_APROVACAO,
             atualizado_por=instance.criado_por
+        )
+
+
+@receiver(post_save, sender=BemPatrimonial)
+def cria_primeiro_historico_movimentacao(sender, instance, created, **kwargs):
+    if created:
+        instance.atualizar_historico_unidade_administrativa(
+            instance.criado_por.unidade_administrativa
         )
