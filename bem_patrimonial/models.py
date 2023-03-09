@@ -22,6 +22,16 @@ STATUS = (
     (NAO_APROVADO, "Não aprovado"),
 )
 
+ENVIADA = 1
+ACEITA = 2
+REJEITADA = 3
+
+STATUS_SOLICITACAO_MOVIMENTACAO = (
+    (ENVIADA, "Enviada"),
+    (ACEITA, "Aceita"),
+    (REJEITADA, "Rejeitada"),
+)
+
 
 class BemPatrimonial(models.Model):
     "Classe que representa um bem patrimonial"
@@ -94,6 +104,56 @@ class HistoricoStatusBemPatrimonial(models.Model):
     def sincroniza_status_bem_patrimonial(self):
         self.bem_patrimonial.status = self.status
         self.bem_patrimonial.save()
+
+
+class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
+    "Classe que representa uma solicitacao de movimentacao de um bem patrimonial"
+    # obrigatórios
+    bem_patrimonial = models.ForeignKey(BemPatrimonial, verbose_name="Bem patrimonial", on_delete=models.CASCADE,
+                                        null=False, blank=False)
+    unidade_administrativa_destino = models.ForeignKey(UnidadeAdministrativa, verbose_name="Unidade administrativa destino",
+                                                       on_delete=models.CASCADE, null=False, blank=False)
+    status = models.PositiveIntegerField("Status", choices=STATUS_SOLICITACAO_MOVIMENTACAO, default=ENVIADA,
+                                         null=False, blank=False)
+    observacao = models.TextField("Observacao", null=True, blank=True)
+    # controle
+    solicitado_por = models.ForeignKey(Usuario, verbose_name="Solicitado por", related_name='%(class)s_solicitadopor', on_delete=models.DO_NOTHING,
+                                       null=False, blank=False)
+    aprovado_por = models.ForeignKey(Usuario, verbose_name="Aprovado por", related_name='%(class)s_aprovadopor', on_delete=models.SET_NULL,
+                                     null=True, blank=True)
+    rejeitado_por = models.ForeignKey(Usuario, verbose_name="Rejeitado por", related_name='%(class)s_rejeitadopor', on_delete=models.SET_NULL,
+                                      null=True, blank=True)
+    criado_em = models.DateTimeField("Criado em", auto_now=True)
+    atualizado_em = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'solicitação de movimentação de bem patrimonial'
+        verbose_name_plural = 'solicitações de movimentação de bem patrimonial'
+
+    def save(self, *args, **kwargs):
+        self.atualizado_em = datetime.now()
+        return super(SolicitacaoMovimentacaoBemPatrimonial, self).save(*args, **kwargs)
+
+
+class HistoricoMovimentacaoBemPatrimonial(models.Model):
+    "Classe que representa uma solicitacao de movimentacao de um bem patrimonial"
+    # obrigatórios
+    bem_patrimonial = models.ForeignKey(BemPatrimonial, verbose_name="Bem patrimonial", on_delete=models.CASCADE,
+                                        null=False, blank=False)
+    unidade_administrativa = models.ForeignKey(UnidadeAdministrativa, verbose_name="Unidade administrativa",
+                                               on_delete=models.CASCADE, null=False, blank=False)
+    solicitacao_movimentacao = models.ForeignKey(SolicitacaoMovimentacaoBemPatrimonial, verbose_name="Solicitação de movimentação",
+                                                 on_delete=models.SET_NULL, null=True, blank=True)
+    criado_em = models.DateTimeField("Criado em", auto_now=True)
+    atualizado_em = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'histórico de movimentação de bem patrimonial'
+        verbose_name_plural = 'históricos de movimentação de bem patrimonial'
+
+    def save(self, *args, **kwargs):
+        self.atualizado_em = datetime.now()
+        return super(HistoricoMovimentacaoBemPatrimonial, self).save(*args, **kwargs)
 
 
 @receiver(post_save, sender=BemPatrimonial)
