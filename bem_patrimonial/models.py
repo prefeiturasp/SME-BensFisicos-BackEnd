@@ -71,9 +71,13 @@ class BemPatrimonial(models.Model):
 
     def save(self, *args, **kwargs):
         self.atualizado_em = datetime.now()
-        if self.criado_por:
-            self.unidade_administrativa = self.criado_por.unidade_administrativa
         return super(BemPatrimonial, self).save(*args, **kwargs)
+
+    @property
+    def pode_solicitar_movimentacao(self):
+        if self.status is APROVADO:
+            return True
+        return False
 
     def atualizar_historico_unidade_administrativa(self, unidade, solicitacao=None):
         self.unidade_administrativa = unidade
