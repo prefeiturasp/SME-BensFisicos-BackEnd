@@ -1,9 +1,21 @@
 from django.contrib import admin
 from django import forms
-from bem_patrimonial.models import BemPatrimonial, HistoricoStatusBemPatrimonial, APROVADO, NAO_APROVADO
+from bem_patrimonial.models import BemPatrimonial, HistoricoStatusBemPatrimonial, SolicitacaoMovimentacaoBemPatrimonial, HistoricoMovimentacaoBemPatrimonial, APROVADO, NAO_APROVADO
 from import_export.admin import ImportExportModelAdmin
 from rangefilter.filters import DateRangeFilter
 from bem_patrimonial.emails import envia_email_cadastro_nao_aprovado
+
+
+class SolicitacaoMovimentacaoBemPatrimoniallInline(admin.TabularInline):
+    model = SolicitacaoMovimentacaoBemPatrimonial
+    extra = 0
+    readonly_fields = ('solicitado_por', 'aprovado_por', 'rejeitado_por', 'status', )
+
+
+class HistoricoMovimentacaoBemPatrimonialInline(admin.TabularInline):
+    model = HistoricoMovimentacaoBemPatrimonial
+    extra = 0
+    readonly_fields = ('unidade_administrativa', 'solicitacao_movimentacao', )
 
 
 class HistoricoStatusBemPatrimonialInline(admin.TabularInline):
@@ -39,7 +51,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         'numero_serie',
     )
 
-    inlines = [HistoricoStatusBemPatrimonialInline,]
+    inlines = [HistoricoStatusBemPatrimonialInline, HistoricoMovimentacaoBemPatrimonialInline, SolicitacaoMovimentacaoBemPatrimoniallInline, ]
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:
