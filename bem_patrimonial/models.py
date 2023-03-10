@@ -220,8 +220,13 @@ def cria_primeiro_historico_movimentacao(sender, instance, created, **kwargs):
 @receiver(post_save, sender=SolicitacaoMovimentacaoBemPatrimonial)
 def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
     if created:
-        operadores_da_unidade = Usuario.objects.filter(
-            active=True,
+        # pega emails dos usuários do setor destino
+        emails = []
+        usuarios = Usuario.objects.filter(
+            is_active=True,
             unidade_administrativa=instance.unidade_administrativa_destino
-        ).values('email')
-        envia_email_nova_solicitacao_movimentacao(instance.bem_patrimonial, operadores_da_unidade)
+        ).only('email')
+        for usuario in usuarios:
+            emails.append(usuario.email)
+
+        envia_email_nova_solicitacao_movimentacao(instance.bem_patrimonial, emails)
