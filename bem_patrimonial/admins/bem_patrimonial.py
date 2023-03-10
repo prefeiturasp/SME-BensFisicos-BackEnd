@@ -15,7 +15,7 @@ class SolicitacaoMovimentacaoBemPatrimoniallInline(admin.StackedInline):
 class HistoricoMovimentacaoBemPatrimonialInline(admin.TabularInline):
     model = HistoricoMovimentacaoBemPatrimonial
     extra = 0
-    readonly_fields = ('unidade_administrativa', 'solicitacao_movimentacao', )
+    readonly_fields = ('unidade_administrativa', 'solicitacao_movimentacao', 'atualizado_em', )
 
 
 class HistoricoStatusBemPatrimonialInline(admin.TabularInline):
@@ -72,15 +72,20 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                                                  unidade_administrativa=request.user.unidade_administrativa)
         return BemPatrimonial.objects.filter(status=APROVADO)
 
-    def get_inline_formsets(self, request, formsets, inline_instances, obj):
-        inlines = super().get_inline_formsets(request, formsets, inline_instances, obj)
-        inline_solicitacao_movimentacao = 'solicitacaomovimentacaobempatrimonial_set'
-        for inline in inlines:
-            if (inline.formset.prefix == inline_solicitacao_movimentacao and
-               (not inline.formset.instance.pode_solicitar_movimentacao)):
-                inlines.remove(inline)
+    def get_inline_instances(self, request, obj=None):
+        inline_instances = []
+        inlines = self.inlines
+        for inline_class in inlines:
+            inline = inline_class(self.model, self.admin_site)
+            if (inline_class is SolicitacaoMovimentacaoBemPatrimoniallInline and (not obj.pode_solicitar_movimentacao)):
+                pass
+            else:
+                inline_instances.append(inline)
+        return inline_instances
 
-        return inlines
+    def get_formsets(self, request, obj=None):
+        for inline in self.get_inline_instances(request, obj):
+            yield inline.get_formset(request, obj)
 
     def save_formset(self, request, form, formset, change):
         if formset.model is HistoricoStatusBemPatrimonial:

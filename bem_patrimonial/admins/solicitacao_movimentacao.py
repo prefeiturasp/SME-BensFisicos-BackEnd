@@ -10,7 +10,7 @@ def aprovar_solicitacao(modeladmin, request, queryset):
         if not item.aceita:
             item.aprovar_solicitacao_e_atualizar_historico(request.user)
             messages.add_message(request, messages.INFO, 'Movimentação aprovada com sucesso')
-            envia_email_solicitacao_movimentacao_aceita(item.bem_patrimonial, item.solicitado_por)
+            envia_email_solicitacao_movimentacao_aceita(item.bem_patrimonial, item.solicitado_por.email)
 
 
 def rejeitar_solicitacao(modeladmin, request, queryset):
@@ -18,7 +18,7 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
         if not item.rejeitada:
             item.rejeitar_solicitacao(request.user)
             messages.add_message(request, messages.INFO, 'Movimentação rejeitada com sucesso')
-            envia_email_solicitacao_movimentacao_rejeitada(item.bem_patrimonial, item.solicitado_por)
+            envia_email_solicitacao_movimentacao_rejeitada(item.bem_patrimonial, item.solicitado_por.email)
 
 
 class SolicitacaoMovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
@@ -43,7 +43,6 @@ class SolicitacaoMovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     def get_form(self, request, *args, **kwargs):
         form = super(SolicitacaoMovimentacaoBemPatrimonialAdmin, self).get_form(request, *args, **kwargs)
         form.request = request
-        # form['model_admin_class'] = 'SolicitacaoMovimentacaoBemPatrimonialAdmin'
         return form
 
     def get_queryset(self, request):
