@@ -32,7 +32,7 @@ def envia_email_nova_solicitacao_movimentacao(bem_patrimonial, emails=[]):
         'title': 'Olá!',
         'subtitle': '''Foi solicitada a movimentação do bem patrimnoial {}.
                        Acesse {} para visualizar mais detalhes.
-                    '''.format(bem_patrimonial.__str__(), settings.ADMIN_UR)
+                    '''.format(bem_patrimonial.__str__(), settings.ADMIN_URL)
     }
     email_utils.send_email_ctrl(
         subject,
@@ -49,7 +49,7 @@ def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
         'title': 'Olá!',
         'subtitle': '''A solicitação de movimentação do bem patrimonial {} foi aceita.
                        Acesse {} para visualizar mais detalhes.
-                    '''.format(bem_patrimonial.__str__(), settings.ADMIN_UR)
+                    '''.format(bem_patrimonial.__str__(), settings.ADMIN_URL)
     }
     email_utils.send_email_ctrl(
         subject,
