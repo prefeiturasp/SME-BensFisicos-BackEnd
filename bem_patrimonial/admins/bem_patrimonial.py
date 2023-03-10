@@ -77,7 +77,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         inlines = self.inlines
         for inline_class in inlines:
             inline = inline_class(self.model, self.admin_site)
-            if (inline_class is SolicitacaoMovimentacaoBemPatrimoniallInline and (not obj.pode_solicitar_movimentacao)):
+            if (inline_class is SolicitacaoMovimentacaoBemPatrimoniallInline and (not (obj and obj.pode_solicitar_movimentacao))):
                 pass
             else:
                 inline_instances.append(inline)
