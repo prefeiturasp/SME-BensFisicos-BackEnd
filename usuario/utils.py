@@ -11,7 +11,9 @@ def setup_grupos_e_permissoes():
     # setup gestor
     gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
     gestor_settings = {
-        'bempatrimonial': ['add', 'change', 'delete', 'view'],
+        '_bempatrimonial': ['add', 'change', 'delete', 'view'],
+        '_historicostatusbempatrimonial': ['add', 'change', 'delete', 'view'],
+        '_historicomovimentacaobempatrimonial': ['view'],
         '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
         '_usuario': ['add', 'change', 'view'],
         '_configagendasuporte': ['view', 'change'],
@@ -19,6 +21,8 @@ def setup_grupos_e_permissoes():
         '_intervalohoras': ['add', 'change', 'delete', 'view'],
         '_unidadeadministrativa': ['add', 'change', 'delete', 'view']
     }
+    for item in Permission.objects.all():
+        print(item.codename)
     for key in gestor_settings:
         verbs = gestor_settings[key]
         permission = Permission.objects.filter(Q(codename__contains=key) & reduce(operator.or_, (Q(codename__contains=x) for x in verbs)))
@@ -28,7 +32,9 @@ def setup_grupos_e_permissoes():
     operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
     operador_settings = {
         '_bempatrimonial': ['add', 'change', 'delete', 'view'],
+        '_solicitacaomovimentacaobempatrimonial':  ['add', 'change', 'view'],
         '_historicostatusbempatrimonial': ['view'],
+        '_historicomovimentacaobempatrimonial': ['view'],
         '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
     }
     for key in operador_settings:
