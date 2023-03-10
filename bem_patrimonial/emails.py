@@ -23,3 +23,54 @@ def envia_email_cadastro_nao_aprovado(status):
         'simple_message.html',
         status.bem_patrimonial.criado_por.email
     )
+
+
+def envia_email_nova_solicitacao_movimentacao(bem_patrimonial, emails=[]):
+    subject = '[Bens físicos] Nova solicitação de movimentação.'
+    dict = {
+        'subject': subject,
+        'title': 'Olá!',
+        'subtitle': '''Foi solicitada a movimentação do bem patrimnoial {}.
+                       Acesse {} para visualizar mais detalhes.
+                    '''.format(bem_patrimonial.__str__(), settings.ADMIN_UR)
+    }
+    email_utils.send_email_ctrl(
+        subject,
+        dict,
+        'simple_message.html',
+        emails
+    )
+
+
+def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
+    subject = '[Bens físicos] Sua solicitação de movimentação foi aceita.'
+    dict = {
+        'subject': subject,
+        'title': 'Olá!',
+        'subtitle': '''A solicitação de movimentação do bem patrimonial {} foi aceita.
+                       Acesse {} para visualizar mais detalhes.
+                    '''.format(bem_patrimonial.__str__(), settings.ADMIN_UR)
+    }
+    email_utils.send_email_ctrl(
+        subject,
+        dict,
+        'simple_message.html',
+        emails
+    )
+
+
+def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
+    subject = '[Bens físicos] Sua solicitação de movimentação foi rejeitada.'
+    dict = {
+        'subject': subject,
+        'title': 'Olá!',
+        'subtitle': '''A solicitação de movimentação do bem patrimonial {} foi rejeitada.
+                       Acesse {} para visualizar mais detalhes.
+                    '''.format(bem_patrimonial.__str__(), settings.ADMIN_UR)
+    }
+    email_utils.send_email_ctrl(
+        subject,
+        dict,
+        'simple_message.html',
+        emails
+    )

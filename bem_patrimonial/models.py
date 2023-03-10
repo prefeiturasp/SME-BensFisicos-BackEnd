@@ -4,6 +4,7 @@ from datetime import datetime
 from django.db import models
 from dados_comuns.models import UnidadeAdministrativa
 from usuario.models import Usuario
+from bem_patrimonial.emails import envia_email_nova_solicitacao_movimentacao
 
 ORIGENS = (
     (1, "Repasse de verba"),
@@ -149,6 +150,14 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
         self.atualizado_em = datetime.now()
         return super(SolicitacaoMovimentacaoBemPatrimonial, self).save(*args, **kwargs)
 
+    @property
+    def aceita(self):
+        return self.status is ACEITA
+
+    @property
+    def rejeitada(self):
+        return self.status is REJEITADA
+
     def aprovar_solicitacao_e_atualizar_historico(self, usuario):
         if self.status is not ACEITA:
             self.status = ACEITA
@@ -206,3 +215,13 @@ def cria_primeiro_historico_movimentacao(sender, instance, created, **kwargs):
         instance.atualizar_historico_unidade_administrativa(
             instance.criado_por.unidade_administrativa
         )
+
+
+@receiver(post_save, sender=SolicitacaoMovimentacaoBemPatrimonial)
+def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
+    if created:
+        operadores_da_unidade = Usuario.objects.filter(
+            active=True,
+            unidade_administrativa=instance.unidade_administrativa_destino
+        ).values('email')
+        envia_email_nova_solicitacao_movimentacao(instance.bem_patrimonial, operadores_da_unidade)
