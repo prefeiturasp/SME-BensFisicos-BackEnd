@@ -124,6 +124,7 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
     # obrigatórios
     bem_patrimonial = models.ForeignKey(BemPatrimonial, verbose_name="Bem patrimonial", on_delete=models.CASCADE,
                                         null=False, blank=False)
+    quantidade = models.PositiveIntegerField("Quantidade", default=1, null=False, blank=False)
     unidade_administrativa_destino = models.ForeignKey(UnidadeAdministrativa, verbose_name="Unidade administrativa destino",
                                                        on_delete=models.CASCADE, null=False, blank=False)
     status = models.PositiveIntegerField("Status", choices=STATUS_SOLICITACAO_MOVIMENTACAO, default=ENVIADA,
