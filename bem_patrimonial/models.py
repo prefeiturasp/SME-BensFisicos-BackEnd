@@ -4,7 +4,7 @@ from datetime import datetime
 from django.db import models
 from dados_comuns.models import UnidadeAdministrativa
 from usuario.models import Usuario
-from bem_patrimonial.emails import envia_email_nova_solicitacao_movimentacao
+from bem_patrimonial.emails import envia_email_nova_solicitacao_movimentacao, envia_email_cadastro_nao_aprovado
 
 ORIGENS = (
     (1, "Repasse de verba"),
@@ -208,6 +208,12 @@ def cria_primeiro_historico_status(sender, instance, created, **kwargs):
             status=AGUARDANDO_APROVACAO,
             atualizado_por=instance.criado_por
         )
+
+
+@receiver(post_save, sender=HistoricoStatusBemPatrimonial)
+def envia_email_status_reprovado(sender, instance, created, **kwargs):
+    if not created and (instance.status is NAO_APROVADO):
+        envia_email_cadastro_nao_aprovado(instance)
 
 
 @receiver(post_save, sender=BemPatrimonial)
