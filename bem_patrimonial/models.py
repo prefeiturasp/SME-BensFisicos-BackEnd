@@ -5,6 +5,7 @@ from django.db import models
 from dados_comuns.models import UnidadeAdministrativa
 from usuario.models import Usuario
 from bem_patrimonial.emails import envia_email_nova_solicitacao_movimentacao, envia_email_cadastro_nao_aprovado
+from .utils import duplicar_e_retornar_nova_instancia
 
 ORIGENS = (
     (1, "Repasse de verba"),
@@ -80,12 +81,8 @@ class BemPatrimonial(models.Model):
             return True
         return False
 
-    def atualizar_historico_unidade_administrativa(self, unidade, solicitacao=None):
-        self.unidade_administrativa = unidade
-        self.historicomovimentacaobempatrimonial_set.create(
-            unidade_administrativa=unidade,
-            solicitacao_movimentacao=solicitacao
-        )
+    def remover_quantidade(self, quantidade):
+        self.quantidade = self.quantidade - quantidade
         self.save()
 
 
@@ -103,7 +100,8 @@ class HistoricoStatusBemPatrimonial(models.Model):
     atualizado_em = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        self.atualizado_em = datetime.now()
+        if not self.atualizado_em:
+            self.atualizado_em = datetime.now()
         self.sincroniza_status_bem_patrimonial()
         return super(HistoricoStatusBemPatrimonial, self).save(*args, **kwargs)
 
@@ -115,8 +113,9 @@ class HistoricoStatusBemPatrimonial(models.Model):
         verbose_name_plural = 'histórico de status'
 
     def sincroniza_status_bem_patrimonial(self):
-        self.bem_patrimonial.status = self.status
-        self.bem_patrimonial.save()
+        if self.bem_patrimonial.status is not self.status:
+            self.bem_patrimonial.status = self.status
+            self.bem_patrimonial.save()
 
 
 class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
@@ -148,7 +147,8 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
         verbose_name_plural = 'solicitações de movimentação de bem patrimonial'
 
     def save(self, *args, **kwargs):
-        self.atualizado_em = datetime.now()
+        if not self.atualizado_em:
+            self.atualizado_em = datetime.now()
         return super(SolicitacaoMovimentacaoBemPatrimonial, self).save(*args, **kwargs)
 
     @property
@@ -159,16 +159,27 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
     def rejeitada(self):
         return self.status is REJEITADA
 
-    def aprovar_solicitacao_e_atualizar_historico(self, usuario):
-        if self.status is not ACEITA:
-            self.status = ACEITA
-            self.aprovado_por = usuario
-            self.save()
+    def realizar_movimentacao_parcial(self):
+        nova_instancia = duplicar_e_retornar_nova_instancia(self.bem_patrimonial)
+        nova_instancia.quantidade = self.quantidade
+        nova_instancia.unidade_administrativa = self.unidade_administrativa_destino
+        nova_instancia.save()
 
-            self.bem_patrimonial.atualizar_historico_unidade_administrativa(
-                self.unidade_administrativa_destino,
-                self
-            )
+        self.bem_patrimonial.remover_quantidade(self.quantidade)
+
+    def realizar_movimentacao_completa(self):
+        self.bem_patrimonial.unidade_administrativa = self.unidade_administrativa_destino
+
+    def aprovar_solicitacao_e_atualizar_historico(self, usuario):
+        # if self.status is not ACEITA:
+        self.status = ACEITA
+        self.aprovado_por = usuario
+        self.save()
+
+        if self.quantidade == self.bem_patrimonial.quantidade:
+            self.realizar_movimentacao_completa()
+        else:
+            self.realizar_movimentacao_parcial()
 
     def rejeitar_solicitacao(self, usuario):
         if self.status is not REJEITADA:
@@ -177,33 +188,9 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
             self.save()
 
 
-class HistoricoMovimentacaoBemPatrimonial(models.Model):
-    "Classe que representa uma solicitacao de movimentacao de um bem patrimonial"
-    # obrigatórios
-    bem_patrimonial = models.ForeignKey(BemPatrimonial, verbose_name="Bem patrimonial", on_delete=models.CASCADE,
-                                        null=False, blank=False)
-    unidade_administrativa = models.ForeignKey(UnidadeAdministrativa, verbose_name="Unidade administrativa",
-                                               on_delete=models.CASCADE, null=False, blank=False)
-    solicitacao_movimentacao = models.ForeignKey(SolicitacaoMovimentacaoBemPatrimonial, verbose_name="Solicitação de movimentação",
-                                                 on_delete=models.SET_NULL, null=True, blank=True)
-    criado_em = models.DateTimeField("Criado em", auto_now=True)
-    atualizado_em = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
-
-    def __str__(self) -> str:
-        return str(self.pk)
-
-    class Meta:
-        verbose_name = 'histórico de movimentação de bem patrimonial'
-        verbose_name_plural = 'históricos de movimentação de bem patrimonial'
-
-    def save(self, *args, **kwargs):
-        self.atualizado_em = datetime.now()
-        return super(HistoricoMovimentacaoBemPatrimonial, self).save(*args, **kwargs)
-
-
 @receiver(post_save, sender=BemPatrimonial)
 def cria_primeiro_historico_status(sender, instance, created, **kwargs):
-    if created:
+    if created and instance.status is AGUARDANDO_APROVACAO:
         instance.historicostatusbempatrimonial_set.create(
             status=AGUARDANDO_APROVACAO,
             atualizado_por=instance.criado_por
@@ -214,14 +201,6 @@ def cria_primeiro_historico_status(sender, instance, created, **kwargs):
 def envia_email_status_reprovado(sender, instance, created, **kwargs):
     if not created and (instance.status is NAO_APROVADO):
         envia_email_cadastro_nao_aprovado(instance)
-
-
-@receiver(post_save, sender=BemPatrimonial)
-def cria_primeiro_historico_movimentacao(sender, instance, created, **kwargs):
-    if created:
-        instance.atualizar_historico_unidade_administrativa(
-            instance.criado_por.unidade_administrativa
-        )
 
 
 @receiver(post_save, sender=SolicitacaoMovimentacaoBemPatrimonial)

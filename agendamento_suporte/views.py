@@ -18,7 +18,6 @@ class ConfigAgendaSuporteViewSet(viewsets.ViewSet):
             dia_semana = agenda.diasemana_set.get(dia_semana=dia)
         except Exception as e:
             dia_semana = None
-            print(e)
 
         horarios = []
 

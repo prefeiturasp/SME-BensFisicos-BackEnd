@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.forms import ValidationError
+from django.db.models import Q
 from bem_patrimonial.admins.forms.form_solicitacao_movimentacao import SolicitacaoMovimentacaoBemPatrimonialForm
 from bem_patrimonial.models import SolicitacaoMovimentacaoBemPatrimonial
 from bem_patrimonial.emails import envia_email_solicitacao_movimentacao_aceita, envia_email_solicitacao_movimentacao_rejeitada
@@ -8,16 +8,16 @@ from bem_patrimonial.emails import envia_email_solicitacao_movimentacao_aceita, 
 
 def aprovar_solicitacao(modeladmin, request, queryset):
     for item in queryset:
-        if item.solicitado_por.pk == request.user.pk:
+        if request.user.is_operador_inventario and (item.solicitado_por.pk == request.user.pk):
             messages.add_message(request, messages.WARNING, 'Não é possível realizar essa ação.')
             return
-        if item.aceita:
-            messages.add_message(request, messages.WARNING, 'Solicitação já foi aprovada.')
-            return
+        # if item.aceita:
+        #     messages.add_message(request, messages.WARNING, 'Solicitação já foi aprovada.')
+        #     return
 
         item.aprovar_solicitacao_e_atualizar_historico(request.user)
         messages.add_message(request, messages.INFO, 'Movimentação aprovada com sucesso')
-        envia_email_solicitacao_movimentacao_aceita(item.bem_patrimonial, item.solicitado_por.email)
+        # envia_email_solicitacao_movimentacao_aceita(item.bem_patrimonial, item.solicitado_por.email)
 
 
 def rejeitar_solicitacao(modeladmin, request, queryset):
@@ -62,7 +62,8 @@ class SolicitacaoMovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         if request.user.is_operador_inventario:
             return SolicitacaoMovimentacaoBemPatrimonial.objects.filter(
-                unidade_administrativa_destino=request.user.unidade_administrativa
+                Q(unidade_administrativa_destino=request.user.unidade_administrativa) |
+                Q(solicitado_por=request.user)
             )
         return SolicitacaoMovimentacaoBemPatrimonial.objects.all()
 

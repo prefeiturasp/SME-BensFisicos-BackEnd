@@ -1,15 +1,8 @@
 from django.contrib import admin
 from django_admin_listfilter_dropdown.filters import DropdownFilter
-from bem_patrimonial.models import (BemPatrimonial, HistoricoStatusBemPatrimonial,
-                                    HistoricoMovimentacaoBemPatrimonial, APROVADO)
+from bem_patrimonial.models import (BemPatrimonial, HistoricoStatusBemPatrimonial, APROVADO)
 from import_export.admin import ImportExportModelAdmin
 from rangefilter.filters import DateRangeFilter
-
-
-class HistoricoMovimentacaoBemPatrimonialInline(admin.TabularInline):
-    model = HistoricoMovimentacaoBemPatrimonial
-    extra = 0
-    readonly_fields = ('unidade_administrativa', 'solicitacao_movimentacao', 'atualizado_em', )
 
 
 class HistoricoStatusBemPatrimonialInline(admin.TabularInline):
@@ -20,7 +13,7 @@ class HistoricoStatusBemPatrimonialInline(admin.TabularInline):
 
 class BemPatrimonialAdmin(ImportExportModelAdmin):
     model = BemPatrimonial
-    list_display = ('id', 'status', 'descricao', 'criado_por', 'criado_em', )
+    list_display = ('id', 'status', 'descricao', 'unidade_administrativa', 'criado_por', 'criado_em', )
     search_fields = ('nome', 'descricao', 'marca', 'modelo', 'localizacao', 'numero_processo', )
     search_help_text = 'Pesquise por nome, descrição, marca, modelo, localização ou número de processo.'
 
@@ -47,7 +40,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         'numero_serie',
     )
 
-    inlines = [HistoricoStatusBemPatrimonialInline, HistoricoMovimentacaoBemPatrimonialInline]
+    inlines = [HistoricoStatusBemPatrimonialInline]
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:
