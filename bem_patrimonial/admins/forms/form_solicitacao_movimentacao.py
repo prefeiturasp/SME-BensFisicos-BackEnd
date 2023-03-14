@@ -7,9 +7,10 @@ class SolicitacaoMovimentacaoBemPatrimonialForm(forms.ModelForm):
 
     def clean(self):
         self.is_cleaned = True
-        if self.request.user.is_operador_inventario and \
-           (self.instance.solicitado_por is not self.request.user):
-            raise ValidationError("Não é permitido alterar uma movimentação solicitada por outro usuário.")
+        if self.instance.pk is not None:
+            if self.request.user.is_operador_inventario and \
+                    (self.instance.solicitado_por is not self.request.user):
+                raise ValidationError("Não é permitido alterar uma movimentação solicitada por outro usuário.")
         super(SolicitacaoMovimentacaoBemPatrimonialForm, self).clean()
 
     def __init__(self, *args, **kwargs):

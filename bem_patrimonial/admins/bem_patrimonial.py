@@ -1,9 +1,9 @@
 from django.contrib import admin
+from django_admin_listfilter_dropdown.filters import DropdownFilter
 from bem_patrimonial.models import (BemPatrimonial, HistoricoStatusBemPatrimonial, SolicitacaoMovimentacaoBemPatrimonial,
                                     HistoricoMovimentacaoBemPatrimonial, APROVADO, NAO_APROVADO)
 from import_export.admin import ImportExportModelAdmin
 from rangefilter.filters import DateRangeFilter
-from django_admin_listfilter_dropdown.filters import DropdownFilter
 from bem_patrimonial.emails import envia_email_cadastro_nao_aprovado
 
 
@@ -67,6 +67,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_queryset(self, request):
         if request.user.is_operador_inventario:
+            print('oi')
             return BemPatrimonial.objects.filter(unidade_administrativa=request.user.unidade_administrativa)
         return BemPatrimonial.objects.all()
 
