@@ -3,6 +3,7 @@ from bem_patrimonial.models import (BemPatrimonial, HistoricoStatusBemPatrimonia
                                     HistoricoMovimentacaoBemPatrimonial, APROVADO, NAO_APROVADO)
 from import_export.admin import ImportExportModelAdmin
 from rangefilter.filters import DateRangeFilter
+from django_admin_listfilter_dropdown.filters import DropdownFilter
 from bem_patrimonial.emails import envia_email_cadastro_nao_aprovado
 
 
@@ -27,12 +28,13 @@ class HistoricoStatusBemPatrimonialInline(admin.TabularInline):
 class BemPatrimonialAdmin(ImportExportModelAdmin):
     model = BemPatrimonial
     list_display = ('id', 'status', 'descricao', 'criado_por', 'criado_em', )
-    search_fields = ('nome', 'descricao', 'marca', 'modelo', 'localizacao', )
-    search_help_text = 'Pesquise por nome, descrição, marca, modelo ou localização.'
+    search_fields = ('nome', 'descricao', 'marca', 'modelo', 'localizacao', 'numero_processo', )
+    search_help_text = 'Pesquise por nome, descrição, marca, modelo, localização ou número de processo.'
 
     list_filter = (
         'status',
         ('criado_em', DateRangeFilter),
+        ('numero_processo', DropdownFilter),
     )
 
     readonly_fields = ('status', 'criado_por', 'criado_em', 'unidade_administrativa',)
@@ -52,11 +54,13 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         'numero_serie',
     )
 
-    inlines = [HistoricoStatusBemPatrimonialInline, HistoricoMovimentacaoBemPatrimonialInline, SolicitacaoMovimentacaoBemPatrimoniallInline, ]
+    inlines = [HistoricoStatusBemPatrimonialInline, HistoricoMovimentacaoBemPatrimonialInline, ]
+    # SolicitacaoMovimentacaoBemPatrimoniallInline
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:
             obj.criado_por = request.user
+            obj.pk = None
             super().save_model(request, obj, form, change)
         else:
             super().save_model(request, obj, form, change)
@@ -72,20 +76,20 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                                                  unidade_administrativa=request.user.unidade_administrativa)
         return BemPatrimonial.objects.filter(status=APROVADO)
 
-    def get_inline_instances(self, request, obj=None):
-        inline_instances = []
-        inlines = self.inlines
-        for inline_class in inlines:
-            inline = inline_class(self.model, self.admin_site)
-            if (inline_class is SolicitacaoMovimentacaoBemPatrimoniallInline and (not (obj and obj.pode_solicitar_movimentacao))):
-                pass
-            else:
-                inline_instances.append(inline)
-        return inline_instances
+    # def get_inline_instances(self, request, obj=None):
+    #     inline_instances = []
+    #     inlines = self.inlines
+    #     for inline_class in inlines:
+    #         inline = inline_class(self.model, self.admin_site)
+    #         if (inline_class is SolicitacaoMovimentacaoBemPatrimoniallInline and (not (obj and obj.pode_solicitar_movimentacao))):
+    #             pass
+    #         else:
+    #             inline_instances.append(inline)
+    #     return inline_instances
 
-    def get_formsets(self, request, obj=None):
-        for inline in self.get_inline_instances(request, obj):
-            yield inline.get_formset(request, obj)
+    # def get_formsets(self, request, obj=None):
+    #     for inline in self.get_inline_instances(request, obj):
+    #         yield inline.get_formset(request, obj)
 
     def save_formset(self, request, form, formset, change):
         if formset.model is HistoricoStatusBemPatrimonial:
@@ -117,6 +121,4 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         for instance in instances:
             instance.solicitado_por = request.user
             instance.save()
-            # TODO envia email nova solicitacao
-
         formset.save_m2m()
