@@ -30,7 +30,7 @@ def envia_email_nova_solicitacao_movimentacao(bem_patrimonial, emails=[]):
     dict = {
         'subject': subject,
         'title': 'Olá!',
-        'subtitle': '''Foi solicitada a movimentação do bem patrimnoial {}.
+        'subtitle': '''Foi solicitada a movimentação do bem patrimonial {}.
                        Acesse {} para visualizar mais detalhes.
                     '''.format(bem_patrimonial.__str__(), settings.ADMIN_URL)
     }
