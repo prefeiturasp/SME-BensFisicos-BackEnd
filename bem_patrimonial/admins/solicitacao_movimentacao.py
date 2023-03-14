@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib import messages
+from django.forms import ValidationError
 from bem_patrimonial.admins.forms.form_solicitacao_movimentacao import SolicitacaoMovimentacaoBemPatrimonialForm
 from bem_patrimonial.models import SolicitacaoMovimentacaoBemPatrimonial
 from bem_patrimonial.emails import envia_email_solicitacao_movimentacao_aceita, envia_email_solicitacao_movimentacao_rejeitada
@@ -36,7 +37,7 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
 class SolicitacaoMovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     model = SolicitacaoMovimentacaoBemPatrimonial
     list_display = ('id', 'bem_patrimonial', 'solicitado_por', 'status', 'criado_em', 'atualizado_em', )
-    raw_id_fields = ("bem_patrimonial",)
+    autocomplete_fields = ("bem_patrimonial",)
     readonly_fields = (
         'solicitado_por',
         'aprovado_por',
