@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django_admin_listfilter_dropdown.filters import DropdownFilter
 from bem_patrimonial.models import (BemPatrimonial, HistoricoStatusBemPatrimonial, APROVADO)
 from import_export.admin import ImportExportModelAdmin
 from rangefilter.filters import DateRangeFilter
@@ -19,8 +18,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     list_filter = (
         'status',
-        ('criado_em', DateRangeFilter),
-        ('numero_processo', DropdownFilter),
+        ('criado_em', DateRangeFilter)
     )
 
     readonly_fields = ('status', 'criado_por', 'criado_em', 'unidade_administrativa',)

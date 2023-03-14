@@ -85,6 +85,10 @@ class BemPatrimonial(models.Model):
         self.quantidade = self.quantidade - quantidade
         self.save()
 
+    def set_unidade_administrative(self, unidade):
+        self.unidade_administrativa = unidade
+        self.save()
+
 
 class HistoricoStatusBemPatrimonial(models.Model):
     "Classe que representa o histórico de mudança de status do bem patrimonial"
@@ -162,27 +166,26 @@ class SolicitacaoMovimentacaoBemPatrimonial(models.Model):
     def realizar_movimentacao_parcial(self):
         nova_instancia = duplicar_e_retornar_nova_instancia(self.bem_patrimonial)
         nova_instancia.quantidade = self.quantidade
-        nova_instancia.unidade_administrativa = self.unidade_administrativa_destino
-        nova_instancia.save()
+        nova_instancia.set_unidade_administrative(self.unidade_administrativa_destino)
 
         self.bem_patrimonial.remover_quantidade(self.quantidade)
 
     def realizar_movimentacao_completa(self):
-        self.bem_patrimonial.unidade_administrativa = self.unidade_administrativa_destino
+        self.bem_patrimonial.set_unidade_administrative(self.unidade_administrativa_destino)
 
     def aprovar_solicitacao_e_atualizar_historico(self, usuario):
-        # if self.status is not ACEITA:
-        self.status = ACEITA
-        self.aprovado_por = usuario
-        self.save()
+        if not self.aceita:
+            self.status = ACEITA
+            self.aprovado_por = usuario
+            self.save()
 
-        if self.quantidade == self.bem_patrimonial.quantidade:
-            self.realizar_movimentacao_completa()
-        else:
-            self.realizar_movimentacao_parcial()
+            if self.quantidade == self.bem_patrimonial.quantidade:
+                self.realizar_movimentacao_completa()
+            else:
+                self.realizar_movimentacao_parcial()
 
     def rejeitar_solicitacao(self, usuario):
-        if self.status is not REJEITADA:
+        if not self.rejeitada:
             self.status = REJEITADA
             self.rejeitado_por = usuario
             self.save()
