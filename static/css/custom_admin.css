@@ -1,0 +1,14 @@
+.inline-group h2{
+    display: none !important;
+}
+
+.djn-item {
+    margin: 16px 0 !important;
+    border: 1px solid #f1f1f1;
+    border-radius: 8px;
+    padding: 16px;    
+}
+
+fieldset.has-inlines {
+    display: none;
+}
