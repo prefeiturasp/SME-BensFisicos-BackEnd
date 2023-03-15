@@ -1,6 +1,7 @@
 import datetime
 from django.test import TestCase
-from bem_patrimonial.models import BemPatrimonial, APROVADO, NAO_APROVADO, AGUARDANDO_APROVACAO
+from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial.constants import APROVADO, NAO_APROVADO, AGUARDANDO_APROVACAO
 from usuario.tests import tests_models as usuariotests_models
 
 
@@ -57,16 +58,16 @@ class BemPatrimonialTestCase(TestCase):
 
     def test_nao_aprovado_status_change_sync(self):
         instance = self.entity.objects.first()
-        instance.historicostatusbempatrimonial_set.create(
+        instance.statusbempatrimonial_set.create(
             status=NAO_APROVADO
         )
-        self.assertEqual(instance.status, instance.historicostatusbempatrimonial_set.last().status)
+        self.assertEqual(instance.status, instance.statusbempatrimonial_set.last().status)
         self.assertEqual(instance.status, NAO_APROVADO)
 
     def test_aprovado_status_change_sync(self):
         instance = self.entity.objects.first()
-        instance.historicostatusbempatrimonial_set.create(
+        instance.statusbempatrimonial_set.create(
             status=APROVADO
         )
-        self.assertEqual(instance.status, instance.historicostatusbempatrimonial_set.last().status)
+        self.assertEqual(instance.status, instance.statusbempatrimonial_set.last().status)
         self.assertEqual(instance.status, APROVADO)

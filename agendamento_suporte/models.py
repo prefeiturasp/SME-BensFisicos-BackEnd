@@ -28,7 +28,7 @@ class ConfigAgendaSuporte(models.Model):
 class DiaSemana(models.Model):
     '''Classe que representa o dia da semana para configuração de agenda'''
     agenda = models.ForeignKey(ConfigAgendaSuporte, verbose_name="Agenda", on_delete=models.SET_NULL, null=True, blank=True)
-    dia_semana = models.PositiveIntegerField("Dia da semana", choices=DAY_WEEK_CHOICES, null=False)
+    dia_semana = models.CharField("Dia da semana", max_length=30, choices=DAY_WEEK_CHOICES, null=False)
 
     def save(self, *args, **kwargs):
         self.updated_at = datetime.now()
