@@ -1,41 +1,95 @@
-# Sistema de cadastro de bens físicos para o setor de Bens Patrimoniais da SME.
+# Projeto de Gestão de Bens Patrimoniais
 
-## Prerequisitos
+## Descrição
 
+O projeto foi desenvolvido para o setor de Bens Patrimoniais da Secretaria Municipal de São Paulo. Possui dois tipos de usuários: Gestor de Patrimônio e Operador de Inventário.
+
+### Funcionalidades
+
+- Cadastro de Bem Patrimonial
+- Aprovação de Cadastro de Bem Patrimonial
+- Movimentação de Bem Patrimonial
+- Configuração de Agenda do Setor de Bem Patrimonial
+- Agendamento de Reunião de Suporte
+- Cadastro de Unidade Administrativa
+- Cadastro de Usuário
+- Login
+
+### Modelos
+
+- BemPatrimonial
+- UnidadeAdministrativaBemPatrimonial
+- MovimentacaoBemPatrimonial
+- StatusBemPatrimonial
+- UnidadeAdministrativa
+- Usuario
+- ConfigAgendaSuporte
+- DiaSemana
+- IntervaloHoras
+- AgendamentoSuporte
+
+### Permissões
+
+- O Gestor de Patrimônio tem acesso a todas as funcionalidades.
+- O Operador de Inventário só tem acesso a cadastrar patrimônio, agendar reunião de suporte e solicitar movimentação de um bem patrimonial.
+
+## Movimentação de bens patrimoniais
+
+- Para realizar a movimentação de um bem patrimonial entre unidades administrativas, é necessário criar uma instância do modelo MovimentacaoBemPatrimonial com os dados da movimentação, incluindo o bem patrimonial, as unidades administrativas de origem e destino e a quantidade a ser movimentada.
+- É necessário que haja a aprovação por parte do operador da unidade destino. Após aprovação, a quantidade é debitada ou creditada.
+
+## Tecnologias
+
+- Django 4.1.3
+- Django Admin
 - Python 3.11
+- PostgreSQL
 
 ## Instalação
 
-Passo a passo para instalar e rodar o projeto local
+1. Faça o clone do repositório.
 
-$ python3 -m venv /path/to/new/virtual/environment
+2. Crie um ambiente virtual:
 
-- Ative o ambiente
+   ```
+   python -m venv venv
+   ```
 
-$ pip install -r requirements.txt
+3. Ative o ambiente virtual:
 
-$ cp env.sample
+   ```
+   source venv/bin/activate
+   ```
 
-$ python manage.py migrate
+4. Instale as dependências:
 
-$ python manage.py createsuperuser
+   ```
+   pip install -r requirements.txt
+   ```
 
-$ python manage.py runserver 0.0.0.0:8000
+5. Crie um banco de dados PostgreSQL e configure as variáveis de ambiente para a conexão com o banco de dados.
 
-Pronto. Agora você pode acessar seu localhost/admin e logar com as credenciais criadas.
+6. Execute as migrações:
 
-## Funcionalidades
+   ```
+   python manage.py migrate
+   ```
 
-- CRUD de bens patrimoniais
-- CRUD de usuários
-- CRUD de unidades administrativas
+7. Crie um superusuário:
 
-## Rodar os testes
+   ```
+   python manage.py createsuperuser
+   ```
 
-Com o env ativado, rode o seguinte comando:
+8. Execute scripts de configuração para funcionamento correto:
 
-$ python manage.py test
+   ```
+   python manage.py setup_grupos_e_permissoes
+   python manage.py setup_agenda
+   ```
 
-Para rodar por app, rode o seguinte o comando:
+9. Execute o servidor:
 
-$ python manage.py test <app>
+   ```
+   python manage.py runserver
+   ```
