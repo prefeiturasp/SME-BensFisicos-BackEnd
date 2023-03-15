@@ -46,11 +46,10 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         ('criado_em', DateRangeFilter)
     )
 
-    readonly_fields = ('status', 'criado_por', 'criado_em', 'unidade_administrativa',)
+    readonly_fields = ('status', 'criado_por', 'criado_em',)
 
     fields = (
         'status',
-        'unidade_administrativa',
         'nome',
         'descricao',
         ('quantidade', 'valor_unitario'),
@@ -96,8 +95,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     ).values('quantidade')[:1],
                     output_field=models.IntegerField()
                 ))
-            for item in queryset:
-                print(item.__dict__)
         return queryset
 
     def save_formset(self, request, form, formset, change):

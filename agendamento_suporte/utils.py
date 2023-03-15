@@ -44,7 +44,7 @@ def dia_da_semana(data):
     data_obj = datetime.datetime.strptime(data, '%Y-%m-%d').date()
 
     # Definir os nomes dos dias da semana
-    dias_da_semana = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo']
+    dias_da_semana = [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
 
     # Obter o índice do dia da semana (0 = segunda-feira, 1 = terça-feira, etc.)
     dia_da_semana_idx = data_obj.weekday()
@@ -52,4 +52,4 @@ def dia_da_semana(data):
     # Retornar o nome do dia da semana correspondente
     # return dias_da_semana[dia_da_semana_idx]
 
-    return dia_da_semana_idx + 1
+    return dias_da_semana[dia_da_semana_idx]
