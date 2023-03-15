@@ -1,6 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from bem_patrimonial.models import BemPatrimonial, APROVADO
+from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial.constants import APROVADO
 
 
 class MovimentacaoBemPatrimonialForm(forms.ModelForm):
