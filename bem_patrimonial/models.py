@@ -216,7 +216,7 @@ def cria_registro_unidade_administrativa_bem_patrimonial(sender, instance, creat
 
 @receiver(post_save, sender=StatusBemPatrimonial)
 def envia_email_status_reprovado(sender, instance, created, **kwargs):
-    if not created and (instance.status is constants.NAO_APROVADO):
+    if created and (instance.status is constants.NAO_APROVADO):
         envia_email_cadastro_nao_aprovado(instance)
 
 
