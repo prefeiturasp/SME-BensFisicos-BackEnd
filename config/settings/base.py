@@ -200,7 +200,7 @@ EMAIL_USE_SSL = env.bool('EMAIL_USE_SSL')
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#default-from-email
 
-DEFAULT_FROM_EMAIL = EMAIL_HOST
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 DEFAULT_TO_EMAIL = env('DJANGO_DEFAULT_TO_EMAIL')
 
 # Rest framework
