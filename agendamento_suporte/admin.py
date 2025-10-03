@@ -3,40 +3,65 @@ from datetime import timedelta
 from django import forms
 from django.contrib import admin
 from django.conf import settings
-from agendamento_suporte.models import AgendamentoSuporte, ConfigAgendaSuporte, DiaSemana, IntervaloHoras
+from agendamento_suporte.models import (
+    AgendamentoSuporte,
+    ConfigAgendaSuporte,
+    DiaSemana,
+    IntervaloHoras,
+)
 from agendamento_suporte.emails import envia_email_alerta_novo_agendamento
 import nested_admin
 
 
 class AgendamentoSuporteForm(forms.ModelForm):
     url = forms.CharField()
-    data_agendada = forms.DateField(widget=forms.DateInput(
-        attrs={
-            'type': 'date',
-            'class': 'vDateField',
-            'id': 'id_data_agendada',
-            'onchange': 'onChangeDate();',
-            'min': datetime.datetime.today().strftime('%Y-%m-%d'),
-            'max': (datetime.datetime.today() + timedelta(days=6)).strftime('%Y-%m-%d')
-        }))
+    data_agendada = forms.DateField(
+        widget=forms.DateInput(
+            attrs={
+                "type": "date",
+                "class": "vDateField",
+                "id": "id_data_agendada",
+                "onchange": "onChangeDate();",
+                "min": datetime.datetime.today().strftime("%Y-%m-%d"),
+                "max": (datetime.datetime.today() + timedelta(days=6)).strftime(
+                    "%Y-%m-%d"
+                ),
+            }
+        )
+    )
 
     class Media:
-        js = ('js/agendamento_suporte/select_horas.js', )
-        fields = ('url', )
+        js = ("js/agendamento_suporte/select_horas.js",)
+        fields = ("url",)
 
     def __init__(self, *args, **kwargs):
         super(AgendamentoSuporteForm, self).__init__(*args, **kwargs)
-        self.initial['url'] = settings.API_URL
+        self.initial["url"] = settings.API_URL
 
         if self.instance.pk:
-            self.initial['data_agendada'] = self.instance.data_agendada.strftime('%Y-%m-%d')
-            self.initial['hora_agendada'] = self.instance.hora_agendada.strftime('%H:%M')
+            self.initial["data_agendada"] = self.instance.data_agendada.strftime(
+                "%Y-%m-%d"
+            )
+            self.initial["hora_agendada"] = self.instance.hora_agendada.strftime(
+                "%H:%M"
+            )
 
 
 class AgendamentoSuporteAdmin(admin.ModelAdmin):
     model = AgendamentoSuporte
-    list_display = ('id', 'agendado_por', 'data_agendada', 'hora_agendada', 'observacao', )
-    fields = ('data_agendada', 'hora_agendada', 'observacao', 'url',)
+    list_display = (
+        "id",
+        "agendado_por",
+        "data_agendada",
+        "hora_agendada",
+        "observacao",
+    )
+    fields = (
+        "data_agendada",
+        "hora_agendada",
+        "observacao",
+        "url",
+    )
     form = AgendamentoSuporteForm
 
     def get_queryset(self, request):
@@ -45,8 +70,8 @@ class AgendamentoSuporteAdmin(admin.ModelAdmin):
         return AgendamentoSuporte.objects.all()
 
     def get_value_of_custom_field(self, request):
-        time_str = request.POST.get('select_hora_agendada')
-        time_date = datetime.datetime.strptime(time_str, '%H:%M')
+        time_str = request.POST.get("select_hora_agendada")
+        time_date = datetime.datetime.strptime(time_str, "%H:%M")
         return time_date
 
     def save_model(self, request, obj, form, change):
@@ -65,28 +90,31 @@ class AgendamentoSuporteAdmin(admin.ModelAdmin):
 class IntervaloHorasInline(nested_admin.NestedStackedInline):
     model = IntervaloHoras
     extra = 0
-    fields = (('hora_inicio', 'hora_fim'), )
+    fields = (("hora_inicio", "hora_fim"),)
 
     class Media:
-        css = {
-            'all': ('css/custom_admin.css', )
-        }
+        css = {"all": ("css/custom_admin.css",)}
 
 
 class DiaSemanaInline(nested_admin.NestedStackedInline):
     model = DiaSemana
     extra = 0
-    inlines = [IntervaloHorasInline,]
-    readonly_fields = ('dia_semana', )
+    inlines = [
+        IntervaloHorasInline,
+    ]
+    readonly_fields = ("dia_semana",)
     sortable_options = {
-        'disabled': True,
+        "disabled": True,
     }
 
 
 class ConfigAgendaSuporteAdmin(nested_admin.NestedModelAdmin):
     model = ConfigAgendaSuporte
-    inlines = [DiaSemanaInline,]
+    inlines = [
+        DiaSemanaInline,
+    ]
 
 
-admin.site.register(ConfigAgendaSuporte, ConfigAgendaSuporteAdmin)
-admin.site.register(AgendamentoSuporte, AgendamentoSuporteAdmin)
+# Módulo de Suporte desabilitado temporariamente
+# admin.site.register(ConfigAgendaSuporte, ConfigAgendaSuporteAdmin)
+# admin.site.register(AgendamentoSuporte, AgendamentoSuporteAdmin)
