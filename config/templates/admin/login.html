@@ -40,8 +40,8 @@
         bottom: 0;
         background: linear-gradient(
           135deg,
-          rgba(20, 159, 103, 0.0),
-          rgba(20, 159, 103, 0.0)
+          rgba(20, 159, 103, 0),
+          rgba(20, 159, 103, 0)
         );
       }
 
@@ -57,15 +57,16 @@
 
       .login-box {
         background: white;
-        padding: 40px;
-        border-radius: 12px;
+        padding: 30px;
+        border-radius: 6px;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
         width: 100%;
-        max-width: 400px;
+        max-width: 430px;
       }
 
       .logo-container {
         display: flex;
+        flex-direction: row;
         justify-content: center;
         align-items: center;
         gap: 20px;
@@ -73,23 +74,40 @@
       }
 
       .logo-container img {
-        max-height: 60px;
+        max-height: 70px;
         width: auto;
       }
 
+      .login-text {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
       .login-title {
-        text-align: center;
+        text-align: left;
         color: #333;
-        font-size: 24px;
-        font-weight: 600;
-        margin-bottom: 10px;
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 0;
       }
 
       .login-subtitle {
+        text-align: left;
+        color: #333;
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 0;
+      }
+
+      .prefeitura-logo {
         text-align: center;
-        color: #666;
-        font-size: 14px;
-        margin-bottom: 30px;
+        margin-top: 45px;
+      }
+
+      .prefeitura-logo img {
+        max-height: 70px;
+        width: auto;
       }
 
       .form-group {
@@ -106,9 +124,9 @@
 
       .form-group input {
         width: 100%;
-        padding: 12px 16px;
+        padding: 8px 16px;
         border: 2px solid #e0e0e0;
-        border-radius: 8px;
+        border-radius: 6px;
         font-size: 14px;
         transition: all 0.3s ease;
       }
@@ -131,15 +149,17 @@
 
       .submit-button {
         width: 100%;
-        padding: 14px;
+        padding: 12px;
         background: #149f67;
         color: white;
         border: none;
-        border-radius: 8px;
+        border-radius: 4px;
         font-size: 16px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.3s ease;
+        margin-top: 26px;
+        margin-bottom: 16px;
       }
 
       .submit-button:hover {
@@ -179,15 +199,17 @@
       <div class="login-form-container">
         <div class="login-box">
           <div class="logo-container">
-            <img src="{% static 'img/sme_logo.png' %}" alt="Logo SME" />
             <img
-              src="{% static 'img/bens_logo.png' %}"
+              src="{% static 'img/bens_default_logo.png' %}"
               alt="Logo Bens Físicos"
             />
+            <div class="login-text">
+              <h1 class="login-title">Bem-vindo(a) ao</h1>
+              <p class="login-subtitle">
+                Sistema de Gestão de Bens Patrimoniais
+              </p>
+            </div>
           </div>
-
-          <h1 class="login-title">Bem-vindo</h1>
-          <p class="login-subtitle">Sistema de Gestão de Bens Patrimoniais</p>
 
           <form method="post" action="{% url 'admin:login' %}">
             {% csrf_token %} {% if form.non_field_errors %}
@@ -218,6 +240,12 @@
 
             <button type="submit" class="submit-button">Acessar</button>
           </form>
+        </div>
+        <div class="prefeitura-logo">
+          <img
+            src="{% static 'img/prefeitura_default_logo.png' %}"
+            alt="Logo Prefeitura de São Paulo"
+          />
         </div>
       </div>
     </div>
