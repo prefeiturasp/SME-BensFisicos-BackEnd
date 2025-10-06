@@ -1,63 +1,253 @@
-<html lang="en">
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}{% endblock %}</title>
-    <!-- CSS only -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-GLhlTQ8iRABdZLl6O3oVMWSktQOp6b7In1Zl3/Jr59b6EGGoI1aFkw7cmDA6j6gD" crossorigin="anonymous">
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - Bens Físicos SME</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    <!-- JS, Popper.js, and jQuery -->
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
-        integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj"
-        crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js" integrity="sha384-oBqDVmMz9ATKxIep9tiCxS/Z9fNfEXiDAYTujMAeBAsjFuCZSmKbSSUnQlmh/jp3" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js" integrity="sha384-mQ93GR66B00ZXjt0YO5KlohRA5SY2XofN4zfuZxLkoj1gXtW8ANNCe9d5Y3eG5eD" crossorigin="anonymous"></script>        
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        height: 100vh;
+        overflow: hidden;
+      }
 
-    </head>
-    <body style="background-color: #F8F8F8;">
-        {% block content %}
-        <nav class="navbar bg-body-secondary">
-            <div class="container">
-                {% block branding %}
-                    {% load static %} 
-                    <div class="d-flex align-items-center">
-                    <a class="navbar-brand" href="#">
-                        <img width="auto" height="50" src="{% static 'educacao_sp.png' %}" alt="Logo eduação SP" />
-                    </a>
-                     <h4>Bens físicos</h4>
-                    </div>
-                {% endblock %}            
+      .login-container {
+        display: flex;
+        height: 100vh;
+      }
+
+      .login-image {
+        flex: 1;
+        background: url("{% static 'img/login_background.png' %}") center/cover
+          no-repeat;
+        position: relative;
+      }
+
+      .login-image::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+          135deg,
+          rgba(20, 159, 103, 0),
+          rgba(20, 159, 103, 0)
+        );
+      }
+
+      .login-form-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 40px;
+        background: #d6d1d16e;
+      }
+
+      .login-box {
+        background: white;
+        padding: 30px;
+        border-radius: 6px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: 430px;
+      }
+
+      .logo-container {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 30px;
+      }
+
+      .logo-container img {
+        max-height: 70px;
+        width: auto;
+      }
+
+      .login-text {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .login-title {
+        text-align: left;
+        color: #333;
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 0;
+      }
+
+      .login-subtitle {
+        text-align: left;
+        color: #333;
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 0;
+      }
+
+      .prefeitura-logo {
+        text-align: center;
+        margin-top: 45px;
+      }
+
+      .prefeitura-logo img {
+        max-height: 70px;
+        width: auto;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        color: #333;
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 8px;
+      }
+
+      .form-group input {
+        width: 100%;
+        padding: 8px 16px;
+        border: 2px solid #e0e0e0;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+      }
+
+      .form-group input:focus {
+        outline: none;
+        border-color: #149f67;
+        box-shadow: 0 0 0 3px rgba(20, 159, 103, 0.1);
+      }
+
+      .error-message {
+        background: #fee;
+        color: #c33;
+        padding: 12px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        border-left: 4px solid #c33;
+      }
+
+      .submit-button {
+        width: 100%;
+        padding: 12px;
+        background: #149f67;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 26px;
+        margin-bottom: 16px;
+      }
+
+      .submit-button:hover {
+        background: #0f7d51;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(20, 159, 103, 0.3);
+      }
+
+      .submit-button:active {
+        transform: translateY(0);
+      }
+
+      @media (max-width: 768px) {
+        .login-container {
+          flex-direction: column;
+        }
+
+        .login-image {
+          display: none;
+        }
+
+        .login-form-container {
+          flex: 1;
+          padding: 20px;
+        }
+
+        .login-box {
+          padding: 30px 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-container">
+      <div class="login-image"></div>
+
+      <div class="login-form-container">
+        <div class="login-box">
+          <div class="logo-container">
+            <img
+              src="{% static 'img/bens_default_logo.png' %}"
+              alt="Logo Bens Físicos"
+            />
+            <div class="login-text">
+              <h1 class="login-title">Bem-vindo(a) ao</h1>
+              <p class="login-subtitle">
+                Sistema de Gestão de Bens Patrimoniais
+              </p>
             </div>
-        </nav>    
-        <div class="container">
-            <div class="row d-flex justify-content-center">
-                <div class="col-12 col-lg-6">
-                    <div class="card mt-5">
-                            <div class="card-header">
-                                <h3>
-                                    Login
-                                </h3>
-                            </div>
-                            <div class="card-body">
-                                    <form role="form" class="form-horizontal" method="post" action="{% url 'login' %}">{% csrf_token %}
-                                        {% csrf_token %}
-                                        <div class="form-group">
-                                            {% for field in form %}
-                                                <div class="mb-3">
-                                                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                                    <input class="form-control" id="{{ field.id_for_label }}" maxlength="30" name="{{ field.html_name }}" type="{{ field.html_name }}" /> 
-                                                    {{ field.errors }}
-                                                </div>
-                                            {% endfor %}
-                                            {{ form.non_field_errors }}
-                                            <input type="submit" class="btn btn-primary" value="Acessar" />
-                                        </div>
-                                    </form>                                
-                            </div>
-                    </div>
-                </div>
+          </div>
+
+          <form method="post" action="{% url 'admin:login' %}">
+            {% csrf_token %} {% if form.non_field_errors %}
+            <div class="error-message">{{ form.non_field_errors }}</div>
+            {% endif %} {% for field in form %}
+            <div class="form-group">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              <input
+                type="{% if field.name == 'password' %}password{% else %}text{% endif %}"
+                id="{{ field.id_for_label }}"
+                name="{{ field.html_name }}"
+                {%
+                if
+                field.field.required
+                %}required{%
+                endif
+                %}
+              />
+              {% if field.errors %}
+              <div class="error-message" style="margin-top: 8px">
+                {{ field.errors }}
+              </div>
+              {% endif %}
             </div>
-            </div>
+            {% endfor %}
+
+            <input type="hidden" name="next" value="{{ next }}" />
+
+            <button type="submit" class="submit-button">Acessar</button>
+          </form>
         </div>
-        {% endblock %}
-    </body>
+        <div class="prefeitura-logo">
+          <img
+            src="{% static 'img/prefeitura_default_logo.png' %}"
+            alt="Logo Prefeitura de São Paulo"
+          />
+        </div>
+      </div>
+    </div>
+  </body>
 </html>
