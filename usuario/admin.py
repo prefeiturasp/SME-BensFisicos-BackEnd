@@ -30,6 +30,7 @@ class CustomUserModelAdmin(UserAdmin):
             {
                 "fields": (
                     "nome",
+                    "rf",
                     "email",
                     "unidade_administrativa",
                 )
@@ -54,6 +55,7 @@ class CustomUserModelAdmin(UserAdmin):
             {
                 "fields": (
                     "nome",
+                    "rf",
                     "email",
                     "unidade_administrativa",
                 )
@@ -71,6 +73,11 @@ class CustomUserModelAdmin(UserAdmin):
         ),
         ("Datas importantes", {"fields": ("last_login", "date_joined")}),
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj:
+            return self.readonly_fields + ("username",)
+        return self.readonly_fields
 
     @admin.display(description="Grupo")
     def get_grupo(self, obj):
