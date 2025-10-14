@@ -18,7 +18,7 @@ class Usuario(AbstractUser):
         ],
     )
     unidade_administrativa = models.ForeignKey(
-        UnidadeAdministrativa, on_delete=models.SET_NULL, null=True, blank=True
+        UnidadeAdministrativa, related_name="%(class)s_unidade_administrativa", on_delete=models.SET_NULL, null=True, blank=True
     )
 
     @property

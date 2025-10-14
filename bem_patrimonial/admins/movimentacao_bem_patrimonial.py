@@ -10,6 +10,9 @@ from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_rejeitada,
 )
 
+from dados_comuns.libs.unidade_administrativa import uas_do_usuario
+
+UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
 def aprovar_solicitacao(modeladmin, request, queryset):
     for item in queryset:
@@ -125,7 +128,12 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "solicitado_por",
         "atualizado_em",
     )
-    autocomplete_fields = ("bem_patrimonial",)
+    autocomplete_fields = (
+        "bem_patrimonial", 
+        "unidade_administrativa_origem",
+        "unidade_administrativa_destino"
+    )
+
     readonly_fields = (
         "solicitado_por",
         "aprovado_por",
@@ -137,11 +145,17 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
 
     form = MovimentacaoBemPatrimonialForm
 
-    def get_form(self, request, *args, **kwargs):
-        form = super(MovimentacaoBemPatrimonialAdmin, self).get_form(
-            request, *args, **kwargs
-        )
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
         form.request = request
+
+        if obj is None:
+            uas = uas_do_usuario(request.user)
+            if uas.count() == 1:
+                ua = uas.first()
+                if hasattr(form, "base_fields") and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields:
+                    form.base_fields[UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE].initial = ua.pk
+
         return form
 
     def get_queryset(self, request):
@@ -158,3 +172,13 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             super().save_model(request, obj, form, change)
         else:
             super().save_model(request, obj, form, change)
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """
+            filtra e ordena as UAs (select normal).
+        """
+        if db_field.name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE:
+            qs = uas_do_usuario(request.user)
+            kwargs["queryset"] = qs
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
