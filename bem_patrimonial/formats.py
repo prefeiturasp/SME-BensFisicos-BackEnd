@@ -74,7 +74,11 @@ class PDFFormat(Format):
 
         elements.extend(self._criar_rodape())
 
-        doc.build(elements)
+        doc.build(
+            elements,
+            onFirstPage=self._adicionar_numero_pagina,
+            onLaterPages=self._adicionar_numero_pagina,
+        )
 
         pdf_bytes = buffer.getvalue()
         buffer.close()
@@ -399,6 +403,21 @@ class PDFFormat(Format):
         elements.append(KeepTogether([Spacer(1, 0.5 * cm), summary_table]))
 
         return elements
+
+    def _adicionar_numero_pagina(self, canvas, doc):
+        canvas.saveState()
+
+        page_num = canvas.getPageNumber()
+        text = f"Página {page_num}"
+
+        canvas.setFont("Helvetica", 9)
+        canvas.drawCentredString(
+            landscape(A4)[0] / 2,
+            0.5 * cm,
+            text,
+        )
+
+        canvas.restoreState()
 
     def _criar_rodape(self):
         elements = []
