@@ -153,12 +153,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def get_resource_kwargs(self, request, **kwargs):
         rk = super().get_resource_kwargs(request, **kwargs)
         rk["request"] = request
-        self._current_export_request = request
         return rk
 
     def get_export_data(self, file_format, queryset, *args, **kwargs):
         if isinstance(file_format, PDFFormat):
-            file_format._export_request = getattr(self, "_current_export_request", None)
+            request = kwargs.get("request")
+            file_format._export_request = request
             file_format._export_queryset = queryset
 
         return super().get_export_data(file_format, queryset, *args, **kwargs)

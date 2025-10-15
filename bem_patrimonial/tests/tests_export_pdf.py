@@ -240,8 +240,6 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.gestor
 
-        self.admin._current_export_request = request
-
         pdf_format = PDFFormat()
         self.admin.get_export_data(pdf_format, queryset, request=request)
 
