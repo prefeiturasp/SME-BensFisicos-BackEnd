@@ -9,9 +9,4 @@ RUN apt-get update && \
   #    python -m pip --no-cache install numpy && \
   python -m pip --no-cache install -r requirements.txt
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 EXPOSE 8001
-
-ENTRYPOINT ["/entrypoint.sh"]
