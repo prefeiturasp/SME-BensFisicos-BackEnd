@@ -18,8 +18,14 @@ class Usuario(AbstractUser):
         ],
     )
     unidade_administrativa = models.ForeignKey(
-        UnidadeAdministrativa, related_name="%(class)s_unidade_administrativa", on_delete=models.SET_NULL, null=True, blank=True
+        UnidadeAdministrativa,
+        related_name="%(class)s_unidade_administrativa",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
+    must_change_password = models.BooleanField(default=True)
+    last_password_change = models.DateTimeField(null=True, blank=True)
 
     @property
     def is_gestor_patrimonio(self):

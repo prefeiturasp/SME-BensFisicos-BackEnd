@@ -8,6 +8,10 @@ from usuario.admin import CustomUserModelAdmin
 from dados_comuns.models import UnidadeAdministrativa
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 
 class SetupData:
     def create_unidade(self):
@@ -361,3 +365,20 @@ class CustomUserModelAdminFieldsetsTestCase(TestCase):
         self.assertEqual(
             rf_index, nome_index + 1, "RF deve estar logo após o campo nome"
         )
+
+
+class UsuarioModelTests(TestCase):
+    def test_defaults_flags(self):
+        u = User.objects.create_user(username="u1", password="x")
+        self.assertTrue(
+            u.must_change_password, "must_change_password deve iniciar como True"
+        )
+        self.assertIsNone(
+            u.last_password_change, "last_password_change deve iniciar como None"
+        )
+
+    def test_can_update_last_password_change_and_flag(self):
+        u = User.objects.create_user(username="u2", password="old")
+        u.must_change_password = False
+        u.save(update_fields=["must_change_password"])
+        self.assertFalse(User.objects.get(pk=u.pk).must_change_password)

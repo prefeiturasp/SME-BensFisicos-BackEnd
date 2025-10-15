@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django_admin_listfilter_dropdown.filters import DropdownFilter
 from rangefilter.filters import DateRangeFilter
+from django.shortcuts import redirect
+from django.urls import reverse
 from usuario.models import Usuario
 
 
