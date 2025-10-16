@@ -86,6 +86,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "criado_em",
     )
 
+    def get_list_display(self, request):
+        if request.user.is_operador_inventario:
+            return ("numero_patrimonial", "nome", "status")
+        return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
+
     fields = (
         "status",
         "nome",
