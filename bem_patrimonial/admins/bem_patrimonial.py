@@ -62,11 +62,10 @@ class BemPatrimonialResource(resources.ModelResource):
 class BemPatrimonialAdmin(ImportExportModelAdmin):
     model = BemPatrimonial
     list_display = (
-        "id",
+        "numero_patrimonial",
+        "nome",
+        "unidade_administrativa",
         "status",
-        "descricao",
-        "criado_por",
-        "criado_em",
     )
     search_fields = (
         "nome",
