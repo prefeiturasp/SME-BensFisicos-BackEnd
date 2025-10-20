@@ -1,6 +1,9 @@
 from datetime import datetime
+import re
 from django.dispatch import receiver
 from django.db.models.signals import post_save
+from django.core.exceptions import ValidationError
+
 from django.db import models
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -11,6 +14,8 @@ from bem_patrimonial.emails import (
     envia_email_cadastro_nao_aprovado,
 )
 from bem_patrimonial import constants
+
+NUMERO_PATRIMONIAL_REGEX = r"^\d{3}\.\d{9}-\d$"
 
 
 class BemPatrimonial(models.Model):
@@ -51,8 +56,24 @@ class BemPatrimonial(models.Model):
     )
     numero_nibpm = models.PositiveIntegerField("Número NIBPM", null=True, blank=True)
     numero_cimbpm = models.PositiveIntegerField("Número CIMBPM", null=True, blank=True)
-    numero_patrimonial = models.PositiveIntegerField(
-        "Número Patrimonial", null=True, blank=True
+    numero_patrimonial = models.CharField(
+        "Número Patrimonial",
+        max_length=15,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Formato padrão: 000.000000000-0",
+        db_index=True,
+    )
+    numero_formato_antigo = models.BooleanField(
+        "Formato antigo",
+        default=False,
+        help_text="Se marcado, não valida formato do número (valor livre).",
+    )
+    sem_numeracao = models.BooleanField(
+        "Sem numeração",
+        default=False,
+        help_text="Se marcado, o sistema atribui automaticamente",
     )
     localizacao = models.CharField("Localização", max_length=255, null=True, blank=True)
     numero_serie = models.PositiveIntegerField("Número de série", null=True, blank=True)
@@ -76,9 +97,54 @@ class BemPatrimonial(models.Model):
         verbose_name = "bem patrimonial"
         verbose_name_plural = "bens patrimoniais"
 
+    def clean(self):
+        if self.numero_formato_antigo and self.sem_numeracao:
+            raise ValidationError(
+                "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
+            )
+
+        if not self.sem_numeracao and not (
+            self.numero_patrimonial and str(self.numero_patrimonial).strip()
+        ):
+            raise ValidationError(
+                {
+                    "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
+                }
+            )
+
+        if (not self.numero_formato_antigo) and (not self.sem_numeracao):
+            if not re.fullmatch(
+                NUMERO_PATRIMONIAL_REGEX, self.numero_patrimonial or ""
+            ):
+                raise ValidationError(
+                    {"numero_patrimonial": "Número Patrimonial incompleto"}
+                )
+
     def save(self, *args, **kwargs):
         self.atualizado_em = datetime.now()
-        return super(BemPatrimonial, self).save(*args, **kwargs)
+
+        if self.sem_numeracao:
+            self.numero_patrimonial = None
+
+        super(BemPatrimonial, self).save(*args, **kwargs)
+
+        if self.sem_numeracao and not self.numero_patrimonial:
+            base_id = self.pk
+
+            while True:
+                id_str = str(base_id).zfill(9)
+                numero_formatado = f"000.{id_str}-0"
+
+                if (
+                    not type(self)
+                    .objects.filter(numero_patrimonial=numero_formatado)
+                    .exists()
+                ):
+                    break
+                base_id += 1
+
+            self.numero_patrimonial = numero_formatado
+            super(BemPatrimonial, self).save(update_fields=["numero_patrimonial"])
 
     @property
     def quantidade_total(self):
