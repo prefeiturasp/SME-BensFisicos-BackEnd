@@ -66,3 +66,21 @@ def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
         ),
     }
     email_utils.send_email_ctrl(subject, dict, "simple_message.html", emails)
+
+
+def envia_email_solicitacao_movimentacao_cancelada(
+    bem_patrimonial, cancelado_por, emails=[]
+):
+    subject = "[Bens físicos] Sua solicitação de movimentação foi cancelada."
+    dict = {
+        "subject": subject,
+        "title": "Olá!",
+        "subtitle": """A solicitação de movimentação do bem patrimonial {} foi cancelada pelo Gestor de Patrimônio {}.
+                       Acesse {} para visualizar mais detalhes.
+                    """.format(
+            bem_patrimonial.__str__(),
+            cancelado_por.nome or cancelado_por.username,
+            settings.ADMIN_URL,
+        ),
+    }
+    email_utils.send_email_ctrl(subject, dict, "simple_message.html", emails)
