@@ -8,45 +8,28 @@ class BemPatrimonialForm(forms.ModelForm):
     class Meta:
         model = BemPatrimonial
         fields = "__all__"
-        widgets = {
-            "numero_patrimonial": forms.TextInput(
-                attrs={
-                    "placeholder": "000.000000000-0",
-                    "data-mask-npat": "1",  # usado no JS do admin
-                    "autocomplete": "off",
-                }
-            ),
-        }
 
     def clean(self):
         cleaned = super().clean()
-        antigo = cleaned.get("numero_formato_antigo")
-        sem = cleaned.get("sem_numeracao")
-        num = (cleaned.get("numero_patrimonial") or "").strip()
+        sem = bool(cleaned.get("sem_numeracao"))
+        antigo = bool(cleaned.get("numero_formato_antigo"))
+        numero = cleaned.get("numero_patrimonial")
 
-        if sem:
-            cleaned["numero_formato_antigo"] = False
-
-        if antigo and sem:
+        if sem and antigo:
             raise ValidationError(
                 "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             )
 
-        if not sem and not num:
+        if sem:
+            cleaned["numero_patrimonial"] = None
+            cleaned["numero_formato_antigo"] = False
+
+        if not sem and not (numero and str(numero).strip()):
             raise ValidationError(
                 {
                     "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
                 }
             )
-
-        if not antigo and not sem:
-            if not re.fullmatch(r"^\d{3}\.\d{9}-\d$", num):
-                raise ValidationError(
-                    {"numero_patrimonial": "Número Patrimonial incompleto"}
-                )
-
-        if sem:
-            cleaned["numero_patrimonial"] = None
 
         return cleaned
 

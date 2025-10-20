@@ -203,7 +203,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
         has_instance = bool(getattr(obj, "pk", None))
 
-        # Flags atuais (GET usa obj, POST usa request)
         if request.method == "POST":
             sem_flag = request.POST.get("sem_numeracao") in ("on", "true", "1")
             antigo_flag = request.POST.get("numero_formato_antigo") in (
@@ -215,63 +214,56 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             sem_flag = bool(getattr(obj, "sem_numeracao", False))
             antigo_flag = bool(getattr(obj, "numero_formato_antigo", False))
 
-        # ---- Regra 1: na EDIÇÃO, travar "formato antigo" e "sem numeração"
-        f_ant = form.base_fields.get("numero_formato_antigo")
-        if f_ant:
-            if has_instance:
-                f_ant.disabled = True  # não editável e valor preservado
-                f_ant.widget.attrs["title"] = "Imutável após a criação."
-            else:
-                f_ant.disabled = False
-                f_ant.widget.attrs.pop("title", None)
-
-        f_sem = form.base_fields.get("sem_numeracao")
-        if f_sem:
-            if has_instance:
-                f_sem.disabled = True  # não editável e valor preservado
-                f_sem.widget.attrs["title"] = "Imutável após a criação."
-            else:
-                f_sem.disabled = False
-                f_sem.widget.attrs.pop("title", None)
-
-        # ---- Campo Número Patrimonial (máscara/pattern/readonly)
         f_num = form.base_fields.get("numero_patrimonial")
+        f_ant = form.base_fields.get("numero_formato_antigo")
+        f_sem = form.base_fields.get("sem_numeracao")
+
+        if has_instance:
+            if f_ant:
+                f_ant.disabled = True
+                f_ant.widget.attrs["disabled"] = "disabled"
+                f_ant.widget.attrs["title"] = "Imutável após a criação."
+            if f_sem:
+                f_sem.disabled = True
+                f_sem.widget.attrs["disabled"] = "disabled"
+                f_sem.widget.attrs["title"] = "Imutável após a criação."
+        else:
+            if f_ant:
+                if sem_flag:
+                    f_ant.widget.attrs["disabled"] = "disabled"
+                    f_ant.widget.attrs["title"] = (
+                        "Desabilitado quando 'Sem numeração' está ativo."
+                    )
+                else:
+                    f_ant.widget.attrs.pop("disabled", None)
+                    f_ant.widget.attrs.pop("title", None)
+            if f_sem:
+                if antigo_flag:
+                    f_sem.widget.attrs["disabled"] = "disabled"
+                    f_sem.widget.attrs["title"] = (
+                        "Desabilitado quando 'Formato antigo' está ativo."
+                    )
+                else:
+                    f_sem.widget.attrs.pop("disabled", None)
+                    f_sem.widget.attrs.pop("title", None)
+
         if f_num:
-            f_num.widget.attrs["data-mask-npat"] = "1"
             f_num.widget.attrs["autocomplete"] = "off"
             f_num.widget.attrs["data-has-instance"] = "1" if has_instance else "0"
-
-            if has_instance:
-                # Regra 2: só pode editar se NA CRIAÇÃO não foi 'sem_numeracao'
-                if sem_flag:  # criado com sem_numeracao=True -> não editar
-                    f_num.disabled = True  # trava totalmente (Django mantém o valor)
-                    f_num.widget.attrs.pop("pattern", None)
-                    # mantém o valor visível, sem placeholder
-                else:
-                    f_num.disabled = False  # editável
-                    if antigo_flag:
-                        # formato antigo -> sem pattern/máscara
-                        f_num.widget.attrs["placeholder"] = (
-                            "Valor livre (formato antigo)"
-                        )
-                        f_num.widget.attrs.pop("pattern", None)
-                    else:
-                        # formato novo -> pattern/máscara
-                        f_num.widget.attrs["placeholder"] = "000.000000000-0"
-                        f_num.widget.attrs["pattern"] = r"^\d{3}\.\d{9}-\d$"
+            if not has_instance and sem_flag:
+                f_num.widget.attrs["placeholder"] = "Gerado automaticamente"
+                f_num.widget.attrs["readonly"] = "readonly"
             else:
-                # CRIAÇÃO: segue a regra normal (pode marcar flags e a máscara reage)
-                f_num.disabled = False
-                if sem_flag:
-                    # criação + sem numeração marcado -> número será gerado no save()
-                    f_num.widget.attrs["placeholder"] = "Gerado automaticamente"
-                    f_num.widget.attrs.pop("pattern", None)
-                elif antigo_flag:
-                    f_num.widget.attrs["placeholder"] = "Valor livre (formato antigo)"
-                    f_num.widget.attrs.pop("pattern", None)
-                else:
+                f_num.widget.attrs.pop("readonly", None)
+                if not antigo_flag and not sem_flag:
                     f_num.widget.attrs["placeholder"] = "000.000000000-0"
                     f_num.widget.attrs["pattern"] = r"^\d{3}\.\d{9}-\d$"
+                else:
+                    f_num.widget.attrs.pop("pattern", None)
+
+            if has_instance and getattr(obj, "sem_numeracao", False):
+                f_num.disabled = True
+                f_num.widget.attrs["disabled"] = "disabled"
 
         return form
 
@@ -279,48 +271,153 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         response = super().render_change_form(request, context, *args, **kwargs)
         script = r"""
             <script>
-            (function(){
-            function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
-            function formatNPatFromDigits(d){
-                d = (d||'').slice(0,13); // 3 + 9 + 1
-                var p1=d.slice(0,3), p2=d.slice(3,12), p3=d.slice(12,13);
-                if (d.length <= 3) return p1;
-                if (d.length <= 12) return p1 + '.' + p2;
-                return p1 + '.' + p2 + '-' + p3;
-            }
-            function shouldMask(){
-                var chkAnt = document.getElementById('id_numero_formato_antigo');
-                var chkSem = document.getElementById('id_sem_numeracao');
-                // máscara somente quando NÃO for antigo e NÃO for sem numeração
-                return !(chkAnt && chkAnt.checked) && !(chkSem && chkSem.checked);
-            }
-            function onInputMask(){
-                var input = document.getElementById('id_numero_patrimonial');
-                if (!input) return;
-                // se o campo estiver desabilitado pelo admin (edit + sem_numeracao), não mascara
-                if (input.disabled) return;
-                if (shouldMask()){
-                input.value = formatNPatFromDigits(onlyDigits(input.value));
+                (function(){
+                function id(el){ return document.getElementById(el); }
+                function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
+                function formatNPatFromDigits(d){
+                    d = (d||'').slice(0,13);
+                    var p1=d.slice(0,3), p2=d.slice(3,12), p3=d.slice(12,13);
+                    if (d.length <= 3) return p1;
+                    if (d.length <= 12) return p1 + '.' + p2;
+                    return p1 + '.' + p2 + '-' + p3;
                 }
-            }
-            function init(){
-                var input  = document.getElementById('id_numero_patrimonial');
-                var chkAnt = document.getElementById('id_numero_formato_antigo');
-                var chkSem = document.getElementById('id_sem_numeracao');
-                if (input){
-                input.addEventListener('input', onInputMask);
-                input.addEventListener('blur', onInputMask);
-                }
-                // em "Add", os checkboxes estão habilitados -> reprocessa máscara ao mudar
-                if (chkAnt && !chkAnt.disabled) chkAnt.addEventListener('change', onInputMask);
-                if (chkSem && !chkSem.disabled) chkSem.addEventListener('change', onInputMask);
 
-                // primeira aplicação
-                onInputMask();
-            }
-            document.addEventListener('DOMContentLoaded', init);
-            })();
-            </script>
+                function markServerState(elem){
+                    if(!elem) return;
+                    
+                    elem.dataset.serverDisabled = elem.disabled ? "1" : "0";
+                    
+                    elem.removeAttribute('data-client-disabled');
+                }
+
+                function clientDisable(elem, reasonAttr){
+                    if(!elem) return;
+                    if(elem.disabled) return; 
+                    elem.setAttribute('disabled','disabled');
+                    
+                    elem.setAttribute('data-client-disabled','1');
+                    if(reasonAttr) elem.setAttribute(reasonAttr,'1');
+                }
+
+                function clientEnable(elem, reasonAttr){
+                    if(!elem) return;
+                    
+                    if(elem.dataset && elem.dataset.serverDisabled === "1"){
+                    
+                    
+                    elem.removeAttribute('data-client-disabled');
+                    if(reasonAttr) elem.removeAttribute(reasonAttr);
+                    return;
+                    }
+                    
+                    elem.removeAttribute('disabled');
+                    elem.removeAttribute('data-client-disabled');
+                    if(reasonAttr) elem.removeAttribute(reasonAttr);
+                }
+
+                function applyState(){
+                    var chkSem = id('id_sem_numeracao');
+                    var chkAnt = id('id_numero_formato_antigo');
+                    var input  = id('id_numero_patrimonial');
+                    if (!input) return;
+
+                    
+                    var semServer = chkSem && chkSem.dataset && chkSem.dataset.serverDisabled === "1";
+                    var antServer = chkAnt && chkAnt.dataset && chkAnt.dataset.serverDisabled === "1";
+
+                    
+                    if (chkSem && chkSem.checked && !semServer){
+                    
+                    if (chkAnt){
+                        chkAnt.checked = false;
+                        clientDisable(chkAnt, 'data-disabled-because-sem');
+                    }
+                    
+                    input.value = '';
+                    input.setAttribute('readonly','readonly');
+                    input.setAttribute('placeholder','Gerado automaticamente');
+                    input.removeAttribute('pattern');
+                    return;
+                    }
+
+                    
+                    if (chkSem && !chkSem.checked){
+                    if (chkAnt){
+                        
+                        clientEnable(chkAnt, 'data-disabled-because-sem');
+                    }
+                    
+                    input.removeAttribute('readonly');
+                    input.removeAttribute('placeholder');
+                    }
+
+                    
+                    if (chkAnt && chkAnt.checked && !antServer){
+                    
+                    if (chkSem){
+                        chkSem.checked = false;
+                        clientDisable(chkSem, 'data-disabled-because-antigo');
+                    }
+                    
+                    input.removeAttribute('pattern');
+                    input.removeAttribute('readonly');
+                    input.setAttribute('placeholder','Valor livre (formato antigo)');
+                    return;
+                    }
+
+                    
+                    if (chkAnt && !chkAnt.checked){
+                    if (chkSem){
+                        clientEnable(chkSem, 'data-disabled-because-antigo');
+                    }
+                    
+                    input.removeAttribute('readonly');
+                    }
+
+                    
+                    input.removeAttribute('readonly');
+                    if (! (chkAnt && chkAnt.checked) && !(chkSem && chkSem.checked) ){
+                    input.setAttribute('pattern','^\\d{3}\\.\\d{9}-\\d$');
+                    input.value = formatNPatFromDigits(onlyDigits(input.value));
+                    input.setAttribute('placeholder','000.000000000-0');
+                    } else {
+                    input.removeAttribute('pattern');
+                    }
+                }
+
+                function bind(){
+                    var chkSem = id('id_sem_numeracao');
+                    var chkAnt = id('id_numero_formato_antigo');
+                    var input  = id('id_numero_patrimonial');
+
+                    
+                    markServerState(chkSem);
+                    markServerState(chkAnt);
+
+                    
+                    if (chkSem && chkSem.dataset.serverDisabled !== "1"){
+                    chkSem.addEventListener('change', applyState);
+                    }
+                    if (chkAnt && chkAnt.dataset.serverDisabled !== "1"){
+                    chkAnt.addEventListener('change', applyState);
+                    }
+
+                    if (input){
+                    input.addEventListener('input', function(){
+                        
+                        if (!(chkSem && chkSem.checked) && !(chkAnt && chkAnt.checked)){
+                        input.value = formatNPatFromDigits(onlyDigits(input.value));
+                        }
+                    });
+                    }
+
+                    
+                    applyState();
+                }
+
+                document.addEventListener('DOMContentLoaded', bind);
+                })();
+                </script>
             """
         try:
             response.content = response.rendered_content.replace(

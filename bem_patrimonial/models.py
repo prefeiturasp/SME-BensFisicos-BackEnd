@@ -66,12 +66,12 @@ class BemPatrimonial(models.Model):
         db_index=True,
     )
     numero_formato_antigo = models.BooleanField(
-        "Formato antigo",
+        "Formato anterior",
         default=False,
         help_text="Se marcado, não valida formato do número (valor livre).",
     )
     sem_numeracao = models.BooleanField(
-        "Sem numeração",
+        "Sem número patrimonial",
         default=False,
         help_text="Se marcado, o sistema atribui automaticamente",
     )

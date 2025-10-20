@@ -24,7 +24,7 @@ class SetupData:
         obj = {
             "nome": "Mesa reta",
             "data_compra_entrega": datetime.date.today(),
-            "origem": ORIGENS[0][0],  # mantém compatibilidade
+            "origem": ORIGENS[0][0],
             "marca": "Fortline",
             "modelo": "Reta",
             "quantidade": 100,
@@ -50,7 +50,6 @@ class BemPatrimonialTestCase(TestCase):
 
     def setUp(self):
         self.instance = self.start.create_instance()
-
 
     def test_get(self):
         instance = self.entity.objects.first()
@@ -85,7 +84,6 @@ class BemPatrimonialTestCase(TestCase):
             instance.status, instance.statusbempatrimonial_set.last().status
         )
         self.assertEqual(instance.status, APROVADO)
-
 
     def test_regex_valido_quando_formato_novo_e_sem_flags(self):
         obj = self.entity(
@@ -162,7 +160,7 @@ class BemPatrimonialTestCase(TestCase):
         )
         with self.assertRaises(ValidationError) as ctx:
             obj.full_clean()
-        
+
         self.assertTrue(any("Sem numeração" in m for m in ctx.exception.messages))
 
     def test_bloqueia_salvar_sem_numero_quando_nao_sem_numeracao(self):
