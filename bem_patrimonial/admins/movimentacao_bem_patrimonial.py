@@ -8,11 +8,13 @@ from bem_patrimonial.models import MovimentacaoBemPatrimonial
 from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_aceita,
     envia_email_solicitacao_movimentacao_rejeitada,
+    envia_email_solicitacao_movimentacao_cancelada,
 )
 
 from dados_comuns.libs.unidade_administrativa import uas_do_usuario
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
+
 
 def aprovar_solicitacao(modeladmin, request, queryset):
     for item in queryset:
@@ -29,6 +31,14 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 request,
                 messages.WARNING,
                 f"Movimentação #{item.pk} já foi rejeitada anteriormente.",
+            )
+            continue
+
+        if item.cancelada:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk} foi cancelada e não pode ser aprovada.",
             )
             continue
 
@@ -83,6 +93,14 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
             )
             continue
 
+        if item.cancelada:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk} foi cancelada e não pode ser rejeitada.",
+            )
+            continue
+
         if request.user.is_operador_inventario:
             if (
                 item.unidade_administrativa_destino
@@ -116,6 +134,54 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
 rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
 
 
+def cancelar_solicitacao(modeladmin, request, queryset):
+    for item in queryset:
+        if item.cancelada:
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"Movimentação #{item.pk} já foi cancelada anteriormente.",
+            )
+            continue
+
+        if item.aceita:
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"Movimentação #{item.pk} já foi aprovada e não pode ser cancelada.",
+            )
+            continue
+
+        if item.rejeitada:
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"Movimentação #{item.pk} já foi rejeitada e não pode ser cancelada.",
+            )
+            continue
+
+        if item.status != "enviada":
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: Apenas movimentações pendentes podem ser canceladas.",
+            )
+            continue
+
+        item.cancelar_solicitacao(request.user)
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            f"Movimentação #{item.pk} cancelada com sucesso. Bem desbloqueado.",
+        )
+        envia_email_solicitacao_movimentacao_cancelada(
+            item.bem_patrimonial, request.user, item.solicitado_por.email
+        )
+
+
+cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"
+
+
 class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     model = MovimentacaoBemPatrimonial
     list_display = (
@@ -129,19 +195,20 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "atualizado_em",
     )
     autocomplete_fields = (
-        "bem_patrimonial", 
+        "bem_patrimonial",
         "unidade_administrativa_origem",
-        "unidade_administrativa_destino"
+        "unidade_administrativa_destino",
     )
 
     readonly_fields = (
         "solicitado_por",
         "aprovado_por",
         "rejeitado_por",
+        "cancelado_por",
         "status",
     )
     list_filter = ("status",)
-    actions = [aprovar_solicitacao, rejeitar_solicitacao]
+    actions = [aprovar_solicitacao, rejeitar_solicitacao, cancelar_solicitacao]
 
     form = MovimentacaoBemPatrimonialForm
 
@@ -153,8 +220,13 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             uas = uas_do_usuario(request.user)
             if uas.count() == 1:
                 ua = uas.first()
-                if hasattr(form, "base_fields") and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields:
-                    form.base_fields[UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE].initial = ua.pk
+                if (
+                    hasattr(form, "base_fields")
+                    and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields
+                ):
+                    form.base_fields[
+                        UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                    ].initial = ua.pk
 
         return form
 
@@ -172,13 +244,23 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             super().save_model(request, obj, form, change)
         else:
             super().save_model(request, obj, form, change)
-    
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """
-            filtra e ordena as UAs (select normal).
+        filtra e ordena as UAs (select normal).
         """
         if db_field.name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE:
             qs = uas_do_usuario(request.user)
             kwargs["queryset"] = qs
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_actions(self, request):
+        """Limita a action de cancelamento apenas para Gestores"""
+        actions = super().get_actions(request)
+
+        if not request.user.is_gestor_patrimonio:
+            if "cancelar_solicitacao" in actions:
+                del actions["cancelar_solicitacao"]
+
+        return actions
