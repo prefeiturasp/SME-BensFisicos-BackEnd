@@ -46,6 +46,7 @@ def setup_grupos_e_permissoes():
         "_unidadeadministrativabempatrimonial": ["view"],
         "_movimentacaobempatrimonial": ["add", "change", "view"],
         "_statusbempatrimonial": ["view"],
+        "_unidadeadministrativa": ["view"],
         # Módulo de Suporte desabilitado temporariamente
         # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
     }
