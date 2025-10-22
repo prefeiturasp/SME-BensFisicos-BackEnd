@@ -1,4 +1,3 @@
-
 # origem bem patrimonial
 
 REPASSE = "repasse_de_verba"
@@ -18,11 +17,13 @@ ORIGENS = (
 AGUARDANDO_APROVACAO = "aguardando_aprovacao"
 APROVADO = "aprovado"
 NAO_APROVADO = "nao_aprovado"
+BLOQUEADO = "bloqueado"
 
 STATUS = (
     (AGUARDANDO_APROVACAO, "Aguardando aprovação"),
     (APROVADO, "Aprovado"),
     (NAO_APROVADO, "Não aprovado"),
+    (BLOQUEADO, "Bloqueado para movimentação"),
 )
 # status movimentacao
 

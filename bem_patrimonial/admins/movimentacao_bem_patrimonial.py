@@ -1,70 +1,168 @@
 from django.contrib import admin
 from django.contrib import messages
 from django.db.models import Q
-from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import MovimentacaoBemPatrimonialForm
+from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
+    MovimentacaoBemPatrimonialForm,
+)
 from bem_patrimonial.models import MovimentacaoBemPatrimonial
-from bem_patrimonial.emails import envia_email_solicitacao_movimentacao_aceita, envia_email_solicitacao_movimentacao_rejeitada
+from bem_patrimonial.emails import (
+    envia_email_solicitacao_movimentacao_aceita,
+    envia_email_solicitacao_movimentacao_rejeitada,
+)
 
+from dados_comuns.libs.unidade_administrativa import uas_do_usuario
+
+UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
 def aprovar_solicitacao(modeladmin, request, queryset):
     for item in queryset:
-        if request.user.is_operador_inventario and (item.solicitado_por.pk == request.user.pk):
-            messages.add_message(request, messages.WARNING, 'Você não pode efetuar essa ação.')
-            return
         if item.aceita:
-            messages.add_message(request, messages.WARNING, 'Solicitação já foi aprovada.')
-            return
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"Movimentação #{item.pk} já foi aprovada anteriormente.",
+            )
+            continue
+
+        if item.rejeitada:
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"Movimentação #{item.pk} já foi rejeitada anteriormente.",
+            )
+            continue
+
+        if request.user.is_operador_inventario:
+            if (
+                item.unidade_administrativa_destino
+                != request.user.unidade_administrativa
+            ):
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    f"Movimentação #{item.pk}: Apenas operadores da unidade de destino podem aprovar esta movimentação.",
+                )
+                continue
+            if item.solicitado_por.pk == request.user.pk:
+                messages.add_message(
+                    request,
+                    messages.WARNING,
+                    f"Movimentação #{item.pk}: Você não pode aprovar sua própria solicitação.",
+                )
+                continue
 
         item.aprovar_solicitacao(request.user)
-        messages.add_message(request, messages.INFO, 'Movimentação aprovada com sucesso')
-        envia_email_solicitacao_movimentacao_aceita(item.bem_patrimonial, item.solicitado_por.email)
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            f"Movimentação #{item.pk} aprovada com sucesso. Bem desbloqueado.",
+        )
+        envia_email_solicitacao_movimentacao_aceita(
+            item.bem_patrimonial, item.solicitado_por.email
+        )
+
+
+aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
 
 
 def rejeitar_solicitacao(modeladmin, request, queryset):
     for item in queryset:
-        if item.solicitado_por.pk == request.user.pk:
-            messages.add_message(request, messages.WARNING, 'Você não pode efetuar essa ação.')
-            return
         if item.rejeitada:
-            messages.add_message(request, messages.WARNING, 'Solicitação já foi rejeitada.')
-            return
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"Movimentação #{item.pk} já foi rejeitada anteriormente.",
+            )
+            continue
+
+        if item.aceita:
+            messages.add_message(
+                request,
+                messages.WARNING,
+                f"Movimentação #{item.pk} já foi aprovada anteriormente.",
+            )
+            continue
+
+        if request.user.is_operador_inventario:
+            if (
+                item.unidade_administrativa_destino
+                != request.user.unidade_administrativa
+            ):
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    f"Movimentação #{item.pk}: Apenas operadores da unidade de destino podem rejeitar esta movimentação.",
+                )
+                continue
+            if item.solicitado_por.pk == request.user.pk:
+                messages.add_message(
+                    request,
+                    messages.WARNING,
+                    f"Movimentação #{item.pk}: Você não pode rejeitar sua própria solicitação.",
+                )
+                continue
 
         item.rejeitar_solicitacao(request.user)
-        messages.add_message(request, messages.INFO, 'Movimentação rejeitada com sucesso')
-        envia_email_solicitacao_movimentacao_rejeitada(item.bem_patrimonial, item.solicitado_por.email)
+        messages.add_message(
+            request,
+            messages.SUCCESS,
+            f"Movimentação #{item.pk} rejeitada com sucesso. Bem desbloqueado.",
+        )
+        envia_email_solicitacao_movimentacao_rejeitada(
+            item.bem_patrimonial, item.solicitado_por.email
+        )
+
+
+rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
 
 
 class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     model = MovimentacaoBemPatrimonial
-    list_display = ('id', 'status', 'bem_patrimonial', 'unidade_administrativa_origem', 'unidade_administrativa_destino',
-                    'quantidade', 'solicitado_por', 'atualizado_em', )
-    autocomplete_fields = ("bem_patrimonial",)
+    list_display = (
+        "id",
+        "status",
+        "bem_patrimonial",
+        "unidade_administrativa_origem",
+        "unidade_administrativa_destino",
+        "quantidade",
+        "solicitado_por",
+        "atualizado_em",
+    )
+    autocomplete_fields = (
+        "bem_patrimonial", 
+        "unidade_administrativa_origem",
+        "unidade_administrativa_destino"
+    )
+
     readonly_fields = (
-        'solicitado_por',
-        'aprovado_por',
-        'rejeitado_por',
-        'status',
+        "solicitado_por",
+        "aprovado_por",
+        "rejeitado_por",
+        "status",
     )
-    list_filter = (
-        'status',
-    )
-    actions = [
-        aprovar_solicitacao,
-        rejeitar_solicitacao
-    ]
+    list_filter = ("status",)
+    actions = [aprovar_solicitacao, rejeitar_solicitacao]
 
     form = MovimentacaoBemPatrimonialForm
 
-    def get_form(self, request, *args, **kwargs):
-        form = super(MovimentacaoBemPatrimonialAdmin, self).get_form(request, *args, **kwargs)
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
         form.request = request
+
+        if obj is None:
+            uas = uas_do_usuario(request.user)
+            if uas.count() == 1:
+                ua = uas.first()
+                if hasattr(form, "base_fields") and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields:
+                    form.base_fields[UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE].initial = ua.pk
+
         return form
 
     def get_queryset(self, request):
         if request.user.is_operador_inventario:
             return MovimentacaoBemPatrimonial.objects.filter(
-                Q(unidade_administrativa_origem=request.user.unidade_administrativa) |
-                Q(unidade_administrativa_destino=request.user.unidade_administrativa)
+                Q(unidade_administrativa_origem=request.user.unidade_administrativa)
+                | Q(unidade_administrativa_destino=request.user.unidade_administrativa)
             )
         return MovimentacaoBemPatrimonial.objects.all()
 
@@ -74,3 +172,13 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             super().save_model(request, obj, form, change)
         else:
             super().save_model(request, obj, form, change)
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """
+            filtra e ordena as UAs (select normal).
+        """
+        if db_field.name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE:
+            qs = uas_do_usuario(request.user)
+            kwargs["queryset"] = qs
+
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
