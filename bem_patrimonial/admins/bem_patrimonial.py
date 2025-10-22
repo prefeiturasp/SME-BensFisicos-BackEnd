@@ -62,11 +62,10 @@ class BemPatrimonialResource(resources.ModelResource):
 class BemPatrimonialAdmin(ImportExportModelAdmin):
     model = BemPatrimonial
     list_display = (
-        "id",
+        "numero_patrimonial",
+        "nome",
+        "unidade_administrativa",
         "status",
-        "descricao",
-        "criado_por",
-        "criado_em",
     )
     search_fields = (
         "nome",
@@ -86,6 +85,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "criado_por",
         "criado_em",
     )
+
+    def get_list_display(self, request):
+        if request.user.is_operador_inventario:
+            return ("numero_patrimonial", "nome", "status")
+        return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     fields = (
         "status",
