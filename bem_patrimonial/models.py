@@ -328,6 +328,14 @@ class MovimentacaoBemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
+    cancelado_por = models.ForeignKey(
+        Usuario,
+        verbose_name="Cancelado por",
+        related_name="%(class)s_canceladopor",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     criado_em = models.DateTimeField("Criado em", auto_now=True)
     atualizado_em = models.DateTimeField(
         "Atualizado em", auto_now=True, null=True, blank=True
@@ -353,8 +361,12 @@ class MovimentacaoBemPatrimonial(models.Model):
     def rejeitada(self):
         return self.status == constants.REJEITADA
 
+    @property
+    def cancelada(self):
+        return self.status == constants.CANCELADA_GESTOR
+
     def aprovar_solicitacao(self, usuario):
-        if not self.aceita:
+        if not self.aceita and self.status == constants.ENVIADA:
             try:
                 bem_patrimonial_por_unidade_origem = (
                     self.bem_patrimonial.unidadeadministrativabempatrimonial_set.get(
@@ -385,9 +397,18 @@ class MovimentacaoBemPatrimonial(models.Model):
             self.bem_patrimonial.save()
 
     def rejeitar_solicitacao(self, usuario):
-        if not self.rejeitada:
+        if not self.rejeitada and self.status == constants.ENVIADA:
             self.status = constants.REJEITADA
             self.rejeitado_por = usuario
+            self.save()
+
+            self.bem_patrimonial.status = constants.APROVADO
+            self.bem_patrimonial.save()
+
+    def cancelar_solicitacao(self, usuario):
+        if not self.cancelada and self.status == constants.ENVIADA:
+            self.status = constants.CANCELADA_GESTOR
+            self.cancelado_por = usuario
             self.save()
 
             self.bem_patrimonial.status = constants.APROVADO
