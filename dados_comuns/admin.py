@@ -7,11 +7,18 @@ UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
 @admin.register(UnidadeAdministrativa)
 class UnidadeAdministrativaAdmin(admin.ModelAdmin):
-    search_fields = [
-        "nome",
-        "sigla",
+    list_display = (
         "codigo",
-    ]
+        "sigla",
+        "nome",
+    )
+    search_fields = (
+        "sigla",
+        "nome",
+        "codigo",
+    )
+    search_help_text = "Pesquise por sigla, nome ou código."
+    ordering = ("codigo", "sigla", "nome")
 
     def get_search_results(self, request, queryset, search_term):
         """
