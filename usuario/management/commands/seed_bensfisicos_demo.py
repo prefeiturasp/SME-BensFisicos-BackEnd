@@ -6,11 +6,13 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save
 
+
 def get_model(label: str):
     try:
         return apps.get_model(label)
     except Exception:
         return None
+
 
 def has_field(model, name: str) -> bool:
     try:
@@ -19,6 +21,7 @@ def has_field(model, name: str) -> bool:
     except Exception:
         return False
 
+
 def first_fk_to(model, target_model):
     if not (model and target_model):
         return None
@@ -26,6 +29,7 @@ def first_fk_to(model, target_model):
         if isinstance(f, models.ForeignKey) and f.remote_field.model == target_model:
             return f
     return None
+
 
 class Command(BaseCommand):
     help = "Cria 2 UnidadesAdministrativas e 2 BemPatrimonial por UA (mínimo, tipos corretos), desativando signals."
@@ -37,13 +41,19 @@ class Command(BaseCommand):
         Through = get_model("bem_patrimonial.UnidadeAdministrativaBemPatrimonial")
 
         if not UA or not Bem:
-            raise CommandError("Model não encontrado: dados_comuns.UnidadeAdministrativa e/ou bem_patrimonial.BemPatrimonial.")
+            raise CommandError(
+                "Model não encontrado: dados_comuns.UnidadeAdministrativa e/ou bem_patrimonial.BemPatrimonial."
+            )
 
         # ===== User p/ FKs de autor, se existirem =====
         User = get_user_model()
         system_user, _ = User.objects.get_or_create(
             username="sistema_seed",
-            defaults={"email": "seed@example.com", "is_staff": True, "is_superuser": True},
+            defaults={
+                "email": "seed@example.com",
+                "is_staff": True,
+                "is_superuser": True,
+            },
         )
 
         # ===== Tentar importar o receiver do signal para desconectar com segurança =====
@@ -51,7 +61,9 @@ class Command(BaseCommand):
         try:
             from bem_patrimonial.models import cria_registro_unidade_administrativa_bem_patrimonial as receiver_func  # type: ignore
         except Exception:
-            receiver_func = None  # se não existir, seguimos sem desconectar nominalmente
+            receiver_func = (
+                None  # se não existir, seguimos sem desconectar nominalmente
+            )
 
         # ===== Desconectar signal (se conhecido) =====
         if receiver_func is not None:
@@ -64,7 +76,8 @@ class Command(BaseCommand):
         now = timezone.now()
 
         # ===== Limpar minimamente (opcional; comente se não quiser limpar) =====
-        if Through: Through.objects.all().delete()
+        if Through:
+            Through.objects.all().delete()
         Bem.objects.all().delete()
         UA.objects.all().delete()
 
@@ -74,10 +87,14 @@ class Command(BaseCommand):
             for i in range(1, 3):
                 ua_payload = {}
                 # Preenche apenas o que existir no seu model
-                if has_field(UA, "nome"): ua_payload["nome"] = f"Unidade Administrativa {i}"
-                if has_field(UA, "sigla"): ua_payload["sigla"] = f"UA{i:02d}"
-                if has_field(UA, "descricao"): ua_payload["descricao"] = f"UA {i:02d}"
-                if has_field(UA, "codigo"): ua_payload["codigo"] = 100 + i
+                if has_field(UA, "nome"):
+                    ua_payload["nome"] = f"Unidade Administrativa {i}"
+                if has_field(UA, "sigla"):
+                    ua_payload["sigla"] = f"UA{i:02d}"
+                if has_field(UA, "descricao"):
+                    ua_payload["descricao"] = f"UA {i:02d}"
+                if has_field(UA, "codigo"):
+                    ua_payload["codigo"] = 100 + i
                 # Adicione aqui mais campos que seu model exija como NOT NULL, se houver
 
                 ua = UA.objects.create(**ua_payload)
@@ -86,7 +103,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("✔ Criadas 2 UnidadesAdministrativas"))
 
         # ===== Mapear FKs e campos para Bem e Through =====
-        fk_bem_ua = first_fk_to(Bem, UA) or (has_field(Bem, "unidade_administrativa") and "unidade_administrativa")
+        fk_bem_ua = first_fk_to(Bem, UA) or (
+            has_field(Bem, "unidade_administrativa") and "unidade_administrativa"
+        )
         fk_through_bem = first_fk_to(Through, Bem) if Through else None
         fk_through_ua = first_fk_to(Through, UA) if Through else None
 
@@ -110,26 +129,40 @@ class Command(BaseCommand):
                     bem_kwargs.setdefault("titulo", f"Bem UA{idx_ua:02d} #{i:02d}")
 
                 # Inteiros/IDs obrigatórios (tipos numéricos!)
-                if has_field(Bem, "numero_tombo"): bem_kwargs["numero_tombo"] = seq
-                if has_field(Bem, "numero_serie"): bem_kwargs["numero_serie"] = seq
-                if has_field(Bem, "numero_processo"): bem_kwargs["numero_processo"] = seq
+                if has_field(Bem, "numero_tombo"):
+                    bem_kwargs["numero_tombo"] = seq
+                if has_field(Bem, "numero_serie"):
+                    bem_kwargs["numero_serie"] = seq
+                if has_field(Bem, "numero_processo"):
+                    bem_kwargs["numero_processo"] = seq
 
                 # Datas
-                if has_field(Bem, "data_compra_entrega"): bem_kwargs["data_compra_entrega"] = today
-                if has_field(Bem, "data_aquisicao"): bem_kwargs.setdefault("data_aquisicao", today)
-                if has_field(Bem, "data_compra"): bem_kwargs.setdefault("data_compra", today)
-                if has_field(Bem, "data_registro"): bem_kwargs.setdefault("data_registro", now)
+                if has_field(Bem, "data_compra_entrega"):
+                    bem_kwargs["data_compra_entrega"] = today
+                if has_field(Bem, "data_aquisicao"):
+                    bem_kwargs.setdefault("data_aquisicao", today)
+                if has_field(Bem, "data_compra"):
+                    bem_kwargs.setdefault("data_compra", today)
+                if has_field(Bem, "data_registro"):
+                    bem_kwargs.setdefault("data_registro", now)
 
                 # Decimais/valores/quantidade
-                if has_field(Bem, "valor_unitario"): bem_kwargs["valor_unitario"] = Decimal("1000.00")
-                if has_field(Bem, "quantidade"): bem_kwargs["quantidade"] = 1
-                if has_field(Bem, "valor_aquisicao"): bem_kwargs.setdefault("valor_aquisicao", Decimal("1000.00"))
-                if has_field(Bem, "valor_compra"): bem_kwargs.setdefault("valor_compra", Decimal("1000.00"))
-                if has_field(Bem, "valor"): bem_kwargs.setdefault("valor", Decimal("1000.00"))
+                if has_field(Bem, "valor_unitario"):
+                    bem_kwargs["valor_unitario"] = Decimal("1000.00")
+                if has_field(Bem, "quantidade"):
+                    bem_kwargs["quantidade"] = 1
+                if has_field(Bem, "valor_aquisicao"):
+                    bem_kwargs.setdefault("valor_aquisicao", Decimal("1000.00"))
+                if has_field(Bem, "valor_compra"):
+                    bem_kwargs.setdefault("valor_compra", Decimal("1000.00"))
+                if has_field(Bem, "valor"):
+                    bem_kwargs.setdefault("valor", Decimal("1000.00"))
 
                 # Documentais (geralmente CharField)
-                if has_field(Bem, "nota_fiscal"): bem_kwargs.setdefault("nota_fiscal", f"NF-{idx_ua:02d}{i:02d}")
-                if has_field(Bem, "numero_empenho"): bem_kwargs.setdefault("numero_empenho", f"EMP-{idx_ua:02d}{i:02d}")
+                if has_field(Bem, "nota_fiscal"):
+                    bem_kwargs.setdefault("nota_fiscal", f"NF-{idx_ua:02d}{i:02d}")
+                if has_field(Bem, "numero_empenho"):
+                    bem_kwargs.setdefault("numero_empenho", f"EMP-{idx_ua:02d}{i:02d}")
 
                 # Status textual (se existir)
                 for alt in ("status_atual", "situacao", "situacao_atual", "status"):
