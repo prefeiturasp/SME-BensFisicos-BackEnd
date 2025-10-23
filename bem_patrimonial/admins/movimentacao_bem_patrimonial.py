@@ -11,8 +11,10 @@ from bem_patrimonial.emails import (
 )
 
 from dados_comuns.libs.unidade_administrativa import uas_do_usuario
+from dados_comuns.models import UnidadeAdministrativa
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
+
 
 def aprovar_solicitacao(modeladmin, request, queryset):
     for item in queryset:
@@ -29,6 +31,24 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 request,
                 messages.WARNING,
                 f"Movimentação #{item.pk} já foi rejeitada anteriormente.",
+            )
+            continue
+
+        if not item.unidade_administrativa_origem.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de origem '{item.unidade_administrativa_origem.nome}' está inativa. "
+                "Não é possível aprovar movimentações de unidades inativas.",
+            )
+            continue
+
+        if not item.unidade_administrativa_destino.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
+                "Não é possível aprovar movimentações para unidades inativas.",
             )
             continue
 
@@ -83,6 +103,24 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
             )
             continue
 
+        if not item.unidade_administrativa_origem.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de origem '{item.unidade_administrativa_origem.nome}' está inativa. "
+                "Não é possível rejeitar movimentações de unidades inativas.",
+            )
+            continue
+
+        if not item.unidade_administrativa_destino.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
+                "Não é possível rejeitar movimentações para unidades inativas.",
+            )
+            continue
+
         if request.user.is_operador_inventario:
             if (
                 item.unidade_administrativa_destino
@@ -129,9 +167,9 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "atualizado_em",
     )
     autocomplete_fields = (
-        "bem_patrimonial", 
+        "bem_patrimonial",
         "unidade_administrativa_origem",
-        "unidade_administrativa_destino"
+        "unidade_administrativa_destino",
     )
 
     readonly_fields = (
@@ -151,10 +189,17 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
 
         if obj is None:
             uas = uas_do_usuario(request.user)
+            uas = uas.filter(status=UnidadeAdministrativa.ATIVA)
+
             if uas.count() == 1:
                 ua = uas.first()
-                if hasattr(form, "base_fields") and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields:
-                    form.base_fields[UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE].initial = ua.pk
+                if (
+                    hasattr(form, "base_fields")
+                    and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields
+                ):
+                    form.base_fields[
+                        UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                    ].initial = ua.pk
 
         return form
 
@@ -172,7 +217,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             super().save_model(request, obj, form, change)
         else:
             super().save_model(request, obj, form, change)
-    
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         """
             filtra e ordena as UAs (select normal).
