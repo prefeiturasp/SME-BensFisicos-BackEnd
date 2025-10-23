@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q, OuterRef, Subquery
 from bem_patrimonial.models import (
@@ -103,11 +104,35 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     inlines = [StatusBemPatrimonialInline, UnidadeAdministrativaBemPatrimonialInline]
 
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+
+        if obj is None:  # Só valida na criação
+            original_clean = form.clean
+
+            def custom_clean(form_self):
+                cleaned_data = original_clean(form_self)
+
+                if (
+                    request.user.unidade_administrativa
+                    and not request.user.unidade_administrativa.is_ativa
+                ):
+                    raise ValidationError(
+                        f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
+                        f"'{request.user.unidade_administrativa.nome}' está inativa. "
+                        "Entre em contato com o gestor de patrimônio."
+                    )
+
+                return cleaned_data
+
+            form.clean = custom_clean
+
+        return form
+
     def save_model(self, request, obj, form, change):
         if obj.id is None:
             obj.criado_por = request.user
             super().save_model(request, obj, form, change)
-
         else:
             super().save_model(request, obj, form, change)
 
