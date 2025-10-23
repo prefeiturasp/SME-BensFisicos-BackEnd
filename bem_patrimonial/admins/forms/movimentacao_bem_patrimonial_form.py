@@ -1,11 +1,15 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial.models import BemPatrimonial, MovimentacaoBemPatrimonial
 from bem_patrimonial.constants import APROVADO, BLOQUEADO, ENVIADA, AGUARDANDO_APROVACAO
 from dados_comuns.models import UnidadeAdministrativa
 
 
 class MovimentacaoBemPatrimonialForm(forms.ModelForm):
+    class Meta:
+        model = MovimentacaoBemPatrimonial
+        fields = "__all__"
+
     def clean(self):
         self.is_cleaned = True
 
