@@ -36,7 +36,7 @@ class UnidadeAdministrativa(models.Model):
     class Meta:
         verbose_name = "unidade administrativa"
         verbose_name_plural = "unidades administrativas"
-        ordering = ["codigo", "nome", "sigla"]
+        ordering = ["codigo", "sigla", "nome"]
 
     def save(self, *args, **kwargs):
         self.updated_at = datetime.now()

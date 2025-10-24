@@ -22,18 +22,18 @@ class StatusFilter(admin.SimpleListFilter):
 
 @admin.register(UnidadeAdministrativa)
 class UnidadeAdministrativaAdmin(admin.ModelAdmin):
-    list_display = [
+    list_display = (
         "codigo",
         "sigla",
         "nome",
-        "status",
-    ]
-
-    search_fields = [
-        "nome",
+    )
+    search_fields = (
         "sigla",
+        "nome",
         "codigo",
-    ]
+    )
+    search_help_text = "Pesquise por sigla, nome ou código."
+    ordering = ("codigo", "sigla", "nome")
 
     list_filter = [StatusFilter]
 

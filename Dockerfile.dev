@@ -1,0 +1,26 @@
+# Dockerfile.dev
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_CACHE_DIR=/root/.cache/pip
+
+WORKDIR /code
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /code/requirements.txt
+RUN pip install --upgrade pip && pip install -r /code/requirements.txt
+
+RUN pip install debugpy==1.8.5
+
+COPY . /code
+
+
+
+EXPOSE 8000 5678
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
