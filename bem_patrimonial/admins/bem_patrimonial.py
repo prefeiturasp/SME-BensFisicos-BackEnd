@@ -143,9 +143,8 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def save_model(self, request, obj, form, change):
         if obj.id is None:
             obj.criado_por = request.user
+
         try:
-            super().save_model(request, obj, form, change)
-        else:
             super().save_model(request, obj, form, change)
         except IntegrityError as e:
             if "numero_patrimonial" in str(e).lower():

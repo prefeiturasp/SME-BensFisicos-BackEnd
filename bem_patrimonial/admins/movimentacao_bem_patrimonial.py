@@ -50,6 +50,9 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 messages.ERROR,
                 f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
                 "Não é possível aprovar movimentações para unidades inativas.",
+            )
+            continue
+
         if item.cancelada:
             messages.add_message(
                 request,
@@ -124,6 +127,9 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                 messages.ERROR,
                 f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
                 "Não é possível rejeitar movimentações para unidades inativas.",
+            )
+            continue
+
         if item.cancelada:
             messages.add_message(
                 request,
