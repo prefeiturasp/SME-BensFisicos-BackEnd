@@ -12,6 +12,7 @@ from bem_patrimonial.emails import (
 )
 
 from dados_comuns.libs.unidade_administrativa import uas_do_usuario
+from dados_comuns.models import UnidadeAdministrativa
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
@@ -31,6 +32,24 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 request,
                 messages.WARNING,
                 f"Movimentação #{item.pk} já foi rejeitada anteriormente.",
+            )
+            continue
+
+        if not item.unidade_administrativa_origem.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de origem '{item.unidade_administrativa_origem.nome}' está inativa. "
+                "Não é possível aprovar movimentações de unidades inativas.",
+            )
+            continue
+
+        if not item.unidade_administrativa_destino.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
+                "Não é possível aprovar movimentações para unidades inativas.",
             )
             continue
 
@@ -90,6 +109,24 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                 request,
                 messages.WARNING,
                 f"Movimentação #{item.pk} já foi aprovada anteriormente.",
+            )
+            continue
+
+        if not item.unidade_administrativa_origem.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de origem '{item.unidade_administrativa_origem.nome}' está inativa. "
+                "Não é possível rejeitar movimentações de unidades inativas.",
+            )
+            continue
+
+        if not item.unidade_administrativa_destino.is_ativa:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
+                "Não é possível rejeitar movimentações para unidades inativas.",
             )
             continue
 
@@ -218,6 +255,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
 
         if obj is None:
             uas = uas_do_usuario(request.user)
+            uas = uas.filter(status=UnidadeAdministrativa.ATIVA)
+
             if uas.count() == 1:
                 ua = uas.first()
                 if (
