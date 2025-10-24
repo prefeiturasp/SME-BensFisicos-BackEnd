@@ -109,7 +109,7 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
         self.admin = UnidadeAdministrativaAdmin(UnidadeAdministrativa, self.site)
 
     def test_list_display_fields(self):
-        expected_fields = ("codigo", "sigla", "nome")
+        expected_fields = ("codigo", "sigla", "nome", "status")
         self.assertEqual(self.admin.list_display, expected_fields)
 
     def test_search_fields_order(self):
