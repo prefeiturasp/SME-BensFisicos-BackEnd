@@ -26,6 +26,7 @@ class UnidadeAdministrativaAdmin(admin.ModelAdmin):
         "codigo",
         "sigla",
         "nome",
+        "status",
     )
     search_fields = (
         "sigla",
