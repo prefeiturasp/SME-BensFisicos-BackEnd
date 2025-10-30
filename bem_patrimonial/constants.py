@@ -30,9 +30,11 @@ STATUS = (
 ENVIADA = "enviada"
 ACEITA = "aceita"
 REJEITADA = "rejeitada"
+CANCELADA_GESTOR = "cancelada_gestor"
 
 STATUS_MOVIMENTACAO = (
     (ENVIADA, "Enviada"),
     (ACEITA, "Aceita"),
     (REJEITADA, "Rejeitada"),
+    (CANCELADA_GESTOR, "Cancelada pelo Gestor de Patrimônio"),
 )

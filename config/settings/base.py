@@ -149,6 +149,8 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
+# Token de recuperação de senha expira em 24 horas (86400 segundos)
+PASSWORD_RESET_TIMEOUT = 86400
 
 
 # Internationalization

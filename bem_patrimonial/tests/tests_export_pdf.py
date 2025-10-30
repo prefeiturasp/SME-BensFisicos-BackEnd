@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-
+import re
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -12,7 +12,7 @@ from bem_patrimonial.constants import APROVADO, NAO_APROVADO, AGUARDANDO_APROVAC
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from dados_comuns.models import UnidadeAdministrativa
-
+NPAT_REGEX = r"^\d{3}\.\d{9}-\d$"
 
 class SetupExportData:
 
@@ -52,13 +52,39 @@ class SetupExportData:
             "quantidade": 10,
             "valor_unitario": Decimal("2500.00"),
             "numero_processo": 2024001,
-            "numero_patrimonial": 1001,
             "numero_cimbpm": 3001,
             "localizacao": "Sala 101",
             "criado_por": criado_por,
             "status": AGUARDANDO_APROVACAO,
         }
         defaults.update(kwargs)
+
+        npat = defaults.get("numero_patrimonial")
+        if npat is not None:
+            npat = str(npat)
+            defaults["numero_patrimonial"] = npat
+
+        if not npat:
+            defaults["sem_numeracao"] = True
+            defaults.pop("numero_patrimonial", None)
+            defaults["numero_formato_antigo"] = False
+
+        else:
+            if not re.fullmatch(NPAT_REGEX, npat):
+                defaults["numero_formato_antigo"] = True
+                base = npat
+                candidate = base
+                i = 2
+                while BemPatrimonial.objects.filter(numero_patrimonial=candidate).exists():
+                    candidate = f"{base}-{i}"
+                    i += 1
+                defaults["numero_patrimonial"] = candidate
+            else:
+                # número no padrão novo; se já existir, cai para geração automática
+                if BemPatrimonial.objects.filter(numero_patrimonial=npat).exists():
+                    defaults["sem_numeracao"] = True
+                    defaults.pop("numero_patrimonial", None)
+                    defaults["numero_formato_antigo"] = False
 
         return BemPatrimonial.objects.create(**defaults)
 

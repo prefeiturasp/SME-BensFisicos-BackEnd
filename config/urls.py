@@ -2,7 +2,14 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.contrib.auth import views as auth_views
-from usuario.views import LoginPasswordChangeView, LoginPasswordChangeDoneView
+from usuario.views import (
+    LoginPasswordChangeView,
+    LoginPasswordChangeDoneView,
+    PasswordRecoveryRequestView,
+    PasswordRecoveryDoneView,
+    PasswordRecoveryConfirmView,
+    PasswordRecoveryCompleteView,
+)
 from django.shortcuts import redirect
 from django.urls import reverse
 
@@ -23,9 +30,31 @@ def redirect_admin_password(request, user_id: int):
 urlpatterns = [
     path(
         "", auth_views.LoginView.as_view(template_name="admin/login.html"), name="login"
-    ),  # new
+    ),
     # Módulo de Suporte desabilitado temporariamente
     # path('api/agenda/', include(agenda_urls.urlpatterns)),
+    # Recuperação de senha
+    path(
+        "admin/password-recovery/",
+        PasswordRecoveryRequestView.as_view(),
+        name="password_recovery",
+    ),
+    path(
+        "admin/password-recovery/done/",
+        PasswordRecoveryDoneView.as_view(),
+        name="password_recovery_done",
+    ),
+    path(
+        "admin/password-recovery/confirm/<uidb64>/<token>/",
+        PasswordRecoveryConfirmView.as_view(),
+        name="password_recovery_confirm",
+    ),
+    path(
+        "admin/password-recovery/complete/",
+        PasswordRecoveryCompleteView.as_view(),
+        name="password_recovery_complete",
+    ),
+    # Troca de senha (usuário logado)
     path(
         "admin/usuario/usuario/<int:user_id>/password/",
         redirect_admin_password,
