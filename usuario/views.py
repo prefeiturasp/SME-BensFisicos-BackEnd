@@ -1,12 +1,19 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
-from django.contrib.auth.views import PasswordChangeView
+from django.contrib.auth.views import (
+    PasswordChangeView,
+    PasswordResetView,
+    PasswordResetConfirmView,
+)
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.tokens import default_token_generator
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import TemplateView
+import logging
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -61,3 +68,57 @@ class LoginPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
 
 class LoginPasswordChangeDoneView(LoginRequiredMixin, TemplateView):
     template_name = "admin/password_change_done.html"
+
+
+class PasswordRecoveryRequestView(PasswordResetView):
+
+    template_name = "admin/password_recovery_request.html"
+    email_template_name = "admin/password_recovery_email.html"
+    success_url = reverse_lazy("password_recovery_done")
+    token_generator = default_token_generator
+    from_email = None
+    html_email_template_name = "admin/password_recovery_email.html"
+    subject = "[Bens Físicos] Recuperação de senha solicitada"
+
+    def get_users(self, email):
+        active_users = User.objects.filter(email__iexact=email, is_active=True)
+        return (u for u in active_users if u.has_usable_password())
+
+    def form_valid(self, form):
+        email = form.cleaned_data["email"]
+        logger.info(f"Solicitação de recuperação de senha para {email}")
+        return super().form_valid(form)
+
+
+class PasswordRecoveryDoneView(TemplateView):
+    
+    template_name = "admin/password_recovery_done.html"
+
+
+class PasswordRecoveryConfirmView(PasswordResetConfirmView):
+
+    template_name = "admin/password_recovery_confirm.html"
+    success_url = reverse_lazy("password_recovery_complete")
+    token_generator = default_token_generator
+
+    def form_valid(self, form):
+        user = form.save()
+
+        updates = []
+        if hasattr(user, "must_change_password"):
+            user.must_change_password = False
+            updates.append("must_change_password")
+        if hasattr(user, "last_password_change"):
+            user.last_password_change = timezone.now()
+            updates.append("last_password_change")
+
+        if updates:
+            user.save(update_fields=updates)
+
+        logger.info(f"Senha recuperada com sucesso para usuário {user.username}")
+        return super().form_valid(form)
+
+
+class PasswordRecoveryCompleteView(TemplateView):
+
+    template_name = "admin/password_recovery_complete.html"

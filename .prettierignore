@@ -1,0 +1,18 @@
+# Django Templates - NÃO FORMATAR!
+# O Prettier quebra a sintaxe do Django Template Language ao colocar
+# múltiplas tags {% %} na mesma linha, causando erros como:
+# "Invalid block tag on line X: 'endblock'. Did you forget to register or load this tag?"
+config/templates/**/*.html
+**/templates/**/*.html
+
+# Arquivos de template de email
+**/*_email.html
+**/*_subject.txt
+
+# Arquivos gerados
+staticfiles/
+static/admin/
+migrations/
+__pycache__/
+*.pyc
+*.pyo
