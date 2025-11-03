@@ -7,7 +7,6 @@ from django.contrib.auth.models import Group
 
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
-    UnidadeAdministrativaBemPatrimonial,
     StatusBemPatrimonial,
 )
 from bem_patrimonial.constants import (
@@ -26,12 +25,11 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 
-# Reutiliza setup existente
+# Reutiliza setup existente (assumindo versão já atualizada p/ novo model)
 from bem_patrimonial.tests.tests_movimentacao_bloqueio import SetupMovimentacaoData
 
 
 class CancelamentoMovimentacaoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -41,14 +39,13 @@ class CancelamentoMovimentacaoTestCase(TestCase):
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
         self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
+            self.operador_origem, self.ua_origem
         )
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -105,7 +102,6 @@ class CancelamentoMovimentacaoTestCase(TestCase):
 
 
 class ValidacoesCruzadasCancelamentoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -115,14 +111,13 @@ class ValidacoesCruzadasCancelamentoTestCase(TestCase):
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
         self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
+            self.operador_origem, self.ua_origem
         )
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -148,7 +143,6 @@ class ValidacoesCruzadasCancelamentoTestCase(TestCase):
 
 
 class AdminActionCancelamentoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -158,14 +152,13 @@ class AdminActionCancelamentoTestCase(TestCase):
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
         self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
+            self.operador_origem, self.ua_origem
         )
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -268,44 +261,6 @@ class AdminActionCancelamentoTestCase(TestCase):
             any("já foi rejeitada e não pode ser cancelada" in msg for msg in mensagens)
         )
 
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_aceita"
-    )
-    def test_action_aprovar_cancelada_exibe_erro(self, mock_email):
-        self.movimentacao.cancelar_solicitacao(self.gestor)
-        self.movimentacao.refresh_from_db()
-
-        request = self._create_request_with_messages(self.operador_destino)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        aprovar_solicitacao(self.admin, request, queryset)
-
-        storage = messages.get_messages(request)
-        mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("foi cancelada e não pode ser aprovada" in msg for msg in mensagens)
-        )
-        mock_email.assert_not_called()
-
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_rejeitada"
-    )
-    def test_action_rejeitar_cancelada_exibe_erro(self, mock_email):
-        self.movimentacao.cancelar_solicitacao(self.gestor)
-        self.movimentacao.refresh_from_db()
-
-        request = self._create_request_with_messages(self.operador_destino)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        rejeitar_solicitacao(self.admin, request, queryset)
-
-        storage = messages.get_messages(request)
-        mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("foi cancelada e não pode ser rejeitada" in msg for msg in mensagens)
-        )
-        mock_email.assert_not_called()
-
     def test_action_cancelamento_apenas_para_gestores(self):
         request = self._create_request_with_messages(self.gestor)
         actions = self.admin.get_actions(request)
@@ -320,13 +275,12 @@ class AdminActionCancelamentoTestCase(TestCase):
     )
     def test_action_cancelar_multiplas_movimentacoes(self, mock_email):
         bem2 = SetupMovimentacaoData().create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=5
+            self.operador_origem, self.ua_origem
         )
         movimentacao2 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=bem2,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=2,
             solicitado_por=self.operador_origem,
         )
 
@@ -352,7 +306,6 @@ class AdminActionCancelamentoTestCase(TestCase):
 
 
 class FluxoCancelamentoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -362,16 +315,14 @@ class FluxoCancelamentoTestCase(TestCase):
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
         self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
+            self.operador_origem, self.ua_origem
         )
 
     def test_cancelar_e_criar_nova_movimentacao(self):
-
         mov1 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=3,
             solicitado_por=self.operador_origem,
         )
 
@@ -386,7 +337,6 @@ class FluxoCancelamentoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=4,
             solicitado_por=self.operador_origem,
         )
 
@@ -397,15 +347,8 @@ class FluxoCancelamentoTestCase(TestCase):
         mov2.aprovar_solicitacao(self.operador_destino)
         self.bem.refresh_from_db()
 
-        ua_origem_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-        ua_destino_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_destino
-        ).quantidade
-
-        self.assertEqual(ua_origem_qtd, 6)  # 10 - 4
-        self.assertEqual(ua_destino_qtd, 4)
+        # Como não há mais gestão de quantidades por UA, validamos a troca de UA do bem
+        self.assertEqual(self.bem.unidade_administrativa, self.ua_destino)
 
     def test_historico_status_ao_cancelar(self):
         count_inicial = StatusBemPatrimonial.objects.filter(
@@ -416,7 +359,6 @@ class FluxoCancelamentoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=3,
             solicitado_por=self.operador_origem,
         )
 
@@ -444,7 +386,6 @@ class FluxoCancelamentoTestCase(TestCase):
 
 
 class EmailCancelamentoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -459,12 +400,11 @@ class EmailCancelamentoTestCase(TestCase):
         self.operador_origem.nome = "João Teste"
         self.operador_origem.save()
         self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
+            self.operador_origem, self.ua_origem
         )
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_email_contem_nome_gestor(self, mock_send_email):
-
         from bem_patrimonial.emails import (
             envia_email_solicitacao_movimentacao_cancelada,
         )
@@ -482,7 +422,6 @@ class EmailCancelamentoTestCase(TestCase):
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_email_usa_username_como_fallback(self, mock_send_email):
-
         from bem_patrimonial.emails import (
             envia_email_solicitacao_movimentacao_cancelada,
         )

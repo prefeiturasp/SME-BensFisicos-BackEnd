@@ -1,0 +1,8 @@
+.multi-row { display:grid; grid-template-columns: 289px 180px 160px 1fr auto; gap:8px; align-items:end; margin-bottom:8px; }
+.multi-row label { display:block; font-weight:600; font-size:12px; margin-bottom:4px; }
+.multi-row .rm { margin-left:8px; }
+.multi-head { font-weight:700; margin-bottom:8px; color:#444 }
+.multi-help { color:#666; font-size:12px; margin-bottom:10px }
+.hide { display:none }
+.multi-inline { border:1px solid #ddd; padding:12px; margin:12px 0; border-radius:6px }
+#error-multi, #error-base-required { margin:8px 0; }

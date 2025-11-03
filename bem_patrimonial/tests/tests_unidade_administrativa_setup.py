@@ -65,22 +65,21 @@ class SetupUnidadeAdministrativaStatusData:
         return operador_1, operador_2, gestor
 
     def create_bem_patrimonial(self, criado_por, ua_origem, quantidade=10):
+        """
+        quantidade é ignorado no model atual; mantido só por compatibilidade.
+        """
         bem = BemPatrimonial.objects.create(
             nome="Notebook Dell",
-            data_compra_entrega=datetime.date.today(),
-            origem="aquisicao_direta",
-            marca="Dell",
-            modelo="Inspiron 15",
-            quantidade=quantidade,
             descricao="Notebook Dell Inspiron 15",
             valor_unitario=3500.00,
-            numero_processo=123456,
-            autorizacao_no_doc_em=datetime.date.today(),
-            numero_nibpm=111111,
-            numero_cimbpm=222222,
+            marca="Dell",
+            modelo="Inspiron 15",
+            numero_processo="PROC-123456",
+            sem_numeracao=True,              # gera número automaticamente
+            numero_formato_antigo=False,
             localizacao="Almoxarifado",
             criado_por=criado_por,
+            unidade_administrativa=ua_origem,
             status=APROVADO,
         )
-
         return bem

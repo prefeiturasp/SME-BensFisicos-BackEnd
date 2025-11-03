@@ -1,5 +1,9 @@
 from datetime import datetime
 from django.db import models
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.utils import timezone
+from django.conf import settings
 
 
 class UnidadeAdministrativa(models.Model):
@@ -47,8 +51,28 @@ class UnidadeAdministrativa(models.Model):
         return self.status == self.ATIVA
 
     def pode_inativar(self):
-        from bem_patrimonial.models import UnidadeAdministrativaBemPatrimonial
+        return not self.bems_patrimonial.exists()
 
-        return not UnidadeAdministrativaBemPatrimonial.objects.filter(
-            unidade_administrativa=self, quantidade__gt=0
-        ).exists()
+
+class HistoricoGeral(models.Model):
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.CharField(max_length=64, db_index=True)
+    content_object = GenericForeignKey('content_type', 'object_id')
+
+    campo = models.CharField("Campo alterado", max_length=128)
+    valor_antigo = models.TextField("Valor antigo", null=True, blank=True)
+    valor_novo = models.TextField("Valor novo", null=True, blank=True)
+
+    alterado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Alterado por"
+    )
+    alterado_em = models.DateTimeField("Alterado em", default=timezone.now, db_index=True)
+
+    class Meta:
+        verbose_name = "histórico geral"
+        verbose_name_plural = "histórico geral"
+        ordering = ("-alterado_em", "content_type", "object_id")
+        indexes = [models.Index(fields=["content_type", "object_id", "alterado_em"])]
+
+    def __str__(self):
+        return f"{self.content_type}.{self.object_id} | {self.campo}"

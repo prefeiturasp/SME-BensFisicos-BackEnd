@@ -8,12 +8,10 @@ from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     StatusBemPatrimonial,
-    UnidadeAdministrativaBemPatrimonial,
 )
 from bem_patrimonial.constants import (
     APROVADO,
     BLOQUEADO,
-    AGUARDANDO_APROVACAO,
     ENVIADA,
     ACEITA,
     REJEITADA,
@@ -30,7 +28,6 @@ from django.contrib.auth.models import Group
 
 
 class SetupMovimentacaoData:
-
     def create_unidades_administrativas(self):
         ua_origem = UnidadeAdministrativa.objects.create(
             nome="DRE Centro", codigo="DRE-CENTRO"
@@ -72,39 +69,45 @@ class SetupMovimentacaoData:
 
         return operador_origem, operador_destino, gestor
 
-    def create_bem_patrimonial(self, criado_por, ua_origem, quantidade=10):
+    def create_bem_patrimonial(
+        self,
+        criado_por,
+        ua_origem,
+        *,
+        numero_patrimonial=None,
+        sem_numeracao=False,
+    ):
+        # Se não for sem_numeracao e não passar número, gera o próximo disponível
+        if numero_patrimonial is None and not sem_numeracao:
+            base = 1
+            while True:
+                candidato = f"000.{str(base).zfill(12)}-0"
+                if not BemPatrimonial.objects.filter(
+                    numero_patrimonial=candidato
+                ).exists():
+                    numero_patrimonial = candidato
+                    break
+                base += 1
+
         bem = BemPatrimonial.objects.create(
             nome="Notebook Dell",
-            data_compra_entrega=datetime.date.today(),
-            origem="aquisicao_direta",
+            descricao="Notebook Dell Inspiron 15",
+            numero_processo="PROC-123456",
+            valor_unitario=3500.00,
             marca="Dell",
             modelo="Inspiron 15",
-            quantidade=quantidade,
-            descricao="Notebook Dell Inspiron 15",
-            valor_unitario=3500.00,
-            numero_processo=123456,
-            autorizacao_no_doc_em=datetime.date.today(),
-            numero_nibpm=111111,
-            numero_cimbpm=222222,
+            numero_patrimonial=numero_patrimonial,
+            numero_formato_antigo=False,
+            sem_numeracao=sem_numeracao,
             localizacao="Almoxarifado",
             criado_por=criado_por,
             status=APROVADO,
-        )
-
-        ua_bem, created = UnidadeAdministrativaBemPatrimonial.objects.get_or_create(
-            bem_patrimonial=bem,
             unidade_administrativa=ua_origem,
-            defaults={"quantidade": quantidade},
         )
-        if not created:
-            ua_bem.quantidade = quantidade
-            ua_bem.save()
-
         return bem
 
 
 class BloqueioAutomaticoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -113,9 +116,7 @@ class BloqueioAutomaticoTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
     def test_bem_bloqueado_ao_criar_movimentacao(self):
         self.assertEqual(self.bem.status, APROVADO)
@@ -124,12 +125,10 @@ class BloqueioAutomaticoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
         self.bem.refresh_from_db()
-
         self.assertEqual(self.bem.status, BLOQUEADO)
         self.assertEqual(movimentacao.status, ENVIADA)
 
@@ -142,14 +141,12 @@ class BloqueioAutomaticoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
         count_depois = StatusBemPatrimonial.objects.filter(
             bem_patrimonial=self.bem
         ).count()
-
         self.assertEqual(count_depois, count_antes + 1)
 
         ultimo_status = StatusBemPatrimonial.objects.filter(
@@ -166,7 +163,6 @@ class BloqueioAutomaticoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -182,7 +178,6 @@ class BloqueioAutomaticoTestCase(TestCase):
 
 
 class AprovacaoMovimentacaoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -191,34 +186,21 @@ class AprovacaoMovimentacaoTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
-    def test_aprovar_movimentacao_atualiza_quantidades(self):
-        ua_origem_qtd_antes = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-
+    def test_aprovar_movimentacao_move_bem_para_ua_destino(self):
+        # Aprovação deve mover a UA do bem para o destino
         self.movimentacao.aprovar_solicitacao(self.operador_destino)
 
-        ua_origem_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-        ua_destino_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_destino
-        ).quantidade
-
-        self.assertEqual(ua_origem_qtd, ua_origem_qtd_antes - 5)
-        self.assertEqual(ua_destino_qtd, 5)
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.unidade_administrativa, self.ua_destino)
 
     def test_aprovar_movimentacao_desbloqueia_bem(self):
         self.bem.refresh_from_db()
@@ -227,7 +209,6 @@ class AprovacaoMovimentacaoTestCase(TestCase):
         self.movimentacao.aprovar_solicitacao(self.operador_destino)
 
         self.bem.refresh_from_db()
-
         self.assertEqual(self.bem.status, APROVADO)
 
     def test_aprovar_movimentacao_muda_status(self):
@@ -248,31 +229,21 @@ class AprovacaoMovimentacaoTestCase(TestCase):
         self.assertTrue(self.movimentacao.aceita)
 
     def test_nao_pode_aprovar_movimentacao_ja_aprovada(self):
+        # 1ª aprovação
         self.movimentacao.aprovar_solicitacao(self.operador_destino)
-
-        ua_origem_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-        ua_destino_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_destino
-        ).quantidade
-
         self.movimentacao.refresh_from_db()
+        bem_ua_apos_primeira = self.bem.unidade_administrativa
+
+        # 2ª tentativa não deve alterar nada
         self.movimentacao.aprovar_solicitacao(self.gestor)
+        self.movimentacao.refresh_from_db()
+        self.bem.refresh_from_db()
 
-        ua_origem_qtd_depois = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-        ua_destino_qtd_depois = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_destino
-        ).quantidade
-
-        self.assertEqual(ua_origem_qtd, ua_origem_qtd_depois)
-        self.assertEqual(ua_destino_qtd, ua_destino_qtd_depois)
+        self.assertEqual(self.movimentacao.aprovado_por, self.operador_destino)
+        self.assertEqual(self.bem.unidade_administrativa, bem_ua_apos_primeira)
 
 
 class RejeicaoMovimentacaoTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -281,36 +252,22 @@ class RejeicaoMovimentacaoTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
-    def test_rejeitar_movimentacao_nao_altera_quantidades(self):
-        ua_origem_qtd_antes = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
+    def test_rejeitar_movimentacao_nao_altera_ua_do_bem(self):
+        ua_inicial = self.bem.unidade_administrativa
 
         self.movimentacao.rejeitar_solicitacao(self.operador_destino)
+        self.bem.refresh_from_db()
 
-        ua_origem_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-
-        self.assertEqual(ua_origem_qtd, ua_origem_qtd_antes)
-
-        self.assertFalse(
-            UnidadeAdministrativaBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem, unidade_administrativa=self.ua_destino
-            ).exists()
-        )
+        self.assertEqual(self.bem.unidade_administrativa, ua_inicial)
 
     def test_rejeitar_movimentacao_desbloqueia_bem(self):
         self.bem.refresh_from_db()
@@ -319,7 +276,6 @@ class RejeicaoMovimentacaoTestCase(TestCase):
         self.movimentacao.rejeitar_solicitacao(self.operador_destino)
 
         self.bem.refresh_from_db()
-
         self.assertEqual(self.bem.status, APROVADO)
 
     def test_rejeitar_movimentacao_muda_status(self):
@@ -341,7 +297,6 @@ class RejeicaoMovimentacaoTestCase(TestCase):
 
 
 class PermissoesAdminActionsTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -350,15 +305,12 @@ class PermissoesAdminActionsTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -407,17 +359,13 @@ class PermissoesAdminActionsTestCase(TestCase):
         self.assertEqual(self.movimentacao.aprovado_por, self.gestor)
 
     def test_solicitante_nao_pode_aprovar_propria_solicitacao(self):
-        UnidadeAdministrativaBemPatrimonial.objects.get_or_create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa=self.ua_destino,
-            defaults={"quantidade": 5},
-        )
+        # colocar o bem no destino para simular o operador_destino como "origem" de uma nova solicitação
+        self.bem.set_unidade_administrative(self.ua_destino)
 
         movimentacao2 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_destino,
             unidade_administrativa_destino=self.ua_origem,
-            quantidade=2,
             solicitado_por=self.operador_destino,
         )
 
@@ -432,13 +380,12 @@ class PermissoesAdminActionsTestCase(TestCase):
 
     def test_action_com_multiplas_movimentacoes(self):
         bem2 = SetupMovimentacaoData().create_bem_patrimonial(
-            self.gestor, self.ua_origem, quantidade=5
+            self.gestor, self.ua_origem
         )
         movimentacao2 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=bem2,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=2,
             solicitado_por=self.operador_origem,
         )
 
@@ -486,7 +433,6 @@ class PermissoesAdminActionsTestCase(TestCase):
 
 
 class IntegracaoCompletaTestCase(TestCase):
-
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
@@ -495,9 +441,7 @@ class IntegracaoCompletaTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
     def test_fluxo_completo_aprovacao(self):
         self.assertEqual(self.bem.status, APROVADO)
@@ -507,7 +451,6 @@ class IntegracaoCompletaTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -523,27 +466,16 @@ class IntegracaoCompletaTestCase(TestCase):
         self.assertEqual(movimentacao.status, ACEITA)
         self.assertEqual(self.bem.status, APROVADO)
         self.assertFalse(self.bem.tem_movimentacao_pendente)
-
-        ua_origem_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-        ua_destino_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_destino
-        ).quantidade
-
-        self.assertEqual(ua_origem_qtd, 5)
-        self.assertEqual(ua_destino_qtd, 5)
+        # bem deve ir para a UA destino
+        self.assertEqual(self.bem.unidade_administrativa, self.ua_destino)
 
     def test_fluxo_completo_rejeicao(self):
-        ua_origem_qtd_inicial = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
+        ua_inicial = self.bem.unidade_administrativa
 
         movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -557,39 +489,29 @@ class IntegracaoCompletaTestCase(TestCase):
         self.assertEqual(movimentacao.status, REJEITADA)
         self.assertEqual(self.bem.status, APROVADO)
         self.assertFalse(self.bem.tem_movimentacao_pendente)
-
-        ua_origem_qtd_final = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-
-        self.assertEqual(ua_origem_qtd_inicial, ua_origem_qtd_final)
+        # bem deve permanecer na UA original
+        self.assertEqual(self.bem.unidade_administrativa, ua_inicial)
 
     def test_multiplas_movimentacoes_sequenciais(self):
+        # 1ª: origem -> destino
         mov1 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=3,
             solicitado_por=self.operador_origem,
         )
         mov1.aprovar_solicitacao(self.operador_destino)
-
         self.bem.refresh_from_db()
+        self.assertEqual(self.bem.unidade_administrativa, self.ua_destino)
+
+        # 2ª: destino -> origem
         mov2 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            quantidade=2,
-            solicitado_por=self.operador_origem,
+            unidade_administrativa_origem=self.ua_destino,
+            unidade_administrativa_destino=self.ua_origem,
+            solicitado_por=self.operador_destino,
         )
-        mov2.aprovar_solicitacao(self.operador_destino)
+        mov2.aprovar_solicitacao(self.operador_origem)
 
-        ua_origem_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_origem
-        ).quantidade
-        ua_destino_qtd = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_destino
-        ).quantidade
-
-        self.assertEqual(ua_origem_qtd, 5)  # 10 - 3 - 2
-        self.assertEqual(ua_destino_qtd, 5)  # 0 + 3 + 2
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.unidade_administrativa, self.ua_origem)

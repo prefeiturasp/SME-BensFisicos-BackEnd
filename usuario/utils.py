@@ -27,7 +27,6 @@ def setup_grupos_e_permissoes():
     gestor_settings = {
         "_bempatrimonial": ["add", "change", "delete", "view"],
         "_movimentacaobempatrimonial": ["add", "change", "delete", "view"],
-        "_unidadeadministrativabempatrimonial": ["view"],
         "_statusbempatrimonial": ["add", "change", "delete", "view"],
         "_usuario": ["add", "change", "view"],
         "_unidadeadministrativa": ["add", "change", "delete", "view"],
@@ -43,7 +42,6 @@ def setup_grupos_e_permissoes():
     operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
     operador_settings = {
         "_bempatrimonial": ["add", "change", "delete", "view"],
-        "_unidadeadministrativabempatrimonial": ["view"],
         "_movimentacaobempatrimonial": ["add", "change", "view"],
         "_statusbempatrimonial": ["view"],
         "_unidadeadministrativa": ["view"],
