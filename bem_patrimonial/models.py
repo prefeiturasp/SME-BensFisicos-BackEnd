@@ -458,13 +458,13 @@ def bloquear_bem_em_movimentacao(sender, instance, created, **kwargs):
 @receiver(post_save, sender=MovimentacaoBemPatrimonial)
 def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
     if created:
-        # pega emails dos usuários do setor destino
         emails = []
         usuarios = Usuario.objects.filter(
             is_active=True,
             unidade_administrativa=instance.unidade_administrativa_destino,
         ).only("email")
         for usuario in usuarios:
-            emails.append(usuario.email)
+            if usuario.email:
+                emails.append(usuario.email)
 
-        envia_email_nova_solicitacao_movimentacao(instance.bem_patrimonial, emails)
+        envia_email_nova_solicitacao_movimentacao(instance, emails)
