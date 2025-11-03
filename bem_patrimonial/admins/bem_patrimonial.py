@@ -6,6 +6,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
 
+from bem_patrimonial.admins.actions.extracao_numeros import aplicar_extracao_numero, simular_extracao_numero
 from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -18,10 +19,11 @@ from rangefilter.filters import DateRangeFilter
 from import_export.formats.base_formats import CSV, XLS, XLSX, HTML
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
-from dados_comuns.models import HistoricoGeral
+
 from django.contrib.contenttypes.admin import GenericTabularInline
 from django.db.models.functions import Cast
 from bem_patrimonial import constants
+from dados_comuns.models import HistoricoGeral
 
 
 class StatusBemPatrimonialInline(admin.TabularInline):
@@ -104,6 +106,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "criado_em",
         "foto_preview",
     )
+    actions = [simular_extracao_numero, aplicar_extracao_numero]
 
     class Media:
         js = ("admin/bem_patrimonial.js",)
