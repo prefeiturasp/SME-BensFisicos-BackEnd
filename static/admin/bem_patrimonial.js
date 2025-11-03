@@ -246,25 +246,56 @@
     toPayload();
     var rows = qsa('#multi-rows .multi-row');
     var errors = [];
+
     if (!rows.length){
-      errors.push('Adicione ao menos uma linha no modo Múltiplos Bens.');
+        errors.push('Adicione ao menos uma linha no modo Múltiplos Bens.');
     }
+
+    function markErr(input){
+        input.classList.add('error');
+        input.style.setProperty('border-color', '#ba2121', 'important');
+        input.style.setProperty('outline', '2px solid rgba(186,33,33,.15)', 'important');
+        input.style.setProperty('outline-offset', '1px', 'important');
+    }
+    function clearErr(input){
+        input.classList.remove('error');
+        input.style.removeProperty('border-color');
+        input.style.removeProperty('outline');
+        input.style.removeProperty('outline-offset');
+    }
+
     rows.forEach(function(r, i){
-      var idx = i + 1;
-      var np = qs('.fld-npat', r);
-      var sem = qs('.fld-sem', r);
-      var npVal = (np.value || '').trim();
-      var semVal = !!sem.checked;
-      if (!semVal && !npVal){
+        var idx = i + 1;
+        var np  = qs('.fld-npat', r);
+        var sem = qs('.fld-sem', r);
+        var loc = qs('.fld-loc', r);
+
+        var npVal  = (np.value || '').trim();
+        var semVal = !!sem.checked;
+        var locVal = (loc.value || '').trim();
+
+        r.classList.remove('invalid');
+
+        if (!semVal && !npVal){
         errors.push('Linha '+idx+': Informe o Nº Patrimonial ou marque "Sem numeração".');
-        np.classList.add('error'); np.style.borderColor = '#ba2121';
-      } else {
-        np.classList.remove('error'); np.style.borderColor = '';
-      }
+        markErr(np);
+        r.classList.add('invalid');
+        } else {
+        clearErr(np);
+        }
+
+        if (!locVal){
+        errors.push('Linha '+idx+': Informe a Localização (obrigatória).');
+        markErr(loc);
+        r.classList.add('invalid');
+        } else {
+        clearErr(loc);
+        }
     });
+
     showError('multi-errors', errors);
     return errors.length === 0;
-  }
+    }
 
   function labelFor(field){
     var wrap = field.closest('.form-row') || field.parentNode;
@@ -346,54 +377,53 @@
     var form = qs('form');
     if (!form) return;
 
-    // Injeta bloco completo logo após o campo foto (ou no fim do form)
     var anchor = qs('.form-row.field-foto');
     var wrapper = document.createElement('div');
     wrapper.innerHTML = multiHTML();
     if (anchor && anchor.parentNode){ anchor.parentNode.insertBefore(wrapper, anchor.nextSibling); }
     else { form.appendChild(wrapper); }
 
+    var locSingle = id('id_localizacao');
+    if (locSingle) locSingle.setAttribute('required', 'required');
+
     var multi = id('multi-container');
     var errorBase = id('base-required-errors');
     var addBtn = id('multi-add');
 
-    // Bind dinâmicos
     if (addBtn && !addBtn.dataset.bound){
-      addBtn.dataset.bound = "1";
-      addBtn.addEventListener('click', addRow);
+        addBtn.dataset.bound = "1";
+        addBtn.addEventListener('click', addRow);
     }
     form.addEventListener('input', toPayload);
     form.addEventListener('change', toPayload);
 
-    // Hidden para garantir envio de modo
     var hiddenModo = document.createElement('input');
     hiddenModo.type = 'hidden';
     hiddenModo.name = 'cadastro_modo';
     form.appendChild(hiddenModo);
 
     function setMode(force){
-      var checked = qs('input[name="cadastro_modo"]:checked');
-      var val = (checked && checked.value) || 'unico';
-      if (force === 'multi'){
+        var checked = qs('input[name="cadastro_modo"]:checked');
+        var val = (checked && checked.value) || 'unico';
+        if (force === 'multi'){
         var radioMulti = qs('input[name="cadastro_modo"][value="multi"]');
         if (radioMulti){ radioMulti.checked = true; val = 'multi'; }
-      }
-      var singleWraps = ['numero_patrimonial', 'numero_formato_antigo', 'sem_numeracao', 'localizacao'].map(function(f){
+        }
+        var singleWraps = ['numero_patrimonial', 'numero_formato_antigo', 'sem_numeracao', 'localizacao'].map(function(f){
         var row = qs('.form-row.field-' + f) || (id('id_'+f) && id('id_'+f).closest('.form-row'));
         return row || null;
-      }).filter(Boolean);
+        }).filter(Boolean);
 
-      if (val === 'multi'){
+        if (val === 'multi'){
         multi.classList.remove('hide');
         singleWraps.forEach(function(w){ w.style.display = 'none'; });
-      } else {
+        } else {
         multi.classList.add('hide');
         singleWraps.forEach(function(w){ w.style.display = ''; });
-      }
-      toPayload();
+        }
+        toPayload();
     }
 
-    // Radios
     qsa('input[name="cadastro_modo"]').forEach(function(r){ r.addEventListener('change', function(){ setMode(); }); });
 
     var initialPayload = (function(){
@@ -406,38 +436,41 @@
     setMode(forceMultiFlag ? 'multi' : null);
 
     function guardSubmit(ev){
-      toPayload();
-      var okBase = validateBaseRequired(form);
-      if (!okBase){ ev.preventDefault(); ev.stopPropagation(); return; }
+        toPayload();
+        var okBase = validateBaseRequired(form);
+        if (!okBase){ ev.preventDefault(); ev.stopPropagation(); return; }
 
-      var isMulti = !multi.classList.contains('hide');
-      var hasRows = qsa('#multi-rows .multi-row').length > 0;
-      var radioMultiChecked = !!qs('input[name="cadastro_modo"][value="multi"]:checked');
-      if (isMulti){
+        var isMulti = !multi.classList.contains('hide');
+        var hasRows = qsa('#multi-rows .multi-row').length > 0;
+        var radioMultiChecked = !!qs('input[name="cadastro_modo"][value="multi"]:checked');
+        if (isMulti){
         var okMulti = validateMultiRows();
         if (!okMulti){ ev.preventDefault(); ev.stopPropagation(); return; }
-      }
-      if (hasRows || radioMultiChecked){
+        }
+        if (hasRows || radioMultiChecked){
         hiddenModo.value = 'multi';
         var radioMulti = qs('input[name="cadastro_modo"][value="multi"]');
         if (radioMulti) radioMulti.checked = true;
-      } else {
+        } else {
         var checked = qs('input[name="cadastro_modo"]:checked');
         hiddenModo.value = checked ? checked.value : 'unico';
-      }
+        }
     }
 
     form.addEventListener('submit', guardSubmit);
     ['_save','_addanother','_continue'].forEach(function(name){
-      var btn = qs('input[name="'+name+'"]');
-      if (btn && !btn.dataset.bound){
+        var btn = qs('input[name="'+name+'"]');
+        if (btn && !btn.dataset.bound){
         btn.dataset.bound = "1";
         btn.addEventListener('click', guardSubmit);
-      }
+        }
     });
 
-    document.addEventListener('input', function(){ showError('base-required-errors', []); showError('multi-errors', []); });
-  }
+    document.addEventListener('input', function(){
+        showError('base-required-errors', []);
+        showError('multi-errors', []);
+    });
+   }
 
   document.addEventListener('DOMContentLoaded', function(){
     bindCurrencyMask();

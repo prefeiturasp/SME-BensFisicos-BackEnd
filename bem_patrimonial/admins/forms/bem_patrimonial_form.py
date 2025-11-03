@@ -54,6 +54,11 @@ class BemPatrimonialAdminForm(forms.ModelForm):
             widget=vu_widget,
         )
 
+        if "localizacao" in self.fields:
+            self.fields["localizacao"].required = True
+            if not self.fields["localizacao"].label:
+                self.fields["localizacao"].label = "Localização"
+
         # status desabilitado; default na criação
         if "status" in self.fields:
             self.fields["status"].disabled = True

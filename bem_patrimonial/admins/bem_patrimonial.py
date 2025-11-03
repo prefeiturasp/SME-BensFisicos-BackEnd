@@ -348,6 +348,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     numero_formato_antigo = to_bool(row.get("numero_formato_antigo"))
                     sem_numeracao = to_bool(row.get("sem_numeracao"))
                     localizacao = (row.get("localizacao") or "").strip() or None
+                    if not localizacao:
+                        errors.append(
+                            f"Linha {idx}: Informe a Localização (obrigatória)."
+                        )
+                        continue
 
                     numero_patrimonial = numero_patrimonial_raw or None
                     if sem_numeracao:
