@@ -64,9 +64,7 @@ class PDFFormat(Format):
 
         if bens_list:
             elements.extend(
-                self._criar_resumo(
-                    total_registros, valor_total, localizacoes_unicas
-                )
+                self._criar_resumo(total_registros, valor_total, localizacoes_unicas)
             )
 
         elements.extend(self._criar_rodape())
@@ -263,10 +261,8 @@ class PDFFormat(Format):
             )
 
             unidade_adm_text = "-"
-            if bem.criado_por and hasattr(bem.criado_por, "unidade_administrativa"):
-                unidade_adm = bem.criado_por.unidade_administrativa
-                if unidade_adm and hasattr(unidade_adm, "nome"):
-                    unidade_adm_text = str(unidade_adm.nome)
+            if bem.unidade_administrativa:
+                unidade_adm_text = str(bem.unidade_administrativa.nome)
             unidade_administrativa = Paragraph(unidade_adm_text, cell_style)
 
             row = [
@@ -339,9 +335,7 @@ class PDFFormat(Format):
 
         return elements
 
-    def _criar_resumo(
-        self, total_registros, valor_total, localizacoes_unicas
-    ):
+    def _criar_resumo(self, total_registros, valor_total, localizacoes_unicas):
         elements = []
 
         summary_data = [
