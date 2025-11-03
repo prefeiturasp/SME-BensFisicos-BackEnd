@@ -64,7 +64,7 @@ class SetupUnidadeAdministrativaStatusData:
 
         return operador_1, operador_2, gestor
 
-    def create_bem_patrimonial(self, criado_por, ua_origem, quantidade=10):
+    def create_bem_patrimonial(self, criado_por, ua_origem):
         """
         quantidade é ignorado no model atual; mantido só por compatibilidade.
         """

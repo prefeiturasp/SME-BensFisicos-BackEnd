@@ -8,7 +8,6 @@ from django.db import transaction, connection
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
-    UnidadeAdministrativaBemPatrimonial,
 )
 from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
@@ -43,26 +42,17 @@ class SetupDuplicacaoData:
         operador.groups.add(grupo_operador)
         return operador
 
-    def create_bem_patrimonial(self, criado_por, ua_origem, quantidade=10):
+    def create_bem_patrimonial(self, criado_por, ua_origem):
         bem = BemPatrimonial.objects.create(
             nome="Computador Desktop",
-            data_compra_entrega=datetime.date.today(),
-            origem="aquisicao_direta",
             marca="Dell",
             modelo="OptiPlex 7090",
-            quantidade=quantidade,
             descricao="Computador Dell OptiPlex",
             valor_unitario=4500.00,
-            numero_processo=789012,
+            numero_processo="789012",
             criado_por=criado_por,
             status=APROVADO,
-        )
-
-        # Usa get_or_create para evitar duplicatas
-        UnidadeAdministrativaBemPatrimonial.objects.get_or_create(
-            bem_patrimonial=bem,
             unidade_administrativa=ua_origem,
-            defaults={"quantidade": quantidade},
         )
 
         return bem
@@ -99,7 +89,6 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
         )
 
         self.admin.save_model(request, movimentacao, None, False)
@@ -113,7 +102,6 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=3,
             solicitado_por=self.operador,
         )
 
@@ -125,7 +113,6 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=2,
         )
 
         self.admin.save_model(request, movimentacao2, None, False)
@@ -138,7 +125,6 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=3,
             solicitado_por=self.operador,
         )
         mov1.aprovar_solicitacao(self.operador)
@@ -151,7 +137,6 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=2,
         )
 
         self.admin.save_model(request, movimentacao2, None, False)
@@ -164,7 +149,6 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=3,
             solicitado_por=self.operador,
         )
         mov1.rejeitar_solicitacao(self.operador)
@@ -177,7 +161,6 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=2,
         )
 
         self.admin.save_model(request, movimentacao2, None, False)
@@ -222,7 +205,6 @@ class LockTransacionalTestCase(TransactionTestCase):
                         bem_patrimonial=self.bem,
                         unidade_administrativa_origem=self.ua_origem,
                         unidade_administrativa_destino=self.ua_destino,
-                        quantidade=1,
                     )
 
                     self.admin.save_model(request, movimentacao, None, False)
@@ -268,7 +250,6 @@ class LockTransacionalTestCase(TransactionTestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=2,
             solicitado_por=self.operador,
         )
 
@@ -289,7 +270,6 @@ class EdicaoMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador,
         )
 
@@ -310,21 +290,21 @@ class EdicaoMovimentacaoTestCase(TestCase):
     def test_pode_editar_movimentacao_existente(self):
         request = self._create_request_with_messages(self.operador)
 
-        self.movimentacao.quantidade = 3
+        self.movimentacao.observacao = "Observação editada"
 
         self.admin.save_model(request, self.movimentacao, None, True)
 
         self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.quantidade, 3)
+        self.assertEqual(self.movimentacao.observacao, "Observação editada")
 
     def test_edicao_nao_passa_por_validacao_lock(self):
         request = self._create_request_with_messages(self.operador)
 
-        quantidade_original = self.movimentacao.quantidade
-        self.movimentacao.quantidade = 7
+        observacao_original = self.movimentacao.observacao
+        self.movimentacao.observacao = "Nova observação"
 
         self.admin.save_model(request, self.movimentacao, None, True)
 
         self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.quantidade, 7)
-        self.assertNotEqual(self.movimentacao.quantidade, quantidade_original)
+        self.assertEqual(self.movimentacao.observacao, "Nova observação")
+        self.assertNotEqual(self.movimentacao.observacao, observacao_original)

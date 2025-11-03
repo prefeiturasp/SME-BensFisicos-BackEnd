@@ -6,7 +6,6 @@ import datetime
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
-    UnidadeAdministrativaBemPatrimonial,
 )
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
@@ -58,22 +57,14 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         self.bem = BemPatrimonial.objects.create(
             nome="POLTRONA GIRATÓRIA",
             numero_patrimonial="001.053719507-5",
-            data_compra_entrega=datetime.date.today(),
-            origem="aquisicao_direta",
             marca="Marca Teste",
             modelo="Modelo Teste",
-            quantidade=10,
             descricao="Descrição teste",
             valor_unitario=1500.00,
-            numero_processo=123456,
+            numero_processo="123456",
             criado_por=self.operador_origem,
             status=APROVADO,
-        )
-
-        UnidadeAdministrativaBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
             unidade_administrativa=self.ua_origem,
-            quantidade=10,
         )
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
@@ -82,7 +73,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -100,7 +90,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -124,7 +113,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -145,7 +133,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -165,7 +152,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -187,7 +173,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -202,7 +187,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -224,7 +208,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -236,7 +219,6 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
