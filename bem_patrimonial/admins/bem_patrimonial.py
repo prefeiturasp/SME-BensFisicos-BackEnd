@@ -143,27 +143,39 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     inlines = [StatusBemPatrimonialInline, HistoricoGeralInline]
 
     def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
+        BaseForm = super().get_form(request, obj, **kwargs)
 
+        # Regras na CRIAÇÃO (mantém sua validação atual)
         if obj is None:
-            original_clean = form.clean
+            original_clean = BaseForm.clean
 
-            def custom_clean(form_self):
-                cleaned_data = original_clean(form_self)
-                if (
-                    getattr(request.user, "unidade_administrativa", None)
-                    and not request.user.unidade_administrativa.is_ativa
-                ):
-                    raise ValidationError(
-                        f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
-                        f"'{request.user.unidade_administrativa.nome}' está inativa. "
-                        "Entre em contato com o gestor de patrimônio."
-                    )
-                return cleaned_data
+            class CreateForm(BaseForm):
+                def clean(self_inner):
+                    cleaned_data = original_clean(self_inner)
+                    ua = getattr(request.user, "unidade_administrativa", None)
+                    if ua and not ua.is_ativa:
+                        raise ValidationError(
+                            f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
+                            f"'{ua.nome}' está inativa. Entre em contato com o gestor de patrimônio."
+                        )
+                    return cleaned_data
 
-            form.clean = custom_clean
+            return CreateForm
 
-        return form
+        class EditForm(BaseForm):
+            def __init__(self_inner, *a, **kw):
+                super().__init__(*a, **kw)
+                inst = getattr(self_inner, "instance", None)
+                if inst and getattr(inst, "sem_numeracao", False):
+                    for fname in (
+                        "numero_patrimonial",
+                        "numero_formato_antigo",
+                        "sem_numeracao",
+                    ):
+                        if fname in self_inner.fields:
+                            self_inner.fields[fname].disabled = True
+
+        return EditForm
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:
@@ -406,6 +418,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
         from django.utils.safestring import mark_safe
+
         anchor = format_html(
             '<div id="multi-inline-root" data-force-multi="{}"></div>'
             '<script id="multi-inline-data" type="application/json">{}</script>',
