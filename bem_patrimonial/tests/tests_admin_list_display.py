@@ -10,6 +10,7 @@ from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 class BemPatrimonialAdminListDisplayTestCase(TestCase):
 
     def setUp(self):
+        self.factory = RequestFactory()
         self.site = AdminSite()
         self.admin = BemPatrimonialAdmin(BemPatrimonial, self.site)
         self.factory = RequestFactory()
@@ -43,6 +44,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         request.user = self.gestor
 
         expected_fields = (
+            "thumb",
             "numero_patrimonial",
             "nome",
             "unidade_administrativa",
@@ -55,7 +57,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.operador
 
-        expected_fields = ("numero_patrimonial", "nome", "status")
+        expected_fields = ("thumb", "numero_patrimonial", "nome", "status")
         actual_fields = self.admin.get_list_display(request)
         self.assertEqual(actual_fields, expected_fields)
 
@@ -90,18 +92,35 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         for field in old_fields:
             self.assertNotIn(field, operador_fields)
 
-    def test_list_display_fields_are_valid(self):
-        model_fields = [f.name for f in BemPatrimonial._meta.get_fields()]
+    def _is_valid_list_display_entry(self, name: str) -> bool:
+        """
+        Válido se:
+        - é campo do modelo, OU
+        - é atributo/método no ModelAdmin, OU
+        - é atributo/método no Model (callable em instância), OU
+        - é @admin.display no ModelAdmin (também é atributo no admin).
+        """
+        model_fields = {f.name for f in BemPatrimonial._meta.get_fields()}
+        if name in model_fields:
+            return True
 
+        if hasattr(self.admin, name):
+            return True
+
+        if hasattr(BemPatrimonial, name):
+            return True
+
+        return False
+
+    def test_list_display_fields_are_valid(self):
         request_gestor = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request_gestor.user = self.gestor
         gestor_fields = self.admin.get_list_display(request_gestor)
 
         for field in gestor_fields:
-            self.assertIn(
-                field,
-                model_fields,
-                f"O campo '{field}' não existe no modelo BemPatrimonial",
+            self.assertTrue(
+                self._is_valid_list_display_entry(field),
+                f"O campo '{field}' não existe como campo do modelo nem como método válido para list_display.",
             )
 
         request_operador = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
@@ -109,22 +128,39 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         operador_fields = self.admin.get_list_display(request_operador)
 
         for field in operador_fields:
-            self.assertIn(
-                field,
-                model_fields,
-                f"O campo '{field}' não existe no modelo BemPatrimonial",
+            self.assertTrue(
+                self._is_valid_list_display_entry(field),
+                f"O campo '{field}' não existe como campo do modelo nem como método válido para list_display.",
             )
 
-    def test_list_display_operador_has_three_fields(self):
-        request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
-        request.user = self.operador
-
-        actual_fields = self.admin.get_list_display(request)
-        self.assertEqual(len(actual_fields), 3)
-
-    def test_list_display_gestor_has_four_fields(self):
+    def test_list_display_gestor_contains_required_fields(self):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.gestor
+        actual = self.admin.get_list_display(request)
+        expected = (
+            "thumb",
+            "numero_patrimonial",
+            "nome",
+            "unidade_administrativa",
+            "status",
+        )
+        self.assertEqual(actual, expected)
 
-        actual_fields = self.admin.get_list_display(request)
-        self.assertEqual(len(actual_fields), 4)
+    def test_list_display_gestor_has_five_fields(self):
+        request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
+        request.user = self.gestor
+        actual = self.admin.get_list_display(request)
+        self.assertEqual(len(actual), 5)
+
+    def test_list_display_operador_contains_required_fields(self):
+        request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
+        request.user = self.operador
+        actual = self.admin.get_list_display(request)
+        expected = ("thumb", "numero_patrimonial", "nome", "status")
+        self.assertEqual(actual, expected)
+
+    def test_list_display_operador_has_four_fields(self):
+        request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
+        request.user = self.operador
+        actual = self.admin.get_list_display(request)
+        self.assertEqual(len(actual), 4)

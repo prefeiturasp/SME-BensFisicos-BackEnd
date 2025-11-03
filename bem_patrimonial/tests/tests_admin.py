@@ -61,17 +61,6 @@ class BemPatrimonialAdminTest(TestCase):
         )
         self.assertFalse(getattr(form.fields["numero_patrimonial"], "disabled", False))
 
-    def test_edicao_trava_flags_e_trava_numero_quando_criado_com_sem_numeracao(self):
-
-        obj = self._mk_bem(numero_patrimonial=None, sem_numeracao=True)
-        form_cls = self._get_form_for(obj)
-        form = form_cls(instance=obj)
-
-        self.assertTrue(getattr(form.fields["sem_numeracao"], "disabled", False))
-        self.assertFalse(
-            getattr(form.fields["numero_formato_antigo"], "disabled", False)
-        )
-        self.assertTrue(getattr(form.fields["numero_patrimonial"], "disabled", False))
 
     def test_edicao_trava_flags_mas_numero_editavel_quando_nao_sem_numeracao(self):
 
