@@ -38,7 +38,7 @@ class Command(BaseCommand):
         # ===== Models =====
         UA = get_model("dados_comuns.UnidadeAdministrativa")
         Bem = get_model("bem_patrimonial.BemPatrimonial")
-        Through = get_model("bem_patrimonial.UnidadeAdministrativaBemPatrimonial")
+        Through = "Ajustar" #get_model("bem_patrimonial.UnidadeAdministrativaBemPatrimonial")
 
         if not UA or not Bem:
             raise CommandError(
