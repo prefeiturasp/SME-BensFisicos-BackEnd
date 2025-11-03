@@ -6,7 +6,10 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
 
-from bem_patrimonial.admins.actions.extracao_numeros import aplicar_extracao_numero, simular_extracao_numero
+from bem_patrimonial.admins.actions.extracao_numeros import (
+    aplicar_extracao_numero,
+    simular_extracao_numero,
+)
 from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -111,6 +114,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     class Media:
         js = ("admin/bem_patrimonial.js",)
         css = {"all": ("admin/bem_patrimonial.css",)}
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not request.user.is_gestor_patrimonio:
+            actions.pop("aplicar_extracao_numero", None)
+        return actions
 
     def get_list_display(self, request):
         if getattr(request.user, "is_operador_inventario", False):

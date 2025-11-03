@@ -4,7 +4,9 @@ from django.http import HttpResponse
 import re, csv
 from django.template.response import TemplateResponse
 from django.contrib.admin import helpers
-
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 
 NEW_PATTERN_STRICT = re.compile(r"^\d{3}\.\d{9}-\d$")
 ALPHA_RE = re.compile(r"[A-Za-zÁ-ú]")
@@ -86,7 +88,7 @@ def _classify_token(token: str):
 
 def _extract(nome: str, descricao: str):
     """
-    Estratégia V5:
+    Estratégia:
     - Se nome começa com letras: procurar no FINAL (nome depois descrição).
       Se achar, aplicar. Se não, SEM_NUMERO.
     - Caso geral:
@@ -100,21 +102,20 @@ def _extract(nome: str, descricao: str):
     starts_with_alpha = bool(re.match(r"^[^\d]+", nome))
 
     if starts_with_alpha:
-        # FINAL do nome, depois FINAL da descrição
+
         for field, text in (("nome_fim", nome), ("descricao_fim", descricao)):
             tok, a, b = _last_numericish_token(text)
             if tok:
                 cls, normalized = _classify_token(tok)
-                # nome sugerido: no final do nome, tiramos o sufixo numérico
+
                 if field == "nome_fim":
                     nome_sug = re.sub(r"\s{2,}", " ", nome[:a].strip()).strip() or nome
                 else:
                     nome_sug = nome
-                # aplicar_auto True nesse fluxo “começa com letras & achou no final”
+
                 return (normalized or tok, cls, nome_sug, field, a, tok, True)
         return None, "SEM_NUMERO", nome, None, None, None, False
 
-    # Caso geral: início do nome
     tok, a, b = _first_token(nome)
     if tok and not ALPHA_RE.search(tok):
         cls, normalized = _classify_token(tok)
@@ -122,7 +123,6 @@ def _extract(nome: str, descricao: str):
         nome_sug = re.sub(r"\s{2,}", " ", resto).strip() or (nome or "")
         return (normalized or tok, cls, nome_sug, "nome", 0, tok, True)
 
-    # Início da descrição
     tok, a, b = _first_token(descricao)
     if tok and not ALPHA_RE.search(tok):
         cls, normalized = _classify_token(tok)
@@ -132,16 +132,13 @@ def _extract(nome: str, descricao: str):
     return None, "SEM_NUMERO", nome, None, None, None, False
 
 
-# -----------------------
-# Ação 1: Simulação → CSV
-# -----------------------
 @admin.action(description="Simular extração do Número Patrimonial → CSV")
 @admin.action(
-    description="(135782/V5) Simular extração do Número Patrimonial → CSV (TODOS os bens)"
+    description="Simular extração do Número Patrimonial → CSV (TODOS os bens)"
 )
 def simular_extracao_numero(modeladmin, request, queryset):
-    # 🔎 Simula para TODOS os bens, independentemente do filtro/seleção
-    qs = modeladmin.model.objects.all().iterator()
+
+    qs = modeladmin.model.objects.filter(numero_patrimonial__isnull=False).iterator()
 
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="simulacao_135782_all.csv"'
@@ -153,13 +150,13 @@ def simular_extracao_numero(modeladmin, request, queryset):
             "descricao_atual",
             "numero_patrimonial_atual",
             "numero_extraido",
-            "classificacao",  # PADRAO_ATUAL | PADRAO_ANTERIOR | SEM_NUMERO
-            "fonte",  # nome_inicio | descricao_inicio | nome_fim | descricao_fim
+            "classificacao",
+            "fonte",
             "posicao",
             "match_bruto",
             "nome_sugerido",
-            "aplicar_auto",  # True/False (apenas conforme regra V5)
-            "elegivel_aplicacao",  # True/False → (sem número atual) AND aplicar_auto
+            "aplicar_auto",
+            "elegivel_aplicacao",
         ]
     )
 
@@ -191,15 +188,12 @@ def simular_extracao_numero(modeladmin, request, queryset):
     return response
 
 
-# -----------------------
-# Ação 2: Aplicação
-# -----------------------
 @admin.action(description="Aplicar extração do Número Patrimonial (somente sem número)")
 @admin.action(
     description="(135782/V5) Aplicar extração do Número Patrimonial (somente sem número)"
 )
 def aplicar_extracao_numero(modeladmin, request, queryset):
-    # Gate de permissão
+
     if not request.user.is_gestor_patrimonio:
         messages.error(
             request,
@@ -207,78 +201,136 @@ def aplicar_extracao_numero(modeladmin, request, queryset):
         )
         return None
 
-    # Apenas bens sem número
-    qs = (
-        queryset.select_for_update().filter(numero_patrimonial__isnull=True)
-        | queryset.select_for_update().filter(numero_patrimonial="")
-    ).distinct()
+    base_qs = queryset.filter(
+        Q(numero_patrimonial__isnull=True) | Q(numero_patrimonial="")
+    )
 
-    # Passo 1: confirmação
-    if "post" not in request.POST:
-        context = {
-            "title": "Confirmar aplicação IRREVERSÍVEL — Extração de Número Patrimonial (V5)",
-            "queryset": qs,
-            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
-            "opts": modeladmin.model._meta,
-            "objects_name": str(modeladmin.model._meta.verbose_name_plural),
-            "action": "aplicar_extracao_numero",
-            # Mensagem de alerta extra (o template padrão não tem campo específico,
-            # mas o título já deixa claro; se quiser, crie um template custom).
-        }
-        return TemplateResponse(request, "admin/action_confirmation.html", context)
+    if request.POST.get("confirm") != "yes":
+        context = modeladmin.admin_site.each_context(request)
 
-    # Passo 2: execução (após confirmação)
-    atualizados = 0
-    erros = 0
+        total = base_qs.count()
 
-    with transaction.atomic():
-        for bem in qs.iterator():
+        selected_ids = list(base_qs.values_list("pk", flat=True))
+
+        sample_qs = list(base_qs[:20])
+        preview = []
+        for bem in sample_qs:
+            num_atual = (bem.numero_patrimonial or "").strip()
             numero, cls, nome_sug, fonte, pos, raw, aplicar_auto = _extract(
                 bem.nome, getattr(bem, "descricao", "")
             )
-
-            if not aplicar_auto:
-                if cls == "SEM_NUMERO" or not numero:
-                    bem.sem_numeracao = True
-                    try:
-                        bem.full_clean()
-                        bem.save(update_fields=["sem_numeracao", "atualizado_em"])
-                        atualizados += 1
-                    except Exception:
-                        erros += 1
-                continue
-
             if cls == "PADRAO_ATUAL":
-                bem.numero_patrimonial = numero
-                bem.numero_formato_antigo = False
-                bem.sem_numeracao = False
+                num_final = numero
+                flag_antigo = False
+                flag_sem = False
             elif cls == "PADRAO_ANTERIOR":
-                bem.numero_patrimonial = numero
-                bem.numero_formato_antigo = True
-                bem.sem_numeracao = False
+                num_final = numero
+                flag_antigo = True
+                flag_sem = False
             else:
-                bem.sem_numeracao = True
+                num_final = "(será gerado automaticamente)"
+                flag_antigo = False
+                flag_sem = True
 
-            if nome_sug and nome_sug != bem.nome:
-                bem.nome = nome_sug
+            preview.append(
+                {
+                    "id": bem.pk,
+                    "nome": bem.nome,
+                    "numero_atual": num_atual or "—",
+                    "numero_resultado": num_final,
+                    "classificacao": cls,
+                    "fonte": fonte or "—",
+                    "aplicar_auto": bool(aplicar_auto),
+                    "numero_formato_antigo": flag_antigo,
+                    "sem_numeracao": flag_sem,
+                }
+            )
 
+        context.update(
+            {
+                "title": "Confirmar aplicação IRREVERSÍVEL — Extração de Número Patrimonial (V5)",
+                "total": total,
+                "preview": preview,
+                "preview_limit": 20,
+                "selected_ids": selected_ids,
+                "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+                "opts": modeladmin.model._meta,
+                "objects_name": str(modeladmin.model._meta.verbose_name_plural),
+                "action": "aplicar_extracao_numero",
+            }
+        )
+        return TemplateResponse(request, "admin/confirm_action.html", context)
+
+    atualizados = 0
+    erros = 0
+
+    posted_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
+    if not posted_ids:
+        messages.warning(
+            request, "Nenhum item foi enviado na confirmação. Ação cancelada."
+        )
+        return None
+
+    with transaction.atomic():
+        Model = modeladmin.model
+        qs = (
+            Model.objects.filter(pk__in=posted_ids)
+            .select_for_update(skip_locked=True)
+            .order_by("pk")
+        )
+
+        for bem in qs:
             try:
-                bem.full_clean()
-                bem.save(
-                    update_fields=[
-                        "numero_patrimonial",
-                        "numero_formato_antigo",
-                        "sem_numeracao",
-                        "nome",
-                        "atualizado_em",
-                    ]
-                )
-                atualizados += 1
-            except Exception:
+
+                with transaction.atomic():
+                    numero, cls, nome_sug, fonte, pos, raw, aplicar_auto = _extract(
+                        bem.nome, getattr(bem, "descricao", "")
+                    )
+
+                    if not aplicar_auto:
+                        if cls == "SEM_NUMERO" or not numero:
+                            bem.sem_numeracao = True
+                            bem.full_clean()
+                            bem.save(update_fields=["sem_numeracao", "atualizado_em"])
+                            atualizados += 1
+
+                        continue
+
+                    if cls == "PADRAO_ATUAL":
+                        bem.numero_patrimonial = numero
+                        bem.numero_formato_antigo = False
+                        bem.sem_numeracao = False
+                    elif cls == "PADRAO_ANTERIOR":
+                        bem.numero_patrimonial = numero
+                        bem.numero_formato_antigo = True
+                        bem.sem_numeracao = False
+                    else:
+                        bem.sem_numeracao = True
+
+                    if nome_sug and nome_sug != bem.nome:
+                        bem.nome = nome_sug
+
+                    bem.full_clean()
+                    bem.save(
+                        update_fields=[
+                            "numero_patrimonial",
+                            "numero_formato_antigo",
+                            "sem_numeracao",
+                            "nome",
+                            "atualizado_em",
+                        ]
+                    )
+                    atualizados += 1
+
+            except (ValidationError, IntegrityError) as e:
+                transaction.set_rollback(True)
+                erros += 1
+            except Exception as e:
+                transaction.set_rollback(True)
                 erros += 1
 
     messages.info(
         request,
-        f"Extração V5 aplicada. Atualizados: {atualizados}. Erros: {erros}. (Ação irreversível foi confirmada.)",
+        f"Extração aplicada. Atualizados: {atualizados}. Erros: {erros}. (Ação irreversível confirmada.)",
     )
     return None
