@@ -38,9 +38,7 @@ class CancelamentoMovimentacaoTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
@@ -110,9 +108,7 @@ class ValidacoesCruzadasCancelamentoTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
@@ -151,9 +147,7 @@ class AdminActionCancelamentoTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
@@ -261,6 +255,44 @@ class AdminActionCancelamentoTestCase(TestCase):
             any("já foi rejeitada e não pode ser cancelada" in msg for msg in mensagens)
         )
 
+    @patch(
+        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_aceita"
+    )
+    def test_action_aprovar_cancelada_exibe_erro(self, mock_email):
+        self.movimentacao.cancelar_solicitacao(self.gestor)
+        self.movimentacao.refresh_from_db()
+
+        request = self._create_request_with_messages(self.operador_destino)
+        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
+
+        aprovar_solicitacao(self.admin, request, queryset)
+
+        storage = messages.get_messages(request)
+        mensagens = [str(m) for m in storage]
+        self.assertTrue(
+            any("foi cancelada e não pode ser aprovada" in msg for msg in mensagens)
+        )
+        mock_email.assert_not_called()
+
+    @patch(
+        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_rejeitada"
+    )
+    def test_action_rejeitar_cancelada_exibe_erro(self, mock_email):
+        self.movimentacao.cancelar_solicitacao(self.gestor)
+        self.movimentacao.refresh_from_db()
+
+        request = self._create_request_with_messages(self.operador_destino)
+        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
+
+        rejeitar_solicitacao(self.admin, request, queryset)
+
+        storage = messages.get_messages(request)
+        mensagens = [str(m) for m in storage]
+        self.assertTrue(
+            any("foi cancelada e não pode ser rejeitada" in msg for msg in mensagens)
+        )
+        mock_email.assert_not_called()
+
     def test_action_cancelamento_apenas_para_gestores(self):
         request = self._create_request_with_messages(self.gestor)
         actions = self.admin.get_actions(request)
@@ -314,9 +346,7 @@ class FluxoCancelamentoTestCase(TestCase):
             self.operador_destino,
             self.gestor,
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
     def test_cancelar_e_criar_nova_movimentacao(self):
         mov1 = MovimentacaoBemPatrimonial.objects.create(
@@ -399,9 +429,7 @@ class EmailCancelamentoTestCase(TestCase):
         self.gestor.save()
         self.operador_origem.nome = "João Teste"
         self.operador_origem.save()
-        self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_email_contem_nome_gestor(self, mock_send_email):
