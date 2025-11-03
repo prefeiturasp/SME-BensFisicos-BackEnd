@@ -44,7 +44,6 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         request.user = self.gestor
 
         expected_fields = (
-            "thumb",
             "numero_patrimonial",
             "nome",
             "unidade_administrativa",
@@ -57,7 +56,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.operador
 
-        expected_fields = ("thumb", "numero_patrimonial", "nome", "status")
+        expected_fields = ("numero_patrimonial", "nome", "status")
         actual_fields = self.admin.get_list_display(request)
         self.assertEqual(actual_fields, expected_fields)
 
@@ -138,7 +137,6 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         request.user = self.gestor
         actual = self.admin.get_list_display(request)
         expected = (
-            "thumb",
             "numero_patrimonial",
             "nome",
             "unidade_administrativa",
@@ -150,17 +148,17 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.gestor
         actual = self.admin.get_list_display(request)
-        self.assertEqual(len(actual), 5)
+        self.assertEqual(len(actual), 4)
 
     def test_list_display_operador_contains_required_fields(self):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.operador
         actual = self.admin.get_list_display(request)
-        expected = ("thumb", "numero_patrimonial", "nome", "status")
+        expected = ("numero_patrimonial", "nome", "status")
         self.assertEqual(actual, expected)
 
     def test_list_display_operador_has_four_fields(self):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.operador
         actual = self.admin.get_list_display(request)
-        self.assertEqual(len(actual), 4)
+        self.assertEqual(len(actual), 3)

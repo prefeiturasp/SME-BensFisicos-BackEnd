@@ -377,7 +377,7 @@
     var form = qs('form');
     if (!form) return;
 
-    var anchor = qs('.form-row.field-foto');
+    var anchor = qs('.form-row.field-numero_processo');
     var wrapper = document.createElement('div');
     wrapper.innerHTML = multiHTML();
     if (anchor && anchor.parentNode){ anchor.parentNode.insertBefore(wrapper, anchor.nextSibling); }
