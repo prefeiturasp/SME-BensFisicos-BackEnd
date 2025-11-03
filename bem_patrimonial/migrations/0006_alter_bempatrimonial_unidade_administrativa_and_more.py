@@ -4,20 +4,58 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
+SQL_COPIA_UNIDADE = r"""
+DO $$
+BEGIN
+    -- Só executa se a tabela legado existir
+    IF to_regclass('public.bem_patrimonial_unidadeadministrativabempatrimonial') IS NOT NULL THEN
+        WITH ultima_assoc AS (
+            SELECT DISTINCT ON (bem_patrimonial_id)
+                bem_patrimonial_id,
+                unidade_administrativa_id
+            FROM public.bem_patrimonial_unidadeadministrativabempatrimonial
+            ORDER BY bem_patrimonial_id, atualizado_em DESC NULLS LAST, id DESC
+        )
+        UPDATE public.bem_patrimonial_bempatrimonial AS b
+        SET unidade_administrativa_id = ua.unidade_administrativa_id
+        FROM ultima_assoc AS ua
+        WHERE b.id = ua.bem_patrimonial_id
+          AND b.unidade_administrativa_id IS NULL;
+    END IF;
+END
+$$;
+"""
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('dados_comuns', '0004_alter_unidadeadministrativa_options'),
-        ('bem_patrimonial', '0005_remove_bempatrimonial_autorizacao_no_doc_em_and_more'),
+        ("dados_comuns", "0004_alter_unidadeadministrativa_options"),
+        (
+            "bem_patrimonial",
+            "0005_remove_bempatrimonial_autorizacao_no_doc_em_and_more",
+        ),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='bempatrimonial',
-            name='unidade_administrativa',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='bems_patrimonial', to='dados_comuns.unidadeadministrativa'),
+            model_name="bempatrimonial",
+            name="unidade_administrativa",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="bems_patrimonial",
+                to="dados_comuns.unidadeadministrativa",
+            ),
         ),
+        # 1) Copia a última unidade para o Bem antes de remover a tabela legado
+        migrations.RunSQL(
+            sql=SQL_COPIA_UNIDADE,
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        # 2) Agora pode remover o model legado
         migrations.DeleteModel(
-            name='UnidadeAdministrativaBemPatrimonial',
+            name="UnidadeAdministrativaBemPatrimonial",
         ),
     ]
