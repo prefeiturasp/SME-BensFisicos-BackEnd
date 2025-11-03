@@ -5,6 +5,9 @@ from django.contrib.auth import views as auth_views
 from usuario.views import LoginPasswordChangeView, LoginPasswordChangeDoneView
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.conf.urls.static import static
+from django.conf import settings
+
 
 # Módulo de Suporte desabilitado temporariamente
 # from agendamento_suporte import urls as agenda_urls
@@ -43,3 +46,6 @@ urlpatterns = [
     ),
     path("admin/", admin.site.urls),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

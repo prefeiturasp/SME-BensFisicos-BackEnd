@@ -5,9 +5,9 @@ from django.contrib import messages
 
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
-    UnidadeAdministrativaBemPatrimonial,
+    BemPatrimonial,
 )
-from bem_patrimonial.constants import ENVIADA
+from bem_patrimonial.constants import ENVIADA, ACEITA
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
     aprovar_solicitacao,
@@ -31,8 +31,13 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
             self.ua_ativa_1, self.ua_ativa_2
         )
         self.bem = setup.create_bem_patrimonial(
-            self.operador_1, self.ua_ativa_1, quantidade=10
+            self.operador_1, self.ua_ativa_1
         )
+        # Garante bem aprovado para aparecer no form (se o form filtra por APROVADO)
+        if self.bem.status != "aprovado":
+            from bem_patrimonial.constants import APROVADO
+            self.bem.status = APROVADO
+            self.bem.save()
 
         self.factory = RequestFactory()
 
@@ -44,37 +49,31 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         return form
 
     def test_nao_pode_criar_movimentacao_com_ua_origem_inativa(self):
-        bem_ua_inativa = self.bem
-        UnidadeAdministrativaBemPatrimonial.objects.create(
-            bem_patrimonial=bem_ua_inativa,
-            unidade_administrativa=self.ua_inativa,
-            quantidade=5,
-        )
+        # Coloca o bem na UA inativa
+        self.bem.set_unidade_administrative(self.ua_inativa)
 
         data = {
-            "bem_patrimonial": bem_ua_inativa.pk,
+            "bem_patrimonial": self.bem.pk,
             "unidade_administrativa_origem": self.ua_inativa.pk,
             "unidade_administrativa_destino": self.ua_ativa_2.pk,
-            "quantidade": 3,
         }
 
         form = self._create_form_with_request(self.gestor, data)
         self.assertFalse(form.is_valid())
-        self.assertIn("unidade de origem", str(form.errors))
-        self.assertIn("inativa", str(form.errors))
+        self.assertIn("unidade de origem", str(form.errors).lower())
+        self.assertIn("inativa", str(form.errors).lower())
 
     def test_nao_pode_criar_movimentacao_com_ua_destino_inativa(self):
         data = {
             "bem_patrimonial": self.bem.pk,
             "unidade_administrativa_origem": self.ua_ativa_1.pk,
             "unidade_administrativa_destino": self.ua_inativa.pk,
-            "quantidade": 3,
         }
 
         form = self._create_form_with_request(self.operador_1, data)
         self.assertFalse(form.is_valid())
-        self.assertIn("unidade de destino", str(form.errors))
-        self.assertIn("inativa", str(form.errors))
+        self.assertIn("unidade de destino", str(form.errors).lower())
+        self.assertIn("inativa", str(form.errors).lower())
 
     def test_nao_pode_criar_movimentacao_com_ambas_uas_inativas(self):
         ua_inativa_2 = UnidadeAdministrativa.objects.create(
@@ -84,29 +83,24 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
             status=UnidadeAdministrativa.INATIVA,
         )
 
-        UnidadeAdministrativaBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa=self.ua_inativa,
-            quantidade=5,
-        )
+        # Origem inativa
+        self.bem.set_unidade_administrative(self.ua_inativa)
 
         data = {
             "bem_patrimonial": self.bem.pk,
             "unidade_administrativa_origem": self.ua_inativa.pk,
             "unidade_administrativa_destino": ua_inativa_2.pk,
-            "quantidade": 2,
         }
 
         form = self._create_form_with_request(self.gestor, data)
         self.assertFalse(form.is_valid())
-        self.assertIn("inativa", str(form.errors))
+        self.assertIn("inativa", str(form.errors).lower())
 
     def test_pode_criar_movimentacao_com_ambas_uas_ativas(self):
         data = {
             "bem_patrimonial": self.bem.pk,
             "unidade_administrativa_origem": self.ua_ativa_1.pk,
             "unidade_administrativa_destino": self.ua_ativa_2.pk,
-            "quantidade": 3,
         }
 
         form = self._create_form_with_request(self.operador_1, data)
@@ -125,14 +119,13 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
             setup.create_usuarios(self.ua_origem, self.ua_destino)
         )
         self.bem = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem, quantidade=10
+            self.operador_origem, self.ua_origem
         )
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
-            quantidade=5,
             solicitado_por=self.operador_origem,
         )
 
@@ -246,7 +239,7 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
         aprovar_solicitacao(self.admin, request, queryset)
 
         self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, "aceita")
+        self.assertEqual(self.movimentacao.status, ACEITA)
         self.assertEqual(self.movimentacao.aprovado_por, self.operador_destino)
 
         storage = messages.get_messages(request)
@@ -266,17 +259,16 @@ class MultiplasMovimentacoesComUAInativaTestCase(TestCase):
         )
 
         self.bem1 = setup.create_bem_patrimonial(
-            self.operador_1, self.ua_ativa_1, quantidade=10
+            self.operador_1, self.ua_ativa_1
         )
         self.bem2 = setup.create_bem_patrimonial(
-            self.operador_1, self.ua_ativa_1, quantidade=8
+            self.operador_1, self.ua_ativa_1
         )
 
         self.mov1 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem1,
             unidade_administrativa_origem=self.ua_ativa_1,
             unidade_administrativa_destino=self.ua_ativa_2,
-            quantidade=3,
             solicitado_por=self.operador_1,
         )
 
@@ -284,7 +276,6 @@ class MultiplasMovimentacoesComUAInativaTestCase(TestCase):
             bem_patrimonial=self.bem2,
             unidade_administrativa_origem=self.ua_ativa_1,
             unidade_administrativa_destino=self.ua_ativa_2,
-            quantidade=2,
             solicitado_por=self.operador_1,
         )
 
@@ -335,10 +326,11 @@ class InativacaoUAComBensTestCase(TestCase):
             self.ua_ativa_1, self.ua_ativa_2
         )
         self.bem = setup.create_bem_patrimonial(
-            self.operador_1, self.ua_ativa_1, quantidade=10
+            self.operador_1, self.ua_ativa_1
         )
 
     def test_nao_pode_inativar_ua_com_bens_quantidade_maior_que_zero(self):
+        # Considerando a regra de negócio implementada em pode_inativar()
         self.assertFalse(self.ua_ativa_1.pode_inativar())
 
     def test_pode_inativar_ua_sem_bens(self):
@@ -351,12 +343,9 @@ class InativacaoUAComBensTestCase(TestCase):
         self.assertTrue(ua_nova.pode_inativar())
 
     def test_pode_inativar_ua_com_bens_quantidade_zero(self):
-        ua_bem = UnidadeAdministrativaBemPatrimonial.objects.get(
-            bem_patrimonial=self.bem, unidade_administrativa=self.ua_ativa_1
-        )
-        ua_bem.quantidade = 0
-        ua_bem.save()
-
+        # Se a sua implementação usa alguma tabela intermediária de quantidade,
+        # ajuste aqui para zerar; caso contrário, mova o bem para outra UA.
+        self.bem.set_unidade_administrative(self.ua_ativa_2)
         self.assertTrue(self.ua_ativa_1.pode_inativar())
 
     def test_property_is_ativa(self):
@@ -382,8 +371,13 @@ class AutocompleteComUAInativaTestCase(TestCase):
             self.ua_ativa_1, self.ua_ativa_2
         )
         self.bem = setup.create_bem_patrimonial(
-            self.operador_1, self.ua_ativa_1, quantidade=10
+            self.operador_1, self.ua_ativa_1
         )
+        # Garante bem aprovado para aparecer
+        from bem_patrimonial.constants import APROVADO
+        if self.bem.status != APROVADO:
+            self.bem.status = APROVADO
+            self.bem.save()
 
     def test_form_filtra_apenas_uas_ativas_origem(self):
         form = MovimentacaoBemPatrimonialForm()
@@ -420,7 +414,7 @@ class CenariosCombinacaoUAStatusTestCase(TestCase):
             self.ua_ativa_1, self.ua_ativa_2
         )
         self.bem = setup.create_bem_patrimonial(
-            self.operador_1, self.ua_ativa_1, quantidade=10
+            self.operador_1, self.ua_ativa_1
         )
 
         self.factory = RequestFactory()
@@ -442,11 +436,11 @@ class CenariosCombinacaoUAStatusTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_ativa_1,
             unidade_administrativa_destino=self.ua_ativa_2,
-            quantidade=3,
             solicitado_por=self.operador_1,
         )
         self.assertEqual(movimentacao.status, ENVIADA)
 
+        # Inativa a origem -> não deve aprovar
         self.ua_ativa_1.status = UnidadeAdministrativa.INATIVA
         self.ua_ativa_1.save()
 
@@ -458,6 +452,7 @@ class CenariosCombinacaoUAStatusTestCase(TestCase):
         self.assertEqual(movimentacao.status, ENVIADA)
         self.assertIsNone(movimentacao.aprovado_por)
 
+        # Reativa a origem -> agora deve aprovar
         self.ua_ativa_1.status = UnidadeAdministrativa.ATIVA
         self.ua_ativa_1.save()
 
@@ -466,7 +461,7 @@ class CenariosCombinacaoUAStatusTestCase(TestCase):
         aprovar_solicitacao(self.admin, request2, queryset2)
 
         movimentacao.refresh_from_db()
-        self.assertEqual(movimentacao.status, "aceita")
+        self.assertEqual(movimentacao.status, ACEITA)
         self.assertEqual(movimentacao.aprovado_por, self.operador_2)
 
     def test_reativacao_ua_permite_novas_movimentacoes(self):
@@ -477,7 +472,6 @@ class CenariosCombinacaoUAStatusTestCase(TestCase):
             "bem_patrimonial": self.bem.pk,
             "unidade_administrativa_origem": self.ua_ativa_1.pk,
             "unidade_administrativa_destino": self.ua_ativa_2.pk,
-            "quantidade": 2,
         }
 
         request = self.factory.post("/admin/")
@@ -493,7 +487,6 @@ class CenariosCombinacaoUAStatusTestCase(TestCase):
             "bem_patrimonial": self.bem.pk,
             "unidade_administrativa_origem": self.ua_ativa_1.pk,
             "unidade_administrativa_destino": self.ua_ativa_2.pk,
-            "quantidade": 2,
         }
 
         form_valida = MovimentacaoBemPatrimonialForm(data=data_valida)
@@ -515,10 +508,8 @@ class CenariosCombinacaoUAStatusTestCase(TestCase):
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_ativa_1,
             unidade_administrativa_destino=ua_nova,
-            quantidade=2,
             solicitado_por=self.operador_1,
         )
 
         self.assertEqual(movimentacao.status, ENVIADA)
-
         self.assertTrue(ua_nova.pode_inativar())

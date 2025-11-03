@@ -20,7 +20,6 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             bem_patrimonial = self.data["bem_patrimonial"]
             unidade_origem = self.data["unidade_administrativa_origem"]
             unidade_destino = self.data["unidade_administrativa_destino"]
-            quantidade = int(self.data["quantidade"])
         except Exception as e:
             raise ValidationError(e)
 
@@ -76,25 +75,8 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                 f"Aguarde a aprovação ou rejeição antes de criar nova movimentação."
             )
 
-        try:
-            origem = bem_patrimonial.unidadeadministrativabempatrimonial_set.get(
-                unidade_administrativa=ua_origem
-            )
-        except Exception:
-            raise ValidationError(
-                "Unidade origem não tem quantidade suficiente para movimentação."
-            )
-
         if ua_destino == ua_origem:
             raise ValidationError("Operação não permitida.")
-
-        if quantidade <= 0:
-            raise ValidationError("Quantidade deve ser válida.")
-
-        if origem.quantidade < quantidade:
-            raise ValidationError(
-                "Unidade origem não tem quantidade suficiente para movimentação."
-            )
 
         if created:
             if user.is_operador_inventario and (

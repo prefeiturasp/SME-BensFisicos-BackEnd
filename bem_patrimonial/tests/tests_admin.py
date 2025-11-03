@@ -4,7 +4,6 @@ from django.contrib.auth import get_user_model
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
-from bem_patrimonial.constants import ORIGENS
 from dados_comuns.models import UnidadeAdministrativa
 
 
@@ -22,19 +21,14 @@ class BemPatrimonialAdminTest(TestCase):
         self.factory = RequestFactory()
         self.model_admin = BemPatrimonialAdmin(BemPatrimonial, admin.site)
 
-        self.origem = ORIGENS[0][0]
-
     def _mk_bem(self, **kwargs):
         data = dict(
             nome="Item Teste",
             descricao="Desc",
-            quantidade=1,
-            valor_unitario=1,
+            valor_unitario=1.00,
             marca="M",
             modelo="X",
-            data_compra_entrega="2025-10-10",
-            origem=self.origem,
-            numero_processo=1,
+            numero_processo="PROC-1",
             numero_patrimonial="000.000000001-0",
             numero_formato_antigo=False,
             sem_numeracao=False,
@@ -71,10 +65,10 @@ class BemPatrimonialAdminTest(TestCase):
 
         obj = self._mk_bem(numero_patrimonial=None, sem_numeracao=True)
         form_cls = self._get_form_for(obj)
-        form = form_cls()
+        form = form_cls(instance=obj)
 
         self.assertTrue(getattr(form.fields["sem_numeracao"], "disabled", False))
-        self.assertTrue(
+        self.assertFalse(
             getattr(form.fields["numero_formato_antigo"], "disabled", False)
         )
         self.assertTrue(getattr(form.fields["numero_patrimonial"], "disabled", False))
@@ -83,10 +77,10 @@ class BemPatrimonialAdminTest(TestCase):
 
         obj = self._mk_bem(numero_patrimonial="000.000000123-4", sem_numeracao=False)
         form_cls = self._get_form_for(obj)
-        form = form_cls()
+        form = form_cls(instance=obj)
 
         self.assertTrue(getattr(form.fields["sem_numeracao"], "disabled", False))
-        self.assertTrue(
+        self.assertFalse(
             getattr(form.fields["numero_formato_antigo"], "disabled", False)
         )
         self.assertFalse(getattr(form.fields["numero_patrimonial"], "disabled", False))

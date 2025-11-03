@@ -3,10 +3,11 @@ import re
 from django.dispatch import receiver
 from django.db.models.signals import post_save
 from django.core.exceptions import ValidationError
-
 from django.db import models
-from django.core.exceptions import ObjectDoesNotExist
-
+from django.contrib.contenttypes.models import ContentType
+from dados_comuns.models import HistoricoGeral
+from dados_comuns.context import get_user
+from dados_comuns.utils import dict_changes
 from dados_comuns.models import UnidadeAdministrativa
 from usuario.models import Usuario
 from bem_patrimonial.emails import (
@@ -23,42 +24,20 @@ class BemPatrimonial(models.Model):
 
     # obrigatórios
     nome = models.CharField("Nome do bem", max_length=255, null=False, blank=False)
-    data_compra_entrega = models.DateField(
-        "Data da compra/entrega", null=False, blank=False
-    )
-    origem = models.CharField(
-        "Origem", max_length=30, choices=constants.ORIGENS, null=False, blank=False
-    )
-    marca = models.CharField("Marca", max_length=255, null=False, blank=False)
-    modelo = models.CharField("Modelo", max_length=255, null=False, blank=False)
-    quantidade = models.PositiveIntegerField("Quantidade", null=False, blank=False)
     descricao = models.TextField("Descrição", null=False, blank=False)
+    numero_processo = models.CharField(
+        "Número do processo de incorporação", max_length=64, null=False, blank=False
+    )
     valor_unitario = models.DecimalField(
         "Valor unitário", max_digits=16, decimal_places=2, blank=False, null=False
     )
-    numero_processo = models.PositiveIntegerField(
-        "Número do processo de incorporação/transferência", null=False, blank=False
-    )
-    status = models.CharField(
-        "Status",
-        max_length=30,
-        choices=constants.STATUS,
-        default=constants.AGUARDANDO_APROVACAO,
-        null=False,
-        blank=False,
-    )
-    unidade_administrativa = models.ForeignKey(
-        UnidadeAdministrativa, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    # opcionais
-    autorizacao_no_doc_em = models.DateField(
-        "Autorização no DOC em", null=True, blank=True
-    )
-    numero_nibpm = models.PositiveIntegerField("Número NIBPM", null=True, blank=True)
-    numero_cimbpm = models.PositiveIntegerField("Número CIMBPM", null=True, blank=True)
+    marca = models.CharField("Marca", max_length=255, null=False, blank=False)
+    modelo = models.CharField("Modelo", max_length=255, null=False, blank=False)
+
+    localizacao = models.CharField("Localização", max_length=255, null=True, blank=True)
     numero_patrimonial = models.CharField(
         "Número Patrimonial",
-        max_length=15,
+        max_length=20,
         unique=True,
         null=True,
         blank=True,
@@ -75,9 +54,22 @@ class BemPatrimonial(models.Model):
         default=False,
         help_text="Se marcado, o sistema atribui automaticamente",
     )
-    localizacao = models.CharField("Localização", max_length=255, null=True, blank=True)
-    numero_serie = models.PositiveIntegerField("Número de série", null=True, blank=True)
-    # controle
+    foto = models.ImageField("Foto", upload_to="bens/", null=True, blank=True)
+    status = models.CharField(
+        "Status",
+        max_length=30,
+        choices=constants.STATUS,
+        default=constants.AGUARDANDO_APROVACAO,
+        null=False,
+        blank=False,
+    )
+    unidade_administrativa = models.ForeignKey(
+        UnidadeAdministrativa,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bems_patrimonial",
+    )
     criado_por = models.ForeignKey(
         Usuario,
         verbose_name="Criado por",
@@ -89,16 +81,33 @@ class BemPatrimonial(models.Model):
     atualizado_em = models.DateTimeField(
         "Atualizado em", auto_now=True, null=True, blank=True
     )
+    AUDIT_TRACK_FIELDS = (
+        "numero_patrimonial",
+        "numero_formato_antigo",
+        "sem_numeracao",
+        "nome",
+        "descricao",
+        "valor_unitario",
+        "marca",
+        "modelo",
+        "numero_processo",
+        "numero_cimbpm",
+        "localizacao",
+        "foto",
+        "unidade_administrativa",
+        "status",
+    )
+    AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
     def __str__(self):
-        return self.nome
+        return f'{self.numero_patrimonial} - {self.nome}' if self.numero_patrimonial else self.nome
 
     class Meta:
         verbose_name = "bem patrimonial"
         verbose_name_plural = "bens patrimoniais"
 
     def clean(self):
-        if self.numero_formato_antigo and self.sem_numeracao:
+        if not self.pk and self.numero_formato_antigo and self.sem_numeracao:
             raise ValidationError(
                 "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             )
@@ -121,18 +130,23 @@ class BemPatrimonial(models.Model):
                 )
 
     def save(self, *args, **kwargs):
-        self.atualizado_em = datetime.now()
+        is_create = self._state.adding or (self.pk is None)
+        original = None
+        if not is_create:
+            try:
+                original = type(self).objects.get(pk=self.pk)
+            except type(self).DoesNotExist:
+                original = None
 
-        if self.sem_numeracao:
-            self.numero_patrimonial = None
+        gerar_auto = bool(self.sem_numeracao and not self.numero_patrimonial)
 
         super(BemPatrimonial, self).save(*args, **kwargs)
 
-        if self.sem_numeracao and not self.numero_patrimonial:
+        if gerar_auto and not self.numero_patrimonial:
             base_id = self.pk
 
             while True:
-                id_str = str(base_id).zfill(9)
+                id_str = str(base_id).zfill(12)
                 numero_formatado = f"000.{id_str}-0"
 
                 if (
@@ -145,15 +159,33 @@ class BemPatrimonial(models.Model):
 
             self.numero_patrimonial = numero_formatado
             super(BemPatrimonial, self).save(update_fields=["numero_patrimonial"])
-
-    @property
-    def quantidade_total(self):
-        return (
-            self.unidadeadministrativabempatrimonial_set.aggregate(
-                models.Sum("quantidade")
-            )["quantidade__sum"]
-            or 0
-        )
+        if not is_create and original:
+            # respeita update_fields (se veio)
+            only = kwargs.get("update_fields")
+            fields = self.AUDIT_TRACK_FIELDS
+            changes = dict_changes(
+                original,
+                self,
+                fields=fields,
+                only=only,
+                ignore=self.AUDIT_IGNORE_FIELDS,
+            )
+            if changes:
+                ct = ContentType.objects.get_for_model(type(self))
+                user = get_user()
+                HistoricoGeral.objects.bulk_create(
+                    [
+                        HistoricoGeral(
+                            content_type=ct,
+                            object_id=str(self.pk),
+                            campo=field,
+                            valor_antigo=old,
+                            valor_novo=new,
+                            alterado_por=user,
+                        )
+                        for field, (old, new) in changes.items()
+                    ]
+                )
 
     @property
     def pode_solicitar_movimentacao(self):
@@ -220,50 +252,6 @@ class StatusBemPatrimonial(models.Model):
             self.bem_patrimonial.save()
 
 
-class UnidadeAdministrativaBemPatrimonial(models.Model):
-    "Classe que representa a quantidade de bem patrimonial por unidade administrativa."
-
-    bem_patrimonial = models.ForeignKey(
-        BemPatrimonial,
-        verbose_name="Bem patrimonial",
-        on_delete=models.CASCADE,
-        null=False,
-        blank=False,
-    )
-    unidade_administrativa = models.ForeignKey(
-        UnidadeAdministrativa,
-        verbose_name="Unidade administrativa",
-        on_delete=models.CASCADE,
-        null=False,
-        blank=False,
-    )
-    quantidade = models.PositiveIntegerField(
-        "Quantidade", default=1, null=False, blank=False
-    )
-    atualizado_em = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
-    )
-
-    def __str__(self) -> str:
-        return str(self.pk)
-
-    class Meta:
-        verbose_name = "bem patrimonial por unidade administrativa"
-        verbose_name_plural = "bens patrimoniais por unidade administrativa"
-
-    def save(self, *args, **kwargs):
-        self.atualizado_em = datetime.now()
-        return super(UnidadeAdministrativaBemPatrimonial, self).save(*args, **kwargs)
-
-    def remover_quantidade(self, quantidade):
-        self.quantidade = self.quantidade - quantidade
-        self.save()
-
-    def adicionar_quantidade(self, quantidade):
-        self.quantidade = self.quantidade + quantidade
-        self.save()
-
-
 class MovimentacaoBemPatrimonial(models.Model):
     "Classe que representa uma solicitacao de movimentacao de um bem patrimonial"
 
@@ -290,9 +278,6 @@ class MovimentacaoBemPatrimonial(models.Model):
         on_delete=models.CASCADE,
         null=False,
         blank=False,
-    )
-    quantidade = models.PositiveIntegerField(
-        "Quantidade", default=1, null=False, blank=False
     )
     status = models.CharField(
         "Status",
@@ -366,35 +351,17 @@ class MovimentacaoBemPatrimonial(models.Model):
         return self.status == constants.CANCELADA_GESTOR
 
     def aprovar_solicitacao(self, usuario):
-        if not self.aceita and self.status == constants.ENVIADA:
-            try:
-                bem_patrimonial_por_unidade_origem = (
-                    self.bem_patrimonial.unidadeadministrativabempatrimonial_set.get(
-                        unidade_administrativa=self.unidade_administrativa_origem
-                    )
-                )
-            except Exception:
-                raise ObjectDoesNotExist
+        if self.aceita or self.status != constants.ENVIADA:
+            return
 
-            bem_patrimonial_por_unidade_destino, created = (
-                self.bem_patrimonial.unidadeadministrativabempatrimonial_set.get_or_create(
-                    unidade_administrativa=self.unidade_administrativa_destino,
-                    defaults={"quantidade": self.quantidade},
-                )
-            )
-            if not created:
-                bem_patrimonial_por_unidade_destino.adicionar_quantidade(
-                    self.quantidade
-                )
+        bem = self.bem_patrimonial
+        bem.unidade_administrativa = self.unidade_administrativa_destino
+        bem.status = constants.APROVADO
+        bem.save()
 
-            bem_patrimonial_por_unidade_origem.remover_quantidade(self.quantidade)
-
-            self.status = constants.ACEITA
-            self.aprovado_por = usuario
-            self.save()
-
-            self.bem_patrimonial.status = constants.APROVADO
-            self.bem_patrimonial.save()
+        self.status = constants.ACEITA
+        self.aprovado_por = usuario
+        self.save()
 
     def rejeitar_solicitacao(self, usuario):
         if not self.rejeitada and self.status == constants.ENVIADA:
@@ -420,17 +387,6 @@ def cria_primeiro_status_bem_patrimonial(sender, instance, created, **kwargs):
     if created and instance.status is constants.AGUARDANDO_APROVACAO:
         instance.statusbempatrimonial_set.create(
             status=constants.AGUARDANDO_APROVACAO, atualizado_por=instance.criado_por
-        )
-
-
-@receiver(post_save, sender=BemPatrimonial)
-def cria_registro_unidade_administrativa_bem_patrimonial(
-    sender, instance, created, **kwargs
-):
-    if created:
-        instance.unidadeadministrativabempatrimonial_set.create(
-            unidade_administrativa=instance.criado_por.unidade_administrativa,
-            quantidade=instance.quantidade,
         )
 
 

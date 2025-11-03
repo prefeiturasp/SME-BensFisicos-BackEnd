@@ -63,6 +63,7 @@ class UnidadeAdministrativaAdmin(admin.ModelAdmin):
             if (
                 field_name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
                 and request.user.is_operador_inventario
+                and not request.user.is_gestor_patrimonio
             ):
                 uas_user = uas_do_usuario(request.user)
                 queryset = queryset.filter(

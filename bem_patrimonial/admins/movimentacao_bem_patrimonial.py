@@ -227,7 +227,6 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "bem_patrimonial",
         "unidade_administrativa_origem",
         "unidade_administrativa_destino",
-        "quantidade",
         "solicitado_por",
         "atualizado_em",
     )
@@ -270,7 +269,10 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         return form
 
     def get_queryset(self, request):
-        if request.user.is_operador_inventario:
+        if (
+            request.user.is_operador_inventario
+            and not request.user.is_gestor_patrimonio
+        ):
             return MovimentacaoBemPatrimonial.objects.filter(
                 Q(unidade_administrativa_origem=request.user.unidade_administrativa)
                 | Q(unidade_administrativa_destino=request.user.unidade_administrativa)

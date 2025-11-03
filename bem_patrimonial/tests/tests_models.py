@@ -9,11 +9,11 @@ from bem_patrimonial.constants import (
     APROVADO,
     NAO_APROVADO,
     AGUARDANDO_APROVACAO,
-    ORIGENS,
 )
 from usuario.tests import tests_models as usuariotests_models
 
-NPAT_REGEX = r"^\d{3}\.\d{9}-\d$"
+# O model atual formata como: 000.{12 dígitos}-0
+NPAT_REGEX = r"^\d{3}\.\d{12}-\d$"
 
 
 class SetupData:
@@ -23,20 +23,13 @@ class SetupData:
 
         obj = {
             "nome": "Mesa reta",
-            "data_compra_entrega": datetime.date.today(),
-            "origem": ORIGENS[0][0],
-            "marca": "Fortline",
-            "modelo": "Reta",
-            "quantidade": 100,
             "descricao": "Mesa reta fortline ferro",
             "valor_unitario": 255.57,
-            "numero_processo": 349573,
-            "autorizacao_no_doc_em": datetime.date.today(),
-            "numero_nibpm": 432434,
-            "numero_cimbpm": 4354534,
+            "marca": "Fortline",
+            "modelo": "Reta",
+            "numero_processo": "349573",
             "numero_patrimonial": None,
             "localizacao": "Escritório",
-            "numero_serie": None,
             "criado_por": criado_por,
             "numero_formato_antigo": False,
             "sem_numeracao": False,
@@ -89,33 +82,26 @@ class BemPatrimonialTestCase(TestCase):
         obj = self.entity(
             nome="CPU",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=1,
+            numero_processo="1",
             numero_patrimonial="000.000000123-4",
             numero_formato_antigo=False,
             sem_numeracao=False,
             criado_por=self.instance.criado_por,
         )
-
         obj.full_clean()
 
     def test_regex_invalido_quando_formato_novo(self):
         obj = self.entity(
             nome="CPU",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=2,
-            numero_patrimonial="000.0000123-44",
+            numero_processo="2",
+            numero_patrimonial="000.0000123-44",  # formato inválido p/ 12 dígitos
             numero_formato_antigo=False,
             sem_numeracao=False,
             criado_por=self.instance.criado_por,
@@ -128,31 +114,25 @@ class BemPatrimonialTestCase(TestCase):
         obj = self.entity(
             nome="Monitor",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=3,
-            numero_patrimonial="valor_livre",
+            numero_processo="3",
+            numero_patrimonial="valor_livre",  # permitido c/ formato antigo
             numero_formato_antigo=True,
             sem_numeracao=False,
             criado_por=self.instance.criado_por,
         )
-        obj.full_clean()
+        obj.full_clean()  # não deve levantar erro
 
     def test_flags_sao_exclusivas(self):
         obj = self.entity(
             nome="Mouse",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=4,
+            numero_processo="4",
             numero_patrimonial=None,
             numero_formato_antigo=True,
             sem_numeracao=True,
@@ -167,13 +147,10 @@ class BemPatrimonialTestCase(TestCase):
         obj = self.entity(
             nome="Teclado",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=5,
+            numero_processo="5",
             numero_patrimonial=None,
             numero_formato_antigo=False,
             sem_numeracao=False,
@@ -187,13 +164,10 @@ class BemPatrimonialTestCase(TestCase):
         obj = self.entity(
             nome="Cadeira",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=6,
+            numero_processo="6",
             numero_patrimonial=None,
             numero_formato_antigo=False,
             sem_numeracao=True,
@@ -202,21 +176,19 @@ class BemPatrimonialTestCase(TestCase):
         obj.full_clean()
         obj.save()
         self.assertIsNotNone(obj.numero_patrimonial)
-        self.assertEqual(len(obj.numero_patrimonial), 15)
+        # "000." + 12 dígitos + "-0" -> total esperado = 4 + 12 + 2 = 18
+        self.assertEqual(len(obj.numero_patrimonial), 18)
         self.assertRegex(obj.numero_patrimonial, NPAT_REGEX)
 
     def test_unicidade_numero_patrimonial(self):
         a = self.entity.objects.create(
             nome="Item1",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=7,
-            numero_patrimonial="000.000000111-2",
+            numero_processo="7",
+            numero_patrimonial="000.000000000111-2",
             numero_formato_antigo=False,
             sem_numeracao=False,
             criado_por=self.instance.criado_por,
@@ -227,14 +199,11 @@ class BemPatrimonialTestCase(TestCase):
             self.entity.objects.create(
                 nome="Item2",
                 descricao="Desc",
-                quantidade=1,
                 valor_unitario=1,
                 marca="M",
                 modelo="X",
-                data_compra_entrega=datetime.date.today(),
-                origem=ORIGENS[0][0],
-                numero_processo=8,
-                numero_patrimonial="000.000000111-2",
+                numero_processo="8",
+                numero_patrimonial="000.000000000111-2",  # duplicado
                 numero_formato_antigo=True,
                 sem_numeracao=False,
                 criado_por=self.instance.criado_por,
@@ -249,13 +218,10 @@ class BemPatrimonialTestCase(TestCase):
         a = self.entity.objects.create(
             nome="A",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=10,
+            numero_processo="10",
             numero_patrimonial=None,
             numero_formato_antigo=False,
             sem_numeracao=True,
@@ -264,21 +230,18 @@ class BemPatrimonialTestCase(TestCase):
         self.assertIsNotNone(a.numero_patrimonial)
 
         next_id = a.pk + 1
-        id9 = str(next_id).zfill(9)
-        esperado_proximo = f"000.{id9}-0"
+        id12 = str(next_id).zfill(12)
+        esperado_proximo = f"000.{id12}-0"
 
         b_holder = self.entity.objects.create(
             nome="B-holder",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=11,
-            numero_patrimonial=esperado_proximo,
-            numero_formato_antigo=True,
+            numero_processo="11",
+            numero_patrimonial=esperado_proximo,  # ocupando o próximo número
+            numero_formato_antigo=True,  # formato antigo permite salvar livre
             sem_numeracao=False,
             criado_por=self.instance.criado_por,
         )
@@ -287,13 +250,10 @@ class BemPatrimonialTestCase(TestCase):
         c = self.entity.objects.create(
             nome="C",
             descricao="Desc",
-            quantidade=1,
             valor_unitario=1,
             marca="M",
             modelo="X",
-            data_compra_entrega=datetime.date.today(),
-            origem=ORIGENS[0][0],
-            numero_processo=12,
+            numero_processo="12",
             numero_patrimonial=None,
             numero_formato_antigo=False,
             sem_numeracao=True,
