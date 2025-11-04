@@ -150,7 +150,7 @@ class BemPatrimonial(models.Model):
             base_id = self.pk
 
             while True:
-                id_str = str(base_id).zfill(12)
+                id_str = str(base_id).zfill(9)
                 numero_formatado = f"000.{id_str}-0"
 
                 if (

@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from bem_patrimonial import constants
 from bem_patrimonial.models import BemPatrimonial
 import re
+from django.forms.utils import ErrorDict
 
 
 class BemPatrimonialAdminForm(forms.ModelForm):
@@ -70,20 +71,22 @@ class BemPatrimonialAdminForm(forms.ModelForm):
                 self.fields["sem_numeracao"].disabled = True
 
     def _post_clean(self):
-        """
-        Na edição, se veio número patrimonial, ignorar a flag sem_numeracao
-        apenas para a validação do model.clean/unique.
-        """
-        if self.instance and self.instance.pk:
-            np = self.cleaned_data.get("numero_patrimonial")
-            if np:
-                original_sem = bool(self.instance.sem_numeracao)
-                try:
-                    self.instance.sem_numeracao = False
-                    super()._post_clean()
-                finally:
-                    self.instance.sem_numeracao = original_sem
-                return
+        has_np_error = False
+        if hasattr(self, "errors") and isinstance(self.errors, ErrorDict):
+            has_np_error = "numero_patrimonial" in self.errors
+
+        if has_np_error:
+            original_clean = getattr(self.instance, "clean", None)
+            try:
+
+                if original_clean:
+                    self.instance.clean = lambda: None
+                super()._post_clean()
+            finally:
+                if original_clean:
+                    self.instance.clean = original_clean
+            return
+
         super()._post_clean()
 
     def clean_valor_unitario(self):
