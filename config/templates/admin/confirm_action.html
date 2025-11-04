@@ -1,0 +1,79 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content_title %}
+  <h1>{{ title }}</h1>
+{% endblock %}
+
+{% block content %}
+  <div class="align-center" style="margin: 1rem 0; color: #b45309; background: #fff7ed; border: 1px solid #fed7aa; padding: 12px;">
+    <strong>Ação irreversível.</strong> Confirme para aplicar a extração do Número Patrimonial.
+  </div>
+
+  {% if duplicados_total and duplicados_total > 0 %}
+    <div style="margin: 1rem 0; color: #991b1b; background: #fee2e2; border: 1px solid #fecaca; padding: 12px;">
+      <strong>Atenção:</strong> {{ duplicados_total }} item(ns) marcado(s) como <strong>DUPLICADO</strong> será(ão) ignorado(s) na aplicação.
+    </div>
+  {% endif %}
+
+  <form method="post" style="margin-bottom: 16px;">{% csrf_token %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="confirm" value="yes">
+
+    {# POSTA APENAS IDs NÃO DUPLICADOS #}
+    {% for pk in selected_ids %}
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+    {% endfor %}
+
+    <p>
+      Serão processados <strong>{{ selected_ids|length }}</strong> itens.
+      {% if duplicados_total and duplicados_total > 0 %}
+        <br>Observação: <strong>{{ duplicados_total }}</strong> duplicado(s) será(ão) automaticamente ignorado(s) durante a execução.
+      {% endif %}
+    </p>
+
+    <div style="margin-top: 16px;">
+      <input type="submit" value="{% trans 'Confirmar' %}" class="default">
+      <a href="." class="button cancel-link"
+         style="margin-left: 8px; background: #fb923c; border-color: #f97316; color: #111827;">
+         Cancelar
+      </a>
+    </div>
+  </form>
+
+  {% if preview %}
+    <h3 style="margin-top: 24px;">Prévia (primeiros {{ preview|length }} itens)</h3>
+    <div class="results">
+      <table id="result_list">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Número atual</th>
+            <th>Como ficará</th>
+            <th>Classificação</th>
+            <th>Fonte</th>
+            <th>Aplicar auto?</th>
+            <th>Formato antigo?</th>
+            <th>Sem numeração?</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview %}
+            <tr {% if row.duplicado %} style="background:#fff1f2"{% endif %}>
+              <td>{{ row.id }}</td>
+              <td>{{ row.nome }}</td>
+              <td>{{ row.numero_atual }}</td>
+              <td>{{ row.numero_resultado }}</td>
+              <td>{% if row.duplicado %}<strong>DUPLICADO</strong>{% else %}{{ row.classificacao }}{% endif %}</td>
+              <td>{{ row.fonte }}</td>
+              <td>{% if row.aplicar_auto and not row.duplicado %}Sim{% else %}Não{% endif %}</td>
+              <td>{% if row.numero_formato_antigo %}Sim{% else %}Não{% endif %}</td>
+              <td>{% if row.sem_numeracao %}Sim{% else %}Não{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endblock %}
