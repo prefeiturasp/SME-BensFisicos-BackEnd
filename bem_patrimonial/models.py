@@ -100,7 +100,11 @@ class BemPatrimonial(models.Model):
     AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
     def __str__(self):
-        return f'{self.numero_patrimonial} - {self.nome}' if self.numero_patrimonial else self.nome
+        return (
+            f"{self.numero_patrimonial} - {self.nome}"
+            if self.numero_patrimonial
+            else self.nome
+        )
 
     class Meta:
         verbose_name = "bem patrimonial"

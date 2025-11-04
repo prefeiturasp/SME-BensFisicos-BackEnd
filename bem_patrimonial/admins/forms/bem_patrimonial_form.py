@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from bem_patrimonial import constants
 from bem_patrimonial.models import BemPatrimonial
+import re
 
 
 class BemPatrimonialAdminForm(forms.ModelForm):
@@ -40,7 +41,6 @@ class BemPatrimonialAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # garante required + reaproveita o widget configurado na Meta (fallback seguro)
         vu_widget = getattr(self.Meta, "widgets", {}).get(
             "valor_unitario", forms.TextInput(attrs={"placeholder": "0,00"})
         )
@@ -59,13 +59,11 @@ class BemPatrimonialAdminForm(forms.ModelForm):
             if not self.fields["localizacao"].label:
                 self.fields["localizacao"].label = "Localização"
 
-        # status desabilitado; default na criação
         if "status" in self.fields:
             self.fields["status"].disabled = True
             if not (self.instance and self.instance.pk):
                 self.initial.setdefault("status", constants.AGUARDANDO_APROVACAO)
 
-        # na edição, oculta o rádio e desabilita 'sem_numeracao'
         if self.instance and self.instance.pk:
             self.fields["cadastro_modo"].widget = forms.HiddenInput()
             if "sem_numeracao" in self.fields:
@@ -104,30 +102,65 @@ class BemPatrimonialAdminForm(forms.ModelForm):
             raise ValidationError("Valor inválido. Use o formato 0,00 ou 0.000,00.")
 
     def clean(self):
+
         cleaned = super().clean()
 
-        # default de status na criação
         if not (self.instance and self.instance.pk):
             cleaned.setdefault("status", constants.AGUARDANDO_APROVACAO)
 
         sem = bool(cleaned.get("sem_numeracao"))
         antigo = bool(cleaned.get("numero_formato_antigo"))
-        numero = cleaned.get("numero_patrimonial")
+        numero = (cleaned.get("numero_patrimonial") or "").strip()
+        tem_pk = bool(getattr(self.instance, "pk", None))
 
-        # não permitir marcar os dois
+        NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
+
+        if tem_pk:
+            if numero:
+
+                if not antigo and not re.fullmatch(NEW_FMT_RE, numero):
+                    raise ValidationError(
+                        {
+                            "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+                        }
+                    )
+
+                cleaned["sem_numeracao"] = False
+            else:
+
+                if not sem:
+                    raise ValidationError(
+                        {
+                            "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
+                        }
+                    )
+
+                cleaned["numero_formato_antigo"] = False
+
+            return cleaned
+
         if sem and antigo:
             raise ValidationError(
                 "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             )
 
         if sem:
+
             cleaned["numero_patrimonial"] = None
             cleaned["numero_formato_antigo"] = False
+            return cleaned
 
-        if not sem and not (numero and str(numero).strip()):
+        if not numero:
             raise ValidationError(
                 {
                     "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
+                }
+            )
+
+        if not antigo and not re.fullmatch(NEW_FMT_RE, numero):
+            raise ValidationError(
+                {
+                    "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
                 }
             )
 
