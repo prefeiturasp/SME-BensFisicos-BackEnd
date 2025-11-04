@@ -12,8 +12,8 @@ from bem_patrimonial.constants import (
 )
 from usuario.tests import tests_models as usuariotests_models
 
-# O model atual formata como: 000.{12 dígitos}-0
-NPAT_REGEX = r"^\d{3}\.\d{12}-\d$"
+# O model atual formata como: 000.{9 dígitos}-0
+NPAT_REGEX = r"^\d{3}\.\d{9}-\d$"
 
 
 class SetupData:
@@ -176,8 +176,7 @@ class BemPatrimonialTestCase(TestCase):
         obj.full_clean()
         obj.save()
         self.assertIsNotNone(obj.numero_patrimonial)
-        # "000." + 12 dígitos + "-0" -> total esperado = 4 + 12 + 2 = 18
-        self.assertEqual(len(obj.numero_patrimonial), 18)
+        self.assertEqual(len(obj.numero_patrimonial), 15)
         self.assertRegex(obj.numero_patrimonial, NPAT_REGEX)
 
     def test_unicidade_numero_patrimonial(self):
