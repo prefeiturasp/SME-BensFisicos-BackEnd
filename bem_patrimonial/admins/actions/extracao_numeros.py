@@ -7,6 +7,8 @@ from django.contrib.admin import helpers
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from collections import Counter
+
 
 NEW_PATTERN_STRICT = re.compile(r"^\d{3}\.\d{9}-\d$")
 ALPHA_RE = re.compile(r"[A-Za-zÁ-ú]")
@@ -201,68 +203,127 @@ def aplicar_extracao_numero(modeladmin, request, queryset):
         )
         return None
 
+    Model = modeladmin.model
     base_qs = queryset.filter(
         Q(numero_patrimonial__isnull=True) | Q(numero_patrimonial="")
     )
 
     if request.POST.get("confirm") != "yes":
-        context = modeladmin.admin_site.each_context(request)
-
-        total = base_qs.count()
-
         selected_ids = list(base_qs.values_list("pk", flat=True))
 
-        sample_qs = list(base_qs[:20])
-        preview = []
-        for bem in sample_qs:
-            num_atual = (bem.numero_patrimonial or "").strip()
+        existentes = set(
+            Model.objects.exclude(numero_patrimonial__isnull=True)
+            .exclude(numero_patrimonial="")
+            .values_list("numero_patrimonial", flat=True)
+        )
+
+        propostos = {}
+        numeros_todos = []
+        for pk in selected_ids:
+            bem = Model.objects.only(
+                "id", "nome", "descricao", "numero_patrimonial"
+            ).get(pk=pk)
             numero, cls, nome_sug, fonte, pos, raw, aplicar_auto = _extract(
                 bem.nome, getattr(bem, "descricao", "")
             )
-            if cls == "PADRAO_ATUAL":
-                num_final = numero
-                flag_antigo = False
-                flag_sem = False
-            elif cls == "PADRAO_ANTERIOR":
-                num_final = numero
-                flag_antigo = True
+            if cls in ("PADRAO_ATUAL", "PADRAO_ANTERIOR") and numero:
+                numeros_todos.append(numero)
+            propostos[pk] = {
+                "numero": numero,
+                "cls": cls,
+                "fonte": fonte,
+                "aplicar_auto": bool(aplicar_auto),
+                "nome": bem.nome,
+                "num_atual": (bem.numero_patrimonial or "").strip() or "—",
+            }
+
+        contagem = Counter(numeros_todos)
+        duplicados_ids = {
+            pk
+            for pk, info in propostos.items()
+            if info["numero"]
+            and (info["numero"] in existentes or contagem.get(info["numero"], 0) > 1)
+        }
+        amostra_ids = sorted(
+            selected_ids, key=lambda _pk: (0 if _pk in duplicados_ids else 1, _pk)
+        )
+
+        sample_qs = list(Model.objects.filter(pk__in=amostra_ids))
+        preview = []
+        for bem in sample_qs:
+            info = propostos[bem.pk]
+            numero = info["numero"]
+            cls = info["cls"]
+            fonte = info["fonte"] or "—"
+            aplicar_auto = info["aplicar_auto"]
+            is_dup = bem.pk in duplicados_ids
+
+            if is_dup and numero:
+                cls_preview = "DUPLICADO"
+                num_result = numero
+                aplicar_preview = False
+                flag_antigo = cls == "PADRAO_ANTERIOR"
                 flag_sem = False
             else:
-                num_final = "(será gerado automaticamente)"
-                flag_antigo = False
-                flag_sem = True
+                if cls == "PADRAO_ATUAL":
+                    cls_preview, num_result = "PADRAO_ATUAL", numero
+                    flag_antigo, flag_sem = False, False
+                    aplicar_preview = aplicar_auto
+                elif cls == "PADRAO_ANTERIOR":
+                    cls_preview, num_result = "PADRAO_ANTERIOR", numero
+                    flag_antigo, flag_sem = True, False
+                    aplicar_preview = aplicar_auto
+                else:
+                    cls_preview, num_result = (
+                        "SEM_NUMERO",
+                        "(será gerado automaticamente)",
+                    )
+                    flag_antigo, flag_sem = False, True
+                    aplicar_preview = aplicar_auto
 
             preview.append(
                 {
                     "id": bem.pk,
-                    "nome": bem.nome,
-                    "numero_atual": num_atual or "—",
-                    "numero_resultado": num_final,
-                    "classificacao": cls,
-                    "fonte": fonte or "—",
-                    "aplicar_auto": bool(aplicar_auto),
+                    "nome": info["nome"],
+                    "numero_atual": info["num_atual"],
+                    "numero_resultado": num_result or "",
+                    "classificacao": cls_preview,
+                    "fonte": fonte,
+                    "aplicar_auto": aplicar_preview and not is_dup,
                     "numero_formato_antigo": flag_antigo,
                     "sem_numeracao": flag_sem,
+                    "duplicado": is_dup,
                 }
             )
-
+        preview = sorted(
+            preview,
+            key=lambda r: (
+                0 if r["duplicado"] else 1,
+                (
+                    r["numero_resultado"].replace(".", "").replace("-", "").zfill(13)
+                    if r["numero_resultado"] and r["numero_resultado"][0].isdigit()
+                    else "9999999999999"
+                ),
+            ),
+        )
+        context = modeladmin.admin_site.each_context(request)
         context.update(
             {
-                "title": "Confirmar aplicação IRREVERSÍVEL — Extração de Número Patrimonial (V5)",
-                "total": total,
+                "title": "Confirmar aplicação IRREVERSÍVEL — Extração de Número Patrimonial",
+                "total": len(selected_ids),
+                "duplicados_total": len(duplicados_ids),
                 "preview": preview,
-                "preview_limit": 20,
+                "preview_limit": 100,
                 "selected_ids": selected_ids,
                 "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
-                "opts": modeladmin.model._meta,
-                "objects_name": str(modeladmin.model._meta.verbose_name_plural),
+                "opts": Model._meta,
+                "objects_name": str(Model._meta.verbose_name_plural),
                 "action": "aplicar_extracao_numero",
             }
         )
         return TemplateResponse(request, "admin/confirm_action.html", context)
 
-    atualizados = 0
-    erros = 0
+    atualizados, erros, ignorados_duplicados = 0, 0, 0
 
     posted_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
     if not posted_ids:
@@ -271,20 +332,51 @@ def aplicar_extracao_numero(modeladmin, request, queryset):
         )
         return None
 
+    existentes = set(
+        Model.objects.exclude(numero_patrimonial__isnull=True)
+        .exclude(numero_patrimonial="")
+        .values_list("numero_patrimonial", flat=True)
+    )
+
+    objs_post = list(
+        Model.objects.filter(pk__in=posted_ids).only(
+            "id", "nome", "descricao", "numero_patrimonial"
+        )
+    )
+    propostos_post = {}
+    numeros_post = []
+    for bem in objs_post:
+        numero, cls, nome_sug, fonte, pos, raw, aplicar_auto = _extract(
+            bem.nome, getattr(bem, "descricao", "")
+        )
+        propostos_post[bem.pk] = (numero, cls, aplicar_auto, nome_sug)
+        if cls in ("PADRAO_ATUAL", "PADRAO_ANTERIOR") and numero:
+            numeros_post.append(numero)
+
+    contagem_post = Counter(numeros_post)
+    dup_ids_runtime = {
+        pk
+        for pk, (numero, cls, _, __) in propostos_post.items()
+        if numero
+        and cls in ("PADRAO_ATUAL", "PADRAO_ANTERIOR")
+        and (numero in existentes or contagem_post.get(numero, 0) > 1)
+    }
+
+    ids_to_process = [pk for pk in posted_ids if pk not in dup_ids_runtime]
+    ignorados_duplicados = len(posted_ids) - len(ids_to_process)
+
     with transaction.atomic():
-        Model = modeladmin.model
         qs = (
-            Model.objects.filter(pk__in=posted_ids)
+            Model.objects.filter(pk__in=ids_to_process)
             .select_for_update(skip_locked=True)
             .order_by("pk")
         )
 
         for bem in qs:
-            try:
-
-                with transaction.atomic():
-                    numero, cls, nome_sug, fonte, pos, raw, aplicar_auto = _extract(
-                        bem.nome, getattr(bem, "descricao", "")
+            with transaction.atomic():
+                try:
+                    numero, cls, aplicar_auto, nome_sug = propostos_post.get(
+                        bem.pk, (None, "SEM_NUMERO", False, None)
                     )
 
                     if not aplicar_auto:
@@ -293,7 +385,6 @@ def aplicar_extracao_numero(modeladmin, request, queryset):
                             bem.full_clean()
                             bem.save(update_fields=["sem_numeracao", "atualizado_em"])
                             atualizados += 1
-
                         continue
 
                     if cls == "PADRAO_ATUAL":
@@ -322,15 +413,15 @@ def aplicar_extracao_numero(modeladmin, request, queryset):
                     )
                     atualizados += 1
 
-            except (ValidationError, IntegrityError) as e:
-                transaction.set_rollback(True)
-                erros += 1
-            except Exception as e:
-                transaction.set_rollback(True)
-                erros += 1
+                except (ValidationError, IntegrityError):
+                    transaction.set_rollback(True)
+                    erros += 1
+                except Exception:
+                    transaction.set_rollback(True)
+                    erros += 1
 
     messages.info(
         request,
-        f"Extração aplicada. Atualizados: {atualizados}. Erros: {erros}. (Ação irreversível confirmada.)",
+        f"Extração aplicada. Atualizados: {atualizados}. Erros: {erros}. Ignorados (duplicados): {ignorados_duplicados}.",
     )
     return None
