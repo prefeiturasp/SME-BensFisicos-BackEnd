@@ -206,6 +206,18 @@ def cancelar_solicitacao(modeladmin, request, queryset):
             )
             continue
 
+        if (
+            request.user.is_operador_inventario
+            and not request.user.is_gestor_patrimonio
+        ):
+            if item.solicitado_por.pk != request.user.pk:
+                messages.add_message(
+                    request,
+                    messages.ERROR,
+                    f"Movimentação #{item.pk}: Você só pode cancelar movimentações criadas por você.",
+                )
+                continue
+
         item.cancelar_solicitacao(request.user)
         messages.add_message(
             request,
@@ -308,11 +320,6 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             super().save_model(request, obj, form, change)
 
     def get_actions(self, request):
-        """Limita a action de cancelamento apenas para Gestores"""
+        """Retorna todas as actions disponíveis"""
         actions = super().get_actions(request)
-
-        if not request.user.is_gestor_patrimonio:
-            if "cancelar_solicitacao" in actions:
-                del actions["cancelar_solicitacao"]
-
         return actions

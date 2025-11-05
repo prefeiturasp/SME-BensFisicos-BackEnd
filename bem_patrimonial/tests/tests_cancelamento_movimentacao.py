@@ -14,7 +14,7 @@ from bem_patrimonial.constants import (
     BLOQUEADO,
     ENVIADA,
     ACEITA,
-    CANCELADA_GESTOR,
+    CANCELADA,
 )
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
@@ -54,7 +54,7 @@ class CancelamentoMovimentacaoTestCase(TestCase):
         self.movimentacao.cancelar_solicitacao(self.gestor)
         self.movimentacao.refresh_from_db()
 
-        self.assertEqual(self.movimentacao.status, CANCELADA_GESTOR)
+        self.assertEqual(self.movimentacao.status, CANCELADA)
         self.assertEqual(self.movimentacao.cancelado_por, self.gestor)
 
     def test_cancelar_movimentacao_desbloqueia_bem(self):
@@ -124,7 +124,7 @@ class ValidacoesCruzadasCancelamentoTestCase(TestCase):
         self.movimentacao.aprovar_solicitacao(self.operador_destino)
         self.movimentacao.refresh_from_db()
 
-        self.assertEqual(self.movimentacao.status, CANCELADA_GESTOR)
+        self.assertEqual(self.movimentacao.status, CANCELADA)
         self.assertIsNone(self.movimentacao.aprovado_por)
 
     def test_nao_pode_rejeitar_movimentacao_cancelada(self):
@@ -134,7 +134,7 @@ class ValidacoesCruzadasCancelamentoTestCase(TestCase):
         self.movimentacao.rejeitar_solicitacao(self.operador_destino)
         self.movimentacao.refresh_from_db()
 
-        self.assertEqual(self.movimentacao.status, CANCELADA_GESTOR)
+        self.assertEqual(self.movimentacao.status, CANCELADA)
         self.assertIsNone(self.movimentacao.rejeitado_por)
 
 
@@ -180,7 +180,7 @@ class AdminActionCancelamentoTestCase(TestCase):
         cancelar_solicitacao(self.admin, request, queryset)
 
         self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, CANCELADA_GESTOR)
+        self.assertEqual(self.movimentacao.status, CANCELADA)
 
         mock_email.assert_called_once()
         call_args = mock_email.call_args[0]
@@ -293,14 +293,34 @@ class AdminActionCancelamentoTestCase(TestCase):
         )
         mock_email.assert_not_called()
 
-    def test_action_cancelamento_apenas_para_gestores(self):
+    def test_action_cancelamento_visivel_para_todos(self):
         request = self._create_request_with_messages(self.gestor)
         actions = self.admin.get_actions(request)
         self.assertIn("cancelar_solicitacao", actions)
 
         request_operador = self._create_request_with_messages(self.operador_origem)
         actions_operador = self.admin.get_actions(request_operador)
-        self.assertNotIn("cancelar_solicitacao", actions_operador)
+        self.assertIn("cancelar_solicitacao", actions_operador)
+
+    def test_operador_nao_cancela_movimentacao_de_outro(self):
+        bem2 = SetupMovimentacaoData().create_bem_patrimonial(
+            self.operador_destino, self.ua_origem
+        )
+        movimentacao2 = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem2,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador_destino,
+        )
+        request_operador = self._create_request_with_messages(self.operador_origem)
+        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=movimentacao2.pk)
+        with patch(
+            "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
+        ):
+            cancelar_solicitacao(self.admin, request_operador, queryset)
+        movimentacao2.refresh_from_db()
+
+        self.assertEqual(movimentacao2.status, ENVIADA)
 
     @patch(
         "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
@@ -326,8 +346,8 @@ class AdminActionCancelamentoTestCase(TestCase):
         self.movimentacao.refresh_from_db()
         movimentacao2.refresh_from_db()
 
-        self.assertEqual(self.movimentacao.status, CANCELADA_GESTOR)
-        self.assertEqual(movimentacao2.status, CANCELADA_GESTOR)
+        self.assertEqual(self.movimentacao.status, CANCELADA)
+        self.assertEqual(movimentacao2.status, CANCELADA)
 
         self.bem.refresh_from_db()
         bem2.refresh_from_db()
@@ -411,7 +431,7 @@ class FluxoCancelamentoTestCase(TestCase):
         self.assertEqual(self.bem.status, APROVADO)
 
         mov.refresh_from_db()
-        self.assertEqual(mov.status, CANCELADA_GESTOR)
+        self.assertEqual(mov.status, CANCELADA)
         self.assertEqual(mov.cancelado_por, self.gestor)
 
 

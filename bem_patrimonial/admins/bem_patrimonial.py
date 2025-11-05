@@ -6,6 +6,10 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
 
+from bem_patrimonial.admins.actions.extracao_numeros import (
+    aplicar_extracao_numero,
+    simular_extracao_numero,
+)
 from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -18,11 +22,11 @@ from rangefilter.filters import DateRangeFilter
 from import_export.formats.base_formats import CSV, XLS, XLSX, HTML
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
-from dados_comuns.models import HistoricoGeral
+
 from django.contrib.contenttypes.admin import GenericTabularInline
 from django.db.models.functions import Cast
 from bem_patrimonial import constants
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 
 
 class StatusBemPatrimonialInline(admin.TabularInline):
@@ -107,10 +111,17 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "criado_por",
         "criado_em",
     )
+    actions = [simular_extracao_numero, aplicar_extracao_numero]
 
     class Media:
         js = ("admin/bem_patrimonial.js",)
         css = {"all": ("admin/bem_patrimonial.css",)}
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not request.user.is_gestor_patrimonio:
+            actions.pop("aplicar_extracao_numero", None)
+        return actions
 
     def get_list_display(self, request):
         if getattr(request.user, "is_operador_inventario", False):

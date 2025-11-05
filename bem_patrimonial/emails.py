@@ -89,7 +89,7 @@ def envia_email_solicitacao_movimentacao_cancelada(
     dict = {
         "subject": subject,
         "title": "Olá!",
-        "subtitle": """A solicitação de movimentação do bem patrimonial {} foi cancelada pelo Gestor de Patrimônio {}.
+        "subtitle": """A solicitação de movimentação do bem patrimonial {} foi cancelada por {}.
                        Acesse {} para visualizar mais detalhes.
                     """.format(
             bem_patrimonial.__str__(),
