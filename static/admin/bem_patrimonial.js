@@ -46,37 +46,75 @@
   }
 
   function bindSingleNumeroPatrimonialMask(){
-  var np   = id('id_numero_patrimonial');
-  var ant  = id('id_numero_formato_antigo');
-  var sem  = id('id_sem_numeracao');
-  var isEdit = !id('id_cadastro_modo'); 
-  if (!np || !ant) return;
+    var np   = id('id_numero_patrimonial');
+    var ant  = id('id_numero_formato_antigo');
+    var sem  = id('id_sem_numeracao');
+    var isEdit = !id('id_cadastro_modo'); 
+    if (!np || !ant) return;
 
-  function setReadOnly(on){
-    if (on){ np.setAttribute('readonly','readonly'); np.setAttribute('aria-readonly','true'); }
-    else { np.removeAttribute('readonly'); np.removeAttribute('aria-readonly'); }
-  }
+    function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
+    function fmt(d){
+      d = (d||'').slice(0,13);
+      var p1=d.slice(0,3), p2=d.slice(3,12), p3=d.slice(12,13);
+      if (d.length <= 3) return p1;
+      if (d.length <= 12) return p1 + '.' + p2;
+      return p1 + '.' + p2 + '-' + p3;
+    }
+    function setReadOnly(on){
+      if (on){ np.setAttribute('readonly','readonly'); np.setAttribute('aria-readonly','true'); }
+      else { np.removeAttribute('readonly'); np.removeAttribute('aria-readonly'); }
+    }
 
-  function refresh(){
+    
+    var didInitialShow = false;
+
+    function mutuallyExclusive(changed){
+      
+      if (!ant || !sem) return;
+      if (changed === 'sem' && sem.checked && ant.checked){ ant.checked = false; }
+      if (changed === 'ant' && ant.checked && sem.checked){ sem.checked = false; }
+    }
+
+    function applyPatternAndMask(){
+      
+      if (!(ant && ant.checked)){
+        np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
+        np.placeholder = '000.000000000-0';
+        np.value = fmt(onlyDigits(np.value));
+      } else {
+        np.removeAttribute('pattern');
+        np.placeholder = 'Valor livre (formato antigo)';
+      }
+    }
+
+    function refresh(opts){
+      opts = opts || {};
       var semMarcado = !!(sem && sem.checked);
 
       
       if (semMarcado){
-        setReadOnly(true);
-        np.removeAttribute('pattern');
+        if (isEdit){
+          
+          setReadOnly(false);
+          np.removeAttribute('pattern');
+          np.placeholder = 'Sem numeração';
 
-        
-        if (!isEdit){
-          np.value = '';
-          np.placeholder = 'Gerado automaticamente';
+          
+          if (!didInitialShow) {
+            didInitialShow = true;
+            return; 
+          }
+          
+          return;
         } else {
           
-          
-          np.placeholder = 'Sem numeração';
+          setReadOnly(true);
+          np.removeAttribute('pattern');
+          np.placeholder = 'Gerado automaticamente';
+          np.value = '';
+          if (ant){ ant.disabled = true; ant.checked = false; }
+          return;
         }
-
-        if (ant){ ant.disabled = true; ant.checked = false; }
-        return; 
       } else {
         setReadOnly(false);
         if (ant) ant.disabled = false;
@@ -86,22 +124,43 @@
       if (ant && ant.checked){
         np.removeAttribute('pattern');
         np.placeholder = 'Valor livre (formato antigo)';
-      } else {
         
-        np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
-        np.value = fmt(onlyDigits(np.value));
-        np.placeholder = '000.000000000-0';
+        return;
       }
+
+      
+      applyPatternAndMask();
     }
 
-    if (ant) ant.addEventListener('change', refresh);
-    if (sem) sem.addEventListener('change', refresh);
+    
+    if (ant) ant.addEventListener('change', function(){
+      mutuallyExclusive('ant');
+      refresh();
+    });
+
+    if (sem) sem.addEventListener('change', function(){
+      mutuallyExclusive('sem');
+      refresh();
+    });
 
     np.addEventListener('input', function(){
-      var semMarcado = !!(sem && sem.checked);
       
+      if (isEdit && sem && sem.checked){
+        sem.checked = false;          
+        mutuallyExclusive('sem');
+      }
+      
+      var semMarcado = !!(sem && sem.checked);
       if (!(ant && ant.checked) && !semMarcado){
         np.value = fmt(onlyDigits(np.value));
+        np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
+        np.placeholder = '000.000000000-0';
+      } else if (ant && ant.checked){
+        np.removeAttribute('pattern');
+        np.placeholder = 'Valor livre (formato antigo)';
+      } else if (semMarcado){
+        np.removeAttribute('pattern');
+        np.placeholder = 'Sem numeração';
       }
     });
 
