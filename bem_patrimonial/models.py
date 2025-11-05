@@ -352,7 +352,7 @@ class MovimentacaoBemPatrimonial(models.Model):
 
     @property
     def cancelada(self):
-        return self.status == constants.CANCELADA_GESTOR
+        return self.status == constants.CANCELADA
 
     def aprovar_solicitacao(self, usuario):
         if self.aceita or self.status != constants.ENVIADA:
@@ -378,7 +378,7 @@ class MovimentacaoBemPatrimonial(models.Model):
 
     def cancelar_solicitacao(self, usuario):
         if not self.cancelada and self.status == constants.ENVIADA:
-            self.status = constants.CANCELADA_GESTOR
+            self.status = constants.CANCELADA
             self.cancelado_por = usuario
             self.save()
 
