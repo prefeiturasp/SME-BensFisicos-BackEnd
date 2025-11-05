@@ -13,7 +13,8 @@ from bem_patrimonial.constants import (
 from usuario.tests import tests_models as usuariotests_models
 
 # O model atual formata como: 000.{9 dígitos}-0
-NPAT_REGEX = r"^\d{3}\.\d{9}-\d$"
+NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
+NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
 
 class SetupData:
@@ -176,8 +177,7 @@ class BemPatrimonialTestCase(TestCase):
         obj.full_clean()
         obj.save()
         self.assertIsNotNone(obj.numero_patrimonial)
-        self.assertEqual(len(obj.numero_patrimonial), 15)
-        self.assertRegex(obj.numero_patrimonial, NPAT_REGEX)
+        self.assertRegex(obj.numero_patrimonial, NPAT_AUTO_REGEX)
 
     def test_unicidade_numero_patrimonial(self):
         a = self.entity.objects.create(
@@ -187,7 +187,7 @@ class BemPatrimonialTestCase(TestCase):
             marca="M",
             modelo="X",
             numero_processo="7",
-            numero_patrimonial="000.000000000111-2",
+            numero_patrimonial="000.000000111-2",
             numero_formato_antigo=False,
             sem_numeracao=False,
             criado_por=self.instance.criado_por,
@@ -202,7 +202,7 @@ class BemPatrimonialTestCase(TestCase):
                 marca="M",
                 modelo="X",
                 numero_processo="8",
-                numero_patrimonial="000.000000000111-2",  # duplicado
+                numero_patrimonial="000.000000111-2",  # duplicado
                 numero_formato_antigo=True,
                 sem_numeracao=False,
                 criado_por=self.instance.criado_por,
@@ -229,8 +229,7 @@ class BemPatrimonialTestCase(TestCase):
         self.assertIsNotNone(a.numero_patrimonial)
 
         next_id = a.pk + 1
-        id12 = str(next_id).zfill(12)
-        esperado_proximo = f"000.{id12}-0"
+        esperado_proximo = f"SEM-NUMERO-{next_id}"
 
         b_holder = self.entity.objects.create(
             nome="B-holder",
@@ -258,5 +257,5 @@ class BemPatrimonialTestCase(TestCase):
             sem_numeracao=True,
             criado_por=self.instance.criado_por,
         )
-        self.assertRegex(c.numero_patrimonial, NPAT_REGEX)
+        self.assertRegex(c.numero_patrimonial, NPAT_AUTO_REGEX)
         self.assertNotEqual(c.numero_patrimonial, esperado_proximo)

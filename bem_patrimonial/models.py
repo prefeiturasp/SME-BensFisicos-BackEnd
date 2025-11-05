@@ -16,7 +16,8 @@ from bem_patrimonial.emails import (
 )
 from bem_patrimonial import constants
 
-NUMERO_PATRIMONIAL_REGEX = r"^\d{3}\.\d{9}-\d$"
+NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
+NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
 
 class BemPatrimonial(models.Model):
@@ -26,7 +27,7 @@ class BemPatrimonial(models.Model):
     nome = models.CharField("Nome do bem", max_length=255, null=False, blank=False)
     descricao = models.TextField("Descrição", null=False, blank=False)
     numero_processo = models.CharField(
-        "Número do processo de incorporação", max_length=64, null=False, blank=False
+        "Número do processo de incorporação", max_length=64, null=True, blank=True
     )
     valor_unitario = models.DecimalField(
         "Valor unitário", max_digits=16, decimal_places=2, blank=False, null=False
@@ -127,7 +128,7 @@ class BemPatrimonial(models.Model):
 
         if (not self.numero_formato_antigo) and (not self.sem_numeracao):
             if not re.fullmatch(
-                NUMERO_PATRIMONIAL_REGEX, self.numero_patrimonial or ""
+                NPAT_NUM_REGEX, self.numero_patrimonial or ""
             ):
                 raise ValidationError(
                     {"numero_patrimonial": "Número Patrimonial incompleto"}
@@ -150,8 +151,7 @@ class BemPatrimonial(models.Model):
             base_id = self.pk
 
             while True:
-                id_str = str(base_id).zfill(9)
-                numero_formatado = f"000.{id_str}-0"
+                numero_formatado = f"SEM-NUMERO-{base_id}"
 
                 if (
                     not type(self)
