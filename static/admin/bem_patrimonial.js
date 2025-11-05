@@ -1,4 +1,4 @@
-// static/admin/bem_patrimonial.js
+
 (function(){
   function id(s){ return document.getElementById(s); }
   function qs(s, r){ return (r || document).querySelector(s); }
@@ -46,34 +46,48 @@
   }
 
   function bindSingleNumeroPatrimonialMask(){
-    var np   = id('id_numero_patrimonial');
-    var ant  = id('id_numero_formato_antigo');
-    var sem  = id('id_sem_numeracao');
-    var isEdit = !id('id_cadastro_modo'); // add tem o rádio; edit não tem
-    if (!np || !ant) return;
+  var np   = id('id_numero_patrimonial');
+  var ant  = id('id_numero_formato_antigo');
+  var sem  = id('id_sem_numeracao');
+  var isEdit = !id('id_cadastro_modo'); 
+  if (!np || !ant) return;
 
-    function setReadOnly(on){
-      if (on){ np.setAttribute('readonly','readonly'); np.setAttribute('aria-readonly','true'); }
-      else { np.removeAttribute('readonly'); np.removeAttribute('aria-readonly'); }
-    }
+  function setReadOnly(on){
+    if (on){ np.setAttribute('readonly','readonly'); np.setAttribute('aria-readonly','true'); }
+    else { np.removeAttribute('readonly'); np.removeAttribute('aria-readonly'); }
+  }
 
-    function refresh(){
-      var semAtivo = !!(sem && sem.checked && !isEdit);
-      if (semAtivo){
-        np.value = '';
+  function refresh(){
+      var semMarcado = !!(sem && sem.checked);
+
+      
+      if (semMarcado){
         setReadOnly(true);
         np.removeAttribute('pattern');
-        np.placeholder = 'Gerado automaticamente';
+
+        
+        if (!isEdit){
+          np.value = '';
+          np.placeholder = 'Gerado automaticamente';
+        } else {
+          
+          
+          np.placeholder = 'Sem numeração';
+        }
+
         if (ant){ ant.disabled = true; ant.checked = false; }
-        return;
+        return; 
       } else {
         setReadOnly(false);
         if (ant) ant.disabled = false;
       }
+
+      
       if (ant && ant.checked){
         np.removeAttribute('pattern');
         np.placeholder = 'Valor livre (formato antigo)';
       } else {
+        
         np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
         np.value = fmt(onlyDigits(np.value));
         np.placeholder = '000.000000000-0';
@@ -82,16 +96,20 @@
 
     if (ant) ant.addEventListener('change', refresh);
     if (sem) sem.addEventListener('change', refresh);
+
     np.addEventListener('input', function(){
-      var semAtivo = !!(sem && sem.checked && !isEdit);
-      if (!(ant && ant.checked) && !semAtivo){
+      var semMarcado = !!(sem && sem.checked);
+      
+      if (!(ant && ant.checked) && !semMarcado){
         np.value = fmt(onlyDigits(np.value));
       }
     });
+
+    
     refresh();
   }
 
-  // ---------- MULTI UI ----------
+  
   function multiHTML(){
     return [
       '<div id="base-required-errors" class="errornote hide" style="margin-bottom:8px;"></div>',

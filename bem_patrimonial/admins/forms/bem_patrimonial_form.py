@@ -117,9 +117,15 @@ class BemPatrimonialAdminForm(forms.ModelForm):
         tem_pk = bool(getattr(self.instance, "pk", None))
 
         NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
+        SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
 
         if tem_pk:
             if numero:
+
+                if sem and re.fullmatch(SEM_NUM_RE, numero):
+                    cleaned["sem_numeracao"] = True
+                    cleaned["numero_formato_antigo"] = False
+                    return cleaned
 
                 if not antigo and not re.fullmatch(NEW_FMT_RE, numero):
                     raise ValidationError(
@@ -127,8 +133,6 @@ class BemPatrimonialAdminForm(forms.ModelForm):
                             "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
                         }
                     )
-
-                cleaned["sem_numeracao"] = False
             else:
 
                 if not sem:

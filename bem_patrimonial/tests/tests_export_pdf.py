@@ -13,7 +13,8 @@ from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from dados_comuns.models import UnidadeAdministrativa
 
-NPAT_REGEX = r"^\d{3}\.\d{9}-\d$"
+NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
+NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
 
 class SetupExportData:
@@ -54,18 +55,18 @@ class SetupExportData:
             "criado_por": criado_por,
             "unidade_administrativa": criado_por.unidade_administrativa,
             "status": AGUARDANDO_APROVACAO,
-            # por padrão deixamos sem número para acionar a geração automática
+            
             "sem_numeracao": True,
             "numero_formato_antigo": False,
         }
         defaults.update(kwargs)
 
-        # Tratamento do numero_patrimonial, se fornecido
+        
         npat = defaults.get("numero_patrimonial", None)
         if npat is not None and npat != "":
             npat = str(npat)
-            # Se for padrão novo, deixa; se já existir, cai em sem_numeracao
-            if re.fullmatch(NPAT_REGEX, npat):
+            
+            if re.fullmatch(NPAT_NUM_REGEX, npat):
                 if BemPatrimonial.objects.filter(numero_patrimonial=npat).exists():
                     defaults["sem_numeracao"] = True
                     defaults.pop("numero_patrimonial", None)
@@ -75,12 +76,12 @@ class SetupExportData:
                     defaults["numero_formato_antigo"] = False
                     defaults["numero_patrimonial"] = npat
             else:
-                # Valor livre -> formato antigo
+                
                 defaults["sem_numeracao"] = False
                 defaults["numero_formato_antigo"] = True
                 defaults["numero_patrimonial"] = npat
         else:
-            # Geração automática
+            
             defaults["sem_numeracao"] = True
             defaults.pop("numero_patrimonial", None)
             defaults["numero_formato_antigo"] = False
@@ -221,10 +222,10 @@ class PDFExportDataTestCase(TestCase):
         self.assertIsInstance(pdf_bytes, bytes)
         self.assertGreater(len(pdf_bytes), 0)
 
-        # Total de registros: 3
-        # Quantidade total: 10 + 5 + 3 = 18
-        # Valor total: 100 + 200 + 50 = 350
-        # Localizações únicas: 2 (Local A e Local B)
+        
+        
+        
+        
 
 
 class BemPatrimonialAdminExportTestCase(TestCase):

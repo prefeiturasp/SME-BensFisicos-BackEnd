@@ -89,7 +89,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "numero_processo",
     )
     list_display_links = (
-        # "thumb",
         "numero_patrimonial",
         "nome",
     )
@@ -107,7 +106,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "status",
         "criado_por",
         "criado_em",
-        # "foto_preview",
     )
 
     class Media:
@@ -152,7 +150,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def get_form(self, request, obj=None, **kwargs):
         BaseForm = super().get_form(request, obj, **kwargs)
 
-        # Regras na CRIAÇÃO (mantém sua validação atual)
         if obj is None:
             original_clean = BaseForm.clean
 
@@ -160,40 +157,49 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 def __init__(self_inner, *a, **kw):
                     super().__init__(*a, **kw)
 
-                    # Se for multi, não exigir 'localizacao' no form base
                     modo = (getattr(self_inner, "data", None) or {}).get(
                         "cadastro_modo"
                     ) or (getattr(self_inner, "initial", {}) or {}).get("cadastro_modo")
                     if modo == "multi" and "localizacao" in self_inner.fields:
                         self_inner.fields["localizacao"].required = False
 
-                    # Limita/trava UA conforme perfil
                     if "unidade_administrativa" in self_inner.fields:
+                        fld = self_inner.fields["unidade_administrativa"]
+                        fld.required = True  
+
                         qs = UnidadeAdministrativa.objects.filter(
                             status=UnidadeAdministrativa.ATIVA
                         )
-                        if (
-                            request.user.is_operador_inventario
-                            and not request.user.is_gestor_patrimonio
-                        ):
+
+                        if request.user.is_operador_inventario and not request.user.is_gestor_patrimonio:
                             ua = getattr(request.user, "unidade_administrativa", None)
                             qs = qs.filter(pk=getattr(ua, "pk", None))
-                            self_inner.fields["unidade_administrativa"].initial = ua
-                            self_inner.fields["unidade_administrativa"].disabled = True
-                        self_inner.fields["unidade_administrativa"].queryset = qs
+                            fld.initial = ua
+                            fld.disabled = True  
+                        fld.queryset = qs
 
                 def clean(self_inner):
                     cleaned_data = original_clean(self_inner)
-
-                    # UA ativa do usuário para criar
                     ua_user = getattr(request.user, "unidade_administrativa", None)
+                    if (
+                        request.user.is_operador_inventario
+                        and not request.user.is_gestor_patrimonio
+                    ):
+                        if not cleaned_data.get("unidade_administrativa") and ua_user:
+                            cleaned_data["unidade_administrativa"] = ua_user
+                    
+                    ua_form = cleaned_data.get("unidade_administrativa")
+                    if not ua_form:
+                        raise ValidationError(
+                            {"unidade_administrativa": "Selecione a Unidade Administrativa."}
+                        )
+                        
                     if ua_user and not ua_user.is_ativa:
                         raise ValidationError(
                             f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
                             f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
                         )
 
-                    # Operador só cria na própria UA
                     if (
                         request.user.is_operador_inventario
                         and not request.user.is_gestor_patrimonio
@@ -213,10 +219,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         class EditForm(BaseForm):
             def __init__(self_inner, *a, **kw):
                 super().__init__(*a, **kw)
-                inst = getattr(self_inner, "instance", None)
-
                 if "unidade_administrativa" in self_inner.fields:
                     self_inner.fields["unidade_administrativa"].disabled = True
+                    self_inner.fields["unidade_administrativa"].required = True
 
             def clean(self_inner):
                 cleaned = super().clean()
@@ -227,6 +232,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                         raise ValidationError(
                             {
                                 "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
+                            }
+                        )
+                    if not ua_post:
+                        raise ValidationError(
+                            {
+                                "unidade_administrativa": "Unidade Administrativa é obrigatória."
                             }
                         )
                 return cleaned
@@ -326,10 +337,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         if request.method == "POST" and request.POST.get("cadastro_modo") == "multi":
 
             post = request.POST.copy()
-            # sinaliza explicitamente o modo multi pro form base
+
             post["cadastro_modo"] = "multi"
 
-            # afrouxar regras do base: número é por linha; forçamos sem_numeração p/ não travar clean do form
             post["sem_numeracao"] = "on"
             post["numero_patrimonial"] = ""
             post["numero_formato_antigo"] = ""
@@ -338,7 +348,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             form = form_cls(post, request.FILES)
 
             if not form.is_valid():
-                # Deixe o Django renderizar os erros normais do form
+
                 return super().add_view(request, form_url, extra_context)
 
             import json
@@ -452,7 +462,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     transaction.set_rollback(True)
 
             if errors:
-                # Mostra mensagens por linha E um erro geral visível no topo do form
+
                 for e in errors:
                     messages.error(request, e)
                 form.add_error(
