@@ -5,6 +5,7 @@ from rangefilter.filters import DateRangeFilter
 from django.shortcuts import redirect
 from django.urls import reverse
 from usuario.models import Usuario
+from dados_comuns.models import UnidadeAdministrativa
 
 
 # TODO ajusta retorno de usuarios conforme GRUPO
@@ -80,6 +81,13 @@ class CustomUserModelAdmin(UserAdmin):
         if obj:
             return self.readonly_fields + ("username",)
         return self.readonly_fields
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "unidade_administrativa":
+            kwargs["queryset"] = UnidadeAdministrativa.objects.filter(
+                status=UnidadeAdministrativa.ATIVA
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description="Grupo")
     def get_grupo(self, obj):

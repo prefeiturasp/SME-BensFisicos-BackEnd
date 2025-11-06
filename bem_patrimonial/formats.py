@@ -35,10 +35,7 @@ class PDFFormat(Format):
         bens_list = list(queryset) if queryset is not None else []
 
         total_registros = len(bens_list)
-        quantidade_total = sum(
-            getattr(bem, "quantidade_unidade", None) or bem.quantidade or 0
-            for bem in bens_list
-        )
+
         valor_total = sum(bem.valor_unitario or Decimal("0.00") for bem in bens_list)
         localizacoes_unicas = len(
             set(bem.localizacao for bem in bens_list if bem.localizacao)
@@ -67,9 +64,7 @@ class PDFFormat(Format):
 
         if bens_list:
             elements.extend(
-                self._criar_resumo(
-                    total_registros, quantidade_total, valor_total, localizacoes_unicas
-                )
+                self._criar_resumo(total_registros, valor_total, localizacoes_unicas)
             )
 
         elements.extend(self._criar_rodape())
@@ -231,10 +226,8 @@ class PDFFormat(Format):
             "Marca",
             "Modelo",
             "Localização",
-            "Qtd.",
             "Valor Unit. (R$)",
             "Nº Processo",
-            "Nº CIMBPM",
             "Unidade Administrativa",
         ]
 
@@ -249,7 +242,6 @@ class PDFFormat(Format):
         data = [headers]
 
         for bem in bens_list:
-            quantidade = getattr(bem, "quantidade_unidade", None) or bem.quantidade or 0
             valor = f"{bem.valor_unitario:.2f}" if bem.valor_unitario else "-"
             numero_patrimonial = Paragraph(
                 str(bem.numero_patrimonial) if bem.numero_patrimonial else "-",
@@ -267,15 +259,10 @@ class PDFFormat(Format):
             processo = Paragraph(
                 str(bem.numero_processo) if bem.numero_processo else "-", cell_style
             )
-            numero_cimbpm = Paragraph(
-                str(bem.numero_cimbpm) if bem.numero_cimbpm else "-", cell_style
-            )
 
             unidade_adm_text = "-"
-            if bem.criado_por and hasattr(bem.criado_por, "unidade_administrativa"):
-                unidade_adm = bem.criado_por.unidade_administrativa
-                if unidade_adm and hasattr(unidade_adm, "nome"):
-                    unidade_adm_text = str(unidade_adm.nome)
+            if bem.unidade_administrativa:
+                unidade_adm_text = str(bem.unidade_administrativa.nome)
             unidade_administrativa = Paragraph(unidade_adm_text, cell_style)
 
             row = [
@@ -285,10 +272,8 @@ class PDFFormat(Format):
                 marca,
                 modelo,
                 localizacao,
-                str(quantidade),
                 valor,
                 processo,
-                numero_cimbpm,
                 unidade_administrativa,
             ]
 
@@ -301,10 +286,8 @@ class PDFFormat(Format):
             2.2 * cm,  # Marca
             2.2 * cm,  # Modelo
             2.2 * cm,  # Localização
-            1.0 * cm,  # Qtd
             2.0 * cm,  # Valor Unit.
             2.0 * cm,  # Nº Processo
-            1.5 * cm,  # Nº CIMBPM
             4.0 * cm,  # Unidade Adm.
         ]
 
@@ -352,21 +335,17 @@ class PDFFormat(Format):
 
         return elements
 
-    def _criar_resumo(
-        self, total_registros, quantidade_total, valor_total, localizacoes_unicas
-    ):
+    def _criar_resumo(self, total_registros, valor_total, localizacoes_unicas):
         elements = []
 
         summary_data = [
             [
                 "Total de Bens",
-                "Quantidade Total",
                 "Valor Total (R$)",
                 "Localizações Únicas",
             ],
             [
                 str(total_registros),
-                str(quantidade_total),
                 f"{valor_total:,.2f}".replace(",", "X")
                 .replace(".", ",")
                 .replace("X", "."),

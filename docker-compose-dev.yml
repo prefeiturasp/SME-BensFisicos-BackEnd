@@ -13,20 +13,42 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+  db-init:
+    image: postgres:15-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./scripts/db_init.sql:/scripts/db_init.sql:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      PGPASSWORD="$POSTGRES_PASSWORD"
+      psql -h db -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1
+      -v app_db="$APP_DB_NAME" -v app_user="$APP_DB_USER" -v app_pass="$APP_DB_PASSWORD"
+      -f /scripts/db_init.sql
+    restart: "no"
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     container_name: sme_bens_fisicos_web
-    command: python manage.py runserver 0.0.0.0:8000
+    command: >
+      python -m debugpy --wait-for-client --listen 0.0.0.0:5678
+      manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/code
     ports:
       - "8000:8000"
+      - "5678:5678"
     env_file:
       - .env
     depends_on:
       db:
         condition: service_healthy
+      db-init:
+        condition: service_started
 
 volumes:
   postgres_data:

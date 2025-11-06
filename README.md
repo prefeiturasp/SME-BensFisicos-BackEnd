@@ -18,7 +18,6 @@ O projeto foi desenvolvido para o setor de Bens Patrimoniais da Secretaria Munic
 ### Modelos
 
 - BemPatrimonial
-- UnidadeAdministrativaBemPatrimonial
 - MovimentacaoBemPatrimonial
 - StatusBemPatrimonial
 - UnidadeAdministrativa
@@ -35,8 +34,8 @@ O projeto foi desenvolvido para o setor de Bens Patrimoniais da Secretaria Munic
 
 ## Movimentação de bens patrimoniais
 
-- Para realizar a movimentação de um bem patrimonial entre unidades administrativas, é necessário criar uma instância do modelo MovimentacaoBemPatrimonial com os dados da movimentação, incluindo o bem patrimonial, as unidades administrativas de origem e destino e a quantidade a ser movimentada.
-- É necessário que haja a aprovação por parte do operador da unidade destino. Após aprovação, a quantidade é debitada ou creditada.
+- Para realizar a movimentação de um bem patrimonial entre unidades administrativas, é necessário criar uma instância do modelo MovimentacaoBemPatrimonial com os dados da movimentação, incluindo o bem patrimonial, as unidades administrativas de origem e destino .
+- É necessário que haja a aprovação por parte do operador da unidade destino para confirmação do envio.
 
 ## Tecnologias
 

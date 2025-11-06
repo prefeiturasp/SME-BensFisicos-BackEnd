@@ -1,6 +1,6 @@
 import datetime
 from decimal import Decimal
-
+import re
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -13,9 +13,11 @@ from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from dados_comuns.models import UnidadeAdministrativa
 
+NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
+NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
+
 
 class SetupExportData:
-
     def create_unidade_administrativa(self, codigo=100, nome="DRE Teste", sigla="DT"):
         return UnidadeAdministrativa.objects.create(
             codigo=codigo, nome=nome, sigla=sigla
@@ -45,20 +47,44 @@ class SetupExportData:
         defaults = {
             "nome": "Notebook Dell",
             "descricao": "Notebook Dell Inspiron 15",
-            "data_compra_entrega": datetime.date.today(),
-            "origem": 1,
             "marca": "Dell",
             "modelo": "Inspiron 15",
-            "quantidade": 10,
             "valor_unitario": Decimal("2500.00"),
-            "numero_processo": 2024001,
-            "numero_patrimonial": 1001,
-            "numero_cimbpm": 3001,
+            "numero_processo": "2024001",
             "localizacao": "Sala 101",
             "criado_por": criado_por,
+            "unidade_administrativa": criado_por.unidade_administrativa,
             "status": AGUARDANDO_APROVACAO,
+            
+            "sem_numeracao": True,
+            "numero_formato_antigo": False,
         }
         defaults.update(kwargs)
+
+        
+        npat = defaults.get("numero_patrimonial", None)
+        if npat is not None and npat != "":
+            npat = str(npat)
+            
+            if re.fullmatch(NPAT_NUM_REGEX, npat):
+                if BemPatrimonial.objects.filter(numero_patrimonial=npat).exists():
+                    defaults["sem_numeracao"] = True
+                    defaults.pop("numero_patrimonial", None)
+                    defaults["numero_formato_antigo"] = False
+                else:
+                    defaults["sem_numeracao"] = False
+                    defaults["numero_formato_antigo"] = False
+                    defaults["numero_patrimonial"] = npat
+            else:
+                
+                defaults["sem_numeracao"] = False
+                defaults["numero_formato_antigo"] = True
+                defaults["numero_patrimonial"] = npat
+        else:
+            
+            defaults["sem_numeracao"] = True
+            defaults.pop("numero_patrimonial", None)
+            defaults["numero_formato_antigo"] = False
 
         return BemPatrimonial.objects.create(**defaults)
 
@@ -131,7 +157,7 @@ class PDFExportDataTestCase(TestCase):
             self.setup.create_bem_patrimonial(
                 self.usuario,
                 nome=f"Item {i}",
-                numero_patrimonial=1000 + i,
+                numero_patrimonial=str(1000 + i),
                 status=APROVADO,
             )
 
@@ -172,19 +198,16 @@ class PDFExportDataTestCase(TestCase):
 
         self.setup.create_bem_patrimonial(
             self.usuario,
-            quantidade=10,
             valor_unitario=Decimal("100.00"),
             localizacao="Local A",
         )
         self.setup.create_bem_patrimonial(
             self.usuario,
-            quantidade=5,
             valor_unitario=Decimal("200.00"),
             localizacao="Local B",
         )
         self.setup.create_bem_patrimonial(
             self.usuario,
-            quantidade=3,
             valor_unitario=Decimal("50.00"),
             localizacao="Local A",
         )
@@ -199,10 +222,10 @@ class PDFExportDataTestCase(TestCase):
         self.assertIsInstance(pdf_bytes, bytes)
         self.assertGreater(len(pdf_bytes), 0)
 
-        # Total de registros: 3
-        # Quantidade total: 10 + 5 + 3 = 18
-        # Valor total: 100 + 200 + 50 = 350
-        # Localizações únicas: 2 (Local A e Local B)
+        
+        
+        
+        
 
 
 class BemPatrimonialAdminExportTestCase(TestCase):
@@ -260,28 +283,20 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         self.assertEqual(queryset.count(), 2)
 
     def test_get_export_queryset_operador_sees_only_own_unit(self):
-
         bem_unidade1 = self.setup.create_bem_patrimonial(
             self.gestor, nome="Bem Unidade 1", status=APROVADO
         )
-
-        from bem_patrimonial.models import UnidadeAdministrativaBemPatrimonial
-
-        UnidadeAdministrativaBemPatrimonial.objects.create(
-            bem_patrimonial=bem_unidade1,
-            unidade_administrativa=self.unidade1,
-            quantidade=5,
-        )
+        # garante vínculo na unidade1
+        bem_unidade1.unidade_administrativa = self.unidade1
+        bem_unidade1.save()
 
         usuario_unidade2 = self.setup.create_usuario("user2", self.unidade2)
         bem_unidade2 = self.setup.create_bem_patrimonial(
             usuario_unidade2, nome="Bem Unidade 2", status=APROVADO
         )
-        UnidadeAdministrativaBemPatrimonial.objects.create(
-            bem_patrimonial=bem_unidade2,
-            unidade_administrativa=self.unidade2,
-            quantidade=3,
-        )
+        # garante vínculo na unidade2
+        bem_unidade2.unidade_administrativa = self.unidade2
+        bem_unidade2.save()
 
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = self.operador
@@ -309,10 +324,8 @@ class PDFContentTestCase(TestCase):
             marca="Dell",
             modelo="Inspiron",
             localizacao="Sala 10",
-            quantidade=5,
             valor_unitario=Decimal("3000.00"),
-            numero_processo=2024100,
-            numero_cimbpm=123,
+            numero_processo="2024100",
         )
 
         pdf_format = PDFFormat()
@@ -328,7 +341,7 @@ class PDFContentTestCase(TestCase):
     def test_pdf_handles_none_values(self):
 
         bem = self.setup.create_bem_patrimonial(
-            self.usuario, numero_patrimonial=None, numero_cimbpm=None, localizacao=None
+            self.usuario, numero_patrimonial=None, localizacao=None
         )
 
         pdf_format = PDFFormat()
