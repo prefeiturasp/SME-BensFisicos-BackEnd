@@ -127,9 +127,7 @@ class BemPatrimonial(models.Model):
             )
 
         if (not self.numero_formato_antigo) and (not self.sem_numeracao):
-            if not re.fullmatch(
-                NPAT_NUM_REGEX, self.numero_patrimonial or ""
-            ):
+            if not re.fullmatch(NPAT_NUM_REGEX, self.numero_patrimonial or ""):
                 raise ValidationError(
                     {"numero_patrimonial": "Número Patrimonial incompleto"}
                 )
@@ -256,6 +254,33 @@ class StatusBemPatrimonial(models.Model):
             self.bem_patrimonial.save()
 
 
+class MovimentacaoBensItem(models.Model):
+
+    bem = models.ForeignKey(
+        BemPatrimonial,
+        on_delete=models.CASCADE,
+        related_name="movimentacoes_itens",
+    )
+    movimentacao = models.ForeignKey(
+        "MovimentacaoBemPatrimonial",
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+
+    class Meta:
+        verbose_name = "item de movimentação"
+        verbose_name_plural = "itens de movimentação"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["movimentacao", "bem"],
+                name="uniq_item_por_movimentacao_bem",
+            )
+        ]
+
+    def __str__(self):
+        return f"Mov#{self.movimentacao_id} • {self.bem}"
+
+
 class MovimentacaoBemPatrimonial(models.Model):
     "Classe que representa uma solicitacao de movimentacao de um bem patrimonial"
 
@@ -328,6 +353,15 @@ class MovimentacaoBemPatrimonial(models.Model):
     criado_em = models.DateTimeField("Criado em", auto_now=True)
     atualizado_em = models.DateTimeField(
         "Atualizado em", auto_now=True, null=True, blank=True
+    )
+
+    numero_cimbpm = models.CharField(
+        "Número CIMBPM",
+        max_length=30,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
     )
 
     def __str__(self) -> str:
