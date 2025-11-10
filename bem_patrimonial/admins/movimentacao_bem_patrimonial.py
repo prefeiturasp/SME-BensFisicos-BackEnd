@@ -255,9 +255,15 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "rejeitado_por",
         "cancelado_por",
         "status",
+        "numero_cimbpm",
+        "get_documento_cimbpm_link",
     )
     list_filter = ("status",)
-    actions = [aprovar_solicitacao, rejeitar_solicitacao, cancelar_solicitacao]
+    actions = [
+        aprovar_solicitacao,
+        rejeitar_solicitacao,
+        cancelar_solicitacao,
+    ]
 
     form = MovimentacaoBemPatrimonialForm
 
@@ -318,6 +324,34 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 super().save_model(request, obj, form, change)
         else:
             super().save_model(request, obj, form, change)
+
+    def get_documento_cimbpm_link(self, obj):
+        if obj and obj.numero_cimbpm:
+            from django.utils.html import format_html
+            from django.urls import reverse
+
+            if not obj.documento_existe():
+                try:
+                    obj.regenerar_documento_cimbpm(force=True)
+                    obj.refresh_from_db()
+                except Exception as e:
+                    return format_html(
+                        '<span style="color: red;">Erro ao gerar documento: {}</span>',
+                        str(e),
+                    )
+
+            if not obj.documento_cimbpm:
+                return "Documento não disponível"
+
+            url_protegida = reverse("download_documento_cimbpm", kwargs={"pk": obj.pk})
+
+            return format_html(
+                '<a href="{}" target="_blank">📄 Baixar Documento CIMBPM</a>',
+                url_protegida,
+            )
+        return "Documento não disponível"
+
+    get_documento_cimbpm_link.short_description = "Documento CIMBPM"
 
     def get_actions(self, request):
         """Retorna todas as actions disponíveis"""
