@@ -5,6 +5,7 @@ from django.db.models.signals import post_save
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.context import get_user
 from dados_comuns.utils import dict_changes
@@ -127,9 +128,7 @@ class BemPatrimonial(models.Model):
             )
 
         if (not self.numero_formato_antigo) and (not self.sem_numeracao):
-            if not re.fullmatch(
-                NPAT_NUM_REGEX, self.numero_patrimonial or ""
-            ):
+            if not re.fullmatch(NPAT_NUM_REGEX, self.numero_patrimonial or ""):
                 raise ValidationError(
                     {"numero_patrimonial": "Número Patrimonial incompleto"}
                 )
@@ -256,6 +255,33 @@ class StatusBemPatrimonial(models.Model):
             self.bem_patrimonial.save()
 
 
+class MovimentacaoBensItem(models.Model):
+
+    bem = models.ForeignKey(
+        BemPatrimonial,
+        on_delete=models.CASCADE,
+        related_name="movimentacoes_itens",
+    )
+    movimentacao = models.ForeignKey(
+        "MovimentacaoBemPatrimonial",
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+
+    class Meta:
+        verbose_name = "item de movimentação"
+        verbose_name_plural = "itens de movimentação"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["movimentacao", "bem"],
+                name="uniq_item_por_movimentacao_bem",
+            )
+        ]
+
+    def __str__(self):
+        return f"Mov#{self.movimentacao_id} • {self.bem}"
+
+
 class MovimentacaoBemPatrimonial(models.Model):
     "Classe que representa uma solicitacao de movimentacao de um bem patrimonial"
 
@@ -264,8 +290,15 @@ class MovimentacaoBemPatrimonial(models.Model):
         BemPatrimonial,
         verbose_name="Bem patrimonial",
         on_delete=models.CASCADE,
-        null=False,
-        blank=False,
+        null=True,
+        blank=True,
+    )
+    bens = models.ManyToManyField(
+        BemPatrimonial,
+        through="MovimentacaoBensItem",
+        related_name="movimentacoes",
+        verbose_name="Bens patrimoniais",
+        blank=True,
     )
     unidade_administrativa_origem = models.ForeignKey(
         UnidadeAdministrativa,
@@ -330,6 +363,23 @@ class MovimentacaoBemPatrimonial(models.Model):
         "Atualizado em", auto_now=True, null=True, blank=True
     )
 
+    numero_cimbpm = models.CharField(
+        "Número CIMBPM",
+        max_length=30,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    documento_cimbpm = models.FileField(
+        "Documento CIMBPM",
+        upload_to="documentos_cimbpm/",
+        null=True,
+        blank=True,
+        editable=False,
+        help_text="PDF gerado automaticamente ao criar movimentação",
+    )
+
     def __str__(self) -> str:
         return "Solicitação #{}".format(str(self.pk))
 
@@ -354,6 +404,38 @@ class MovimentacaoBemPatrimonial(models.Model):
     def cancelada(self):
         return self.status == constants.CANCELADA
 
+    def documento_existe(self):
+        if not self.documento_cimbpm:
+            return False
+        try:
+            return self.documento_cimbpm.storage.exists(self.documento_cimbpm.name)
+        except Exception:
+            return False
+
+    def regenerar_documento_cimbpm(self, force=False):
+        if not force and self.documento_existe():
+            return False
+
+        from bem_patrimonial.cimbpm import gerar_pdf_cimbpm
+
+        data_aceite = None
+        if self.aceita and self.aprovado_por:
+            data_aceite = (
+                self.criado_em
+                if not hasattr(self, "atualizado_em")
+                else self.atualizado_em
+            )
+
+        if self.numero_cimbpm:
+            pdf_buffer = gerar_pdf_cimbpm(self, data_aceite=data_aceite)
+            filename = f"CIMBPM_{self.numero_cimbpm.replace('.', '_')}.pdf"
+            self.documento_cimbpm.save(
+                filename, ContentFile(pdf_buffer.read()), save=True
+            )
+            return True
+
+        return False
+
     def aprovar_solicitacao(self, usuario):
         if self.aceita or self.status != constants.ENVIADA:
             return
@@ -366,6 +448,16 @@ class MovimentacaoBemPatrimonial(models.Model):
         self.status = constants.ACEITA
         self.aprovado_por = usuario
         self.save()
+
+        from bem_patrimonial.cimbpm import gerar_pdf_cimbpm
+        from django.utils import timezone
+
+        if self.numero_cimbpm:
+            pdf_buffer = gerar_pdf_cimbpm(self, data_aceite=timezone.now())
+            filename = f"CIMBPM_{self.numero_cimbpm.replace('.', '_')}.pdf"
+            self.documento_cimbpm.save(
+                filename, ContentFile(pdf_buffer.read()), save=True
+            )
 
     def rejeitar_solicitacao(self, usuario):
         if not self.rejeitada and self.status == constants.ENVIADA:
@@ -428,3 +520,13 @@ def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
                 emails.append(usuario.email)
 
         envia_email_nova_solicitacao_movimentacao(instance, emails)
+
+
+@receiver(post_save, sender=MovimentacaoBemPatrimonial)
+def gerar_numero_cimbpm_signal(sender, instance, created, **kwargs):
+    if created:
+        from bem_patrimonial.cimbpm import gerar_numero_cimbpm
+
+        if not instance.numero_cimbpm:
+            instance.numero_cimbpm = gerar_numero_cimbpm(instance)
+            instance.save(update_fields=["numero_cimbpm"])
