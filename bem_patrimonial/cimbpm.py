@@ -90,32 +90,34 @@ def criar_estilo_base(nome, parent, **kwargs):
 
 def gerar_numero_cimbpm(movimentacao):
     from bem_patrimonial.models import MovimentacaoBemPatrimonial
+    from django.db.models import Max
+    from django.db.models.functions import Cast, Substr
+    from django.db.models import IntegerField
 
-    ano_atual = timezone.now().year
+    ano_movimentacao = movimentacao.criado_em.year
     codigo_origem = extrair_codigo_ua(movimentacao.unidade_administrativa_origem.codigo)
     codigo_destino = extrair_codigo_ua(
         movimentacao.unidade_administrativa_destino.codigo
     )
 
     with transaction.atomic():
-        ultimo_numero = (
+        ultimo_sequencial = (
             MovimentacaoBemPatrimonial.objects.select_for_update()
             .filter(
-                numero_cimbpm__endswith=f".{ano_atual}", numero_cimbpm__isnull=False
+                numero_cimbpm__endswith=f".{ano_movimentacao}",
+                numero_cimbpm__isnull=False,
             )
-            .aggregate(max_numero=Max("numero_cimbpm"))["max_numero"]
+            .annotate(
+                sequencial_str=Substr("numero_cimbpm", 9, 7)
+            )
+            .aggregate(max_seq=Max(Cast("sequencial_str", IntegerField())))["max_seq"]
         )
 
-        if ultimo_numero:
-            try:
-                partes = ultimo_numero.split(".")
-                numero_sequencial = int(partes[2]) + 1 if len(partes) == 4 else 1
-            except (ValueError, IndexError):
-                numero_sequencial = 1
-        else:
-            numero_sequencial = 1
+        numero_sequencial = (ultimo_sequencial or 0) + 1
 
-    return f"{codigo_origem}.{codigo_destino}.{numero_sequencial:07d}.{ano_atual}"
+    return (
+        f"{codigo_origem}.{codigo_destino}.{numero_sequencial:07d}.{ano_movimentacao}"
+    )
 
 
 def gerar_pdf_cimbpm(movimentacao, data_aceite=None):
