@@ -9,9 +9,6 @@ from bem_patrimonial.models import MovimentacaoBemPatrimonial
 def download_documento_cimbpm(request, pk):
     movimentacao = get_object_or_404(MovimentacaoBemPatrimonial, pk=pk)
 
-    if not movimentacao.documento_cimbpm:
-        raise Http404("Documento CIMBPM não encontrado")
-
     if request.user.is_operador_inventario and not request.user.is_gestor_patrimonio:
         user_ua = request.user.unidade_administrativa
 
@@ -25,12 +22,14 @@ def download_documento_cimbpm(request, pk):
                 "relacionadas à sua Unidade Administrativa."
             )
 
-    if not movimentacao.documento_existe():
-        try:
-            movimentacao.regenerar_documento_cimbpm(force=True)
-            movimentacao.refresh_from_db()
-        except Exception as e:
-            raise Http404(f"Erro ao gerar documento: {str(e)}")
+    try:
+        movimentacao.regenerar_documento_cimbpm(force=True)
+        movimentacao.refresh_from_db()
+    except Exception as e:
+        raise Http404(f"Erro ao gerar documento: {str(e)}")
+
+    if not movimentacao.documento_cimbpm:
+        raise Http404("Erro: Documento não foi gerado")
 
     filename = f"CIMBPM_{movimentacao.numero_cimbpm.replace('.', '_')}.pdf"
 

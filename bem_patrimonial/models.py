@@ -523,16 +523,10 @@ def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=MovimentacaoBemPatrimonial)
-def gerar_documento_cimbpm(sender, instance, created, **kwargs):
+def gerar_numero_cimbpm_signal(sender, instance, created, **kwargs):
     if created:
-        from bem_patrimonial.cimbpm import gerar_numero_cimbpm, gerar_pdf_cimbpm
+        from bem_patrimonial.cimbpm import gerar_numero_cimbpm
 
         if not instance.numero_cimbpm:
             instance.numero_cimbpm = gerar_numero_cimbpm(instance)
             instance.save(update_fields=["numero_cimbpm"])
-
-        pdf_buffer = gerar_pdf_cimbpm(instance, data_aceite=None)
-        filename = f"CIMBPM_{instance.numero_cimbpm.replace('.', '_')}.pdf"
-        instance.documento_cimbpm.save(
-            filename, ContentFile(pdf_buffer.read()), save=True
-        )
