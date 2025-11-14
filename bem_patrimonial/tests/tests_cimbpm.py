@@ -286,6 +286,12 @@ class TestGeracaoDocumentoPDF(CIMBPMTestBase):
         )
         mov.refresh_from_db()
 
+        self.assertIsNotNone(mov.numero_cimbpm)
+        self.assertRegex(mov.numero_cimbpm, r"^\d{3}\.\d{3}\.\d{7}\.\d{4}$")
+
+        self.assertFalse(mov.documento_cimbpm)
+
+        mov.regenerar_documento_cimbpm(force=True)
         self.assertTrue(mov.documento_cimbpm)
         self.assertIn("CIMBPM_", mov.documento_cimbpm.name)
         self.assertTrue(mov.documento_cimbpm.name.endswith(".pdf"))
@@ -300,6 +306,8 @@ class TestGeracaoDocumentoPDF(CIMBPMTestBase):
             status=constants.ENVIADA,
         )
         mov.refresh_from_db()
+
+        mov.regenerar_documento_cimbpm(force=True)
 
         pdf_file = mov.documento_cimbpm.open("rb")
         pdf_content = pdf_file.read()
@@ -319,6 +327,8 @@ class TestGeracaoDocumentoPDF(CIMBPMTestBase):
         )
         mov.refresh_from_db()
         numero_original = mov.numero_cimbpm
+
+        mov.regenerar_documento_cimbpm(force=True)
 
         mov.aprovar_solicitacao(self.gestor)
         mov.refresh_from_db()
@@ -358,7 +368,7 @@ class TestGeracaoDocumentoPDF(CIMBPMTestBase):
 class TestEdgeCasesPDF(CIMBPMTestBase):
 
     def test_bem_sem_numero_patrimonial(self):
-        bem = self.criar_bem(numero_patrimonial=None)
+        bem = self.criar_bem(sem_numeracao=True)
         mov = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=bem,
             unidade_administrativa_origem=self.ua_origem,
@@ -367,6 +377,8 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             status=constants.ENVIADA,
         )
         mov.refresh_from_db()
+
+        mov.regenerar_documento_cimbpm(force=True)
 
         self.assertTrue(mov.documento_existe())
 
@@ -381,6 +393,8 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
         )
         mov.refresh_from_db()
 
+        mov.regenerar_documento_cimbpm(force=True)
+
         self.assertTrue(mov.documento_existe())
 
     def test_bem_com_valor_zero(self):
@@ -393,6 +407,8 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             status=constants.ENVIADA,
         )
         mov.refresh_from_db()
+
+        mov.regenerar_documento_cimbpm(force=True)
 
         self.assertTrue(mov.documento_existe())
 
@@ -415,6 +431,8 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
         )
         mov.refresh_from_db()
 
+        mov.regenerar_documento_cimbpm(force=True)
+
         self.assertTrue(mov.documento_existe())
 
     def test_pdf_com_logo_inexistente(self):
@@ -429,9 +447,10 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             solicitado_por=self.operador,
             status=constants.ENVIADA,
         )
+        mov.refresh_from_db()
 
         with patch("os.path.exists", return_value=False):
-            mov.refresh_from_db()
+            mov.regenerar_documento_cimbpm(force=True)
             self.assertTrue(mov.documento_existe())
 
 
@@ -448,6 +467,9 @@ class TestRegeneracaoDocumento(CIMBPMTestBase):
         )
         mov.refresh_from_db()
 
+        self.assertFalse(mov.documento_existe())
+
+        mov.regenerar_documento_cimbpm(force=True)
         self.assertTrue(mov.documento_existe())
 
         import os
@@ -469,6 +491,8 @@ class TestRegeneracaoDocumento(CIMBPMTestBase):
             status=constants.ENVIADA,
         )
         mov.refresh_from_db()
+
+        self.assertTrue(mov.regenerar_documento_cimbpm(force=False))
 
         self.assertFalse(mov.regenerar_documento_cimbpm(force=False))
 
