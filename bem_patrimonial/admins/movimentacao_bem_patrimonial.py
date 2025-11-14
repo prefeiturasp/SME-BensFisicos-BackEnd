@@ -330,26 +330,13 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             from django.utils.html import format_html
             from django.urls import reverse
 
-            if not obj.documento_existe():
-                try:
-                    obj.regenerar_documento_cimbpm(force=True)
-                    obj.refresh_from_db()
-                except Exception as e:
-                    return format_html(
-                        '<span style="color: red;">Erro ao gerar documento: {}</span>',
-                        str(e),
-                    )
-
-            if not obj.documento_cimbpm:
-                return "Documento não disponível"
-
             url_protegida = reverse("download_documento_cimbpm", kwargs={"pk": obj.pk})
 
             return format_html(
                 '<a href="{}" target="_blank">📄 Baixar Documento CIMBPM</a>',
                 url_protegida,
             )
-        return "Documento não disponível"
+        return "Número CIMBPM não gerado"
 
     get_documento_cimbpm_link.short_description = "Documento CIMBPM"
 
