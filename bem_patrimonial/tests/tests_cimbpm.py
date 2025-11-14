@@ -514,12 +514,7 @@ class TestRegeneracaoDocumento(CIMBPMTestBase):
         )
         mov.refresh_from_db()
 
-        import os
-
-        if mov.documento_cimbpm:
-            if os.path.exists(mov.documento_cimbpm.path):
-                os.remove(mov.documento_cimbpm.path)
-
+        self.assertIsNotNone(mov.numero_cimbpm)
         self.assertFalse(mov.documento_existe())
 
         admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, AdminSite())
@@ -527,9 +522,10 @@ class TestRegeneracaoDocumento(CIMBPMTestBase):
 
         self.assertIn("href=", link_html)
         self.assertIn("Baixar Documento CIMBPM", link_html)
+        self.assertIn(f"/documento-cimbpm/{mov.pk}/download/", link_html)
 
         mov.refresh_from_db()
-        self.assertTrue(mov.documento_existe())
+        self.assertFalse(mov.documento_existe())
 
 
 class TestSegurancaDownload(CIMBPMTestBase):
