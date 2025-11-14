@@ -290,8 +290,15 @@ class MovimentacaoBemPatrimonial(models.Model):
         BemPatrimonial,
         verbose_name="Bem patrimonial",
         on_delete=models.CASCADE,
-        null=False,
-        blank=False,
+        null=True,
+        blank=True,
+    )
+    bens = models.ManyToManyField(
+        BemPatrimonial,
+        through="MovimentacaoBensItem",
+        related_name="movimentacoes",
+        verbose_name="Bens patrimoniais",
+        blank=True,
     )
     unidade_administrativa_origem = models.ForeignKey(
         UnidadeAdministrativa,
