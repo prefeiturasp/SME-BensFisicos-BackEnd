@@ -2,7 +2,9 @@ from django.contrib import admin
 from django.contrib import messages
 from django.db.models import Q
 from django.db import transaction
-
+from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
+    verificar_movimentacoes_duplicadas,
+)
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,
 )
@@ -340,6 +342,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         aprovar_solicitacao,
         rejeitar_solicitacao,
         cancelar_solicitacao,
+        verificar_movimentacoes_duplicadas,
     ]
 
     form = MovimentacaoBemPatrimonialForm
@@ -432,3 +435,14 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     def get_actions(self, request):
         actions = super().get_actions(request)
         return actions
+
+    def response_action(self, request, queryset):
+
+        action_name = request.POST.get("action")
+
+        if action_name == "verificar_movimentacoes_duplicadas":
+            changelist = self.get_changelist_instance(request)
+            qs = changelist.get_queryset(request)
+            return verificar_movimentacoes_duplicadas(self, request, qs)
+
+        return super().response_action(request, queryset)
