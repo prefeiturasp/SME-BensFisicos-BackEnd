@@ -30,7 +30,6 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
     if not emails:
         return
 
-    bem = movimentacao.bem_patrimonial
     ua_destino = movimentacao.unidade_administrativa_destino
 
     ua_info = (
@@ -39,19 +38,56 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
         else ua_destino.nome
     )
 
-    bem_info = (
-        f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
-    )
+
+    itens = movimentacao.itens.select_related("bem").all()
+
+    bens_info = []
+
+    for item in itens:
+        bem = item.bem
+        if not bem:
+            continue
+
+        identificador = (
+            f"{bem.numero_patrimonial} – {bem.nome}"
+            if bem.numero_patrimonial
+            else bem.nome
+        )
+        bens_info.append(identificador)
+
+    if not bens_info and movimentacao.bem_patrimonial:
+        bem = movimentacao.bem_patrimonial
+        identificador = (
+            f"{bem.numero_patrimonial} – {bem.nome}"
+            if bem.numero_patrimonial
+            else bem.nome
+        )
+        bens_info.append(identificador)
+
+    if not bens_info:
+        return
+
+
+    lista_bens_formatada = "\n".join(f"- {info}" for info in bens_info)
 
     subject = "[Bens Físicos] Movimentação recebida para aceite"
+
     dict_params = {
         "subject": subject,
         "title": "Olá!",
-        "subtitle": f"""A Unidade Administrativa {ua_info} recebeu a movimentação do bem patrimonial {bem_info} para aceite.
-        Acesse {settings.ADMIN_URL} para concluir a movimentação.""",
+        "subtitle": (
+            f"A Unidade Administrativa {ua_info} recebeu a movimentação dos seguintes bens patrimoniais para aceite:\n\n"
+            f"{lista_bens_formatada}\n\n"
+            f"Acesse {settings.ADMIN_URL} para concluir a movimentação."
+        ),
     }
 
-    email_utils.send_email_ctrl(subject, dict_params, "simple_message.html", emails)
+    email_utils.send_email_ctrl(
+        subject,
+        dict_params,
+        "simple_message.html",
+        emails,
+    )
 
 
 def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):

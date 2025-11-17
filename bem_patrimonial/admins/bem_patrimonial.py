@@ -581,3 +581,34 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         except Exception:
             pass
         return "—"
+    
+    def get_search_results(self, request, queryset, search_term):
+        qs, use_distinct = super().get_search_results(request, queryset, search_term)
+
+        # Só aplica esse filtro quando for autocomplete
+        if request.path.endswith("/autocomplete/"):
+            app_label = request.GET.get("app_label")
+            model_name = request.GET.get("model_name")
+            field_name = request.GET.get("field_name")
+
+            # Autocomplete vindo do inline MovimentacaoBensItem.bem
+            if (
+                app_label == "bem_patrimonial"
+                and model_name == "movimentacaobensitem"
+                and field_name == "bem"
+            ):
+                ua_origem = request.GET.get("ua_origem")
+                if ua_origem:
+                    qs = qs.filter(unidade_administrativa_id=ua_origem)
+
+                exclude_bens = request.GET.get("exclude_bens")
+                if exclude_bens:
+                    ids = [
+                        int(pk)
+                        for pk in exclude_bens.split(",")
+                        if pk.isdigit()
+                    ]
+                    if ids:
+                        qs = qs.exclude(pk__in=ids)
+
+        return qs, use_distinct

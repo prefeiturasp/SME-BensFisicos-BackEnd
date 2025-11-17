@@ -1,4 +1,5 @@
 import datetime
+from django.test import TestCase
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.constants import APROVADO
@@ -9,7 +10,7 @@ from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 from django.contrib.auth.models import Group
 
 
-class SetupUnidadeAdministrativaStatusData:
+class SetupUnidadeAdministrativaStatusData(TestCase):
 
     def create_unidades_administrativas(self):
         ua_ativa_1 = UnidadeAdministrativa.objects.create(
@@ -66,7 +67,9 @@ class SetupUnidadeAdministrativaStatusData:
 
     def create_bem_patrimonial(self, criado_por, ua_origem):
         """
-        quantidade é ignorado no model atual; mantido só por compatibilidade.
+        Agora os bens são sempre associados via inline. 
+        Neste método só criamos o bem aprovado.
+        A geração automática do número acontece no save().
         """
         bem = BemPatrimonial.objects.create(
             nome="Notebook Dell",
@@ -75,7 +78,7 @@ class SetupUnidadeAdministrativaStatusData:
             marca="Dell",
             modelo="Inspiron 15",
             numero_processo="PROC-123456",
-            sem_numeracao=True,              # gera número automaticamente
+            sem_numeracao=True,  # gerará SEM-NUMERO-x
             numero_formato_antigo=False,
             localizacao="Almoxarifado",
             criado_por=criado_por,
