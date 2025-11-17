@@ -362,8 +362,14 @@ class MovimentacaoBemPatrimonial(models.Model):
     atualizado_em = models.DateTimeField(
         "Atualizado em", auto_now=True, null=True, blank=True
     )
-
-
+    numero_cimbpm = models.CharField(
+        "Número CIMBPM",
+        max_length=30,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     documento_cimbpm = models.FileField(
         "Documento CIMBPM",
         upload_to="documentos_cimbpm/",
@@ -527,7 +533,7 @@ def bloquear_bem_quando_item_criado(sender, instance, created, **kwargs):
 
     bem.status = constants.BLOQUEADO
     bem.save(update_fields=["status"])
-    
+
     StatusBemPatrimonial.objects.create(
         bem_patrimonial=bem,
         status=constants.BLOQUEADO,
