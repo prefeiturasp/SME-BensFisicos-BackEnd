@@ -1,0 +1,47 @@
+.inline-group {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Tabela do inline ocupa a largura inteira */
+.inline-group table,
+.inline-group .tabular {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* As células do inline também precisam expandir */
+.inline-group table td,
+.inline-group table th {
+    width: auto !important;
+}
+
+/* Remove margens exageradas */
+.inline-group .add-row {
+    margin-left: 0 !important;
+}
+.related-widget-wrapper-link {
+    display: none !important;
+}
+
+.inline-group .select2-container,
+.inline-group .select2-container--admin-autocomplete {
+    width: 100% !important;
+}
+
+/* Só por garantia, o wrapper da célula também */
+.inline-group .field-bem,
+.inline-group .field-bem .form-row,
+.inline-group .field-bem .related-widget-wrapper {
+    width: 100% !important;
+}
+
+/* O select original (escondido) também ajuda a não limitar */
+.inline-group .field-bem select {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.inline-group th.delete {
+    display: none;
+}

@@ -6,6 +6,7 @@ import datetime
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
 )
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
@@ -14,7 +15,6 @@ from usuario.constants import GRUPO_OPERADOR_INVENTARIO
 
 
 class EmailNovaMovimentacaoTestCase(TestCase):
-
     def setUp(self):
         self.ua_origem = UnidadeAdministrativa.objects.create(
             nome="DRE Centro", codigo="01.16.10.500", sigla="DRE-CENTRO"
@@ -67,14 +67,25 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             unidade_administrativa=self.ua_origem,
         )
 
-    @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
-    def test_email_enviado_para_todos_operadores_ua_destino(self, mock_send_email):
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
+    def _cria_movimentacao_com_item(self):
+        """
+        Helper para evitar repetição: cria movimentação + item ligado ao bem.
+        """
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=self.bem,  # legado, ainda pode ser preenchido
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_origem,
         )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=mov,
+            bem=self.bem,
+        )
+        return mov
+
+    @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
+    def test_email_enviado_para_todos_operadores_ua_destino(self, mock_send_email):
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -86,12 +97,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_template_email_conforme_especificacao(self, mock_send_email):
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -109,12 +115,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         self.operador_destino_2.is_active = False
         self.operador_destino_2.save()
 
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -129,12 +130,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         self.bem.numero_patrimonial = None
         self.bem.save()
 
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -148,12 +144,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         self.ua_destino.codigo = ""
         self.ua_destino.save()
 
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -169,12 +160,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         self.operador_destino_2.is_active = False
         self.operador_destino_2.save()
 
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_not_called()
 
@@ -183,12 +169,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         self.operador_destino_2.email = ""
         self.operador_destino_2.save()
 
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -204,23 +185,13 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         self.operador_destino_2.email = ""
         self.operador_destino_2.save()
 
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_not_called()
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_email_usa_template_correto(self, mock_send_email):
-        MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
+        self._cria_movimentacao_com_item()
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]

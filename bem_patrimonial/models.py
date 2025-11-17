@@ -363,14 +363,7 @@ class MovimentacaoBemPatrimonial(models.Model):
         "Atualizado em", auto_now=True, null=True, blank=True
     )
 
-    numero_cimbpm = models.CharField(
-        "Número CIMBPM",
-        max_length=30,
-        unique=True,
-        null=True,
-        blank=True,
-        db_index=True,
-    )
+
     documento_cimbpm = models.FileField(
         "Documento CIMBPM",
         upload_to="documentos_cimbpm/",
@@ -440,10 +433,13 @@ class MovimentacaoBemPatrimonial(models.Model):
         if self.aceita or self.status != constants.ENVIADA:
             return
 
-        bem = self.bem_patrimonial
-        bem.unidade_administrativa = self.unidade_administrativa_destino
-        bem.status = constants.APROVADO
-        bem.save()
+        itens = self.itens.all()
+
+        for item in itens:
+            bem = item.bem
+            bem.unidade_administrativa = self.unidade_administrativa_destino
+            bem.status = constants.APROVADO
+            bem.save()
 
         self.status = constants.ACEITA
         self.aprovado_por = usuario
@@ -460,22 +456,30 @@ class MovimentacaoBemPatrimonial(models.Model):
             )
 
     def rejeitar_solicitacao(self, usuario):
-        if not self.rejeitada and self.status == constants.ENVIADA:
-            self.status = constants.REJEITADA
-            self.rejeitado_por = usuario
-            self.save()
+        if self.rejeitada or self.status != constants.ENVIADA:
+            return
 
-            self.bem_patrimonial.status = constants.APROVADO
-            self.bem_patrimonial.save()
+        self.status = constants.REJEITADA
+        self.rejeitado_por = usuario
+        self.save()
+
+        for item in self.itens.all():
+            bem = item.bem
+            bem.status = constants.APROVADO
+            bem.save()
 
     def cancelar_solicitacao(self, usuario):
-        if not self.cancelada and self.status == constants.ENVIADA:
-            self.status = constants.CANCELADA
-            self.cancelado_por = usuario
-            self.save()
+        if self.cancelada or self.status != constants.ENVIADA:
+            return
 
-            self.bem_patrimonial.status = constants.APROVADO
-            self.bem_patrimonial.save()
+        self.status = constants.CANCELADA
+        self.cancelado_por = usuario
+        self.save()
+
+        for item in self.itens.all():
+            bem = item.bem
+            bem.status = constants.APROVADO
+            bem.save()
 
 
 @receiver(post_save, sender=BemPatrimonial)
@@ -492,19 +496,44 @@ def envia_email_status_reprovado(sender, instance, created, **kwargs):
         envia_email_cadastro_nao_aprovado(instance)
 
 
-@receiver(post_save, sender=MovimentacaoBemPatrimonial)
-def bloquear_bem_em_movimentacao(sender, instance, created, **kwargs):
-    if created:
-        bem = instance.bem_patrimonial
-        bem.status = constants.BLOQUEADO
-        bem.save()
+# @receiver(post_save, sender=MovimentacaoBemPatrimonial)
+# def bloquear_bem_em_movimentacao(sender, instance, created, **kwargs):
+#     if created:
+#         bem = instance.bem_patrimonial
+#         bem.status = constants.BLOQUEADO
+#         bem.save()
 
-        StatusBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            status=constants.BLOQUEADO,
-            atualizado_por=instance.solicitado_por,
-            observacao=f"Bem bloqueado para movimentação #{instance.pk}",
-        )
+#         StatusBemPatrimonial.objects.create(
+#             bem_patrimonial=bem,
+#             status=constants.BLOQUEADO,
+#             atualizado_por=instance.solicitado_por,
+#             observacao=f"Bem bloqueado para movimentação #{instance.pk}",
+#         )
+
+
+@receiver(post_save, sender=MovimentacaoBensItem)
+def bloquear_bem_quando_item_criado(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    movimentacao = instance.movimentacao
+    bem = instance.bem
+
+    if movimentacao.status != constants.ENVIADA:
+        return
+
+    if bem.status == constants.BLOQUEADO:
+        return
+
+    bem.status = constants.BLOQUEADO
+    bem.save(update_fields=["status"])
+    
+    StatusBemPatrimonial.objects.create(
+        bem_patrimonial=bem,
+        status=constants.BLOQUEADO,
+        atualizado_por=movimentacao.solicitado_por,
+        observacao=f"Bem bloqueado para movimentação #{movimentacao.pk}",
+    )
 
 
 @receiver(post_save, sender=MovimentacaoBemPatrimonial)

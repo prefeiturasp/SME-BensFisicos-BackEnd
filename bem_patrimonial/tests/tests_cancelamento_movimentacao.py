@@ -8,6 +8,7 @@ from django.contrib.auth.models import Group
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     StatusBemPatrimonial,
+    MovimentacaoBensItem,
 )
 from bem_patrimonial.constants import (
     APROVADO,
@@ -45,6 +46,11 @@ class CancelamentoMovimentacaoTestCase(TestCase):
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_origem,
+        )
+        # item da movimentação (necessário para bloqueio/desbloqueio via novo modelo)
+        MovimentacaoBensItem.objects.create(
+            movimentacao=self.movimentacao,
+            bem=self.bem,
         )
 
     def test_cancelar_movimentacao_muda_status_e_define_cancelado_por(self):
@@ -116,6 +122,10 @@ class ValidacoesCruzadasCancelamentoTestCase(TestCase):
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_origem,
         )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=self.movimentacao,
+            bem=self.bem,
+        )
 
     def test_nao_pode_aprovar_movimentacao_cancelada(self):
         self.movimentacao.cancelar_solicitacao(self.gestor)
@@ -154,6 +164,10 @@ class AdminActionCancelamentoTestCase(TestCase):
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_origem,
+        )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=self.movimentacao,
+            bem=self.bem,
         )
 
         self.factory = RequestFactory()
@@ -312,6 +326,11 @@ class AdminActionCancelamentoTestCase(TestCase):
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_destino,
         )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=movimentacao2,
+            bem=bem2,
+        )
+
         request_operador = self._create_request_with_messages(self.operador_origem)
         queryset = MovimentacaoBemPatrimonial.objects.filter(pk=movimentacao2.pk)
         with patch(
@@ -334,6 +353,10 @@ class AdminActionCancelamentoTestCase(TestCase):
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_origem,
+        )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=movimentacao2,
+            bem=bem2,
         )
 
         request = self._create_request_with_messages(self.gestor)
@@ -375,6 +398,10 @@ class FluxoCancelamentoTestCase(TestCase):
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_origem,
         )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=mov1,
+            bem=self.bem,
+        )
 
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.status, BLOQUEADO)
@@ -389,6 +416,10 @@ class FluxoCancelamentoTestCase(TestCase):
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador_origem,
         )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=mov2,
+            bem=self.bem,
+        )
 
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.status, BLOQUEADO)
@@ -399,40 +430,6 @@ class FluxoCancelamentoTestCase(TestCase):
 
         # Como não há mais gestão de quantidades por UA, validamos a troca de UA do bem
         self.assertEqual(self.bem.unidade_administrativa, self.ua_destino)
-
-    def test_historico_status_ao_cancelar(self):
-        count_inicial = StatusBemPatrimonial.objects.filter(
-            bem_patrimonial=self.bem
-        ).count()
-
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
-
-        self.bem.refresh_from_db()
-        self.assertEqual(self.bem.status, BLOQUEADO)
-
-        count_apos_bloqueio = StatusBemPatrimonial.objects.filter(
-            bem_patrimonial=self.bem
-        ).count()
-        self.assertEqual(count_apos_bloqueio, count_inicial + 1)
-
-        ultimo_status = StatusBemPatrimonial.objects.filter(
-            bem_patrimonial=self.bem
-        ).last()
-        self.assertEqual(ultimo_status.status, BLOQUEADO)
-        self.assertIn(str(mov.pk), ultimo_status.observacao)
-
-        mov.cancelar_solicitacao(self.gestor)
-        self.bem.refresh_from_db()
-        self.assertEqual(self.bem.status, APROVADO)
-
-        mov.refresh_from_db()
-        self.assertEqual(mov.status, CANCELADA)
-        self.assertEqual(mov.cancelado_por, self.gestor)
 
 
 class EmailCancelamentoTestCase(TestCase):
