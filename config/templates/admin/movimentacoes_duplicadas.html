@@ -1,0 +1,75 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content_title %}
+  <h1>{{ title }}</h1>
+{% endblock %}
+
+{% block content %}
+  <div class="align-center"
+       style="margin: 1rem 0; color: #1f2937; background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px;">
+    <p style="margin: 0;">
+      Esta tela lista <strong>bens com movimentações potencialmente duplicadas</strong>, segundo a regra:
+      <br>
+      <em>Para um mesmo bem, se ele saiu mais de uma vez da mesma unidade de origem, o conjunto de movimentações merece revisão.</em>
+    </p>
+  </div>
+
+  <p>
+    Total de movimentações analisadas: <strong>{{ total_movimentacoes_analisadas }}</strong><br>
+    Total de grupos com possíveis duplicidades: <strong>{{ total_grupos_duplicados }}</strong>
+  </p>
+
+  {% if not grupos_duplicados %}
+    <div style="margin-top: 16px; color: #166534; background: #dcfce7; border: 1px solid #bbf7d0; padding: 12px;">
+      Nenhuma movimentação potencialmente duplicada foi encontrada para os filtros atuais.
+    </div>
+  {% else %}
+    <div class="results" style="margin-top: 24px;">
+      {% for grupo in grupos_duplicados %}
+        <h3 style="margin-top: 16px; margin-bottom: 4px;">
+          Bem #{{ grupo.bem_id }} — {{ grupo.bem }}
+        </h3>
+        <p style="margin-top: 0; margin-bottom: 8px; font-size: 0.9rem; color: #4b5563;">
+          Unidade de origem: <strong>{{ grupo.origem }}</strong><br>
+          Quantidade de movimentações com esta origem: <strong>{{ grupo.movimentos|length }}</strong>
+        </p>
+
+        <table id="result_list" style="margin-bottom: 24px;">
+          <thead>
+            <tr>
+              <th style="width: 80px;">ID Mov.</th>
+              <th>Status</th>
+              <th>Origem</th>
+              <th>Destino</th>
+              <th>Atualizado em</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for mov in grupo.movimentos %}
+              <tr>
+                <td>
+                  <a href="{% url opts|admin_urlname:'change' mov.pk %}">
+                    {{ mov.pk }}
+                  </a>
+                </td>
+                <td>{{ mov.status }}</td>
+                <td>{{ mov.unidade_administrativa_origem }}</td>
+                <td>{{ mov.unidade_administrativa_destino }}</td>
+                <td>{{ mov.atualizado_em }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <p>
+    <a href=".." class="button"
+       style="margin-top: 8px; background: #e5e7eb; border-color: #9ca3af; color: #111827;">
+      Voltar à lista de movimentações
+    </a>
+  </p>
+{% endblock %}
