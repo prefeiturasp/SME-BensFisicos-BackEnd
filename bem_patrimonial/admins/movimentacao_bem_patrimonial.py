@@ -315,7 +315,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "status",
-        "numero_cimbpm",
+        # "numero_cimbpm",
         "unidade_administrativa_origem",
         "unidade_administrativa_destino",
         "solicitado_por",
@@ -333,7 +333,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "rejeitado_por",
         "cancelado_por",
         "status",
-        "numero_cimbpm",
+        # "numero_cimbpm",
         "get_documento_cimbpm_link",
     )
 
