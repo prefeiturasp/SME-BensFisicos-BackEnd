@@ -362,7 +362,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         if obj is not None:
             return [
                 "status",
-                "numero_cimbpm",
+                # "numero_cimbpm",
                 "get_documento_cimbpm_link",
                 "solicitado_por",
                 "aprovado_por",
