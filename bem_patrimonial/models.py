@@ -5,6 +5,7 @@ from django.db.models.signals import post_save
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.context import get_user
 from dados_comuns.utils import dict_changes
@@ -362,13 +363,14 @@ class MovimentacaoBemPatrimonial(models.Model):
         "Atualizado em", auto_now=True, null=True, blank=True
     )
 
-    numero_cimbpm = models.CharField(
-        "Número CIMBPM",
-        max_length=30,
-        unique=True,
+
+    documento_cimbpm = models.FileField(
+        "Documento CIMBPM",
+        upload_to="documentos_cimbpm/",
         null=True,
         blank=True,
-        db_index=True,
+        editable=False,
+        help_text="PDF gerado automaticamente ao criar movimentação",
     )
 
     def __str__(self) -> str:
@@ -395,6 +397,38 @@ class MovimentacaoBemPatrimonial(models.Model):
     def cancelada(self):
         return self.status == constants.CANCELADA
 
+    def documento_existe(self):
+        if not self.documento_cimbpm:
+            return False
+        try:
+            return self.documento_cimbpm.storage.exists(self.documento_cimbpm.name)
+        except Exception:
+            return False
+
+    def regenerar_documento_cimbpm(self, force=False):
+        if not force and self.documento_existe():
+            return False
+
+        from bem_patrimonial.cimbpm import gerar_pdf_cimbpm
+
+        data_aceite = None
+        if self.aceita and self.aprovado_por:
+            data_aceite = (
+                self.criado_em
+                if not hasattr(self, "atualizado_em")
+                else self.atualizado_em
+            )
+
+        if self.numero_cimbpm:
+            pdf_buffer = gerar_pdf_cimbpm(self, data_aceite=data_aceite)
+            filename = f"CIMBPM_{self.numero_cimbpm.replace('.', '_')}.pdf"
+            self.documento_cimbpm.save(
+                filename, ContentFile(pdf_buffer.read()), save=True
+            )
+            return True
+
+        return False
+
     def aprovar_solicitacao(self, usuario):
         if self.aceita or self.status != constants.ENVIADA:
             return
@@ -410,6 +444,16 @@ class MovimentacaoBemPatrimonial(models.Model):
         self.status = constants.ACEITA
         self.aprovado_por = usuario
         self.save()
+
+        from bem_patrimonial.cimbpm import gerar_pdf_cimbpm
+        from django.utils import timezone
+
+        if self.numero_cimbpm:
+            pdf_buffer = gerar_pdf_cimbpm(self, data_aceite=timezone.now())
+            filename = f"CIMBPM_{self.numero_cimbpm.replace('.', '_')}.pdf"
+            self.documento_cimbpm.save(
+                filename, ContentFile(pdf_buffer.read()), save=True
+            )
 
     def rejeitar_solicitacao(self, usuario):
         if self.rejeitada or self.status != constants.ENVIADA:
@@ -505,3 +549,13 @@ def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
                 emails.append(usuario.email)
 
         envia_email_nova_solicitacao_movimentacao(instance, emails)
+
+
+@receiver(post_save, sender=MovimentacaoBemPatrimonial)
+def gerar_numero_cimbpm_signal(sender, instance, created, **kwargs):
+    if created:
+        from bem_patrimonial.cimbpm import gerar_numero_cimbpm
+
+        if not instance.numero_cimbpm:
+            instance.numero_cimbpm = gerar_numero_cimbpm(instance)
+            instance.save(update_fields=["numero_cimbpm"])

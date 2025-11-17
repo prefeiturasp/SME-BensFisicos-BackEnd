@@ -331,10 +331,16 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "rejeitado_por",
         "cancelado_por",
         "status",
+        "numero_cimbpm",
+        "get_documento_cimbpm_link",
     )
 
     list_filter = ("status",)
-    actions = [aprovar_solicitacao, rejeitar_solicitacao, cancelar_solicitacao]
+    actions = [
+        aprovar_solicitacao,
+        rejeitar_solicitacao,
+        cancelar_solicitacao,
+    ]
 
     form = MovimentacaoBemPatrimonialForm
     inlines = [MovimentacaoBensItemInline]
@@ -405,6 +411,21 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         if obj.id is None:
             obj.solicitado_por = request.user
         super().save_model(request, obj, form, change)
+
+    def get_documento_cimbpm_link(self, obj):
+        if obj and obj.numero_cimbpm:
+            from django.utils.html import format_html
+            from django.urls import reverse
+
+            url_protegida = reverse("download_documento_cimbpm", kwargs={"pk": obj.pk})
+
+            return format_html(
+                '<a href="{}" target="_blank">📄 Baixar Documento CIMBPM</a>',
+                url_protegida,
+            )
+        return "Número CIMBPM não gerado"
+
+    get_documento_cimbpm_link.short_description = "Documento CIMBPM"
 
     def get_actions(self, request):
         actions = super().get_actions(request)
