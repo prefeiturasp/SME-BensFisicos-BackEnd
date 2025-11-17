@@ -60,10 +60,9 @@ class UnidadeAdministrativaAdmin(admin.ModelAdmin):
         field_name = request.GET.get("field_name")
 
         if field_name:
-            if (
-                field_name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                and request.user.is_operador_inventario
-                and not request.user.is_gestor_patrimonio
+            if field_name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE and (
+                request.user.is_operador_inventario
+                or (request.user.is_gestor_patrimonio and uas_do_usuario(request.user))
             ):
                 uas_user = uas_do_usuario(request.user)
                 queryset = queryset.filter(

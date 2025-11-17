@@ -8,90 +8,127 @@ from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,
 )
-from bem_patrimonial.models import MovimentacaoBemPatrimonial
+from bem_patrimonial.models import (
+    MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
+)
 from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_aceita,
     envia_email_solicitacao_movimentacao_rejeitada,
     envia_email_solicitacao_movimentacao_cancelada,
 )
+from bem_patrimonial import constants
 
 from dados_comuns.libs.unidade_administrativa import uas_do_usuario
 from dados_comuns.models import UnidadeAdministrativa
+from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
 
+def _bens_da_movimentacao(mov):
+    """
+    Helper: retorna queryset de bens da movimentação, já com select_related.
+    """
+    return mov.itens.select_related("bem").all()
+
+
 def aprovar_solicitacao(modeladmin, request, queryset):
-    for item in queryset:
-        if item.aceita:
+    for mov in queryset:
+        if mov.aceita:
             messages.add_message(
                 request,
                 messages.WARNING,
-                f"Movimentação #{item.pk} já foi aprovada anteriormente.",
+                f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
             )
             continue
 
-        if item.rejeitada:
+        if mov.rejeitada:
             messages.add_message(
                 request,
                 messages.WARNING,
-                f"Movimentação #{item.pk} já foi rejeitada anteriormente.",
+                f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
             )
             continue
 
-        if not item.unidade_administrativa_origem.is_ativa:
+        if not mov.unidade_administrativa_origem.is_ativa:
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{item.pk}: A unidade de origem '{item.unidade_administrativa_origem.nome}' está inativa. "
+                f"Movimentação #{mov.pk}: A unidade de origem "
+                f"'{mov.unidade_administrativa_origem.nome}' está inativa. "
                 "Não é possível aprovar movimentações de unidades inativas.",
             )
             continue
 
-        if not item.unidade_administrativa_destino.is_ativa:
+        if not mov.unidade_administrativa_destino.is_ativa:
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
+                f"Movimentação #{mov.pk}: A unidade de destino "
+                f"'{mov.unidade_administrativa_destino.nome}' está inativa. "
                 "Não é possível aprovar movimentações para unidades inativas.",
             )
             continue
 
-        if item.cancelada:
+        if mov.cancelada:
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{item.pk} foi cancelada e não pode ser aprovada.",
+                f"Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
             )
             continue
 
         if request.user.is_operador_inventario:
             if (
-                item.unidade_administrativa_destino
+                mov.unidade_administrativa_destino
                 != request.user.unidade_administrativa
             ):
                 messages.add_message(
                     request,
                     messages.ERROR,
-                    f"Movimentação #{item.pk}: Apenas operadores da unidade de destino podem aprovar esta movimentação.",
+                    f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
+                    "podem aprovar esta movimentação.",
                 )
                 continue
-            if item.solicitado_por.pk == request.user.pk:
+            if mov.solicitado_por_id == request.user.pk:
                 messages.add_message(
                     request,
                     messages.WARNING,
-                    f"Movimentação #{item.pk}: Você não pode aprovar sua própria solicitação.",
+                    f"Movimentação #{mov.pk}: Você não pode aprovar sua própria solicitação.",
                 )
                 continue
 
-        item.aprovar_solicitacao(request.user)
+        bens_itens = _bens_da_movimentacao(mov)
+
+        if not bens_itens.exists():
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{mov.pk} não possui bens associados.",
+            )
+            continue
+
+        with transaction.atomic():
+            for item in bens_itens:
+                bem = item.bem
+                bem.unidade_administrativa = mov.unidade_administrativa_destino
+                bem.status = constants.APROVADO
+                bem.save()
+
+                if mov.solicitado_por and mov.solicitado_por.email:
+                    envia_email_solicitacao_movimentacao_aceita(
+                        bem, mov.solicitado_por.email
+                    )
+
+            mov.status = constants.ACEITA
+            mov.aprovado_por = request.user
+            mov.save()
+
         messages.add_message(
             request,
             messages.SUCCESS,
-            f"Movimentação #{item.pk} aprovada com sucesso. Bem desbloqueado.",
-        )
-        envia_email_solicitacao_movimentacao_aceita(
-            item.bem_patrimonial, item.solicitado_por.email
+            f"Movimentação #{mov.pk} aprovada com sucesso. Bens desbloqueados.",
         )
 
 
@@ -99,76 +136,100 @@ aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
 
 
 def rejeitar_solicitacao(modeladmin, request, queryset):
-    for item in queryset:
-        if item.rejeitada:
+    for mov in queryset:
+        if mov.rejeitada:
             messages.add_message(
                 request,
                 messages.WARNING,
-                f"Movimentação #{item.pk} já foi rejeitada anteriormente.",
+                f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
             )
             continue
 
-        if item.aceita:
+        if mov.aceita:
             messages.add_message(
                 request,
                 messages.WARNING,
-                f"Movimentação #{item.pk} já foi aprovada anteriormente.",
+                f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
             )
             continue
 
-        if not item.unidade_administrativa_origem.is_ativa:
+        if not mov.unidade_administrativa_origem.is_ativa:
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{item.pk}: A unidade de origem '{item.unidade_administrativa_origem.nome}' está inativa. "
+                f"Movimentação #{mov.pk}: A unidade de origem "
+                f"'{mov.unidade_administrativa_origem.nome}' está inativa. "
                 "Não é possível rejeitar movimentações de unidades inativas.",
             )
             continue
 
-        if not item.unidade_administrativa_destino.is_ativa:
+        if not mov.unidade_administrativa_destino.is_ativa:
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{item.pk}: A unidade de destino '{item.unidade_administrativa_destino.nome}' está inativa. "
+                f"Movimentação #{mov.pk}: A unidade de destino "
+                f"'{mov.unidade_administrativa_destino.nome}' está inativa. "
                 "Não é possível rejeitar movimentações para unidades inativas.",
             )
             continue
 
-        if item.cancelada:
+        if mov.cancelada:
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{item.pk} foi cancelada e não pode ser rejeitada.",
+                f"Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
             )
             continue
 
         if request.user.is_operador_inventario:
             if (
-                item.unidade_administrativa_destino
+                mov.unidade_administrativa_destino
                 != request.user.unidade_administrativa
             ):
                 messages.add_message(
                     request,
                     messages.ERROR,
-                    f"Movimentação #{item.pk}: Apenas operadores da unidade de destino podem rejeitar esta movimentação.",
+                    f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
+                    "podem rejeitar esta movimentação.",
                 )
                 continue
-            if item.solicitado_por.pk == request.user.pk:
+            if mov.solicitado_por_id == request.user.pk:
                 messages.add_message(
                     request,
                     messages.WARNING,
-                    f"Movimentação #{item.pk}: Você não pode rejeitar sua própria solicitação.",
+                    f"Movimentação #{mov.pk}: Você não pode rejeitar sua própria solicitação.",
                 )
                 continue
 
-        item.rejeitar_solicitacao(request.user)
+        bens_itens = _bens_da_movimentacao(mov)
+
+        if not bens_itens.exists():
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{mov.pk} não possui bens associados.",
+            )
+            continue
+
+        with transaction.atomic():
+            mov.status = constants.REJEITADA
+            mov.rejeitado_por = request.user
+            mov.save()
+
+            for item in bens_itens:
+                bem = item.bem
+                bem.status = constants.APROVADO
+                bem.save()
+
+                if mov.solicitado_por and mov.solicitado_por.email:
+                    envia_email_solicitacao_movimentacao_rejeitada(
+                        bem, mov.solicitado_por.email
+                    )
+
         messages.add_message(
             request,
             messages.SUCCESS,
-            f"Movimentação #{item.pk} rejeitada com sucesso. Bem desbloqueado.",
-        )
-        envia_email_solicitacao_movimentacao_rejeitada(
-            item.bem_patrimonial, item.solicitado_por.email
+            f"Movimentação #{mov.pk} rejeitada com sucesso. Bens desbloqueados.",
         )
 
 
@@ -176,36 +237,36 @@ rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
 
 
 def cancelar_solicitacao(modeladmin, request, queryset):
-    for item in queryset:
-        if item.cancelada:
+    for mov in queryset:
+        if mov.cancelada:
             messages.add_message(
                 request,
                 messages.WARNING,
-                f"Movimentação #{item.pk} já foi cancelada anteriormente.",
+                f"Movimentação #{mov.pk} já foi cancelada anteriormente.",
             )
             continue
 
-        if item.aceita:
+        if mov.aceita:
             messages.add_message(
                 request,
                 messages.WARNING,
-                f"Movimentação #{item.pk} já foi aprovada e não pode ser cancelada.",
+                f"Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
             )
             continue
 
-        if item.rejeitada:
+        if mov.rejeitada:
             messages.add_message(
                 request,
                 messages.WARNING,
-                f"Movimentação #{item.pk} já foi rejeitada e não pode ser cancelada.",
+                f"Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
             )
             continue
 
-        if item.status != "enviada":
+        if mov.status != constants.ENVIADA:
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{item.pk}: Apenas movimentações pendentes podem ser canceladas.",
+                f"Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
             )
             continue
 
@@ -213,22 +274,35 @@ def cancelar_solicitacao(modeladmin, request, queryset):
             request.user.is_operador_inventario
             and not request.user.is_gestor_patrimonio
         ):
-            if item.solicitado_por.pk != request.user.pk:
+            if mov.solicitado_por_id != request.user.pk:
                 messages.add_message(
                     request,
                     messages.ERROR,
-                    f"Movimentação #{item.pk}: Você só pode cancelar movimentações criadas por você.",
+                    f"Movimentação #{mov.pk}: Você só pode cancelar movimentações criadas por você.",
                 )
                 continue
 
-        item.cancelar_solicitacao(request.user)
+        bens_itens = _bens_da_movimentacao(mov)
+
+        with transaction.atomic():
+            mov.status = constants.CANCELADA
+            mov.cancelado_por = request.user
+            mov.save()
+
+            for item in bens_itens:
+                bem = item.bem
+                bem.status = constants.APROVADO
+                bem.save()
+
+                if mov.solicitado_por and mov.solicitado_por.email:
+                    envia_email_solicitacao_movimentacao_cancelada(
+                        bem, request.user, mov.solicitado_por.email
+                    )
+
         messages.add_message(
             request,
             messages.SUCCESS,
-            f"Movimentação #{item.pk} cancelada com sucesso. Bem desbloqueado.",
-        )
-        envia_email_solicitacao_movimentacao_cancelada(
-            item.bem_patrimonial, request.user, item.solicitado_por.email
+            f"Movimentação #{mov.pk} cancelada com sucesso. Bens desbloqueados.",
         )
 
 
@@ -237,17 +311,18 @@ cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"
 
 class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     model = MovimentacaoBemPatrimonial
+
     list_display = (
         "id",
         "status",
-        "bem_patrimonial",
+        "numero_cimbpm",
         "unidade_administrativa_origem",
         "unidade_administrativa_destino",
         "solicitado_por",
         "atualizado_em",
     )
+
     autocomplete_fields = (
-        "bem_patrimonial",
         "unidade_administrativa_origem",
         "unidade_administrativa_destino",
     )
@@ -261,6 +336,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "numero_cimbpm",
         "get_documento_cimbpm_link",
     )
+
     list_filter = ("status",)
     actions = [
         aprovar_solicitacao,
@@ -270,10 +346,40 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     ]
 
     form = MovimentacaoBemPatrimonialForm
+    inlines = [MovimentacaoBensItemInline]
 
     class Media:
-        js = ("js/bem_patrimonial/prevenir_duplo_submit.js",)
-        css = {"all": ("css/prevenir_duplo_submit.css",)}
+        js = (
+            "js/bem_patrimonial/prevenir_duplo_submit.js",
+            "admin/movimentacao_filtra_bens_por_ua.js",
+        )
+        css = {"all": ("css/prevenir_duplo_submit.css", "css/custom_inline.css")}
+
+    def get_fields(self, request, obj=None):
+        base_fields = [
+            "unidade_administrativa_origem",
+            "unidade_administrativa_destino",
+            "observacao",
+        ]
+
+        if obj is not None:
+            return [
+                "status",
+                "numero_cimbpm",
+                "get_documento_cimbpm_link",
+                "solicitado_por",
+                "aprovado_por",
+                "rejeitado_por",
+                "cancelado_por",
+                *base_fields,
+            ]
+
+        return base_fields
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ()
+        return self.readonly_fields
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
@@ -296,38 +402,20 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         return form
 
     def get_queryset(self, request):
-        if (
-            request.user.is_operador_inventario
-            and not request.user.is_gestor_patrimonio
+        qs = super().get_queryset(request)
+        if request.user.is_operador_inventario or (
+            request.user.is_gestor_patrimonio and request.user.unidade_administrativa
         ):
-            return MovimentacaoBemPatrimonial.objects.filter(
+            return qs.filter(
                 Q(unidade_administrativa_origem=request.user.unidade_administrativa)
                 | Q(unidade_administrativa_destino=request.user.unidade_administrativa)
             )
-        return MovimentacaoBemPatrimonial.objects.all()
+        return qs
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:
-            # Proteção contra duplicação usando lock transacional
-            with transaction.atomic():
-                from bem_patrimonial.models import BemPatrimonial
-
-                bem_locked = BemPatrimonial.objects.select_for_update().get(
-                    pk=obj.bem_patrimonial.pk
-                )
-
-                if bem_locked.tem_movimentacao_pendente:
-                    messages.add_message(
-                        request,
-                        messages.WARNING,
-                        f"O bem '{bem_locked}' já possui uma movimentação pendente. Aguarde a conclusão antes de criar uma nova.",
-                    )
-                    return
-
-                obj.solicitado_por = request.user
-                super().save_model(request, obj, form, change)
-        else:
-            super().save_model(request, obj, form, change)
+            obj.solicitado_por = request.user
+        super().save_model(request, obj, form, change)
 
     def get_documento_cimbpm_link(self, obj):
         if obj and obj.numero_cimbpm:
@@ -345,7 +433,6 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     get_documento_cimbpm_link.short_description = "Documento CIMBPM"
 
     def get_actions(self, request):
-        """Retorna todas as actions disponíveis"""
         actions = super().get_actions(request)
         return actions
 

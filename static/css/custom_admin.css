@@ -12,3 +12,10 @@
 fieldset.has-inlines {
     display: none;
 }
+
+.change-form .submit-row input.default {
+    text-transform: none !important;
+}
+.submit-row input.default {
+    text-transform: none !important ;
+}

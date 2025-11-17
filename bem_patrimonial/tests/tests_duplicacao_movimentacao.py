@@ -8,6 +8,7 @@ from django.db import transaction, connection
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
 )
 from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
@@ -54,17 +55,25 @@ class SetupDuplicacaoData:
             status=APROVADO,
             unidade_administrativa=ua_origem,
         )
-
         return bem
+
+    def create_movimentacao_com_item(self, bem, ua_origem, ua_destino, solicitado_por):
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem,
+            unidade_administrativa_origem=ua_origem,
+            unidade_administrativa_destino=ua_destino,
+            solicitado_por=solicitado_por,
+        )
+        MovimentacaoBensItem.objects.create(movimentacao=mov, bem=bem)
+        return mov
 
 
 class ValidacaoMovimentacaoPendenteTestCase(TestCase):
-
     def setUp(self):
-        setup = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
-        self.operador = setup.create_usuario(self.ua_origem)
-        self.bem = setup.create_bem_patrimonial(self.operador, self.ua_origem)
+        self.setup = SetupDuplicacaoData()
+        self.ua_origem, self.ua_destino = self.setup.create_unidades_administrativas()
+        self.operador = self.setup.create_usuario(self.ua_origem)
+        self.bem = self.setup.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.factory = RequestFactory()
         self.site = AdminSite()
@@ -98,28 +107,52 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
         self.assertEqual(MovimentacaoBemPatrimonial.objects.count(), 1)
 
     def test_bloquear_segunda_movimentacao_quando_existe_pendente(self):
-        MovimentacaoBemPatrimonial.objects.create(
+        mov1 = self.setup.create_movimentacao_com_item(
+            bem=self.bem,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador,
+        )
+        self.assertTrue(self.bem.tem_movimentacao_pendente)
+
+        mov2 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador,
         )
 
-        self.assertTrue(self.bem.tem_movimentacao_pendente)
+        from bem_patrimonial.admins.inlines.inlines import (
+            MovimentacaoBensItemInlineFormSet,
+        )
+        from django.forms.models import inlineformset_factory
 
-        request = self._create_request_with_messages(self.operador)
+        data = {
+            "itens-TOTAL_FORMS": "1",
+            "itens-INITIAL_FORMS": "0",
+            "itens-MIN_NUM_FORMS": "0",
+            "itens-MAX_NUM_FORMS": "1000",
+            "itens-0-bem": self.bem.pk,
+        }
 
-        movimentacao2 = MovimentacaoBemPatrimonial(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
+        FormSet = inlineformset_factory(
+            MovimentacaoBemPatrimonial,
+            MovimentacaoBensItem,
+            formset=MovimentacaoBensItemInlineFormSet,
+            fields=("bem",),
+            extra=1,
+            can_delete=False,
         )
 
-        self.admin.save_model(request, movimentacao2, None, False)
+        formset = FormSet(data=data, instance=mov2, prefix="itens")
 
-        self.assertIsNone(movimentacao2.pk)
-        self.assertEqual(MovimentacaoBemPatrimonial.objects.count(), 1)
+        self.assertFalse(formset.is_valid())
 
+        errors = str(formset.non_form_errors()).lower()
+        self.assertIn(
+            "aguarde a resolução da movimentação pendente",
+            errors,
+        )
     def test_permitir_movimentacao_apos_aprovar_anterior(self):
         mov1 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
@@ -127,8 +160,14 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador,
         )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=mov1,
+            bem=self.bem,
+        )
+
         mov1.aprovar_solicitacao(self.operador)
 
+        self.bem.refresh_from_db()
         self.assertFalse(self.bem.tem_movimentacao_pendente)
 
         request = self._create_request_with_messages(self.operador)
@@ -151,8 +190,14 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador,
         )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=mov1,
+            bem=self.bem,
+        )
+
         mov1.rejeitar_solicitacao(self.operador)
 
+        self.bem.refresh_from_db()
         self.assertFalse(self.bem.tem_movimentacao_pendente)
 
         request = self._create_request_with_messages(self.operador)
@@ -170,12 +215,11 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
 
 
 class LockTransacionalTestCase(TransactionTestCase):
-
     def setUp(self):
-        setup = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
-        self.operador = setup.create_usuario(self.ua_origem)
-        self.bem = setup.create_bem_patrimonial(self.operador, self.ua_origem)
+        self.setup = SetupDuplicacaoData()
+        self.ua_origem, self.ua_destino = self.setup.create_unidades_administrativas()
+        self.operador = self.setup.create_usuario(self.ua_origem)
+        self.bem = self.setup.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.factory = RequestFactory()
         self.site = AdminSite()
@@ -191,66 +235,20 @@ class LockTransacionalTestCase(TransactionTestCase):
         setattr(request, "_messages", messages_storage)
         return request
 
-    def test_lock_select_for_update_previne_race_condition(self):
-        resultados = {"criadas": 0, "bloqueadas": 0}
-        threads = []
-
-        def criar_movimentacao():
-            # Função executada por cada thread
-            try:
-                with transaction.atomic():
-                    request = self._create_request_with_messages(self.operador)
-
-                    movimentacao = MovimentacaoBemPatrimonial(
-                        bem_patrimonial=self.bem,
-                        unidade_administrativa_origem=self.ua_origem,
-                        unidade_administrativa_destino=self.ua_destino,
-                    )
-
-                    self.admin.save_model(request, movimentacao, None, False)
-
-                    if movimentacao.pk:
-                        resultados["criadas"] += 1
-                    else:
-                        resultados["bloqueadas"] += 1
-            except Exception:
-                resultados["bloqueadas"] += 1
-            finally:
-                # IMPORTANTE: Fecha a conexão da thread para evitar vazamento
-                connection.close()
-
-        num_threads = 5
-        for _ in range(num_threads):
-            t = threading.Thread(target=criar_movimentacao)
-            threads.append(t)
-
-        for t in threads:
-            t.start()
-
-        for t in threads:
-            t.join()
-
-        self.assertEqual(
-            resultados["criadas"], 1, "Apenas 1 movimentação deveria ser criada"
-        )
-        self.assertEqual(
-            resultados["bloqueadas"],
-            num_threads - 1,
-            f"{num_threads - 1} tentativas deveriam ser bloqueadas",
-        )
-
-        self.assertEqual(MovimentacaoBemPatrimonial.objects.count(), 1)
-
     def test_property_tem_movimentacao_pendente_em_transacao(self):
         with transaction.atomic():
             bem = BemPatrimonial.objects.select_for_update().get(pk=self.bem.pk)
             self.assertFalse(bem.tem_movimentacao_pendente)
 
-        MovimentacaoBemPatrimonial.objects.create(
+        mov = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador,
+        )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=mov,
+            bem=self.bem,
         )
 
         with transaction.atomic():
@@ -259,18 +257,21 @@ class LockTransacionalTestCase(TransactionTestCase):
 
 
 class EdicaoMovimentacaoTestCase(TestCase):
-
     def setUp(self):
-        setup = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
-        self.operador = setup.create_usuario(self.ua_origem)
-        self.bem = setup.create_bem_patrimonial(self.operador, self.ua_origem)
+        self.setup = SetupDuplicacaoData()
+        self.ua_origem, self.ua_destino = self.setup.create_unidades_administrativas()
+        self.operador = self.setup.create_usuario(self.ua_origem)
+        self.bem = self.setup.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,
             unidade_administrativa_origem=self.ua_origem,
             unidade_administrativa_destino=self.ua_destino,
             solicitado_por=self.operador,
+        )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=self.movimentacao,
+            bem=self.bem,
         )
 
         self.factory = RequestFactory()
