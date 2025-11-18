@@ -77,6 +77,9 @@ class CustomUserModelAdmin(UserAdmin):
         ("Datas importantes", {"fields": ("last_login", "date_joined")}),
     )
 
+    class Media:
+        css = {"all": ("css/hide_crud_icons.css",)}
+
     def get_readonly_fields(self, request, obj=None):
         if obj:
             return self.readonly_fields + ("username",)
