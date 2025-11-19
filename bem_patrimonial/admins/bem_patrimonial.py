@@ -48,9 +48,13 @@ class HistoricoGeralInline(GenericTabularInline):
     )
     fields = ("campo", "valor_antigo", "valor_novo", "alterado_por", "alterado_em")
     ordering = ("-alterado_em",)
+    template = "admin/bem_patrimonial/edit_inline/tabular-historico.html"
 
     def has_view_or_change_permission(self, request, obj=None):
         return True
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class BemPatrimonialResource(resources.ModelResource):
@@ -176,17 +180,20 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
                     if "unidade_administrativa" in self_inner.fields:
                         fld = self_inner.fields["unidade_administrativa"]
-                        fld.required = True  
+                        fld.required = True
 
                         qs = UnidadeAdministrativa.objects.filter(
                             status=UnidadeAdministrativa.ATIVA
                         )
 
-                        if request.user.is_operador_inventario and not request.user.is_gestor_patrimonio:
+                        if (
+                            request.user.is_operador_inventario
+                            and not request.user.is_gestor_patrimonio
+                        ):
                             ua = getattr(request.user, "unidade_administrativa", None)
                             qs = qs.filter(pk=getattr(ua, "pk", None))
                             fld.initial = ua
-                            fld.disabled = True  
+                            fld.disabled = True
                         fld.queryset = qs
 
                 def clean(self_inner):
@@ -198,13 +205,15 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     ):
                         if not cleaned_data.get("unidade_administrativa") and ua_user:
                             cleaned_data["unidade_administrativa"] = ua_user
-                    
+
                     ua_form = cleaned_data.get("unidade_administrativa")
                     if not ua_form:
                         raise ValidationError(
-                            {"unidade_administrativa": "Selecione a Unidade Administrativa."}
+                            {
+                                "unidade_administrativa": "Selecione a Unidade Administrativa."
+                            }
                         )
-                        
+
                     if ua_user and not ua_user.is_ativa:
                         raise ValidationError(
                             f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
@@ -581,7 +590,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         except Exception:
             pass
         return "—"
-    
+
     def get_search_results(self, request, queryset, search_term):
         qs, use_distinct = super().get_search_results(request, queryset, search_term)
 
@@ -603,11 +612,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
                 exclude_bens = request.GET.get("exclude_bens")
                 if exclude_bens:
-                    ids = [
-                        int(pk)
-                        for pk in exclude_bens.split(",")
-                        if pk.isdigit()
-                    ]
+                    ids = [int(pk) for pk in exclude_bens.split(",") if pk.isdigit()]
                     if ids:
                         qs = qs.exclude(pk__in=ids)
 
