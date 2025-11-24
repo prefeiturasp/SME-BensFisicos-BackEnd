@@ -27,6 +27,7 @@ def setup_grupos_e_permissoes():
     gestor_settings = {
         "_bempatrimonial": ["add", "change", "delete", "view"],
         "_movimentacaobempatrimonial": ["add", "change", "delete", "view"],
+        "_movimentacaobensitem": ["view", "add"],
         "_statusbempatrimonial": ["add", "change", "delete", "view"],
         "_usuario": ["add", "change", "view"],
         "_unidadeadministrativa": ["add", "change", "delete", "view"],
@@ -43,6 +44,7 @@ def setup_grupos_e_permissoes():
     operador_settings = {
         "_bempatrimonial": ["add", "change", "delete", "view"],
         "_movimentacaobempatrimonial": ["add", "change", "view"],
+        "_movimentacaobensitem": ["view", "add"],
         "_statusbempatrimonial": ["view"],
         "_unidadeadministrativa": ["view"],
         # Módulo de Suporte desabilitado temporariamente

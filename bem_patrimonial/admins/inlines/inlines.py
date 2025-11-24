@@ -18,7 +18,6 @@ class MovimentacaoBensItemInlineFormSet(BaseInlineFormSet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Desabilita o checkbox de DELETE em cada formulário
         for form in self.forms:
             if "DELETE" in form.fields:
                 form.fields["DELETE"].disabled = True
@@ -37,12 +36,11 @@ class MovimentacaoBensItemInlineFormSet(BaseInlineFormSet):
 
             bem = form.cleaned_data.get("bem")
             if not bem:
-                # linha vazia ignorada
+
                 continue
 
             bens_usados.append(bem)
 
-            # Validações por bem (as mesmas que você fazia no form antes)
             if bem.status == AGUARDANDO_APROVACAO:
                 raise ValidationError(
                     f"O bem '{bem.nome}' está aguardando aprovação do cadastro. "
@@ -80,7 +78,6 @@ class MovimentacaoBensItemInlineForm(ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Monta o rótulo com numero_patrimonial, nome, marca e modelo
         def _label(obj: BemPatrimonial):
             npat = obj.numero_patrimonial or "SEM-NUMERO"
             return f"{npat} - {obj.nome} ({obj.marca} / {obj.modelo})"
@@ -94,3 +91,7 @@ class MovimentacaoBensItemInline(admin.TabularInline):
     form = MovimentacaoBensItemInlineForm
     formset = MovimentacaoBensItemInlineFormSet
     autocomplete_fields = ("bem",)
+
+    def has_add_permission(self, request, obj=None):
+
+        return obj is None
