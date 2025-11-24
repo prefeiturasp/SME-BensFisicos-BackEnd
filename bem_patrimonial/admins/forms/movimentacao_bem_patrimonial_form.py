@@ -8,33 +8,28 @@ from dados_comuns.models import UnidadeAdministrativa
 class MovimentacaoBemPatrimonialForm(forms.ModelForm):
     class Meta:
         model = MovimentacaoBemPatrimonial
-        # Esconde campos de controle e campo legado bem_patrimonial + bens (M2M)
+
         exclude = (
             "solicitado_por",
             "aprovado_por",
             "rejeitado_por",
             "cancelado_por",
             "status",
-            "bem_patrimonial",  # legado
-            "bens",             # M2M gerenciado via inline
+            "bem_patrimonial",
+            "bens",
         )
 
     def __init__(self, *args, **kwargs):
         super(MovimentacaoBemPatrimonialForm, self).__init__(*args, **kwargs)
 
-        # Filtrar apenas unidades administrativas ativas
         if "unidade_administrativa_origem" in self.fields:
             self.fields["unidade_administrativa_origem"].queryset = (
-                UnidadeAdministrativa.objects.filter(
-                    status=UnidadeAdministrativa.ATIVA
-                )
+                UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
             )
 
         if "unidade_administrativa_destino" in self.fields:
             self.fields["unidade_administrativa_destino"].queryset = (
-                UnidadeAdministrativa.objects.filter(
-                    status=UnidadeAdministrativa.ATIVA
-                )
+                UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
             )
 
     def clean(self):
@@ -47,7 +42,6 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
 
         is_editing = self.instance.pk is not None
 
-        # Validação de unidades administrativas
         if not ua_origem:
             raise ValidationError("Unidade administrativa de origem é obrigatória.")
 
@@ -67,9 +61,10 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             )
 
         if ua_destino == ua_origem:
-            raise ValidationError("Operação não permitida: origem e destino são iguais.")
+            raise ValidationError(
+                "Operação não permitida: origem e destino são iguais."
+            )
 
-        # Restrição de edição para operador de inventário
         if is_editing and user and getattr(user, "is_operador_inventario", False):
             if self.instance.solicitado_por_id != user.id:
                 raise ValidationError(

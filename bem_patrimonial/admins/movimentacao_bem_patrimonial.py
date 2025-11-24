@@ -445,3 +445,13 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             return verificar_movimentacoes_duplicadas(self, request, qs)
 
         return super().response_action(request, queryset)
+
+    def get_inline_formsets(self, request, formsets, inline_instances, obj=None):
+        inline_formsets = super().get_inline_formsets(
+            request, formsets, inline_instances, obj
+        )
+
+        if obj is not None:
+            for formset in inline_formsets:
+                formset.can_add = False
+        return inline_formsets
