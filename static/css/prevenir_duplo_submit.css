@@ -25,3 +25,6 @@ button[type="submit"].submitting::after {
 @keyframes spin {
     to { transform: translateY(-50%) rotate(360deg); }
 }
+.submit-row input.default {
+    text-transform: none !important ;
+}

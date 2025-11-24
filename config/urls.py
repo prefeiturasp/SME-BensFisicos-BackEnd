@@ -10,6 +10,7 @@ from usuario.views import (
     PasswordRecoveryConfirmView,
     PasswordRecoveryCompleteView,
 )
+from bem_patrimonial.views import download_documento_cimbpm
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.conf.urls.static import static
@@ -33,6 +34,12 @@ def redirect_admin_password(request, user_id: int):
 urlpatterns = [
     path(
         "", auth_views.LoginView.as_view(template_name="admin/login.html"), name="login"
+    ),
+    # Download protegido de documentos CIMBPM
+    path(
+        "documento-cimbpm/<int:pk>/download/",
+        download_documento_cimbpm,
+        name="download_documento_cimbpm",
     ),
     # Módulo de Suporte desabilitado temporariamente
     # path('api/agenda/', include(agenda_urls.urlpatterns)),

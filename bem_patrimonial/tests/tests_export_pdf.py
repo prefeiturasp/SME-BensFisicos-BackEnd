@@ -55,17 +55,15 @@ class SetupExportData:
             "criado_por": criado_por,
             "unidade_administrativa": criado_por.unidade_administrativa,
             "status": AGUARDANDO_APROVACAO,
-            
             "sem_numeracao": True,
             "numero_formato_antigo": False,
         }
         defaults.update(kwargs)
 
-        
         npat = defaults.get("numero_patrimonial", None)
         if npat is not None and npat != "":
             npat = str(npat)
-            
+
             if re.fullmatch(NPAT_NUM_REGEX, npat):
                 if BemPatrimonial.objects.filter(numero_patrimonial=npat).exists():
                     defaults["sem_numeracao"] = True
@@ -76,12 +74,12 @@ class SetupExportData:
                     defaults["numero_formato_antigo"] = False
                     defaults["numero_patrimonial"] = npat
             else:
-                
+
                 defaults["sem_numeracao"] = False
                 defaults["numero_formato_antigo"] = True
                 defaults["numero_patrimonial"] = npat
         else:
-            
+
             defaults["sem_numeracao"] = True
             defaults.pop("numero_patrimonial", None)
             defaults["numero_formato_antigo"] = False
@@ -221,11 +219,6 @@ class PDFExportDataTestCase(TestCase):
 
         self.assertIsInstance(pdf_bytes, bytes)
         self.assertGreater(len(pdf_bytes), 0)
-
-        
-        
-        
-        
 
 
 class BemPatrimonialAdminExportTestCase(TestCase):
