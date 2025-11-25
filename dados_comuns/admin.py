@@ -50,23 +50,19 @@ class UnidadeAdministrativaAdmin(admin.ModelAdmin):
         return super().get_queryset(request)
 
     def get_search_results(self, request, queryset, search_term):
-        """
-        Filtra o autocomplete para exibir apenas as UAs associadas ao usuário Operador.
-        """
+        # Autocomplete: gestor sem UA vê todas ativas, com UA só vê a sua
         queryset, use_distinct = super().get_search_results(
             request, queryset, search_term
         )
 
         field_name = request.GET.get("field_name")
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
 
         if field_name:
-            if field_name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE and (
-                request.user.is_operador_inventario
-                or (request.user.is_gestor_patrimonio and uas_do_usuario(request.user))
-            ):
-                uas_user = uas_do_usuario(request.user)
+            if field_name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE and ua_user:
                 queryset = queryset.filter(
-                    id__in=uas_user.values_list("id", flat=True),
+                    id=ua_user.id,
                     status=UnidadeAdministrativa.ATIVA,
                 )
             else:
