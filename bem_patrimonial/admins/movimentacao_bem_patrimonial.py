@@ -334,6 +334,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "status",
         "numero_cimbpm",
         "get_documento_cimbpm_link",
+        "unidade_administrativa_origem",
+        "unidade_administrativa_destino",
     )
 
     list_filter = ("status",)
