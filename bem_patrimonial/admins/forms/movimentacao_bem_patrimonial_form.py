@@ -37,33 +37,36 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         self.is_cleaned = True
 
         user = getattr(self, "request", None).user if hasattr(self, "request") else None
-        ua_origem = cleaned_data.get("unidade_administrativa_origem")
-        ua_destino = cleaned_data.get("unidade_administrativa_destino")
-
         is_editing = self.instance.pk is not None
 
-        if not ua_origem:
-            raise ValidationError("Unidade administrativa de origem é obrigatória.")
+        if not is_editing:
+            ua_origem = cleaned_data.get("unidade_administrativa_origem")
+            ua_destino = cleaned_data.get("unidade_administrativa_destino")
 
-        if not ua_destino:
-            raise ValidationError("Unidade administrativa de destino é obrigatória.")
+            if not ua_origem:
+                raise ValidationError("Unidade administrativa de origem é obrigatória.")
 
-        if not ua_origem.is_ativa:
-            raise ValidationError(
-                f"A unidade de origem '{ua_origem.nome}' está inativa. "
-                "Não é possível criar movimentações a partir de unidades inativas."
-            )
+            if not ua_destino:
+                raise ValidationError(
+                    "Unidade administrativa de destino é obrigatória."
+                )
 
-        if not ua_destino.is_ativa:
-            raise ValidationError(
-                f"A unidade de destino '{ua_destino.nome}' está inativa. "
-                "Não é possível criar movimentações para unidades inativas."
-            )
+            if not ua_origem.is_ativa:
+                raise ValidationError(
+                    f"A unidade de origem '{ua_origem.nome}' está inativa. "
+                    "Não é possível criar movimentações a partir de unidades inativas."
+                )
 
-        if ua_destino == ua_origem:
-            raise ValidationError(
-                "Operação não permitida: origem e destino são iguais."
-            )
+            if not ua_destino.is_ativa:
+                raise ValidationError(
+                    f"A unidade de destino '{ua_destino.nome}' está inativa. "
+                    "Não é possível criar movimentações para unidades inativas."
+                )
+
+            if ua_destino == ua_origem:
+                raise ValidationError(
+                    "Operação não permitida: origem e destino são iguais."
+                )
 
         if is_editing and user and getattr(user, "is_operador_inventario", False):
             if self.instance.solicitado_por_id != user.id:

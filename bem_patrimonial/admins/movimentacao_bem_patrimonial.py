@@ -462,4 +462,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         if obj is not None:
             for formset in inline_formsets:
                 formset.can_add = False
+                formset.can_delete = False
+                for form in formset.forms:
+                    for field in form.fields.values():
+                        field.disabled = True
         return inline_formsets
