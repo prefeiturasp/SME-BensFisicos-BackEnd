@@ -89,6 +89,32 @@ class CustomUserModelAdmin(UserAdmin):
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        original_clean = form.clean
+
+        def custom_clean(form_self):
+            cleaned_data = original_clean(form_self)
+            groups = cleaned_data.get("groups", [])
+            ua = cleaned_data.get("unidade_administrativa")
+
+            from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+
+            is_operador = any(g.name == GRUPO_OPERADOR_INVENTARIO for g in groups)
+            if is_operador and not ua:
+                from django.core.exceptions import ValidationError
+
+                raise ValidationError(
+                    {
+                        "unidade_administrativa": "Operador de Inventário deve ter uma Unidade Administrativa vinculada."
+                    }
+                )
+
+            return cleaned_data
+
+        form.clean = custom_clean
+        return form
+
     @admin.display(description="Grupo")
     def get_grupo(self, obj):
         if obj.is_gestor_patrimonio:
