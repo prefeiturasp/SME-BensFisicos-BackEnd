@@ -385,30 +385,36 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         form.request = request
 
         if obj is None:
-            uas = uas_do_usuario(request.user)
-            uas = uas.filter(status=UnidadeAdministrativa.ATIVA)
-
-            if uas.count() == 1:
-                ua = uas.first()
-                if (
-                    hasattr(form, "base_fields")
-                    and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields
-                ):
+            ua_user = getattr(request.user, "unidade_administrativa", None)
+            if ua_user and ua_user.is_ativa and hasattr(form, "base_fields"):
+                if UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields:
                     form.base_fields[
                         UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                    ].initial = ua.pk
+                    ].initial = ua_user.pk
 
         return form
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_operador_inventario or (
-            request.user.is_gestor_patrimonio and request.user.unidade_administrativa
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
+
+        if (
+            user.is_gestor_patrimonio
+            and not user.is_operador_inventario
+            and not ua_user
         ):
+            return qs
+
+        if ua_user:
             return qs.filter(
-                Q(unidade_administrativa_origem=request.user.unidade_administrativa)
-                | Q(unidade_administrativa_destino=request.user.unidade_administrativa)
+                Q(unidade_administrativa_origem=ua_user)
+                | Q(unidade_administrativa_destino=ua_user)
             )
+
+        if user.is_operador_inventario:
+            return qs.none()
+
         return qs
 
     def save_model(self, request, obj, form, change):
