@@ -263,13 +263,24 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         self.assertEqual(list(pdf_format._export_queryset), list(queryset))
 
     def test_get_export_queryset_gestor_sees_all(self):
+        # Criar gestor SEM UA para ter acesso total
+        gestor_sem_ua = Usuario.objects.create(
+            username="gestor_sem_ua",
+            password="testpass123",
+            nome="Gestor Sem UA",
+            email="gestor_sem_ua@teste.com",
+            unidade_administrativa=None,
+            is_staff=True,
+        )
+        group, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        gestor_sem_ua.groups.add(group)
 
         self.setup.create_bem_patrimonial(self.gestor, nome="Bem Unidade 1")
         usuario_unidade2 = self.setup.create_usuario("user2", self.unidade2)
         self.setup.create_bem_patrimonial(usuario_unidade2, nome="Bem Unidade 2")
 
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
-        request.user = self.gestor
+        request.user = gestor_sem_ua
 
         queryset = self.admin.get_export_queryset(request)
 
