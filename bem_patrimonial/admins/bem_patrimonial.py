@@ -124,18 +124,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         return actions
 
     def get_list_display(self, request):
-        if getattr(request.user, "is_operador_inventario", False):
-            return (
-                "numero_patrimonial",
-                "nome",
-                "status",
-            )
-        return (
-            "numero_patrimonial",
-            "nome",
-            "unidade_administrativa",
-            "status",
-        )
+        if (
+            request.user.is_operador_inventario
+            and not request.user.is_gestor_patrimonio
+        ):
+            return ("numero_patrimonial", "nome", "status")
+        return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     def get_fields(self, request, obj=None):
         base = [
@@ -176,52 +170,53 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
                     if "unidade_administrativa" in self_inner.fields:
                         fld = self_inner.fields["unidade_administrativa"]
-                        fld.required = True  
+                        fld.required = True
+                        ua_user = getattr(request.user, "unidade_administrativa", None)
 
-                        qs = UnidadeAdministrativa.objects.filter(
-                            status=UnidadeAdministrativa.ATIVA
-                        )
-
-                        if request.user.is_operador_inventario and not request.user.is_gestor_patrimonio:
-                            ua = getattr(request.user, "unidade_administrativa", None)
-                            qs = qs.filter(pk=getattr(ua, "pk", None))
-                            fld.initial = ua
-                            fld.disabled = True  
-                        fld.queryset = qs
+                        if ua_user:
+                            fld.queryset = UnidadeAdministrativa.objects.filter(
+                                pk=ua_user.pk, status=UnidadeAdministrativa.ATIVA
+                            )
+                            fld.initial = ua_user
+                            fld.disabled = True
+                        else:
+                            fld.queryset = UnidadeAdministrativa.objects.filter(
+                                status=UnidadeAdministrativa.ATIVA
+                            )
 
                 def clean(self_inner):
                     cleaned_data = original_clean(self_inner)
                     ua_user = getattr(request.user, "unidade_administrativa", None)
+                    ua_form = cleaned_data.get("unidade_administrativa")
+
                     if (
-                        request.user.is_operador_inventario
+                        not ua_form
+                        and ua_user
+                        and request.user.is_operador_inventario
                         and not request.user.is_gestor_patrimonio
                     ):
-                        if not cleaned_data.get("unidade_administrativa") and ua_user:
-                            cleaned_data["unidade_administrativa"] = ua_user
-                    
-                    ua_form = cleaned_data.get("unidade_administrativa")
+                        cleaned_data["unidade_administrativa"] = ua_user
+                        ua_form = ua_user
+
                     if not ua_form:
                         raise ValidationError(
-                            {"unidade_administrativa": "Selecione a Unidade Administrativa."}
+                            {
+                                "unidade_administrativa": "Selecione a Unidade Administrativa."
+                            }
                         )
-                        
+
                     if ua_user and not ua_user.is_ativa:
                         raise ValidationError(
                             f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
                             f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
                         )
 
-                    if (
-                        request.user.is_operador_inventario
-                        and not request.user.is_gestor_patrimonio
-                    ):
-                        ua_form = cleaned_data.get("unidade_administrativa")
-                        if ua_form != ua_user:
-                            raise ValidationError(
-                                {
-                                    "unidade_administrativa": "Operador só pode criar bens na sua Unidade Administrativa."
-                                }
-                            )
+                    if ua_user and ua_form != ua_user:
+                        raise ValidationError(
+                            {
+                                "unidade_administrativa": "Você só pode criar bens na Unidade Administrativa vinculada ao seu usuário."
+                            }
+                        )
 
                     return cleaned_data
 
@@ -276,13 +271,25 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             raise
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        qs = qs.select_related("unidade_administrativa", "criado_por")
+        qs = (
+            super()
+            .get_queryset(request)
+            .select_related("unidade_administrativa", "criado_por")
+        )
 
-        if getattr(request.user, "is_operador_inventario", False) and not getattr(
-            request.user, "is_gestor_patrimonio", True
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
+
+        if (
+            user.is_gestor_patrimonio
+            and not user.is_operador_inventario
+            and not ua_user
         ):
-            qs = qs.filter(unidade_administrativa=request.user.unidade_administrativa)
+            pass
+        elif ua_user:
+            qs = qs.filter(unidade_administrativa=ua_user)
+        elif user.is_operador_inventario:
+            qs = qs.none()
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
@@ -299,13 +306,19 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_export_queryset(self, request):
         queryset = super().get_export_queryset(request)
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
 
-        if getattr(request.user, "is_operador_inventario", False) and not getattr(
-            request.user, "is_gestor_patrimonio", True
+        if (
+            user.is_gestor_patrimonio
+            and not user.is_operador_inventario
+            and not ua_user
         ):
-            queryset = queryset.filter(
-                unidade_administrativa=request.user.unidade_administrativa
-            )
+            pass
+        elif ua_user:
+            queryset = queryset.filter(unidade_administrativa=ua_user)
+        elif user.is_operador_inventario:
+            queryset = queryset.none()
 
         return queryset
 
@@ -581,7 +594,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         except Exception:
             pass
         return "—"
-    
+
     def get_search_results(self, request, queryset, search_term):
         qs, use_distinct = super().get_search_results(request, queryset, search_term)
 
@@ -603,11 +616,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
                 exclude_bens = request.GET.get("exclude_bens")
                 if exclude_bens:
-                    ids = [
-                        int(pk)
-                        for pk in exclude_bens.split(",")
-                        if pk.isdigit()
-                    ]
+                    ids = [int(pk) for pk in exclude_bens.split(",") if pk.isdigit()]
                     if ids:
                         qs = qs.exclude(pk__in=ids)
 
