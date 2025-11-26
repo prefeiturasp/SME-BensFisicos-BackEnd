@@ -98,10 +98,15 @@ class CustomUserModelAdmin(UserAdmin):
             groups = cleaned_data.get("groups", [])
             ua = cleaned_data.get("unidade_administrativa")
 
-            from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+            from usuario.constants import (
+                GRUPO_OPERADOR_INVENTARIO,
+                GRUPO_GESTOR_PATRIMONIO,
+            )
 
             is_operador = any(g.name == GRUPO_OPERADOR_INVENTARIO for g in groups)
-            if is_operador and not ua:
+            is_gestor = any(g.name == GRUPO_GESTOR_PATRIMONIO for g in groups)
+
+            if is_operador and not is_gestor and not ua:
                 from django.core.exceptions import ValidationError
 
                 raise ValidationError(
