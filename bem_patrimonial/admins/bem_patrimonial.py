@@ -48,9 +48,13 @@ class HistoricoGeralInline(GenericTabularInline):
     )
     fields = ("campo", "valor_antigo", "valor_novo", "alterado_por", "alterado_em")
     ordering = ("-alterado_em",)
+    template = "admin/bem_patrimonial/edit_inline/tabular-historico.html"
 
     def has_view_or_change_permission(self, request, obj=None):
         return True
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class BemPatrimonialResource(resources.ModelResource):
