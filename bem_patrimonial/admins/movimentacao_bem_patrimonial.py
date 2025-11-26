@@ -334,6 +334,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "status",
         "numero_cimbpm",
         "get_documento_cimbpm_link",
+        "unidade_administrativa_origem",
+        "unidade_administrativa_destino",
     )
 
     list_filter = ("status",)
@@ -391,31 +393,30 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         form.request = request
 
         if obj is None:
-            uas = uas_do_usuario(request.user)
-            uas = uas.filter(status=UnidadeAdministrativa.ATIVA)
-
-            if uas.count() == 1:
-                ua = uas.first()
-                if (
-                    hasattr(form, "base_fields")
-                    and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields
-                ):
+            ua_user = getattr(request.user, "unidade_administrativa", None)
+            if ua_user and ua_user.is_ativa and hasattr(form, "base_fields"):
+                if UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields:
                     form.base_fields[
                         UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                    ].initial = ua.pk
+                    ].initial = ua_user.pk
 
         return form
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_operador_inventario or (
-            request.user.is_gestor_patrimonio and request.user.unidade_administrativa
-        ):
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
+
+        if user.is_gestor_patrimonio and not ua_user:
+            return qs
+
+        if ua_user:
             return qs.filter(
-                Q(unidade_administrativa_origem=request.user.unidade_administrativa)
-                | Q(unidade_administrativa_destino=request.user.unidade_administrativa)
+                Q(unidade_administrativa_origem=ua_user)
+                | Q(unidade_administrativa_destino=ua_user)
             )
-        return qs
+
+        return qs.none()
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:
@@ -460,4 +461,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         if obj is not None:
             for formset in inline_formsets:
                 formset.can_add = False
+                formset.can_delete = False
+                for form in formset.forms:
+                    for field in form.fields.values():
+                        field.disabled = True
         return inline_formsets
