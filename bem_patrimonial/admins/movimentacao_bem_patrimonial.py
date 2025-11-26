@@ -401,11 +401,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         user = request.user
         ua_user = getattr(user, "unidade_administrativa", None)
 
-        if (
-            user.is_gestor_patrimonio
-            and not user.is_operador_inventario
-            and not ua_user
-        ):
+        if user.is_gestor_patrimonio and not ua_user:
             return qs
 
         if ua_user:
@@ -414,10 +410,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 | Q(unidade_administrativa_destino=ua_user)
             )
 
-        if user.is_operador_inventario:
-            return qs.none()
-
-        return qs
+        return qs.none()
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:
