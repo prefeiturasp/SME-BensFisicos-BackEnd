@@ -280,15 +280,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         user = request.user
         ua_user = getattr(user, "unidade_administrativa", None)
 
-        if (
-            user.is_gestor_patrimonio
-            and not user.is_operador_inventario
-            and not ua_user
-        ):
+        if user.is_gestor_patrimonio and not ua_user:
             pass
         elif ua_user:
             qs = qs.filter(unidade_administrativa=ua_user)
-        elif user.is_operador_inventario:
+        else:
             qs = qs.none()
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
@@ -309,15 +305,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         user = request.user
         ua_user = getattr(user, "unidade_administrativa", None)
 
-        if (
-            user.is_gestor_patrimonio
-            and not user.is_operador_inventario
-            and not ua_user
-        ):
+        if user.is_gestor_patrimonio and not ua_user:
             pass
         elif ua_user:
             queryset = queryset.filter(unidade_administrativa=ua_user)
-        elif user.is_operador_inventario:
+        else:
             queryset = queryset.none()
 
         return queryset
