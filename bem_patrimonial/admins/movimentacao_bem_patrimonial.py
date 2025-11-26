@@ -352,7 +352,13 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             "js/bem_patrimonial/prevenir_duplo_submit.js",
             "admin/movimentacao_filtra_bens_por_ua.js",
         )
-        css = {"all": ("css/prevenir_duplo_submit.css", "css/custom_inline.css")}
+        css = {
+            "all": (
+                "css/prevenir_duplo_submit.css",
+                "css/custom_inline.css",
+                "css/hide_crud_icons.css",
+            )
+        }
 
     def get_fields(self, request, obj=None):
         base_fields = [
