@@ -18,12 +18,16 @@ AGUARDANDO_APROVACAO = "aguardando_aprovacao"
 APROVADO = "aprovado"
 NAO_APROVADO = "nao_aprovado"
 BLOQUEADO = "bloqueado"
+BAIXA_FISICA_AGUARDANDO_APROVACAO = "baixa_fisica_aguardando_aprovacao"
+BAIXA_FISICA = "baixa_fisica"
 
 STATUS = (
     (AGUARDANDO_APROVACAO, "Aguardando aprovação"),
     (APROVADO, "Aprovado"),
     (NAO_APROVADO, "Não aprovado"),
     (BLOQUEADO, "Bloqueado para movimentação"),
+    (BAIXA_FISICA_AGUARDANDO_APROVACAO, "Baixa Física - Aguardando aprovação"),
+    (BAIXA_FISICA, "Baixa Física"),
 )
 # status movimentacao
 
@@ -31,8 +35,17 @@ ENVIADA = "enviada"
 ACEITA = "aceita"
 REJEITADA = "rejeitada"
 CANCELADA = "cancelada"
+AGUARDANDO_ENVIO = "aguardando_envio"
 
 STATUS_MOVIMENTACAO = (
+    (ENVIADA, "Enviada"),
+    (ACEITA, "Aceita"),
+    (REJEITADA, "Rejeitada"),
+    (CANCELADA, "Cancelada"),
+)
+
+STATUS_BAIXA_FISICA = (
+    (AGUARDANDO_ENVIO, "Aguardando envio"),
     (ENVIADA, "Enviada"),
     (ACEITA, "Aceita"),
     (REJEITADA, "Rejeitada"),

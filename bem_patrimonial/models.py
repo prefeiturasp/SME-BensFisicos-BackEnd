@@ -4,6 +4,9 @@ from django.dispatch import receiver
 from django.db.models.signals import post_save
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db import transaction
+from django.utils import timezone
+
 from django.contrib.contenttypes.models import ContentType
 from django.core.files.base import ContentFile
 from dados_comuns.models import HistoricoGeral
@@ -59,7 +62,7 @@ class BemPatrimonial(models.Model):
     foto = models.ImageField("Foto", upload_to="bens/", null=True, blank=True)
     status = models.CharField(
         "Status",
-        max_length=30,
+        max_length=50,
         choices=constants.STATUS,
         default=constants.AGUARDANDO_APROVACAO,
         null=False,
@@ -218,7 +221,7 @@ class StatusBemPatrimonial(models.Model):
     status = models.CharField(
         "Status",
         choices=constants.STATUS,
-        max_length=30,
+        max_length=50,
         default=constants.AGUARDANDO_APROVACAO,
         null=False,
         blank=False,
@@ -565,3 +568,175 @@ def gerar_numero_cimbpm_signal(sender, instance, created, **kwargs):
         if not instance.numero_cimbpm:
             instance.numero_cimbpm = gerar_numero_cimbpm(instance)
             instance.save(update_fields=["numero_cimbpm"])
+
+
+class BaixaFisicaBemPatrimonial(models.Model):
+    """
+    Registro de Baixa Física de bens em uma Unidade Administrativa.
+    Similar à MovimentacaoBemPatrimonial, mas muda só status do bem.
+    """
+
+    unidade_administrativa_origem = models.ForeignKey(
+        UnidadeAdministrativa,
+        related_name="baixas_fisicas_origem",
+        verbose_name="Unidade administrativa",
+        on_delete=models.CASCADE,
+        null=False,
+        blank=False,
+    )
+
+    numero_processo_baixa = models.CharField(
+        "Número do processo de Baixa Física",
+        max_length=64,
+        null=False,
+        blank=False,
+    )
+
+    status = models.CharField(
+        "Status",
+        choices=constants.STATUS_BAIXA_FISICA,
+        max_length=30,
+        default=constants.AGUARDANDO_ENVIO,
+        null=False,
+        blank=False,
+    )
+
+    criado_por = models.ForeignKey(
+        Usuario,
+        verbose_name="Usuário que realizou a baixa",
+        related_name="baixas_fisicas_criadas",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+    )
+
+    data_criacao = models.DateTimeField(
+        "Data/hora da solicitação de baixa",
+        auto_now_add=True,
+    )
+
+    aprovado_por = models.ForeignKey(
+        Usuario,
+        verbose_name="Gestor que aprovou a baixa",
+        related_name="baixas_fisicas_aprovadas",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+
+    data_aprovacao = models.DateTimeField(
+        "Data/hora da aprovação",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        verbose_name = "Baixa Física de Bem Patrimonial"
+        verbose_name_plural = "Baixas Físicas de Bens Patrimoniais"
+
+    def __str__(self):
+        return f"Baixa Física #{self.pk} - UA: {self.unidade_administrativa_origem}"
+
+    def clean(self):
+        super().clean()
+
+        if not self.numero_processo_baixa:
+            raise ValidationError(
+                {
+                    "numero_processo_baixa": "Informe o número do processo de Baixa Física."
+                }
+            )
+        if not self.pk:
+            return
+        itens = list(self.itens.select_related("bem", "bem__unidade_administrativa"))
+
+        if self.pk and not itens:
+            raise ValidationError("Não é possível manter uma Baixa Física sem itens.")
+
+        for item in itens:
+            bem = item.bem
+
+            if bem.unidade_administrativa_id != self.unidade_administrativa_origem_id:
+                raise ValidationError(
+                    f"O bem '{bem}' não pertence à Unidade Administrativa selecionada."
+                )
+            if bem.status == constants.BAIXA_FISICA:
+                raise ValidationError(f"O bem '{bem}' já foi baixado.")
+
+            existe_em_outra_baixa = (
+                BaixaFisicaBensItem.objects.filter(
+                    bem=bem,
+                    baixa__status__in=[
+                        constants.AGUARDANDO_ENVIO,
+                        constants.ENVIADA,
+                        constants.ACEITA,
+                    ],
+                )
+                .exclude(baixa=self)
+                .exists()
+            )
+            if existe_em_outra_baixa:
+                raise ValidationError(
+                    f"O bem '{bem}' já está em processo de Baixa Física em outro pedido."
+                )
+
+    @transaction.atomic
+    def enviar_solicitacao(self):
+        """
+        Confirma a baixa (coloca como ENVIADA) e
+        marca os bens como 'Baixa Física - Aguardando aprovação'.
+        """
+        if not self.itens.exists():
+            raise ValidationError("Não é possível enviar Baixa Física sem itens.")
+
+        self.status = constants.ENVIADA
+        self.save(update_fields=["status"])
+
+        for item in self.itens.select_related("bem"):
+            bem = item.bem
+
+            bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+            bem.save(update_fields=["status"])
+
+    @transaction.atomic
+    def aprovar(self, usuario_aprovador):
+        """
+        Aprova a Baixa Física:
+        - status da baixa => ACEITA
+        - status do bem => BAIXA_FISICA
+        - limpa 'numero_processo' (incorporação)
+        """
+        if self.status != constants.ENVIADA:
+            raise ValidationError("Só é possível aprovar baixas com status 'Enviada'.")
+
+        self.status = constants.ACEITA
+        self.aprovado_por = usuario_aprovador
+        self.data_aprovacao = timezone.now()
+        self.save(update_fields=["status", "aprovado_por", "data_aprovacao"])
+
+        for item in self.itens.select_related("bem"):
+            bem = item.bem
+            bem.status = constants.BAIXA_FISICA
+            bem.numero_processo = None
+            bem.save(update_fields=["status", "numero_processo"])
+
+
+class BaixaFisicaBensItem(models.Model):
+    bem = models.ForeignKey(
+        BemPatrimonial,
+        on_delete=models.CASCADE,
+        related_name="baixas_fisicas_itens",
+    )
+    baixa = models.ForeignKey(
+        BaixaFisicaBemPatrimonial,
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+
+    class Meta:
+        verbose_name = "item de baixa física"
+        verbose_name_plural = "itens de baixa física"
+        unique_together = ("bem", "baixa")
+
+    def __str__(self):
+        return f"{self.bem} (Baixa #{self.baixa_id})"
