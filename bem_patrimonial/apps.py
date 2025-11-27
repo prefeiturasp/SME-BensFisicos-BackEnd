@@ -2,6 +2,11 @@ from django.apps import AppConfig
 
 
 class BemPatrimonialConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'bem_patrimonial'
-    verbose_name = 'Bem Patrimonial'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "bem_patrimonial"
+    verbose_name = "Bem Patrimonial"
+    ordering = [
+        "bempatrimonial",
+        "movimentacaobempatrimonial",
+        "baixafisicabempatrimonial",
+    ]
