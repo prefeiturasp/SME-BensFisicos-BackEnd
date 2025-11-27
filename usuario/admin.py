@@ -77,6 +77,9 @@ class CustomUserModelAdmin(UserAdmin):
         ("Datas importantes", {"fields": ("last_login", "date_joined")}),
     )
 
+    class Media:
+        css = {"all": ("css/hide_crud_icons.css",)}
+
     def get_readonly_fields(self, request, obj=None):
         if obj:
             return self.readonly_fields + ("username",)
@@ -88,6 +91,37 @@ class CustomUserModelAdmin(UserAdmin):
                 status=UnidadeAdministrativa.ATIVA
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        original_clean = form.clean
+
+        def custom_clean(form_self):
+            cleaned_data = original_clean(form_self)
+            groups = cleaned_data.get("groups", [])
+            ua = cleaned_data.get("unidade_administrativa")
+
+            from usuario.constants import (
+                GRUPO_OPERADOR_INVENTARIO,
+                GRUPO_GESTOR_PATRIMONIO,
+            )
+
+            is_operador = any(g.name == GRUPO_OPERADOR_INVENTARIO for g in groups)
+            is_gestor = any(g.name == GRUPO_GESTOR_PATRIMONIO for g in groups)
+
+            if is_operador and not is_gestor and not ua:
+                from django.core.exceptions import ValidationError
+
+                raise ValidationError(
+                    {
+                        "unidade_administrativa": "Operador de Inventário deve ter uma Unidade Administrativa vinculada."
+                    }
+                )
+
+            return cleaned_data
+
+        form.clean = custom_clean
+        return form
 
     @admin.display(description="Grupo")
     def get_grupo(self, obj):

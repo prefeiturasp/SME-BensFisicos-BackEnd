@@ -61,9 +61,7 @@ class BemPatrimonialAdminForm(forms.ModelForm):
                 self.fields["localizacao"].label = "Localização"
 
         if "status" in self.fields:
-            self.fields["status"].disabled = True
-            if not (self.instance and self.instance.pk):
-                self.initial.setdefault("status", constants.AGUARDANDO_APROVACAO)
+            self.fields.pop("status")
 
         if self.instance and self.instance.pk:
             self.fields["cadastro_modo"].widget = forms.HiddenInput()

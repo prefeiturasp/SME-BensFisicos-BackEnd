@@ -1,0 +1,50 @@
+{% load static %}
+<div class="inline-group" id="{{ inline_admin_formset.formset.prefix }}-group">
+  <div class="tabular inline-related">
+    <fieldset class="module">
+      <h2 style="cursor: pointer; user-select: none;" onclick="var c = this.nextElementSibling, i = this.querySelector('.toggle-icon'); if (c.style.display === 'none') { c.style.display = 'block'; i.textContent = '▼'; } else { c.style.display = 'none'; i.textContent = '▶'; }">
+        <span class="toggle-icon">▶</span>
+        {{ inline_admin_formset.opts.verbose_name_plural|capfirst }}
+        ({{ inline_admin_formset.formset.total_form_count }})
+      </h2>
+      
+      <div style="display: none;">
+        {% if inline_admin_formset.formset.non_form_errors %}
+          {{ inline_admin_formset.formset.non_form_errors }}
+        {% endif %}
+        {{ inline_admin_formset.formset.management_form }}
+
+        <table>
+          <thead>
+            <tr>
+              {% for field in inline_admin_formset.fields %}
+                {% if not field.widget.is_hidden %}
+                  <th{% if field.required %} class="required"{% endif %}>{{ field.label|capfirst }}</th>
+                {% endif %}
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for inline_admin_form in inline_admin_formset %}
+              <tr class="{% cycle "row1" "row2" %}">
+                {% for fieldset in inline_admin_form %}
+                  {% for line in fieldset %}
+                    {% for field in line %}
+                      <td{% if field.field.name %} class="field-{{ field.field.name }}"{% endif %}>
+                        {% if field.is_readonly %}
+                          <p>{{ field.contents }}</p>
+                        {% else %}
+                          {{ field.field }}
+                        {% endif %}
+                      </td>
+                    {% endfor %}
+                  {% endfor %}
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </fieldset>
+  </div>
+</div>
