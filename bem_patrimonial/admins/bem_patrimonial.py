@@ -10,6 +10,7 @@ from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
     simular_extracao_numero,
 )
+from bem_patrimonial.admins.filters.bem_patrimonial_filters import SemNumeroFilter
 from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -197,17 +198,24 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "modelo",
         "localizacao",
         "numero_processo",
+        "unidade_administrativa__codigo",
+        "unidade_administrativa__nome", 
+    )
+
+    search_help_text = (
+        "Pesquise por número patrimonial, nome, descrição, marca, modelo, "
+        "localização, número de processo, código ou nome da Unidade Administrativa."
     )
     list_display_links = (
         "numero_patrimonial",
         "nome",
     )
-    search_help_text = "Pesquise por número patrimonial, nome, descrição, marca, modelo, localização ou número de processo."
+    
     resource_class = BemPatrimonialResource
 
     list_filter = (
         "status",
-        "sem_numeracao",
+        SemNumeroFilter,
         "numero_formato_antigo",
         ("criado_em", DateRangeFilter),
     )
