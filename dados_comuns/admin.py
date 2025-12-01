@@ -1,8 +1,11 @@
 from django.contrib import admin
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from dados_comuns.libs.unidade_administrativa import uas_do_usuario
+from import_export.admin import ImportExportModelAdmin
+from import_export.formats.base_formats import CSV, XLS, XLSX
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.resources import UnidadeAdministrativaResource
+from dados_comuns.formats import UnidadeAdministrativaPDFFormat
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
@@ -21,7 +24,15 @@ class StatusFilter(admin.SimpleListFilter):
 
 
 @admin.register(UnidadeAdministrativa)
-class UnidadeAdministrativaAdmin(admin.ModelAdmin):
+class UnidadeAdministrativaAdmin(ImportExportModelAdmin):
+    resource_class = UnidadeAdministrativaResource
+
+    def has_import_permission(self, request):
+        return False
+
+    def has_export_permission(self, request):
+        return request.user.is_gestor_patrimonio
+
     list_display = (
         "codigo",
         "sigla",
@@ -106,3 +117,13 @@ class UnidadeAdministrativaAdmin(admin.ModelAdmin):
                 request,
                 f"Unidade '{obj.nome}' inativada com sucesso. O histórico foi preservado.",
             )
+
+    def get_export_formats(self):
+        return [CSV, XLSX, XLS, UnidadeAdministrativaPDFFormat]
+
+    def get_export_data(self, file_format, queryset, *args, **kwargs):
+        if isinstance(file_format, UnidadeAdministrativaPDFFormat):
+            request = kwargs.get("request")
+            file_format._export_request = request
+            file_format._export_queryset = queryset
+        return super().get_export_data(file_format, queryset, *args, **kwargs)
