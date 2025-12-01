@@ -107,6 +107,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
 
     class Media:
         js = ("admin/baixa_fisica_autocomplete.js",)
+        css = {"all": ("css/hide_crud_icons.css", "css/baixa_fisica_inline.css")}
 
     def get_readonly_fields(self, request, obj=None):
         if obj:

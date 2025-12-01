@@ -1,0 +1,47 @@
+/* Tabela da Baixa Física ocupa 100% */
+#itens-group .tabular table {
+    width: 100% !important;
+    table-layout: fixed; /* faz respeitar as larguras definidas nas colunas */
+}
+
+/* Coluna técnica (original) fica mínima */
+#itens-group th.original,
+#itens-group td.original {
+    width: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Coluna BEM ocupa todo o resto */
+#itens-group th.column-bem,
+#itens-group td.field-bem {
+    width: 100% !important;
+}
+
+/* Wrapper + select2 em 100% dentro da célula */
+#itens-group td.field-bem .related-widget-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+#itens-group td.field-bem .select2-container,
+#itens-group td.field-bem .select2-selection,
+#itens-group td.field-bem .select2-selection--single {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Deixando o “Remover” bonitinho do lado direito, sem quebrar */
+#itens-group td.field-bem {
+    display: flex;
+    align-items: center;
+}
+
+#itens-group td.field-bem .related-widget-wrapper {
+    flex: 1 1 auto;
+}
+
+#itens-group td.field-bem .inline-deletelink {
+    margin-left: 10px;
+    white-space: nowrap;
+}
