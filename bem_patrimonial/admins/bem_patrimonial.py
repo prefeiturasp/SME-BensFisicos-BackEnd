@@ -725,9 +725,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 if not ua_origem:
                     return qs.none(), use_distinct
                 qs = (
-                    qs.exclude(status=constants.BAIXA_FISICA_AGUARDANDO_APROVACAO)
-                    .exclude(status=constants.AGUARDANDO_APROVACAO)
-                    .exclude(status=constants.BLOQUEADO)
+                    qs.filter(status=constants.APROVADO)
                     .filter(unidade_administrativa_id=ua_origem)
                 )
 
