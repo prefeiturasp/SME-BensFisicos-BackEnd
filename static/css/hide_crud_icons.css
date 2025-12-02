@@ -1,0 +1,11 @@
+/**
+ * CSS para ocultar ícones de CRUD (editar, adicionar, excluir, visualizar)
+ * nas telas de detalhe do Django Admin
+ */
+ 
+.related-widget-wrapper .add-related,
+.related-widget-wrapper .change-related,
+.related-widget-wrapper .delete-related,
+.related-widget-wrapper .view-related {
+    display: none !important;
+}

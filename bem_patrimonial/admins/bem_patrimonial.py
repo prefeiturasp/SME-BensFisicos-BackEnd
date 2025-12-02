@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, models
+from django.db import IntegrityError, models, transaction
 from django.db.models import OuterRef, Subquery
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -10,6 +10,7 @@ from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
     simular_extracao_numero,
 )
+from bem_patrimonial.admins.filters.bem_patrimonial_filters import SemNumeroFilter
 from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -27,6 +28,108 @@ from django.contrib.contenttypes.admin import GenericTabularInline
 from django.db.models.functions import Cast
 from bem_patrimonial import constants
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+
+
+@admin.action(description="Aprovar bens selecionados")
+def aprovar_bens(_, request, queryset):
+    if not request.user.is_gestor_patrimonio:
+        messages.error(
+            request,
+            "Você não tem permissão para executar esta ação. Restrito ao grupo GESTOR_PATRIMONIO.",
+        )
+        return
+
+    bens_aguardando = queryset.filter(status=constants.AGUARDANDO_APROVACAO)
+    count_aguardando = bens_aguardando.count()
+    count_outros = queryset.exclude(status=constants.AGUARDANDO_APROVACAO).count()
+
+    if count_aguardando == 0:
+        messages.warning(
+            request,
+            "Nenhum bem selecionado está com status 'Aguardando aprovação'.",
+        )
+        return
+
+    try:
+        with transaction.atomic():
+            for bem in bens_aguardando:
+                bem.status = constants.APROVADO
+                bem.save(update_fields=["status", "atualizado_em"])
+
+                StatusBemPatrimonial.objects.create(
+                    bem_patrimonial=bem,
+                    status=constants.APROVADO,
+                    atualizado_por=request.user,
+                    observacao="Aprovado em lote pelo gestor",
+                )
+
+        messages.success(
+            request,
+            f"{count_aguardando} bem(ns) aprovado(s) com sucesso.",
+        )
+
+        if count_outros > 0:
+            messages.warning(
+                request,
+                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+            )
+
+    except Exception as e:
+        messages.error(
+            request,
+            f"Erro ao aprovar bens: {str(e)}",
+        )
+
+
+@admin.action(description="Reprovar bens selecionados")
+def reprovar_bens(_, request, queryset):
+    if not request.user.is_gestor_patrimonio:
+        messages.error(
+            request,
+            "Você não tem permissão para executar esta ação. Restrito ao grupo GESTOR_PATRIMONIO.",
+        )
+        return
+
+    bens_aguardando = queryset.filter(status=constants.AGUARDANDO_APROVACAO)
+    count_aguardando = bens_aguardando.count()
+    count_outros = queryset.exclude(status=constants.AGUARDANDO_APROVACAO).count()
+
+    if count_aguardando == 0:
+        messages.warning(
+            request,
+            "Nenhum bem selecionado está com status 'Aguardando aprovação'.",
+        )
+        return
+
+    try:
+        with transaction.atomic():
+            for bem in bens_aguardando:
+                bem.status = constants.NAO_APROVADO
+                bem.save(update_fields=["status", "atualizado_em"])
+
+                StatusBemPatrimonial.objects.create(
+                    bem_patrimonial=bem,
+                    status=constants.NAO_APROVADO,
+                    atualizado_por=request.user,
+                    observacao="Reprovado em lote pelo gestor",
+                )
+
+        messages.success(
+            request,
+            f"{count_aguardando} bem(ns) reprovado(s) com sucesso.",
+        )
+
+        if count_outros > 0:
+            messages.warning(
+                request,
+                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+            )
+
+    except Exception as e:
+        messages.error(
+            request,
+            f"Erro ao reprovar bens: {str(e)}",
+        )
 
 
 class StatusBemPatrimonialInline(admin.TabularInline):
@@ -48,9 +151,13 @@ class HistoricoGeralInline(GenericTabularInline):
     )
     fields = ("campo", "valor_antigo", "valor_novo", "alterado_por", "alterado_em")
     ordering = ("-alterado_em",)
+    template = "admin/bem_patrimonial/edit_inline/tabular-historico.html"
 
     def has_view_or_change_permission(self, request, obj=None):
         return True
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class BemPatrimonialResource(resources.ModelResource):
@@ -91,17 +198,24 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "modelo",
         "localizacao",
         "numero_processo",
+        "unidade_administrativa__codigo",
+        "unidade_administrativa__nome", 
+    )
+
+    search_help_text = (
+        "Pesquise por número patrimonial, nome, descrição, marca, modelo, "
+        "localização, número de processo, código ou nome da Unidade Administrativa."
     )
     list_display_links = (
         "numero_patrimonial",
         "nome",
     )
-    search_help_text = "Pesquise por número patrimonial, nome, descrição, marca, modelo, localização ou número de processo."
+    
     resource_class = BemPatrimonialResource
 
     list_filter = (
         "status",
-        "sem_numeracao",
+        SemNumeroFilter,
         "numero_formato_antigo",
         ("criado_em", DateRangeFilter),
     )
@@ -111,31 +225,32 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "criado_por",
         "criado_em",
     )
-    actions = [simular_extracao_numero, aplicar_extracao_numero]
+    actions = [
+        simular_extracao_numero,
+        aplicar_extracao_numero,
+        aprovar_bens,
+        reprovar_bens,
+    ]
 
     class Media:
         js = ("admin/bem_patrimonial.js",)
-        css = {"all": ("admin/bem_patrimonial.css",)}
+        css = {"all": ("admin/bem_patrimonial.css", "css/hide_crud_icons.css")}
 
     def get_actions(self, request):
         actions = super().get_actions(request)
         if not request.user.is_gestor_patrimonio:
             actions.pop("aplicar_extracao_numero", None)
+            actions.pop("aprovar_bens", None)
+            actions.pop("reprovar_bens", None)
         return actions
 
     def get_list_display(self, request):
-        if getattr(request.user, "is_operador_inventario", False):
-            return (
-                "numero_patrimonial",
-                "nome",
-                "status",
-            )
-        return (
-            "numero_patrimonial",
-            "nome",
-            "unidade_administrativa",
-            "status",
-        )
+        if (
+            request.user.is_operador_inventario
+            and not request.user.is_gestor_patrimonio
+        ):
+            return ("numero_patrimonial", "nome", "status")
+        return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     def get_fields(self, request, obj=None):
         base = [
@@ -156,7 +271,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     autocomplete_fields = ("unidade_administrativa",)
     ordering = ("-criado_em",)
 
-    inlines = [StatusBemPatrimonialInline, HistoricoGeralInline]
+    inlines = [HistoricoGeralInline]
 
     def get_form(self, request, obj=None, **kwargs):
         BaseForm = super().get_form(request, obj, **kwargs)
@@ -176,52 +291,53 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
                     if "unidade_administrativa" in self_inner.fields:
                         fld = self_inner.fields["unidade_administrativa"]
-                        fld.required = True  
+                        fld.required = True
+                        ua_user = getattr(request.user, "unidade_administrativa", None)
 
-                        qs = UnidadeAdministrativa.objects.filter(
-                            status=UnidadeAdministrativa.ATIVA
-                        )
-
-                        if request.user.is_operador_inventario and not request.user.is_gestor_patrimonio:
-                            ua = getattr(request.user, "unidade_administrativa", None)
-                            qs = qs.filter(pk=getattr(ua, "pk", None))
-                            fld.initial = ua
-                            fld.disabled = True  
-                        fld.queryset = qs
+                        if ua_user:
+                            fld.queryset = UnidadeAdministrativa.objects.filter(
+                                pk=ua_user.pk, status=UnidadeAdministrativa.ATIVA
+                            )
+                            fld.initial = ua_user
+                            fld.disabled = True
+                        else:
+                            fld.queryset = UnidadeAdministrativa.objects.filter(
+                                status=UnidadeAdministrativa.ATIVA
+                            )
 
                 def clean(self_inner):
                     cleaned_data = original_clean(self_inner)
                     ua_user = getattr(request.user, "unidade_administrativa", None)
+                    ua_form = cleaned_data.get("unidade_administrativa")
+
                     if (
-                        request.user.is_operador_inventario
+                        not ua_form
+                        and ua_user
+                        and request.user.is_operador_inventario
                         and not request.user.is_gestor_patrimonio
                     ):
-                        if not cleaned_data.get("unidade_administrativa") and ua_user:
-                            cleaned_data["unidade_administrativa"] = ua_user
-                    
-                    ua_form = cleaned_data.get("unidade_administrativa")
+                        cleaned_data["unidade_administrativa"] = ua_user
+                        ua_form = ua_user
+
                     if not ua_form:
                         raise ValidationError(
-                            {"unidade_administrativa": "Selecione a Unidade Administrativa."}
+                            {
+                                "unidade_administrativa": "Selecione a Unidade Administrativa."
+                            }
                         )
-                        
+
                     if ua_user and not ua_user.is_ativa:
                         raise ValidationError(
                             f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
                             f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
                         )
 
-                    if (
-                        request.user.is_operador_inventario
-                        and not request.user.is_gestor_patrimonio
-                    ):
-                        ua_form = cleaned_data.get("unidade_administrativa")
-                        if ua_form != ua_user:
-                            raise ValidationError(
-                                {
-                                    "unidade_administrativa": "Operador só pode criar bens na sua Unidade Administrativa."
-                                }
-                            )
+                    if ua_user and ua_form != ua_user:
+                        raise ValidationError(
+                            {
+                                "unidade_administrativa": "Você só pode criar bens na Unidade Administrativa vinculada ao seu usuário."
+                            }
+                        )
 
                     return cleaned_data
 
@@ -276,13 +392,21 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             raise
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        qs = qs.select_related("unidade_administrativa", "criado_por")
+        qs = (
+            super()
+            .get_queryset(request)
+            .select_related("unidade_administrativa", "criado_por")
+        )
 
-        if getattr(request.user, "is_operador_inventario", False) and not getattr(
-            request.user, "is_gestor_patrimonio", True
-        ):
-            qs = qs.filter(unidade_administrativa=request.user.unidade_administrativa)
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
+
+        if user.is_gestor_patrimonio and not ua_user:
+            pass
+        elif ua_user:
+            qs = qs.filter(unidade_administrativa=ua_user)
+        else:
+            qs = qs.none()
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
@@ -299,13 +423,15 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_export_queryset(self, request):
         queryset = super().get_export_queryset(request)
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
 
-        if getattr(request.user, "is_operador_inventario", False) and not getattr(
-            request.user, "is_gestor_patrimonio", True
-        ):
-            queryset = queryset.filter(
-                unidade_administrativa=request.user.unidade_administrativa
-            )
+        if user.is_gestor_patrimonio and not ua_user:
+            pass
+        elif ua_user:
+            queryset = queryset.filter(unidade_administrativa=ua_user)
+        else:
+            queryset = queryset.none()
 
         return queryset
 
@@ -581,33 +707,31 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         except Exception:
             pass
         return "—"
-    
+
     def get_search_results(self, request, queryset, search_term):
         qs, use_distinct = super().get_search_results(request, queryset, search_term)
 
-        # Só aplica esse filtro quando for autocomplete
         if request.path.endswith("/autocomplete/"):
             app_label = request.GET.get("app_label")
             model_name = request.GET.get("model_name")
             field_name = request.GET.get("field_name")
 
-            # Autocomplete vindo do inline MovimentacaoBensItem.bem
             if (
                 app_label == "bem_patrimonial"
-                and model_name == "movimentacaobensitem"
+                and model_name in ("movimentacaobensitem", "baixafisicabensitem")
                 and field_name == "bem"
             ):
                 ua_origem = request.GET.get("ua_origem")
-                if ua_origem:
-                    qs = qs.filter(unidade_administrativa_id=ua_origem)
+                if not ua_origem:
+                    return qs.none(), use_distinct
+                qs = (
+                    qs.filter(status=constants.APROVADO)
+                    .filter(unidade_administrativa_id=ua_origem)
+                )
 
                 exclude_bens = request.GET.get("exclude_bens")
                 if exclude_bens:
-                    ids = [
-                        int(pk)
-                        for pk in exclude_bens.split(",")
-                        if pk.isdigit()
-                    ]
+                    ids = [int(pk) for pk in exclude_bens.split(",") if pk.isdigit()]
                     if ids:
                         qs = qs.exclude(pk__in=ids)
 

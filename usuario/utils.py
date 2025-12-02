@@ -31,6 +31,8 @@ def setup_grupos_e_permissoes():
         "_statusbempatrimonial": ["add", "change", "delete", "view"],
         "_usuario": ["add", "change", "view"],
         "_unidadeadministrativa": ["add", "change", "delete", "view"],
+        "_baixafisicabempatrimonial": ["view", "add", "change", "delete"],
+        "_baixafisicabensitem": ["view", "add", "change", "delete"],
         # Módulo de Suporte desabilitado temporariamente
         # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
         # '_configagendasuporte': ['view', 'change'],
@@ -47,6 +49,8 @@ def setup_grupos_e_permissoes():
         "_movimentacaobensitem": ["view", "add"],
         "_statusbempatrimonial": ["view"],
         "_unidadeadministrativa": ["view"],
+        "_baixafisicabempatrimonial": ["view", "add", "change"],
+        "_baixafisicabensitem": ["view", "add"],
         # Módulo de Suporte desabilitado temporariamente
         # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
     }

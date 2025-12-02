@@ -1,8 +1,11 @@
 from django.contrib import admin
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from dados_comuns.libs.unidade_administrativa import uas_do_usuario
+from import_export.admin import ImportExportModelAdmin
+from import_export.formats.base_formats import CSV, XLS, XLSX
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.resources import UnidadeAdministrativaResource
+from dados_comuns.formats import UnidadeAdministrativaPDFFormat
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
@@ -21,7 +24,15 @@ class StatusFilter(admin.SimpleListFilter):
 
 
 @admin.register(UnidadeAdministrativa)
-class UnidadeAdministrativaAdmin(admin.ModelAdmin):
+class UnidadeAdministrativaAdmin(ImportExportModelAdmin):
+    resource_class = UnidadeAdministrativaResource
+
+    def has_import_permission(self, request):
+        return False
+
+    def has_export_permission(self, request):
+        return request.user.is_gestor_patrimonio
+
     list_display = (
         "codigo",
         "sigla",
@@ -50,23 +61,19 @@ class UnidadeAdministrativaAdmin(admin.ModelAdmin):
         return super().get_queryset(request)
 
     def get_search_results(self, request, queryset, search_term):
-        """
-        Filtra o autocomplete para exibir apenas as UAs associadas ao usuário Operador.
-        """
+        # Autocomplete: gestor sem UA vê todas ativas, com UA só vê a sua
         queryset, use_distinct = super().get_search_results(
             request, queryset, search_term
         )
 
         field_name = request.GET.get("field_name")
+        user = request.user
+        ua_user = getattr(user, "unidade_administrativa", None)
 
         if field_name:
-            if field_name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE and (
-                request.user.is_operador_inventario
-                or (request.user.is_gestor_patrimonio and uas_do_usuario(request.user))
-            ):
-                uas_user = uas_do_usuario(request.user)
+            if field_name == UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE and ua_user:
                 queryset = queryset.filter(
-                    id__in=uas_user.values_list("id", flat=True),
+                    id=ua_user.id,
                     status=UnidadeAdministrativa.ATIVA,
                 )
             else:
@@ -110,3 +117,13 @@ class UnidadeAdministrativaAdmin(admin.ModelAdmin):
                 request,
                 f"Unidade '{obj.nome}' inativada com sucesso. O histórico foi preservado.",
             )
+
+    def get_export_formats(self):
+        return [CSV, XLSX, XLS, UnidadeAdministrativaPDFFormat]
+
+    def get_export_data(self, file_format, queryset, *args, **kwargs):
+        if isinstance(file_format, UnidadeAdministrativaPDFFormat):
+            request = kwargs.get("request")
+            file_format._export_request = request
+            file_format._export_queryset = queryset
+        return super().get_export_data(file_format, queryset, *args, **kwargs)
