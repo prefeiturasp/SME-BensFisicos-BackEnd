@@ -107,7 +107,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
 
     class Media:
         js = ("admin/baixa_fisica_autocomplete.js",)
-        css = {"all": ("css/hide_crud_icons.css", "css/baixa_fisica_inline.css")}
+        css = {"all": ("css/hide_crud_icons.css", "css/baixa_fisica_inline.css", "css/custom_baixa_fisica.css")}
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
@@ -197,6 +197,10 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
 
         return self.has_view_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+
+        return False
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
