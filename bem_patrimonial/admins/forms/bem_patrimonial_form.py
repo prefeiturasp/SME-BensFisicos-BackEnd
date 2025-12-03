@@ -42,18 +42,19 @@ class BemPatrimonialAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        vu_widget = getattr(self.Meta, "widgets", {}).get(
-            "valor_unitario", forms.TextInput(attrs={"placeholder": "0,00"})
-        )
-        self.fields["valor_unitario"] = forms.CharField(
-            required=True,
-            label=(
-                self.fields.get("valor_unitario", None).label
-                if "valor_unitario" in self.fields
-                else "Valor unitário"
-            ),
-            widget=vu_widget,
-        )
+        if "valor_unitario" in self.fields:
+            vu_widget = getattr(self.Meta, "widgets", {}).get(
+                "valor_unitario", forms.TextInput(attrs={"placeholder": "0,00"})
+            )
+            self.fields["valor_unitario"] = forms.CharField(
+                required=True,
+                label=(
+                    self.fields.get("valor_unitario", None).label
+                    if "valor_unitario" in self.fields
+                    else "Valor unitário"
+                ),
+                widget=vu_widget,
+            )
 
         if "localizacao" in self.fields:
             self.fields["localizacao"].required = True
@@ -88,6 +89,9 @@ class BemPatrimonialAdminForm(forms.ModelForm):
         super()._post_clean()
 
     def clean_valor_unitario(self):
+        if "valor_unitario" not in self.fields:
+            return self.instance.valor_unitario if self.instance else None
+
         from decimal import Decimal
 
         raw = (self.data.get("valor_unitario") or "").strip()
@@ -108,6 +112,9 @@ class BemPatrimonialAdminForm(forms.ModelForm):
 
         if not (self.instance and self.instance.pk):
             cleaned.setdefault("status", constants.AGUARDANDO_APROVACAO)
+
+        if "numero_patrimonial" not in self.fields:
+            return cleaned
 
         sem = bool(cleaned.get("sem_numeracao"))
         antigo = bool(cleaned.get("numero_formato_antigo"))
@@ -177,6 +184,10 @@ class BemPatrimonialAdminForm(forms.ModelForm):
             return super().validate_unique()
         except ValidationError as e:
             if "numero_patrimonial" in getattr(e, "message_dict", {}):
+                if "numero_patrimonial" not in self.fields:
+                    raise ValidationError(
+                        "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                    )
                 raise ValidationError(
                     {
                         "numero_patrimonial": [
