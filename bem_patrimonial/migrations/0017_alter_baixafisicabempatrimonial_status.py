@@ -13,6 +13,13 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='baixafisicabempatrimonial',
             name='status',
-            field=models.CharField(choices=[('aguardando_envio', 'Aguardando envio'), ('enviada', 'Enviada'), ('aceita', 'Aceita'), ('rejeitada', 'Rejeitada'), ('cancelada', 'Cancelada')], default='aguardando_envio', max_length=30, verbose_name='Status'),
+            field=models.CharField(choices=[
+                ('aguardando_envio', 'Aguardando envio'),
+                ('enviada', 'Enviada'), ('aceita', 'Aceita'), 
+                ('rejeitada', 'Rejeitada'), 
+                ('cancelada', 'Cancelada')], 
+                default='aguardando_envio',
+                max_length=30, 
+                verbose_name='Status'),
         ),
     ]

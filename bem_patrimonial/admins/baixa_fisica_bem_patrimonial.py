@@ -7,7 +7,7 @@ from bem_patrimonial.models import (
     BaixaFisicaBensItem,
 )
 from bem_patrimonial.emails import (
-    envia_email_baixa_fisica_enviada,
+    envia_email_baixa_fisica_solicitada,
     envia_email_baixa_fisica_aprovada,
     envia_email_baixa_fisica_cancelada,
 )
@@ -88,14 +88,14 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "unidade_administrativa_origem",
-        "numero_processo_baixa",
         "status",
         "criado_por",
         "data_criacao",
         "aprovado_por",
         "data_aprovacao",
     )
-    list_filter = ("status",)
+
+    list_display_links = ("id",)
     search_fields = (
         "numero_processo_baixa",
         "unidade_administrativa_origem__nome",
@@ -107,7 +107,13 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
 
     class Media:
         js = ("admin/baixa_fisica_autocomplete.js",)
-        css = {"all": ("css/hide_crud_icons.css", "css/baixa_fisica_inline.css", "css/custom_baixa_fisica.css")}
+        css = {
+            "all": (
+                "css/hide_crud_icons.css",
+                "css/baixa_fisica_inline.css",
+                "css/custom_baixa_fisica.css",
+            )
+        }
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
@@ -155,7 +161,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         """
         Depois de salvar os inlines, ajusta o status dos bens
         conforme inclusão/remoção de itens, mas APENAS quando
-        a baixa está em status 'aguardando envio' (ENVIADA).
+        a baixa está em status 'aguardando envio' (SOLICITADA).
         """
         super().save_related(request, form, formsets, change)
 
@@ -252,7 +258,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
             self.message_user(
                 request,
                 (
-                    "As seguintes Baixas Físicas não podem ser enviadas, "
+                    "As seguintes Baixas Físicas não podem ser solicitadas, "
                     "pois não estão com status 'Aguardando envio': "
                     f"{lista_invalidas}"
                 ),
@@ -262,24 +268,24 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         if not baixas_permitidas.exists():
             self.message_user(
                 request,
-                "Nenhuma das Baixas Físicas selecionadas pode ser enviada.",
+                "Nenhuma das Baixas Físicas selecionadas pode ser solicitada.",
                 level=messages.WARNING,
             )
             return
 
-        enviadas = 0
+        solicitadas = 0
         for baixa in baixas_permitidas:
             baixa.enviar_solicitacao()
-            envia_email_baixa_fisica_enviada(baixa)
-            enviadas += 1
+            envia_email_baixa_fisica_solicitada(baixa)
+            solicitadas += 1
 
         self.message_user(
             request,
-            f"{enviadas} Baixa(s) Física(s) enviada(s) para aprovação.",
+            f"{solicitadas} Baixa(s) Física(s) solicitada(s) para aprovação.",
             level=messages.SUCCESS,
         )
 
-    acao_enviar_baixa.short_description = "Enviar Baixa Física selecionadas"
+    acao_enviar_baixa.short_description = "Seolicitar Baixa Física selecionadas"
 
     def acao_aprovar_baixa(self, request, queryset):
         if not request.user.is_gestor_patrimonio:
@@ -290,34 +296,34 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
             )
             return
 
-        baixas_enviadas = queryset.filter(status=constants.ENVIADA)
-        baixas_nao_enviadas = queryset.exclude(status=constants.ENVIADA)
+        baixas_solicitadas = queryset.filter(status=constants.SOLICITADA)
+        baixas_nao_solicitadas = queryset.exclude(status=constants.SOLICITADA)
 
-        if baixas_nao_enviadas.exists():
+        if baixas_nao_solicitadas.exists():
             lista_nao_aprovaveis = ", ".join(
                 f"#{b.pk} (status={b.get_status_display()})"
-                for b in baixas_nao_enviadas
+                for b in baixas_nao_solicitadas
             )
             self.message_user(
                 request,
                 (
                     "As seguintes Baixas Físicas não podem ser aprovadas, "
-                    "pois não estão com status 'Enviada': "
+                    "pois não estão com status 'Solicitada': "
                     f"{lista_nao_aprovaveis}"
                 ),
                 level=messages.ERROR,
             )
 
-        if not baixas_enviadas.exists():
+        if not baixas_solicitadas.exists():
             self.message_user(
                 request,
-                "Nenhuma das Baixas Físicas selecionadas está com status 'Enviada'. Nada foi aprovado.",
+                "Nenhuma das Baixas Físicas selecionadas está com status 'Solicitada'. Nada foi aprovado.",
                 level=messages.WARNING,
             )
             return
 
         aprovadas = 0
-        for baixa in baixas_enviadas:
+        for baixa in baixas_solicitadas:
             baixa.aprovar(usuario_aprovador=request.user)
             envia_email_baixa_fisica_aprovada(baixa)
             aprovadas += 1
@@ -335,7 +341,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         if not request.user.is_gestor_patrimonio:
             self.message_user(
                 request,
-                "Apenas Gestor de Patrimônio pode cancelar Baixa Física.",
+                "Apenas Gestor de Patrimônio pode recusar Baixa Física.",
                 level=messages.ERROR,
             )
             return
@@ -350,39 +356,39 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
                 request,
                 (
                     "As seguintes Baixas Físicas já estão aprovadas e "
-                    "não podem ser canceladas: "
+                    "não podem ser recusadas: "
                     f"{lista_aceitas}"
                 ),
                 level=messages.ERROR,
             )
 
-        baixas_cancelaveis = queryset.filter(
-            status__in=[constants.AGUARDANDO_ENVIO, constants.ENVIADA]
+        baixas_recusaveis = queryset.filter(
+            status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA]
         )
 
-        if not baixas_cancelaveis.exists():
+        if not baixas_recusaveis.exists():
             self.message_user(
                 request,
                 (
                     "Nenhuma das Baixas Físicas selecionadas está em status "
-                    "'Aguardando envio' ou 'Enviada'. Nada foi cancelado."
+                    "'Aguardando envio' ou 'solicitada'. Nada foi recusado."
                 ),
                 level=messages.WARNING,
             )
             return
 
-        lista_cancelaveis = ", ".join(
+        lista_recusaveis = ", ".join(
             f"#{b.pk} (proc. {b.numero_processo_baixa}, status={b.get_status_display()})"
-            for b in baixas_cancelaveis
+            for b in baixas_recusaveis
         )
         self.message_user(
             request,
-            ("Serão canceladas as seguintes Baixas Físicas: " f"{lista_cancelaveis}"),
+            ("Serão recusadas as seguintes Baixas Físicas: " f"{lista_recusaveis}"),
             level=messages.INFO,
         )
 
         canceladas = 0
-        for baixa in baixas_cancelaveis:
+        for baixa in baixas_recusaveis:
 
             for item in baixa.itens.select_related("bem"):
                 bem = item.bem
@@ -390,7 +396,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
                     bem.status = constants.APROVADO
                     bem.save(update_fields=["status"])
 
-            baixa.status = constants.CANCELADA
+            baixa.status = constants.RECUSADA
             baixa.save(update_fields=["status"])
             canceladas += 1
 
@@ -403,4 +409,4 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
                 level=messages.SUCCESS,
             )
 
-    acao_cancelar_baixa.short_description = "Cancelar Baixa Física selecionadas"
+    acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"
