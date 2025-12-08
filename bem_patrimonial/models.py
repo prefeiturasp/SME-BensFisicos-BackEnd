@@ -68,6 +68,11 @@ class BemPatrimonial(models.Model):
         null=False,
         blank=False,
     )
+    bloqueado_inventario = models.BooleanField(
+        "Bloqueado por inventário",
+        default=False,
+        help_text="Se True, bem não pode ser movimentado até atualização de situação no inventário",
+    )
     unidade_administrativa = models.ForeignKey(
         UnidadeAdministrativa,
         on_delete=models.SET_NULL,
@@ -101,6 +106,7 @@ class BemPatrimonial(models.Model):
         "foto",
         "unidade_administrativa",
         "status",
+        "bloqueado_inventario",
     )
     AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
@@ -195,7 +201,7 @@ class BemPatrimonial(models.Model):
 
     @property
     def pode_solicitar_movimentacao(self):
-        return self.status == constants.APROVADO
+        return self.status == constants.APROVADO and not self.bloqueado_inventario
 
     @property
     def tem_movimentacao_pendente(self):
