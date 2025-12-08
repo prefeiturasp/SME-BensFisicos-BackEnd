@@ -668,7 +668,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
                     bem=bem,
                     baixa__status__in=[
                         constants.AGUARDANDO_ENVIO,
-                        constants.ENVIADA,
+                        constants.SOLICITADA,
                         constants.ACEITA,
                     ],
                 )
@@ -689,7 +689,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
         if not self.itens.exists():
             raise ValidationError("Não é possível enviar Baixa Física sem itens.")
 
-        self.status = constants.ENVIADA
+        self.status = constants.SOLICITADA
         self.save(update_fields=["status"])
 
         for item in self.itens.select_related("bem"):
@@ -706,8 +706,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
         - status do bem => BAIXA_FISICA
         - limpa 'numero_processo' (incorporação)
         """
-        if self.status != constants.ENVIADA:
-            raise ValidationError("Só é possível aprovar baixas com status 'Enviada'.")
+        if self.status != constants.SOLICITADA:
+            raise ValidationError("Só é possível aprovar baixas com status 'Solicitada'.")
 
         self.status = constants.ACEITA
         self.aprovado_por = usuario_aprovador

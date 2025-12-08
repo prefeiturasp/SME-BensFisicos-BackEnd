@@ -161,9 +161,9 @@ def _formata_lista_bens_baixa(baixa_fisica):
     return "\n".join(f"- {info}" for info in bens_info)
 
 
-def envia_email_baixa_fisica_enviada(baixa_fisica):
+def envia_email_baixa_fisica_solicitada(baixa_fisica):
     """
-    Envio de e-mail quando a baixa é enviada (ação: acao_enviar_baixa).
+    Envio de e-mail quando a baixa é solicitada (ação: acao_enviar_baixa).
     Destinatários: todos da unidade associada à baixa (unidade_administrativa_origem).
     """
     # gestores da UA de origem
@@ -185,7 +185,7 @@ def envia_email_baixa_fisica_enviada(baixa_fisica):
 
     lista_bens_formatada = _formata_lista_bens_baixa(baixa_fisica) or ""
 
-    subject = "[Bens Físicos] Baixa Física enviada para aprovação"
+    subject = "[Bens Físicos] Baixa Física solicitada para aprovação"
     dict_params = {
         "subject": subject,
         "title": "Olá!",
