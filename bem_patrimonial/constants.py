@@ -50,6 +50,5 @@ STATUS_BAIXA_FISICA = (
     (AGUARDANDO_ENVIO, "Aguardando envio"),
     (SOLICITADA, "Solicitada"),
     (ACEITA, "Aceita"),
-    (REJEITADA, "Rejeitada"),
     (RECUSADA, "Recusada"),
 )
