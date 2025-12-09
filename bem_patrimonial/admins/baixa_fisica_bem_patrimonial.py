@@ -96,6 +96,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     )
 
     list_display_links = ("id",)
+    list_filter = ("status",)
     search_fields = (
         "numero_processo_baixa",
         "unidade_administrativa_origem__nome",
