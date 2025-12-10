@@ -70,6 +70,7 @@ LOCAL_APPS = [
     "usuario",
     "dados_comuns",
     "bem_patrimonial",
+    "inventario",
     # Módulo de Suporte desabilitado temporariamente
     # 'agendamento_suporte'
 ]
