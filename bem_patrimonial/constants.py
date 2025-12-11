@@ -36,6 +36,8 @@ ACEITA = "aceita"
 REJEITADA = "rejeitada"
 CANCELADA = "cancelada"
 AGUARDANDO_ENVIO = "aguardando_envio"
+SOLICITADA = "solicitada"
+RECUSADA = "recusada"
 
 STATUS_MOVIMENTACAO = (
     (ENVIADA, "Enviada"),
@@ -46,8 +48,7 @@ STATUS_MOVIMENTACAO = (
 
 STATUS_BAIXA_FISICA = (
     (AGUARDANDO_ENVIO, "Aguardando envio"),
-    (ENVIADA, "Enviada"),
+    (SOLICITADA, "Solicitada"),
     (ACEITA, "Aceita"),
-    (REJEITADA, "Rejeitada"),
-    (CANCELADA, "Cancelada"),
+    (RECUSADA, "Recusada"),
 )
