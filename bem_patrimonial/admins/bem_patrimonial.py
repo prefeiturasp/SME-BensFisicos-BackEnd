@@ -199,7 +199,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "localizacao",
         "numero_processo",
         "unidade_administrativa__codigo",
-        "unidade_administrativa__nome", 
+        "unidade_administrativa__nome",
     )
 
     search_help_text = (
@@ -210,7 +210,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "numero_patrimonial",
         "nome",
     )
-    
+
     resource_class = BemPatrimonialResource
 
     list_filter = (
@@ -251,6 +251,46 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         ):
             return ("numero_patrimonial", "nome", "status")
         return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
+
+    def get_readonly_fields(self, request, obj=None):
+
+        base = ("status", "criado_por", "criado_em")
+
+        if obj is None:
+            return base
+
+        if request.user.is_gestor_patrimonio:
+            return base
+
+        if request.user.is_operador_inventario:
+            return base + (
+                "unidade_administrativa",
+                "numero_patrimonial",
+                "numero_formato_antigo",
+                "sem_numeracao",
+                "nome",
+                "descricao",
+                "valor_unitario",
+                "marca",
+                "modelo",
+                "numero_processo",
+                "foto",
+            )
+
+        return base + (
+            "unidade_administrativa",
+            "numero_patrimonial",
+            "numero_formato_antigo",
+            "sem_numeracao",
+            "nome",
+            "descricao",
+            "valor_unitario",
+            "marca",
+            "modelo",
+            "localizacao",
+            "numero_processo",
+            "foto",
+        )
 
     def get_fields(self, request, obj=None):
         base = [
@@ -724,9 +764,8 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 ua_origem = request.GET.get("ua_origem")
                 if not ua_origem:
                     return qs.none(), use_distinct
-                qs = (
-                    qs.filter(status=constants.APROVADO)
-                    .filter(unidade_administrativa_id=ua_origem)
+                qs = qs.filter(status=constants.APROVADO).filter(
+                    unidade_administrativa_id=ua_origem
                 )
 
                 exclude_bens = request.GET.get("exclude_bens")
