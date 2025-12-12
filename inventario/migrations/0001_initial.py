@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('dados_comuns', '0005_historicogeral_and_more'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('bem_patrimonial', '0018_bempatrimonial_bloqueado_inventario'),
+        ('bem_patrimonial', '0020_bempatrimonial_bloqueado_inventario'),
     ]
 
     operations = [
