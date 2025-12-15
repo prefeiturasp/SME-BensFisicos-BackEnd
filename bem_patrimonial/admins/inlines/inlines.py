@@ -53,6 +53,33 @@ class MovimentacaoBensItemInlineFormSet(BaseInlineFormSet):
                     f"Aguarde a resolução da movimentação pendente."
                 )
 
+            # Verifica bloqueio por inventário
+            if getattr(bem, "bloqueado_inventario", False):
+                from inventario.models import ItemInventario
+                from inventario import constants as inv_constants
+
+                item_bloqueante = (
+                    ItemInventario.objects.filter(
+                        bem=bem,
+                        inventario__status=inv_constants.INVENTARIO_EM_ABERTO,
+                    )
+                    .exclude(situacao=inv_constants.ENCONTRADO_SEM_DIVERGENCIA)
+                    .select_related("inventario")
+                    .first()
+                )
+
+                if item_bloqueante:
+                    raise ValidationError(
+                        f"O bem '{bem.nome}' está bloqueado pelo inventário "
+                        f"'{item_bloqueante.inventario.numero_inventario}'. "
+                        f"Verifique a situação do bem no inventário antes de movimentá-lo."
+                    )
+                else:
+                    raise ValidationError(
+                        f"O bem '{bem.nome}' está bloqueado por inventário. "
+                        f"Verifique a situação do bem no inventário antes de movimentá-lo."
+                    )
+
             if bem.status != APROVADO:
                 raise ValidationError(
                     f"O bem '{bem.nome}' não pode ser movimentado. "

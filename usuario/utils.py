@@ -33,6 +33,9 @@ def setup_grupos_e_permissoes():
         "_unidadeadministrativa": ["add", "change", "delete", "view"],
         "_baixafisicabempatrimonial": ["view", "add", "change", "delete"],
         "_baixafisicabensitem": ["view", "add", "change", "delete"],
+        "_inventarioua": ["add", "change", "delete", "view"],
+        "_iteminventario": ["add", "change", "delete", "view"],
+        "_ocorrenciainventario": ["view"],
         # Módulo de Suporte desabilitado temporariamente
         # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
         # '_configagendasuporte': ['view', 'change'],
@@ -51,6 +54,9 @@ def setup_grupos_e_permissoes():
         "_unidadeadministrativa": ["view"],
         "_baixafisicabempatrimonial": ["view", "add", "change"],
         "_baixafisicabensitem": ["view", "add"],
+        "_inventarioua": ["view"],
+        "_iteminventario": ["change", "view"],
+        "_ocorrenciainventario": ["view"],
         # Módulo de Suporte desabilitado temporariamente
         # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
     }
