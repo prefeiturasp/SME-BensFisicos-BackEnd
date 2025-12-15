@@ -1,91 +1,10 @@
-from datetime import date
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants as bem_constants
 
 from .models import InventarioUA, ItemInventario, OcorrenciaInventario
 from . import constants
-
-
-def get_or_create_inventario(unidade_administrativa, usuario):
-    ano = date.today().year
-    inventario, created = InventarioUA.objects.get_or_create(
-        unidade_administrativa=unidade_administrativa,
-        ano_referencia=ano,
-        defaults={"criado_por": usuario},
-    )
-
-    if created:
-        criar_itens_inventario(inventario)
-
-    return inventario, created
-
-
-def criar_itens_inventario(inventario):
-    bens = BemPatrimonial.objects.filter(
-        unidade_administrativa=inventario.unidade_administrativa,
-        status=bem_constants.APROVADO,
-    )
-
-    inventario_anterior = (
-        InventarioUA.objects.filter(
-            unidade_administrativa=inventario.unidade_administrativa,
-            status=constants.INVENTARIO_FECHADO,
-        )
-        .exclude(pk=inventario.pk)
-        .order_by("-fechado_em")
-        .first()
-    )
-
-    itens_anteriores = {}
-    if inventario_anterior:
-        for item_ant in ItemInventario.objects.filter(inventario=inventario_anterior):
-            itens_anteriores[item_ant.bem_id] = {
-                "situacao": item_ant.situacao,
-                "divergencia": item_ant.divergencia,
-                "observacao": item_ant.observacao,
-            }
-
-    def get_dados_herdados(bem_id):
-        dados_anteriores = itens_anteriores.get(bem_id)
-
-        if dados_anteriores and dados_anteriores["situacao"] in (
-            constants.NAO_ENCONTRADO,
-            constants.DIVERGENTE,
-            constants.BAIXA_FISICA,
-        ):
-            return {
-                "situacao": dados_anteriores["situacao"],
-                "divergencia": (
-                    dados_anteriores["divergencia"]
-                    if dados_anteriores["situacao"] == constants.DIVERGENTE
-                    else ""
-                ),
-                "observacao": dados_anteriores["observacao"],
-            }
-
-        return {
-            "situacao": constants.ENCONTRADO_SEM_DIVERGENCIA,
-            "divergencia": "",
-            "observacao": "",
-        }
-
-    itens = []
-    for bem in bens:
-        dados = get_dados_herdados(bem.id)
-        itens.append(
-            ItemInventario(
-                inventario=inventario,
-                bem=bem,
-                situacao=dados["situacao"],
-                divergencia=dados["divergencia"],
-                observacao=dados["observacao"],
-            )
-        )
-
-    ItemInventario.objects.bulk_create(itens)
 
 
 @transaction.atomic

@@ -166,32 +166,6 @@ class InventarioUAAdmin(admin.ModelAdmin):
         "total_itens",
     ]
 
-    fieldsets = (
-        (
-            "Dados Básicos",
-            {
-                "fields": (
-                    "numero_inventario",
-                    "tipo",
-                    ("periodo_inicial", "periodo_final"),
-                    "unidade_administrativa",
-                    "status",
-                )
-            },
-        ),
-        (
-            "Estatísticas",
-            {"fields": ("total_itens",), "classes": ("collapse",)},
-        ),
-        (
-            "Auditoria",
-            {
-                "fields": ("criado_por", "criado_em", "fechado_por", "fechado_em"),
-                "classes": ("collapse",),
-            },
-        ),
-    )
-
     inlines = [ItemInventarioInline]
     actions = ["action_finalizar_inventario"]
 
