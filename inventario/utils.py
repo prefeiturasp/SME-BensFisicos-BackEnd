@@ -35,7 +35,7 @@ def criar_itens_inventario(inventario):
             status=constants.INVENTARIO_FECHADO,
         )
         .exclude(pk=inventario.pk)
-        .order_by("-criado_em")
+        .order_by("-fechado_em")
         .first()
     )
 
@@ -98,19 +98,29 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
             "Campo divergência é obrigatório quando situação é Divergente"
         )
 
+    ultima_ocorrencia = item.ocorrencias.order_by("-registrado_em").first()
+
+    if ultima_ocorrencia and ultima_ocorrencia.situacao == situacao:
+        ultima_ocorrencia.observacao = observacao
+        ultima_ocorrencia.divergencia = (
+            divergencia if situacao == constants.DIVERGENTE else ""
+        )
+        ultima_ocorrencia.save()
+        ocorrencia = ultima_ocorrencia
+    else:
+        ocorrencia = OcorrenciaInventario.objects.create(
+            item=item,
+            situacao=situacao,
+            observacao=observacao,
+            divergencia=divergencia if situacao == constants.DIVERGENTE else "",
+            registrado_por=usuario,
+        )
+
     item.situacao = situacao
     item.observacao = observacao
     item.divergencia = divergencia if situacao == constants.DIVERGENTE else ""
     item.atualizado_por = usuario
     item.save()
-
-    ocorrencia = OcorrenciaInventario.objects.create(
-        item=item,
-        situacao=situacao,
-        observacao=observacao,
-        divergencia=item.divergencia,
-        registrado_por=usuario,
-    )
 
     if situacao == constants.NAO_ENCONTRADO:
         item.bem.bloqueado_inventario = True
@@ -170,7 +180,7 @@ def excluir_ocorrencia(item, usuario):
             ):
                 situacao_inicial = item_anterior.situacao
                 observacao_inicial = item_anterior.observacao
-                
+
                 if item_anterior.situacao == constants.DIVERGENTE:
                     divergencia_inicial = item_anterior.divergencia
 
