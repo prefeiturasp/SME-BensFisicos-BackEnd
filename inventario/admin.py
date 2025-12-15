@@ -353,6 +353,10 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
         situacoes_disponiveis = list(constants.SITUACOES_ITEM_INVENTARIO)
 
+        situacoes_disponiveis = [
+            s for s in situacoes_disponiveis if s[0] != item.situacao
+        ]
+
         if not item.pode_resolver_situacao:
             situacoes_disponiveis = [
                 s
