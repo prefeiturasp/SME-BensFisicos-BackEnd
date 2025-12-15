@@ -35,8 +35,10 @@ def criar_itens_inventario(inventario):
     - incluir bens ativos
     - incluir bens BAIXADOS apenas no ano anterior ao ano do inventário
       (ano da baixa = baixa_fisica.data_aprovacao, com baixa ACEITA)
-    - se o bem tiver ocorrência anterior, usar a situação da ÚLTIMA ocorrência
-      senão: ENCONTRADO_SEM_DIVERGENCIA
+    - Regra de herança de situação:
+      * Se situação anterior foi NAO_ENCONTRADO, DIVERGENTE ou BAIXA_FISICA → herda situação, divergência e observação
+      * Se situação anterior foi ENCONTRADO ou ENCONTRADO_SEM_DIVERGENCIA → inicia como ENCONTRADO_SEM_DIVERGENCIA
+      * Se não tinha situação anterior → inicia como ENCONTRADO_SEM_DIVERGENCIA
     """
     hoje = timezone.localdate()
 
@@ -50,15 +52,23 @@ def criar_itens_inventario(inventario):
 
     ano_baixa_permitido = ano_inventario - 1
 
-    ultima_situacao_sq = (
-        OcorrenciaInventario.objects.filter(item__bem_id=OuterRef("pk"))
-        .order_by("-registrado_em")
-        .values("situacao")[:1]
-    )
+    # Subqueries para pegar dados da última ocorrência de cada bem
+    # IMPORTANTE: só considera ocorrências de inventários FECHADOS
+    ultima_ocorrencia_base = OcorrenciaInventario.objects.filter(
+        item__bem_id=OuterRef("pk"),
+        item__inventario__status=constants.INVENTARIO_FECHADO,
+    ).order_by("-registrado_em")
 
-    qs_bens = (
-        BemPatrimonial.objects.filter(unidade_administrativa=inventario.unidade_administrativa)
-        .annotate(ultima_situacao_inventario=Subquery(ultima_situacao_sq))
+    ultima_situacao_sq = ultima_ocorrencia_base.values("situacao")[:1]
+    ultima_divergencia_sq = ultima_ocorrencia_base.values("divergencia")[:1]
+    ultima_observacao_sq = ultima_ocorrencia_base.values("observacao")[:1]
+
+    qs_bens = BemPatrimonial.objects.filter(
+        unidade_administrativa=inventario.unidade_administrativa
+    ).annotate(
+        ultima_situacao_inventario=Subquery(ultima_situacao_sq),
+        ultima_divergencia_inventario=Subquery(ultima_divergencia_sq),
+        ultima_observacao_inventario=Subquery(ultima_observacao_sq),
     )
 
     filtro_ativos = ~Q(status=bem_constants.BAIXA_FISICA)
@@ -69,16 +79,42 @@ def criar_itens_inventario(inventario):
         baixas_fisicas_itens__baixa__data_aprovacao__year=ano_baixa_permitido,
     )
 
-    bens = (
-        qs_bens.filter(filtro_ativos | filtro_baixados_no_ano_anterior)
-        .distinct()
-        .only("id")
+    bens = qs_bens.filter(filtro_ativos | filtro_baixados_no_ano_anterior).distinct()
+
+    # Situações que devem ser herdadas para o novo inventário
+    situacoes_problematicas = (
+        constants.NAO_ENCONTRADO,
+        constants.DIVERGENTE,
+        constants.BAIXA_FISICA,
     )
 
     itens = []
     for bem in bens:
-        situacao = bem.ultima_situacao_inventario or constants.ENCONTRADO_SEM_DIVERGENCIA
-        itens.append(ItemInventario(inventario=inventario, bem=bem, situacao=situacao))
+        ultima_situacao = bem.ultima_situacao_inventario
+        # Se a última situação foi problemática, herda situação, divergência e observação
+        if ultima_situacao in situacoes_problematicas:
+            situacao = ultima_situacao
+            # Divergência só é herdada se situação for DIVERGENTE
+            divergencia = (
+                bem.ultima_divergencia_inventario
+                if ultima_situacao == constants.DIVERGENTE
+                else ""
+            )
+            observacao = bem.ultima_observacao_inventario or ""
+        else:
+            situacao = constants.ENCONTRADO_SEM_DIVERGENCIA
+            divergencia = ""
+            observacao = ""
+
+        itens.append(
+            ItemInventario(
+                inventario=inventario,
+                bem=bem,
+                situacao=situacao,
+                divergencia=divergencia,
+                observacao=observacao,
+            )
+        )
 
     with transaction.atomic():
         ItemInventario.objects.filter(inventario=inventario).delete()
