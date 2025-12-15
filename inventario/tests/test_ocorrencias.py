@@ -183,26 +183,40 @@ class RegistrarOcorrenciaTest(OcorrenciaBaseTest):
         self.assertEqual(ocorrencia.situacao, constants.BAIXA_FISICA)
         self.assertFalse(bem.bloqueado_inventario)
 
-    def test_multiplas_ocorrencias_registradas_com_historico(self):
-        _, _, item = self.criar_cenario_basico()
-        self.assertEqual(item.ocorrencias.count(), 0)
+    def test_editar_ocorrencia_atualiza_ao_inves_de_criar_nova(self):
+        _, bem, item = self.criar_cenario_basico()
 
-        registrar_ocorrencia(
-            item=item, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario
-        )
+        # Registra primeira ocorrência
         registrar_ocorrencia(
             item=item,
-            situacao=constants.DIVERGENTE,
-            divergencia="Teste",
+            situacao=constants.BAIXA_FISICA,
+            observacao="Equipamento danificado",
+            usuario=self.usuario,
+        )
+        self.assertEqual(item.ocorrencias.count(), 1)
+
+        # "Edita" para outra situação - deve ATUALIZAR, não criar nova
+        registrar_ocorrencia(
+            item=item,
+            situacao=constants.NAO_ENCONTRADO,
+            observacao="Na verdade está perdido",
             usuario=self.usuario,
         )
 
-        ocorrencias = item.ocorrencias.order_by("registrado_em")
-        self.assertEqual(ocorrencias.count(), 2)
-        self.assertEqual(ocorrencias[0].situacao, constants.NAO_ENCONTRADO)
-        self.assertEqual(ocorrencias[1].situacao, constants.DIVERGENTE)
-        for oc in ocorrencias:
-            self.assertEqual(oc.registrado_por, self.usuario)
+        item.refresh_from_db()
+        # Ainda deve ter apenas 1 ocorrência (atualizada)
+        self.assertEqual(item.ocorrencias.count(), 1)
+        self.assertEqual(item.situacao, constants.NAO_ENCONTRADO)
+
+        ocorrencia = item.ocorrencias.first()
+        self.assertEqual(ocorrencia.situacao, constants.NAO_ENCONTRADO)
+        self.assertEqual(ocorrencia.observacao, "Na verdade está perdido")
+
+        # Ao excluir, deve voltar para o estado inicial (sem ocorrência)
+        excluir_ocorrencia(item=item, usuario=self.usuario)
+        item.refresh_from_db()
+        self.assertEqual(item.ocorrencias.count(), 0)
+        self.assertEqual(item.situacao, constants.ENCONTRADO_SEM_DIVERGENCIA)
 
     def test_inventario_fechado_nao_permite_alteracoes(self):
         inventario = self.criar_inventario(fechado=True)
@@ -247,32 +261,6 @@ class ExcluirOcorrenciaTest(OcorrenciaBaseTest):
         with self.assertRaises(ValidationError) as ctx:
             excluir_ocorrencia(item=item, usuario=self.usuario)
         self.assertIn("não tem ocorrência", str(ctx.exception))
-
-    def test_excluir_volta_para_ocorrencia_anterior(self):
-        _, _, item = self.criar_cenario_basico()
-
-        registrar_ocorrencia(
-            item=item,
-            situacao=constants.DIVERGENTE,
-            divergencia="Primeira divergência",
-            observacao="Obs 1",
-            usuario=self.usuario,
-        )
-        registrar_ocorrencia(
-            item=item,
-            situacao=constants.NAO_ENCONTRADO,
-            observacao="Obs 2",
-            usuario=self.usuario,
-        )
-        self.assertEqual(item.ocorrencias.count(), 2)
-
-        excluir_ocorrencia(item=item, usuario=self.usuario)
-
-        item.refresh_from_db()
-        self.assertEqual(item.ocorrencias.count(), 1)
-        self.assertEqual(item.situacao, constants.DIVERGENTE)
-        self.assertEqual(item.divergencia, "Primeira divergência")
-        self.assertEqual(item.observacao, "Obs 1")
 
     def test_excluir_restaura_divergencia_herdada(self):
         inv_anterior = self.criar_inventario(fechado=True, ano=2020)
@@ -448,7 +436,6 @@ class PropertiesItemInventarioTest(OcorrenciaBaseTest):
             (constants.ENCONTRADO_SEM_DIVERGENCIA, True),
             (constants.NAO_ENCONTRADO, True),
             (constants.DIVERGENTE, True),
-            (constants.BAIXA_FISICA, False),  # status definitivo
         ]
 
         for situacao, esperado in cenarios:
@@ -456,6 +443,22 @@ class PropertiesItemInventarioTest(OcorrenciaBaseTest):
                 bem = self.criar_bem()
                 item = self.criar_item(inventario, bem, situacao=situacao)
                 self.assertEqual(item.permite_registrar_ocorrencia, esperado)
+
+        # BAIXA_FISICA herdada (sem ocorrência) - não permite
+        bem = self.criar_bem()
+        item_herdado = self.criar_item(inventario, bem, situacao=constants.BAIXA_FISICA)
+        self.assertFalse(item_herdado.permite_registrar_ocorrencia)
+
+        # BAIXA_FISICA registrada neste inventário (com ocorrência) - permite editar
+        bem2 = self.criar_bem()
+        item_registrado = self.criar_item(inventario, bem2)
+        registrar_ocorrencia(
+            item=item_registrado,
+            situacao=constants.BAIXA_FISICA,
+            usuario=self.usuario,
+        )
+        item_registrado.refresh_from_db()
+        self.assertTrue(item_registrado.permite_registrar_ocorrencia)
 
     def test_tem_ocorrencia_verifica_registros(self):
         inventario = self.criar_inventario()
