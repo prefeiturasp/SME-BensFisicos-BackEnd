@@ -239,7 +239,21 @@ class ItemInventario(models.Model):
 
     @property
     def tem_ocorrencia(self):
-        return self.situacao != constants.ENCONTRADO_SEM_DIVERGENCIA
+        return self.ocorrencias.exists()
+
+    @property
+    def pode_marcar_como_encontrado(self):
+        return (
+            not self.ocorrencias.exists() and self.situacao == constants.NAO_ENCONTRADO
+        )
+
+    @property
+    def pode_resolver_situacao(self):
+        return not self.ocorrencias.exists() and self.situacao == constants.DIVERGENTE
+
+    @property
+    def permite_registrar_ocorrencia(self):
+        return self.situacao != constants.BAIXA_FISICA
 
 
 class OcorrenciaInventario(models.Model):
@@ -255,6 +269,7 @@ class OcorrenciaInventario(models.Model):
         "Situação",
         max_length=30,
         choices=constants.SITUACOES_ITEM_INVENTARIO,
+        default=constants.ENCONTRADO_SEM_DIVERGENCIA,
         help_text="Situação na ocorrencia",
     )
 
@@ -278,4 +293,4 @@ class OcorrenciaInventario(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.item.bem.numero_patrimonial} - → {self.situacao_nova}"
+        return f"{self.item.bem.numero_patrimonial} - {self.get_situacao_display()}"
