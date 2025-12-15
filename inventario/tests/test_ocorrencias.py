@@ -14,8 +14,8 @@ from inventario import constants
 from inventario.utils import (
     registrar_ocorrencia,
     excluir_ocorrencia,
-    criar_itens_inventario,
 )
+from inventario.utils_inventario.inventario_utils import criar_itens_inventario
 
 
 class OcorrenciaBaseTest(TestCase):
@@ -51,19 +51,26 @@ class OcorrenciaBaseTest(TestCase):
             constants.INVENTARIO_FECHADO if fechado else constants.INVENTARIO_EM_ABERTO
         )
         if ano:
-            periodo_inicial = datetime.date(ano, 1, 1)
             periodo_final = datetime.date(ano, 12, 31)
         else:
-            periodo_inicial = periodo_final = datetime.date.today()
+            periodo_final = datetime.date.today()
 
-        return InventarioUA.objects.create(
-            tipo=constants.INVENTARIO_ANUAL,
-            periodo_inicial=periodo_inicial,
+        inv = InventarioUA.objects.create(
+            tipo=constants.INVENTARIO_EVENTUAL,
             periodo_final=periodo_final,
             unidade_administrativa=self.ua,
             criado_por=self.usuario,
-            status=status,
         )
+
+        if fechado:
+            InventarioUA.objects.filter(pk=inv.pk).update(
+                status=constants.INVENTARIO_FECHADO,
+                fechado_por=self.usuario,
+                fechado_em=datetime.datetime.now(),
+            )
+            inv.refresh_from_db()
+
+        return inv
 
     def criar_item(
         self,
@@ -71,13 +78,39 @@ class OcorrenciaBaseTest(TestCase):
         bem,
         situacao=constants.ENCONTRADO_SEM_DIVERGENCIA,
         divergencia="",
+        observacao="",
     ):
         return ItemInventario.objects.create(
             inventario=inventario,
             bem=bem,
             situacao=situacao,
             divergencia=divergencia,
+            observacao=observacao,
         )
+
+    def criar_item_com_ocorrencia(
+        self,
+        inventario,
+        bem,
+        situacao,
+        divergencia="",
+        observacao="",
+    ):
+        item = self.criar_item(
+            inventario,
+            bem,
+            situacao=situacao,
+            divergencia=divergencia,
+            observacao=observacao,
+        )
+        OcorrenciaInventario.objects.create(
+            item=item,
+            situacao=situacao,
+            divergencia=divergencia,
+            observacao=observacao,
+            registrado_por=self.usuario,
+        )
+        return item
 
     def criar_cenario_basico(self):
         inventario = self.criar_inventario()
@@ -244,7 +277,7 @@ class ExcluirOcorrenciaTest(OcorrenciaBaseTest):
     def test_excluir_restaura_divergencia_herdada(self):
         inv_anterior = self.criar_inventario(fechado=True, ano=2020)
         bem = self.criar_bem()
-        self.criar_item(
+        self.criar_item_com_ocorrencia(
             inv_anterior,
             bem,
             situacao=constants.DIVERGENTE,
@@ -290,7 +323,9 @@ class HerancaSituacaoTest(OcorrenciaBaseTest):
     def test_heranca_nao_encontrado(self):
         inv_anterior = self.criar_inventario(fechado=True, ano=2024)
         bem = self.criar_bem()
-        self.criar_item(inv_anterior, bem, situacao=constants.NAO_ENCONTRADO)
+        self.criar_item_com_ocorrencia(
+            inv_anterior, bem, situacao=constants.NAO_ENCONTRADO
+        )
 
         inv_novo = self.criar_inventario(ano=2025)
         criar_itens_inventario(inv_novo)
@@ -302,10 +337,11 @@ class HerancaSituacaoTest(OcorrenciaBaseTest):
     def test_heranca_divergente_com_texto(self):
         inv_anterior = self.criar_inventario(fechado=True, ano=2024)
         bem = self.criar_bem()
-        self.criar_item(
-            inv_anterior, bem,
+        self.criar_item_com_ocorrencia(
+            inv_anterior,
+            bem,
             situacao=constants.DIVERGENTE,
-            divergencia="Número de série diferente"
+            divergencia="Número de série diferente",
         )
 
         inv_novo = self.criar_inventario(ano=2025)
@@ -318,10 +354,14 @@ class HerancaSituacaoTest(OcorrenciaBaseTest):
     def test_heranca_baixa_fisica_e_encontrado(self):
         inv_anterior = self.criar_inventario(fechado=True, ano=2024)
         bem1 = self.criar_bem()
-        self.criar_item(inv_anterior, bem1, situacao=constants.BAIXA_FISICA)
+        self.criar_item_com_ocorrencia(
+            inv_anterior, bem1, situacao=constants.BAIXA_FISICA
+        )
 
         bem2 = self.criar_bem()
-        self.criar_item(inv_anterior, bem2, situacao=constants.ENCONTRADO)
+        self.criar_item_com_ocorrencia(
+            inv_anterior, bem2, situacao=constants.ENCONTRADO
+        )
 
         inv_novo = self.criar_inventario(ano=2025)
         criar_itens_inventario(inv_novo)
@@ -335,7 +375,9 @@ class HerancaSituacaoTest(OcorrenciaBaseTest):
     def test_heranca_ignora_inventario_aberto(self):
         inv_aberto = self.criar_inventario(fechado=False, ano=2024)
         bem = self.criar_bem()
-        self.criar_item(inv_aberto, bem, situacao=constants.NAO_ENCONTRADO)
+        self.criar_item_com_ocorrencia(
+            inv_aberto, bem, situacao=constants.NAO_ENCONTRADO
+        )
 
         inv_novo = self.criar_inventario(ano=2025)
         criar_itens_inventario(inv_novo)
@@ -466,7 +508,11 @@ class FluxoCompletoTest(OcorrenciaBaseTest):
         registrar_ocorrencia(
             item=item_2024, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario
         )
-        inv_2024.finalizar(self.usuario)
+        InventarioUA.objects.filter(pk=inv_2024.pk).update(
+            status=constants.INVENTARIO_FECHADO,
+            fechado_por=self.usuario,
+            fechado_em=datetime.datetime.now(),
+        )
 
         # Inventário 2025 - herda NAO_ENCONTRADO, operador encontra
         inv_2025 = self.criar_inventario(ano=2025)
@@ -479,7 +525,11 @@ class FluxoCompletoTest(OcorrenciaBaseTest):
         registrar_ocorrencia(
             item=item_2025, situacao=constants.ENCONTRADO, usuario=self.usuario
         )
-        inv_2025.finalizar(self.usuario)
+        InventarioUA.objects.filter(pk=inv_2025.pk).update(
+            status=constants.INVENTARIO_FECHADO,
+            fechado_por=self.usuario,
+            fechado_em=datetime.datetime.now(),
+        )
 
         bem.refresh_from_db()
         self.assertFalse(bem.bloqueado_inventario)
