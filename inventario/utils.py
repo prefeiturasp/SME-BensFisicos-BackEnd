@@ -9,69 +9,6 @@ from .models import InventarioUA, ItemInventario, OcorrenciaInventario
 from . import constants
 
 
-def get_or_create_inventario(unidade_administrativa, usuario):
-    ano = date.today().year
-    inventario, created = InventarioUA.objects.get_or_create(
-        unidade_administrativa=unidade_administrativa,
-        ano_referencia=ano,
-        defaults={"criado_por": usuario},
-    )
-
-    if created:
-        criar_itens_inventario(inventario)
-
-    return inventario, created
-
-
-def criar_itens_inventario(inventario):
-    bens = BemPatrimonial.objects.filter(
-        unidade_administrativa=inventario.unidade_administrativa,
-        status=bem_constants.APROVADO,
-    )
-
-    situacoes_anteriores = {}
-    inventario_anterior = None
-
-    try:
-        if inventario.tipo == constants.INVENTARIO_EVENTUAL:
-            inventario_anterior = (
-                InventarioUA.objects.filter(
-                    unidade_administrativa=inventario.unidade_administrativa,
-                )
-                .exclude(pk=inventario.pk)
-                .order_by("-ano_referencia", "-versao")
-                .first()
-            )
-        else:
-            ano_anterior = inventario.ano_referencia - 1
-            inventario_anterior = InventarioUA.objects.filter(
-                unidade_administrativa=inventario.unidade_administrativa,
-                ano_referencia=ano_anterior,
-                tipo=constants.INVENTARIO_ANUAL,
-            ).first()
-
-        if inventario_anterior:
-            situacoes_anteriores = dict(
-                ItemInventario.objects.filter(
-                    inventario=inventario_anterior
-                ).values_list("bem_id", "situacao")
-            )
-    except Exception:
-        pass
-
-    itens = [
-        ItemInventario(
-            inventario=inventario,
-            bem=bem,
-            situacao=constants.ENCONTRADO_SEM_DIVERGENCIA,
-            situacao_anterior=situacoes_anteriores.get(bem.id),
-        )
-        for bem in bens
-    ]
-
-    ItemInventario.objects.bulk_create(itens)
-
-
 @transaction.atomic
 def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=None):
     if not item.inventario.esta_aberto:
@@ -147,7 +84,3 @@ def excluir_ocorrencia(item, usuario):
     item.bem.save(update_fields=["bloqueado_inventario"])
 
     return ocorrencia
-
-
-def finalizar_inventario(inventario, usuario):
-    inventario.finalizar(usuario)

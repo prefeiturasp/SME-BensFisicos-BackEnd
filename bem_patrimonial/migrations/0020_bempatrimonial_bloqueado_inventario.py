@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('bem_patrimonial', '0017_alter_baixafisicabempatrimonial_status'),
+        ('bem_patrimonial', '0019_alter_baixafisicabempatrimonial_status_recusada'),
     ]
 
     operations = [
