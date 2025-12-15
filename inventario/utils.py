@@ -17,9 +17,12 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
             "Campo divergência é obrigatório quando situação é Divergente"
         )
 
+    # Se já tem ocorrência, estamos editando - atualiza a última ao invés de criar nova
     ultima_ocorrencia = item.ocorrencias.order_by("-registrado_em").first()
 
-    if ultima_ocorrencia and ultima_ocorrencia.situacao == situacao:
+    if ultima_ocorrencia:
+        # Edição: atualiza a última ocorrência existente
+        ultima_ocorrencia.situacao = situacao
         ultima_ocorrencia.observacao = observacao
         ultima_ocorrencia.divergencia = (
             divergencia if situacao == constants.DIVERGENTE else ""
@@ -27,6 +30,7 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
         ultima_ocorrencia.save()
         ocorrencia = ultima_ocorrencia
     else:
+        # Nova ocorrência: cria novo registro
         ocorrencia = OcorrenciaInventario.objects.create(
             item=item,
             situacao=situacao,

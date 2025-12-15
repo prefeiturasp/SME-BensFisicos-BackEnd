@@ -160,7 +160,9 @@ class InventarioUA(models.Model):
         ano = self._get_ano_do_inventario()
         hoje = timezone.localdate()
 
-        from .models import ParametroInventarioAnual  # evita import circular, se necessário
+        from .models import (
+            ParametroInventarioAnual,
+        )  # evita import circular, se necessário
 
         parametro = ParametroInventarioAnual.objects.filter(
             ano_referencia=ano,
@@ -186,7 +188,9 @@ class InventarioUA(models.Model):
 
         # ✅ EVENTUAL exige periodo_final
         if self.tipo == constants.INVENTARIO_EVENTUAL and not self.periodo_final:
-            raise ValidationError({"periodo_final": "Campo obrigatório para inventário eventual."})
+            raise ValidationError(
+                {"periodo_final": "Campo obrigatório para inventário eventual."}
+            )
 
         # ✅ ANUAL não usa período
         if self.tipo == constants.INVENTARIO_ANUAL:
@@ -321,7 +325,10 @@ class ItemInventario(models.Model):
 
     @property
     def permite_registrar_ocorrencia(self):
-        return self.situacao != constants.BAIXA_FISICA
+        if self.situacao == constants.BAIXA_FISICA:
+            # Se tem ocorrência, foi registrado neste inventário então permite editar
+            return self.tem_ocorrencia
+        return True
 
 
 class OcorrenciaInventario(models.Model):
