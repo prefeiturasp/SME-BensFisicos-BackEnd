@@ -369,6 +369,11 @@ class InventarioUAAdmin(admin.ModelAdmin):
                 s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO
             ]
 
+        is_edicao = item.tem_ocorrencia
+        situacao_atual = item.situacao if is_edicao else None
+        observacao_atual = item.observacao if is_edicao else ""
+        divergencia_atual = item.divergencia if is_edicao else ""
+
         context = {
             "item": item,
             "situacoes_disponiveis": situacoes_disponiveis,
@@ -377,6 +382,10 @@ class InventarioUAAdmin(admin.ModelAdmin):
             "has_view_permission": self.has_view_permission(request),
             "original": item.inventario,
             "title": f"Registrar Ocorrência - {item.bem.numero_patrimonial}",
+            "is_edicao": is_edicao,
+            "situacao_atual": situacao_atual,
+            "observacao_atual": observacao_atual,
+            "divergencia_atual": divergencia_atual,
         }
 
         return render(request, "admin/inventario/registrar_ocorrencia.html", context)

@@ -269,7 +269,7 @@ class OcorrenciaInventario(models.Model):
         "Situação",
         max_length=30,
         choices=constants.SITUACOES_ITEM_INVENTARIO,
-        default=constants.ENCONTRADO_SEM_DIVERGENCIA,
+        default=constants.DIVERGENTE,
         help_text="Situação na ocorrencia",
     )
 

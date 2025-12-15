@@ -66,8 +66,11 @@
                     <label for="situacao">Situação</label>
                     <select name="situacao" id="situacao" required>
                         <option value="">Selecione uma situação...</option>
+                        {% if is_edicao and situacao_atual %}
+                        <option value="{{ situacao_atual }}" selected>{{ item.get_situacao_display }} (atual)</option>
+                        {% endif %}
                         {% for value, label in situacoes_disponiveis %}
-                        <option value="{{ value }}"{% if item.tem_ocorrencia and item.situacao == value %} selected{% endif %}>{{ label }}</option>
+                        <option value="{{ value }}">{{ label }}</option>
                         {% endfor %}
                     </select>
                     {% if item.pode_marcar_como_encontrado %}
@@ -77,14 +80,14 @@
                     {% endif %}
                 </div>
                 
-                <div id="campo-observacao" class="form-field campo-condicional{% if item.tem_ocorrencia %} ativo{% endif %}">
+                <div id="campo-observacao" class="form-field campo-condicional{% if is_edicao %} ativo{% endif %}">
                     <label for="observacao">Observação <span class="opcional">(opcional)</span></label>
-                    <textarea name="observacao" id="observacao" placeholder="Adicione informações complementares...">{{ item.observacao|default:'' }}</textarea>
+                    <textarea name="observacao" id="observacao" placeholder="Adicione informações complementares...">{{ observacao_atual }}</textarea>
                 </div>
                 
-                <div id="campo-divergencia" class="form-field campo-condicional{% if item.divergencia %} ativo{% endif %}">
+                <div id="campo-divergencia" class="form-field campo-condicional{% if is_edicao and divergencia_atual %} ativo{% endif %}">
                     <label for="divergencia">Divergência</label>
-                    <textarea name="divergencia" id="divergencia" placeholder="Descreva a divergência encontrada...">{{ item.divergencia|default:'' }}</textarea>
+                    <textarea name="divergencia" id="divergencia" placeholder="Descreva a divergência encontrada...">{{ divergencia_atual }}</textarea>
                     <p class="help-text">Campo obrigatório. Detalhe a divergência identificada no bem patrimonial.</p>
                 </div>
             </div>
