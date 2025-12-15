@@ -6,17 +6,13 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("bem_patrimonial", "0019_alter_baixafisicabempatrimonial_status_recusada"),
+        ('bem_patrimonial', '0019_alter_baixafisicabempatrimonial_status_recusada'),
     ]
 
     operations = [
         migrations.AddField(
-            model_name="bempatrimonial",
-            name="bloqueado_inventario",
-            field=models.BooleanField(
-                default=False,
-                help_text="Se True, bem não pode ser movimentado até atualização de situação no inventário",
-                verbose_name="Bloqueado por inventário",
-            ),
+            model_name='bempatrimonial',
+            name='bloqueado_inventario',
+            field=models.BooleanField(default=False, help_text='Se True, bem não pode ser movimentado até atualização de situação no inventário', verbose_name='Bloqueado por inventário'),
         ),
     ]

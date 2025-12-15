@@ -1,23 +1,33 @@
-from django.contrib import admin
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from .models import InventarioUA, ItemInventario
-from .utils import (
-    registrar_ocorrencia,
-    excluir_ocorrencia,
-    finalizar_inventario,
-    criar_itens_inventario,
-)
+from inventario.utils_inventario.inventario_utils import criar_itens_inventario
+
+from .models import ParametroInventarioAnual, InventarioUA, ItemInventario
+from .forms import InventarioUAAdminForm
+
+
+from inventario.utils import excluir_ocorrencia, registrar_ocorrencia
 from . import constants
 
 
-class ItemInventarioInline(admin.TabularInline):
+@admin.register(ParametroInventarioAnual)
+class ParametroInventarioAnualAdmin(admin.ModelAdmin):
+    list_display = (
+        "ano_referencia",
+        "periodo_final",
+        "ativo",
+    )
+    list_filter = ("ativo", "ano_referencia")
+    search_fields = ("ano_referencia",)
+    ordering = ("-ano_referencia", "-ativo")
 
+
+class ItemInventarioInline(admin.TabularInline):
     model = ItemInventario
     extra = 0
     can_delete = False
@@ -41,16 +51,12 @@ class ItemInventarioInline(admin.TabularInline):
         return False
 
     def numero_patrimonial_bem(self, obj):
-        if obj and obj.bem:
-            return obj.bem.numero_patrimonial
-        return "-"
+        return getattr(obj.bem, "numero_patrimonial", "-")
 
     numero_patrimonial_bem.short_description = "Número Patrimonial"
 
     def nome_bem(self, obj):
-        if obj and obj.bem:
-            return obj.bem.nome
-        return "-"
+        return getattr(obj.bem, "nome", "-")
 
     nome_bem.short_description = "Nome do Bem"
 
@@ -129,24 +135,28 @@ class ItemInventarioInline(admin.TabularInline):
 
 @admin.register(InventarioUA)
 class InventarioUAAdmin(admin.ModelAdmin):
+    form = InventarioUAAdminForm
 
     list_display = [
         "numero_inventario",
         "unidade_administrativa",
         "tipo",
         "status_display",
+        "periodo_display",
         "total_itens",
-        "periodo_inicial",
-        "periodo_final",
         "criado_em",
     ]
-    list_filter = ["status", "tipo", "unidade_administrativa"]
+    list_filter = [
+        "status",
+        "tipo",
+    ]
     search_fields = [
         "numero_inventario",
         "unidade_administrativa__nome",
         "unidade_administrativa__codigo",
         "unidade_administrativa__sigla",
     ]
+
     readonly_fields = [
         "numero_inventario",
         "criado_por",
@@ -187,6 +197,69 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
     class Media:
         css = {"all": ("css/hide_crud_icons.css",)}
+        js = ("admin/inventario_inventarioua_add.js",)
+
+    def get_form(self, request, obj=None, **kwargs):
+        """
+        Injeta request dentro do form (pra aplicar regras gestor/operador e validações).
+        """
+        form_class = super().get_form(request, obj, **kwargs)
+
+        class RequestForm(form_class):
+            def __new__(cls, *args, **kw):
+                kw["request"] = request
+                return form_class(*args, **kw)
+
+        return RequestForm
+
+    def get_fieldsets(self, request, obj=None):
+        if obj is None:
+            return (
+                (
+                    "Criar Inventário",
+                    {
+                        "fields": (
+                            "unidade_administrativa",
+                            "tipo",
+                            "periodo_final",  # só aparece/obrigatório quando EVENTUAL
+                        )
+                    },
+                ),
+            )
+
+        return (
+            (
+                "Dados Básicos",
+                {
+                    "fields": (
+                        "numero_inventario",
+                        "unidade_administrativa",
+                        "tipo",
+                        "periodo_final",
+                        "status",
+                    )
+                },
+            ),
+            (
+                "Auditoria",
+                {"fields": ("criado_por", "criado_em", "fechado_por", "fechado_em")},
+            ),
+        )
+
+    def periodo_display(self, obj):
+        # anual não tem período
+        if obj.tipo == constants.INVENTARIO_ANUAL:
+            return "-"
+
+        if not obj.periodo_final:
+            return "-"
+
+        return format_html(
+            "<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y")
+        )
+
+    periodo_display.short_description = "Período"
+    periodo_display.admin_order_field = "periodo_final"
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -197,25 +270,21 @@ class InventarioUAAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         qs = super().get_queryset(request)
 
+        ua = getattr(request.user, "unidade_administrativa", None)
         if (
             request.user.is_operador_inventario
             and not request.user.is_gestor_patrimonio
         ):
-            if request.user.unidade_administrativa:
-                qs = qs.filter(
-                    unidade_administrativa=request.user.unidade_administrativa
-                )
-            else:
-                qs = qs.none()
+            return qs.filter(unidade_administrativa=ua) if ua else qs.none()
 
-        return qs.prefetch_related("itens", "itens__bem")
+        return qs
 
     def save_model(self, request, obj, form, change):
         if not change:
             obj.criado_por = request.user
-
         super().save_model(request, obj, form, change)
 
+        # Após criar: montar itens automaticamente com as regras
         if not change:
             criar_itens_inventario(obj)
             messages.success(
@@ -259,7 +328,9 @@ class InventarioUAAdmin(admin.ModelAdmin):
         detalhes = " | ".join([f"{k}: {v}" for k, v in por_situacao.items() if v > 0])
 
         return format_html(
-            "<strong>Total: {}</strong><br/><small>{}</small>", total, detalhes or "—"
+            "<strong>Total: {}</strong><br/><small>{}</small>",
+            total,
+            detalhes or "—",
         )
 
     total_itens.short_description = "Itens"
@@ -353,6 +424,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
         situacoes_disponiveis = list(constants.SITUACOES_ITEM_INVENTARIO)
 
+        # não permitir registrar "Encontrado sem divergência" manualmente
         situacoes_disponiveis = [
             s for s in situacoes_disponiveis if s[0] != item.situacao
         ]

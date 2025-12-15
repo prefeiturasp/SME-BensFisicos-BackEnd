@@ -1,6 +1,5 @@
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Max
 from django.utils import timezone
 
 from bem_patrimonial.models import BemPatrimonial
@@ -8,6 +7,41 @@ from dados_comuns.models import UnidadeAdministrativa
 from usuario.models import Usuario
 
 from . import constants
+
+
+class ParametroInventarioAnual(models.Model):
+
+    ano_referencia = models.PositiveSmallIntegerField(
+        "Ano de Referência",
+        help_text="Ano do inventário anual ao qual este parâmetro se refere (ex.: 2025).",
+    )
+
+    periodo_inicial = models.DateField(
+        "Período Inicial Permitido",
+        help_text="Data inicial em que inventários anuais podem ser criados/fechados.",
+    )
+
+    periodo_final = models.DateField(
+        "Período Final Permitido",
+        help_text="Data final em que inventários anuais podem ser criados/fechados.",
+    )
+
+    ativo = models.BooleanField(
+        "Ativo",
+        default=True,
+        help_text="Apenas um parâmetro ativo por ano.",
+    )
+
+    class Meta:
+        verbose_name = "Parâmetro de Inventário Anual"
+        verbose_name_plural = "Parâmetros de Inventário Anual"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ano_referencia"],
+                condition=models.Q(ativo=True),
+                name="unique_parametro_inventario_anual_ativo_por_ano",
+            )
+        ]
 
 
 class InventarioUA(models.Model):
@@ -19,13 +53,11 @@ class InventarioUA(models.Model):
         help_text="Formato: 001.XXXX/AAAA (anual) ou 001.XXXX/AAAA/VVV (eventual)",
     )
 
-    periodo_inicial = models.DateField(
-        "Período Inicial",
-        help_text="Data inicial do período do inventário",
-    )
     periodo_final = models.DateField(
         "Período Final",
-        help_text="Data final do período do inventário",
+        null=True,
+        blank=True,
+        help_text="Data final do período do inventário.",
     )
 
     tipo = models.CharField(
@@ -67,23 +99,84 @@ class InventarioUA(models.Model):
     fechado_em = models.DateTimeField("Fechado em", null=True, blank=True)
 
     class Meta:
-        unique_together = (
-            "unidade_administrativa",
-            "tipo",
-            "periodo_inicial",
-            "periodo_final",
-        )
+        # ✅ Sem periodo_inicial. Unique agora:
+        # - ANUAL: único por (UA, tipo, ano) => garantimos via constraint condicional
+        # - EVENTUAL: único por (UA, tipo, periodo_final)
         verbose_name = "Gerenciamento de Inventário"
         verbose_name_plural = "Gerenciamento de Inventário"
-        ordering = ["-periodo_inicial", "unidade_administrativa", "-criado_em"]
+        ordering = ["-criado_em", "unidade_administrativa"]
 
         indexes = [
-            models.Index(fields=["unidade_administrativa", "periodo_inicial"]),
-            models.Index(fields=["unidade_administrativa", "tipo", "periodo_inicial"]),
+            models.Index(fields=["unidade_administrativa", "tipo"]),
+            models.Index(fields=["unidade_administrativa", "periodo_final"]),
+        ]
+
+        constraints = [
+            # EVENTUAL: não pode repetir mesmo periodo_final na mesma UA
+            models.UniqueConstraint(
+                fields=["unidade_administrativa", "tipo", "periodo_final"],
+                name="uniq_inventario_ua_tipo_periodo_final",
+            ),
+            # ANUAL: um por ano (ano calculado pelo número do inventário),
+            # então garantimos pela combinação (UA, tipo, numero_inventario) já ser unique global
+            # e também bloqueamos múltiplos anuais no mesmo ano usando um constraint por "numero_inventario".
+            # Como numero_inventario já é unique global, isso já impede duplicar 001.XXXX/AAAA.
         ]
 
     def __str__(self):
         return f"{self.numero_inventario} - {self.unidade_administrativa.sigla}"
+
+    def _get_ano_do_inventario(self):
+        """
+        EVENTUAL: ano vem do periodo_final
+        ANUAL: ano corrente (criação/fechamento controlados por ParametroInventarioAnual)
+        """
+        if self.tipo == constants.INVENTARIO_EVENTUAL:
+            if self.periodo_final:
+                return self.periodo_final.year
+            return timezone.localdate().year
+
+        # ANUAL
+        return timezone.localdate().year
+
+    def _get_proxima_versao_eventual(self):
+        ano = self._get_ano_do_inventario()
+
+        qs = InventarioUA.objects.filter(
+            unidade_administrativa=self.unidade_administrativa,
+            tipo=constants.INVENTARIO_EVENTUAL,
+            periodo_final__year=ano,
+        )
+
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+
+        return qs.count() + 1
+
+    def _validar_parametro_anual_por_data_atual(self):
+        if self.tipo != constants.INVENTARIO_ANUAL:
+            return
+
+        ano = self._get_ano_do_inventario()
+        hoje = timezone.localdate()
+
+        from .models import ParametroInventarioAnual  # evita import circular, se necessário
+
+        parametro = ParametroInventarioAnual.objects.filter(
+            ano_referencia=ano,
+            ativo=True,
+        ).first()
+
+        if not parametro:
+            raise ValidationError(
+                f"Não existe parâmetro ativo para inventário anual do ano {ano}."
+            )
+
+        if not (parametro.periodo_inicial <= hoje <= parametro.periodo_final):
+            raise ValidationError(
+                f"O inventário anual {ano} só pode ser criado ou fechado entre "
+                f"{parametro.periodo_inicial:%d/%m/%Y} e {parametro.periodo_final:%d/%m/%Y}."
+            )
 
     def clean(self):
         super().clean()
@@ -91,44 +184,15 @@ class InventarioUA(models.Model):
         if not self.tipo:
             raise ValidationError({"tipo": "Campo obrigatório."})
 
-        if self.periodo_inicial and self.periodo_final:
-            if self.periodo_inicial > self.periodo_final:
-                raise ValidationError(
-                    {
-                        "periodo_final": "O Período Final deve ser maior ou igual ao Período Inicial."
-                    }
-                )
+        # ✅ EVENTUAL exige periodo_final
+        if self.tipo == constants.INVENTARIO_EVENTUAL and not self.periodo_final:
+            raise ValidationError({"periodo_final": "Campo obrigatório para inventário eventual."})
 
-            if self.periodo_inicial.year != self.periodo_final.year:
-                raise ValidationError(
-                    {
-                        "periodo_final": "O período do inventário deve estar dentro do mesmo ano."
-                    }
-                )
+        # ✅ ANUAL não usa período
+        if self.tipo == constants.INVENTARIO_ANUAL:
+            self.periodo_final = None
 
-    def _get_ano_do_inventario(self):
-        if not self.periodo_inicial:
-            return timezone.now().year
-        return self.periodo_inicial.year
-
-    def _get_proxima_versao_eventual(self):
-        """
-        Versão = quantidade de inventários EVENTUAIS existentes para a mesma UA no mesmo ano + 1.
-        Ex.: existem 10 eventuais -> próximo = 11 (gravado como 011 no número).
-        """
-        ano = self._get_ano_do_inventario()
-
-        qs = InventarioUA.objects.filter(
-            unidade_administrativa=self.unidade_administrativa,
-            tipo=constants.INVENTARIO_EVENTUAL,
-            periodo_inicial__year=ano,
-        )
-
-        if self.pk:
-            qs = qs.exclude(pk=self.pk)
-
-        total = qs.count()
-        return total + 1
+        self._validar_parametro_anual_por_data_atual()
 
     def save(self, *args, **kwargs):
         self.full_clean(exclude=["numero_inventario"])
@@ -153,6 +217,9 @@ class InventarioUA(models.Model):
     def finalizar(self, usuario):
         if self.status == constants.INVENTARIO_FECHADO:
             return
+
+        self._validar_parametro_anual_por_data_atual()
+
         self.status = constants.INVENTARIO_FECHADO
         self.fechado_por = usuario
         self.fechado_em = timezone.now()
@@ -183,6 +250,7 @@ class ItemInventario(models.Model):
         "Situação",
         max_length=30,
         choices=constants.SITUACOES_ITEM_INVENTARIO,
+        default=constants.ENCONTRADO_SEM_DIVERGENCIA,
         help_text="Situação do bem no momento da criação do inventário",
     )
 
