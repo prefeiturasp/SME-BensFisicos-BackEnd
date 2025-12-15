@@ -98,6 +98,14 @@ class ItemInventarioInline(admin.TabularInline):
         if not obj.inventario.esta_aberto:
             return format_html('<span style="color: gray;">Inventário fechado</span>')
 
+        if not obj.permite_registrar_ocorrencia:
+            return format_html(
+                '<button class="button" disabled '
+                'style="padding: 3px 10px; font-size: 11px; background-color: #ccc; '
+                'border-color: #ccc; color: #666; cursor: not-allowed;" '
+                'title="Bem baixado não pode ter status alterado">Registrar</button>'
+            )
+
         botoes = []
 
         texto_botao = "Editar" if obj.tem_ocorrencia else "Registrar"
@@ -125,15 +133,14 @@ class InventarioUAAdmin(admin.ModelAdmin):
     list_display = [
         "numero_inventario",
         "unidade_administrativa",
-        "ano_referencia",
         "tipo",
-        "versao_display",
         "status_display",
         "total_itens",
-        "vigencia",
+        "periodo_inicial",
+        "periodo_final",
         "criado_em",
     ]
-    list_filter = ["status", "tipo", "ano_referencia", "unidade_administrativa"]
+    list_filter = ["status", "tipo", "unidade_administrativa"]
     search_fields = [
         "numero_inventario",
         "unidade_administrativa__nome",
@@ -142,7 +149,6 @@ class InventarioUAAdmin(admin.ModelAdmin):
     ]
     readonly_fields = [
         "numero_inventario",
-        "versao",
         "criado_por",
         "criado_em",
         "fechado_por",
@@ -156,10 +162,8 @@ class InventarioUAAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "numero_inventario",
-                    "ano_referencia",
                     "tipo",
-                    "versao",
-                    "vigencia",
+                    ("periodo_inicial", "periodo_final"),
                     "unidade_administrativa",
                     "status",
                 )
@@ -235,14 +239,6 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
     status_display.short_description = "Status"
     status_display.admin_order_field = "status"
-
-    def versao_display(self, obj):
-        if obj.tipo == constants.INVENTARIO_EVENTUAL:
-            return f"{obj.versao:03d}"
-        return "-"
-
-    versao_display.short_description = "Versão"
-    versao_display.admin_order_field = "versao"
 
     def total_itens(self, obj):
         if not obj.pk:
@@ -327,6 +323,14 @@ class InventarioUAAdmin(admin.ModelAdmin):
             messages.error(request, "Inventário fechado não permite edições")
             return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
 
+        if not item.permite_registrar_ocorrencia:
+            messages.error(
+                request,
+                "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
+                "Este status é definitivo.",
+            )
+            return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
+
         if request.method == "POST":
             situacao = request.POST.get("situacao")
             observacao = request.POST.get("observacao", "")
@@ -349,13 +353,14 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
         situacoes_disponiveis = list(constants.SITUACOES_ITEM_INVENTARIO)
 
-        situacoes_disponiveis = [
-            s
-            for s in situacoes_disponiveis
-            if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
-        ]
+        if not item.pode_resolver_situacao:
+            situacoes_disponiveis = [
+                s
+                for s in situacoes_disponiveis
+                if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
+            ]
 
-        if item.situacao_anterior != constants.NAO_ENCONTRADO:
+        if not item.pode_marcar_como_encontrado:
             situacoes_disponiveis = [
                 s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO
             ]
