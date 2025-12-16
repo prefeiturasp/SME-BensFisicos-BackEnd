@@ -99,9 +99,7 @@ class InventarioUA(models.Model):
     fechado_em = models.DateTimeField("Fechado em", null=True, blank=True)
 
     class Meta:
-        # ✅ Sem periodo_inicial. Unique agora:
-        # - ANUAL: único por (UA, tipo, ano) => garantimos via constraint condicional
-        # - EVENTUAL: único por (UA, tipo, periodo_final)
+
         verbose_name = "Gerenciamento de Inventário"
         verbose_name_plural = "Gerenciamento de Inventário"
         ordering = ["-criado_em", "unidade_administrativa"]
@@ -112,15 +110,10 @@ class InventarioUA(models.Model):
         ]
 
         constraints = [
-            # EVENTUAL: não pode repetir mesmo periodo_final na mesma UA
             models.UniqueConstraint(
                 fields=["unidade_administrativa", "tipo", "periodo_final"],
                 name="uniq_inventario_ua_tipo_periodo_final",
             ),
-            # ANUAL: um por ano (ano calculado pelo número do inventário),
-            # então garantimos pela combinação (UA, tipo, numero_inventario) já ser unique global
-            # e também bloqueamos múltiplos anuais no mesmo ano usando um constraint por "numero_inventario".
-            # Como numero_inventario já é unique global, isso já impede duplicar 001.XXXX/AAAA.
         ]
 
     def __str__(self):
@@ -136,7 +129,6 @@ class InventarioUA(models.Model):
                 return self.periodo_final.year
             return timezone.localdate().year
 
-        # ANUAL
         return timezone.localdate().year
 
     def _get_proxima_versao_eventual(self):
@@ -162,7 +154,7 @@ class InventarioUA(models.Model):
 
         from .models import (
             ParametroInventarioAnual,
-        )  # evita import circular, se necessário
+        )
 
         parametro = ParametroInventarioAnual.objects.filter(
             ano_referencia=ano,
@@ -186,13 +178,11 @@ class InventarioUA(models.Model):
         if not self.tipo:
             raise ValidationError({"tipo": "Campo obrigatório."})
 
-        # ✅ EVENTUAL exige periodo_final
         if self.tipo == constants.INVENTARIO_EVENTUAL and not self.periodo_final:
             raise ValidationError(
                 {"periodo_final": "Campo obrigatório para inventário eventual."}
             )
 
-        # ✅ ANUAL não usa período
         if self.tipo == constants.INVENTARIO_ANUAL:
             self.periodo_final = None
 
@@ -326,7 +316,7 @@ class ItemInventario(models.Model):
     @property
     def permite_registrar_ocorrencia(self):
         if self.situacao == constants.BAIXA_FISICA:
-            # Se tem ocorrência, foi registrado neste inventário então permite editar
+
             return self.tem_ocorrencia
         return True
 

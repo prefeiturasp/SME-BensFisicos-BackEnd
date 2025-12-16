@@ -15,31 +15,35 @@ class InventarioUAAdminForm(forms.ModelForm):
         self.request = kwargs.pop("request", None)
         super().__init__(*args, **kwargs)
 
-        # obrigatórios
-        self.fields["unidade_administrativa"].required = True
-        self.fields["tipo"].required = True
+        if "unidade_administrativa" in self.fields:
+            self.fields["unidade_administrativa"].required = True
+        if "tipo" in self.fields:
+            self.fields["tipo"].required = True
 
-        # periodo_final: só será obrigatório quando EVENTUAL (no clean)
         if "periodo_final" in self.fields:
             self.fields["periodo_final"].required = False
 
         user = getattr(self.request, "user", None)
 
-        # Operador: sempre tem UA e não pode editar
-        if user and getattr(user, "is_operador_inventario", False) and not getattr(user, "is_gestor_patrimonio", False):
+        if (
+            user
+            and getattr(user, "is_operador_inventario", False)
+            and not getattr(user, "is_gestor_patrimonio", False)
+        ):
             ua = getattr(user, "unidade_administrativa", None)
             if not ua:
-                raise ValidationError("Como operador você deve estar vinculado a uma unidade administrativa.")
-            self.fields["unidade_administrativa"].initial = ua
-            self.fields["unidade_administrativa"].disabled = True
+                raise ValidationError(
+                    "Como operador você deve estar vinculado a uma unidade administrativa."
+                )
+            if "unidade_administrativa" in self.fields:
+                self.fields["unidade_administrativa"].initial = ua
+                self.fields["unidade_administrativa"].disabled = True
 
-        # Gestor: se tiver UA, seta default (mas deixa editar)
         if user and getattr(user, "is_gestor_patrimonio", False):
             ua = getattr(user, "unidade_administrativa", None)
-            if ua:
+            if ua and "unidade_administrativa" in self.fields:
                 self.fields["unidade_administrativa"].initial = ua
 
-        # edição: travar campos base
         if self.instance and self.instance.pk:
             for f in ("unidade_administrativa", "tipo", "periodo_final"):
                 if f in self.fields:
@@ -48,24 +52,45 @@ class InventarioUAAdminForm(forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
 
+        unidade_administrativa = cleaned.get("unidade_administrativa")
         tipo = cleaned.get("tipo")
         periodo_final = cleaned.get("periodo_final")
 
         if not tipo:
             raise ValidationError({"tipo": "Campo obrigatório."})
 
+        if not unidade_administrativa:
+            raise ValidationError({"unidade_administrativa": "Campo obrigatório."})
+
+        if not self.instance.pk:
+            existe_aberto = InventarioUA.objects.filter(
+                unidade_administrativa=unidade_administrativa,
+                status=constants.INVENTARIO_EM_ABERTO,
+            ).exists()
+
+            if existe_aberto:
+                raise ValidationError(
+                    {
+                        "unidade_administrativa": (
+                            "Já existe um inventário em aberto para esta Unidade Administrativa. "
+                            "Feche o inventário anterior para abrir um novo."
+                        )
+                    }
+                )
+
         hoje = timezone.localdate()
         ano_atual = hoje.year
 
         if tipo == constants.INVENTARIO_ANUAL:
-            # ✅ anual: NÃO exige periodo_final
             parametro = ParametroInventarioAnual.objects.filter(
                 ano_referencia=ano_atual,
                 ativo=True,
             ).first()
 
             if not parametro:
-                raise ValidationError(f"Não existe parâmetro ativo para inventário anual do ano {ano_atual}.")
+                raise ValidationError(
+                    f"Não existe parâmetro ativo para inventário anual do ano {ano_atual}."
+                )
 
             if not (parametro.periodo_inicial <= hoje <= parametro.periodo_final):
                 raise ValidationError(
@@ -73,11 +98,9 @@ class InventarioUAAdminForm(forms.ModelForm):
                     f"{parametro.periodo_inicial:%d/%m/%Y} e {parametro.periodo_final:%d/%m/%Y}."
                 )
 
-            # força nulo no anual
             cleaned["periodo_final"] = None
 
         elif tipo == constants.INVENTARIO_EVENTUAL:
-            # ✅ eventual: exige periodo_final
             if not periodo_final:
                 raise ValidationError({"periodo_final": "Este campo é obrigatório."})
 
