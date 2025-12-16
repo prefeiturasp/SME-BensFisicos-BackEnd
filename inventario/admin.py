@@ -11,7 +11,7 @@ from .models import ParametroInventarioAnual, InventarioUA, ItemInventario
 from .forms import InventarioUAAdminForm
 
 
-from inventario.utils import excluir_ocorrencia
+from inventario.utils import excluir_ocorrencia, registrar_ocorrencia
 from . import constants
 
 
@@ -103,6 +103,14 @@ class ItemInventarioInline(admin.TabularInline):
 
         if not obj.inventario.esta_aberto:
             return format_html('<span style="color: gray;">Inventário fechado</span>')
+
+        if not obj.permite_registrar_ocorrencia:
+            return format_html(
+                '<button class="button" disabled '
+                'style="padding: 3px 10px; font-size: 11px; background-color: #ccc; '
+                'border-color: #ccc; color: #666; cursor: not-allowed;" '
+                'title="Bem baixado não pode ter status alterado">Registrar</button>'
+            )
 
         botoes = []
 
@@ -220,11 +228,13 @@ class InventarioUAAdmin(admin.ModelAdmin):
         if not obj.periodo_final:
             return "-"
 
-        return format_html("<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y"))
+        return format_html(
+            "<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y")
+        )
 
     periodo_display.short_description = "Período"
     periodo_display.admin_order_field = "periodo_final"
-    
+
     def get_actions(self, request):
         actions = super().get_actions(request)
         if "delete_selected" in actions:
@@ -272,18 +282,6 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
     status_display.short_description = "Status"
     status_display.admin_order_field = "status"
-
-    # def periodo_display(self, obj):
-    #     if not obj.periodo_inicial or not obj.periodo_final:
-    #         return "-"
-    #     return format_html(
-    #         "<strong>{}</strong> → <strong>{}</strong>",
-    #         obj.periodo_inicial.strftime("%d/%m/%Y"),
-    #         obj.periodo_final.strftime("%d/%m/%Y"),
-    #     )
-
-    # periodo_display.short_description = "Período"
-    # periodo_display.admin_order_field = "periodo_inicial"
 
     def total_itens(self, obj):
         if not obj.pk:
@@ -370,6 +368,14 @@ class InventarioUAAdmin(admin.ModelAdmin):
             messages.error(request, "Inventário fechado não permite edições")
             return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
 
+        if not item.permite_registrar_ocorrencia:
+            messages.error(
+                request,
+                "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
+                "Este status é definitivo.",
+            )
+            return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
+
         if request.method == "POST":
             situacao = request.POST.get("situacao")
             observacao = request.POST.get("observacao", "")
@@ -394,17 +400,25 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
         # não permitir registrar "Encontrado sem divergência" manualmente
         situacoes_disponiveis = [
-            s
-            for s in situacoes_disponiveis
-            if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
+            s for s in situacoes_disponiveis if s[0] != item.situacao
         ]
 
-        # compatível com model atual: não existe situacao_anterior
-        # regra original: só permitir "ENCONTRADO" se antes estava "NAO_ENCONTRADO"
-        if item.situacao != constants.NAO_ENCONTRADO:
+        if not item.pode_resolver_situacao:
+            situacoes_disponiveis = [
+                s
+                for s in situacoes_disponiveis
+                if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
+            ]
+
+        if not item.pode_marcar_como_encontrado:
             situacoes_disponiveis = [
                 s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO
             ]
+
+        is_edicao = item.tem_ocorrencia
+        situacao_atual = item.situacao if is_edicao else None
+        observacao_atual = item.observacao if is_edicao else ""
+        divergencia_atual = item.divergencia if is_edicao else ""
 
         context = {
             "item": item,
@@ -414,6 +428,10 @@ class InventarioUAAdmin(admin.ModelAdmin):
             "has_view_permission": self.has_view_permission(request),
             "original": item.inventario,
             "title": f"Registrar Ocorrência - {item.bem.numero_patrimonial}",
+            "is_edicao": is_edicao,
+            "situacao_atual": situacao_atual,
+            "observacao_atual": observacao_atual,
+            "divergencia_atual": divergencia_atual,
         }
 
         return render(request, "admin/inventario/registrar_ocorrencia.html", context)

@@ -1,0 +1,73 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .excluir-container { max-width: 720px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; overflow: hidden; }
+    .card-header { padding: 14px 20px; font-size: 15px; font-weight: 600; }
+    .card-header.warning { background: linear-gradient(135deg, #e65100 0%, #bf360c 100%); color: #fff; }
+    .card-header.info { background: linear-gradient(135deg, #417690 0%, #2a5a70 100%); color: #fff; }
+    .card-body { padding: 20px; }
+    .alert-list { margin: 0; padding-left: 20px; color: #5d4037; font-size: 14px; line-height: 1.8; }
+    .info-grid { display: grid; grid-template-columns: 160px 1fr; gap: 12px 16px; }
+    .info-label { color: #666; font-size: 13px; font-weight: 500; }
+    .info-value { color: #333; font-size: 14px; font-weight: 600; }
+    .actions-bar { display: flex; align-items: center; gap: 12px; padding: 20px; background: #f8f8f8; border-radius: 8px; }
+    .btn { padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; cursor: pointer; transition: all 0.2s ease; border: none; display: inline-flex; align-items: center; }
+    .btn-danger { background: #ba2121; color: #fff !important; }
+    .btn-danger:hover { background: #981b1b; color: #fff !important; }
+    a.btn-secondary, .btn-secondary { background: #e0e0e0; color: #333 !important; }
+    a.btn-secondary:hover, .btn-secondary:hover { background: #c0c0c0; color: #222 !important; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:inventario_inventarioua_changelist' %}">Inventários</a>
+    &rsaquo; <a href="{% url 'admin:inventario_inventarioua_change' item.inventario.pk %}">{{ item.inventario.numero_inventario }}</a>
+    &rsaquo; Excluir Ocorrência
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="excluir-container">
+    <div class="card">
+        <div class="card-header warning">⚠️ Confirmar Exclusão</div>
+        <div class="card-body">
+            <ul class="alert-list">
+                <li>A situação será revertida para "Encontrado sem divergência"</li>
+                <li>Observações e divergências serão removidas</li>
+                <li>O bloqueio do bem será removido (se houver)</li>
+                <li>Esta ação criará um registro no histórico</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header info">📦 Dados do Item</div>
+        <div class="card-body">
+            <div class="info-grid">
+                <span class="info-label">Número Patrimonial</span>
+                <span class="info-value">{{ item.bem.numero_patrimonial }}</span>
+                <span class="info-label">Descrição</span>
+                <span class="info-value">{{ item.bem.nome }}</span>
+                <span class="info-label">Situação atual</span>
+                <span class="info-value">{{ item.get_situacao_display }}</span>
+                {% if item.observacao %}<span class="info-label">Observação</span><span class="info-value">{{ item.observacao }}</span>{% endif %}
+                {% if item.divergencia %}<span class="info-label">Divergência</span><span class="info-value">{{ item.divergencia }}</span>{% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <form method="post">
+        {% csrf_token %}
+        <div class="actions-bar">
+            <button type="submit" class="btn btn-danger">Confirmar Exclusão</button>
+            <a href="{% url 'admin:inventario_inventarioua_change' item.inventario.pk %}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

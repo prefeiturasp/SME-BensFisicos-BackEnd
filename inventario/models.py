@@ -160,7 +160,9 @@ class InventarioUA(models.Model):
         ano = self._get_ano_do_inventario()
         hoje = timezone.localdate()
 
-        from .models import ParametroInventarioAnual  # evita import circular, se necessário
+        from .models import (
+            ParametroInventarioAnual,
+        )  # evita import circular, se necessário
 
         parametro = ParametroInventarioAnual.objects.filter(
             ano_referencia=ano,
@@ -186,7 +188,9 @@ class InventarioUA(models.Model):
 
         # ✅ EVENTUAL exige periodo_final
         if self.tipo == constants.INVENTARIO_EVENTUAL and not self.periodo_final:
-            raise ValidationError({"periodo_final": "Campo obrigatório para inventário eventual."})
+            raise ValidationError(
+                {"periodo_final": "Campo obrigatório para inventário eventual."}
+            )
 
         # ✅ ANUAL não usa período
         if self.tipo == constants.INVENTARIO_ANUAL:
@@ -307,7 +311,24 @@ class ItemInventario(models.Model):
 
     @property
     def tem_ocorrencia(self):
-        return self.situacao != constants.ENCONTRADO_SEM_DIVERGENCIA
+        return self.ocorrencias.exists()
+
+    @property
+    def pode_marcar_como_encontrado(self):
+        return (
+            not self.ocorrencias.exists() and self.situacao == constants.NAO_ENCONTRADO
+        )
+
+    @property
+    def pode_resolver_situacao(self):
+        return not self.ocorrencias.exists() and self.situacao == constants.DIVERGENTE
+
+    @property
+    def permite_registrar_ocorrencia(self):
+        if self.situacao == constants.BAIXA_FISICA:
+            # Se tem ocorrência, foi registrado neste inventário então permite editar
+            return self.tem_ocorrencia
+        return True
 
 
 class OcorrenciaInventario(models.Model):
@@ -323,8 +344,8 @@ class OcorrenciaInventario(models.Model):
         "Situação",
         max_length=30,
         choices=constants.SITUACOES_ITEM_INVENTARIO,
-        default=constants.ENCONTRADO_SEM_DIVERGENCIA,
-        help_text="Situação na ocorrência",
+        default=constants.DIVERGENTE,
+        help_text="Situação na ocorrencia",
     )
 
     observacao = models.TextField("Observação", blank=True)
@@ -347,4 +368,4 @@ class OcorrenciaInventario(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.item.bem.numero_patrimonial} → {self.get_situacao_display()}"
+        return f"{self.item.bem.numero_patrimonial} - {self.get_situacao_display()}"
