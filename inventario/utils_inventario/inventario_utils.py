@@ -47,13 +47,11 @@ def criar_itens_inventario(inventario):
             raise ValueError("Inventário eventual precisa de periodo_final.")
         ano_inventario = inventario.periodo_final.year
     else:
-        # anual: ano corrente (o model valida pelo parâmetro anual)
+
         ano_inventario = hoje.year
 
-    ano_baixa_permitido = ano_inventario - 1
+    ano_baixa_minimo = ano_inventario - 1
 
-    # Subqueries para pegar dados da última ocorrência de cada bem
-    # IMPORTANTE: só considera ocorrências de inventários FECHADOS
     ultima_ocorrencia_base = OcorrenciaInventario.objects.filter(
         item__bem_id=OuterRef("pk"),
         item__inventario__status=constants.INVENTARIO_FECHADO,
@@ -71,17 +69,21 @@ def criar_itens_inventario(inventario):
         ultima_observacao_inventario=Subquery(ultima_observacao_sq),
     )
 
-    filtro_ativos = ~Q(status=bem_constants.BAIXA_FISICA)
-
-    filtro_baixados_no_ano_anterior = Q(
-        status=bem_constants.BAIXA_FISICA,
-        baixas_fisicas_itens__baixa__status=bem_constants.ACEITA,
-        baixas_fisicas_itens__baixa__data_aprovacao__year=ano_baixa_permitido,
+    filtro_ativos = ~Q(
+        status__in=[
+            bem_constants.BAIXA_FISICA,
+            bem_constants.AGUARDANDO_APROVACAO,
+        ]
     )
 
-    bens = qs_bens.filter(filtro_ativos | filtro_baixados_no_ano_anterior).distinct()
+    filtro_baixados_a_partir_do_ano_anterior = Q(
+        status=bem_constants.BAIXA_FISICA,
+        baixas_fisicas_itens__baixa__status=bem_constants.ACEITA,
+        baixas_fisicas_itens__baixa__data_aprovacao__year__gte=ano_baixa_minimo,
+    )
 
-    # Situações que devem ser herdadas para o novo inventário
+    bens = qs_bens.filter(filtro_ativos | filtro_baixados_a_partir_do_ano_anterior).distinct()
+
     situacoes_problematicas = (
         constants.NAO_ENCONTRADO,
         constants.DIVERGENTE,
@@ -91,10 +93,10 @@ def criar_itens_inventario(inventario):
     itens = []
     for bem in bens:
         ultima_situacao = bem.ultima_situacao_inventario
-        # Se a última situação foi problemática, herda situação, divergência e observação
+
         if ultima_situacao in situacoes_problematicas:
             situacao = ultima_situacao
-            # Divergência só é herdada se situação for DIVERGENTE
+
             divergencia = (
                 bem.ultima_divergencia_inventario
                 if ultima_situacao == constants.DIVERGENTE

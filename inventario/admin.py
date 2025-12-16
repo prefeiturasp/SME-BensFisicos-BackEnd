@@ -5,7 +5,10 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-from inventario.utils_inventario.inventario_utils import criar_itens_inventario
+from inventario.utils_inventario.inventario_utils import (
+    criar_itens_inventario,
+    finalizar_inventario,
+)
 
 from .models import ParametroInventarioAnual, InventarioUA, ItemInventario
 from .forms import InventarioUAAdminForm
@@ -164,6 +167,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
         "fechado_por",
         "fechado_em",
         "total_itens",
+        "status_display",
     ]
 
     inlines = [ItemInventarioInline]
@@ -172,6 +176,14 @@ class InventarioUAAdmin(admin.ModelAdmin):
     class Media:
         css = {"all": ("css/hide_crud_icons.css",)}
         js = ("admin/inventario_inventarioua_add.js",)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
 
     def get_form(self, request, obj=None, **kwargs):
         """
@@ -195,7 +207,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
                         "fields": (
                             "unidade_administrativa",
                             "tipo",
-                            "periodo_final",  # só aparece/obrigatório quando EVENTUAL
+                            "periodo_final",
                         )
                     },
                 ),
@@ -210,7 +222,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
                         "unidade_administrativa",
                         "tipo",
                         "periodo_final",
-                        "status",
+                        "status_display",
                     )
                 },
             ),
@@ -220,26 +232,33 @@ class InventarioUAAdmin(admin.ModelAdmin):
             ),
         )
 
-    def periodo_display(self, obj):
-        # anual não tem período
-        if obj.tipo == constants.INVENTARIO_ANUAL:
-            return "-"
+    def get_readonly_fields(self, request, obj=None):
+        ro = list(super().get_readonly_fields(request, obj))
+        if obj and not obj.esta_aberto:
+            for f in ("unidade_administrativa", "tipo", "periodo_final"):
+                if f not in ro:
+                    ro.append(f)
+        return ro
 
-        if not obj.periodo_final:
-            return "-"
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        """
+        Remove:
+          - Salvar e adicionar outro
+          - Salvar e continuar editando
+          - Apagar (já removido por has_delete_permission)
+        E: Salvar só aparece se inventário estiver EM_ABERTO
+        """
+        extra_context = extra_context or {}
+        extra_context["show_save_and_add_another"] = False
+        extra_context["show_save_and_continue"] = False
 
-        return format_html(
-            "<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y")
-        )
+        obj = None
+        if object_id:
+            obj = self.get_object(request, object_id)
 
-    periodo_display.short_description = "Período"
-    periodo_display.admin_order_field = "periodo_final"
+        extra_context["show_save"] = (obj is None) or (obj and obj.esta_aberto)
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        if "delete_selected" in actions:
-            del actions["delete_selected"]
-        return actions
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -254,11 +273,22 @@ class InventarioUAAdmin(admin.ModelAdmin):
         return qs
 
     def save_model(self, request, obj, form, change):
+        if change and "status" in getattr(form, "changed_data", []):
+            messages.error(
+                request,
+                "Status do inventário só pode ser alterado pela ação 'Fechar inventário'.",
+            )
+            return
+
+        if change and obj and not obj.esta_aberto:
+            messages.error(request, "Inventário fechado não permite edições.")
+            return
+
         if not change:
             obj.criado_por = request.user
+
         super().save_model(request, obj, form, change)
 
-        # Após criar: montar itens automaticamente com as regras
         if not change:
             criar_itens_inventario(obj)
             messages.success(
@@ -282,6 +312,18 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
     status_display.short_description = "Status"
     status_display.admin_order_field = "status"
+
+    def periodo_display(self, obj):
+        if obj.tipo == constants.INVENTARIO_ANUAL:
+            return "-"
+        if not obj.periodo_final:
+            return "-"
+        return format_html(
+            "<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y")
+        )
+
+    periodo_display.short_description = "Período"
+    periodo_display.admin_order_field = "periodo_final"
 
     def total_itens(self, obj):
         if not obj.pk:
