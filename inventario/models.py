@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 from bem_patrimonial.models import BemPatrimonial
@@ -38,10 +39,65 @@ class ParametroInventarioAnual(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["ano_referencia"],
-                condition=models.Q(ativo=True),
+                condition=Q(ativo=True),
                 name="unique_parametro_inventario_anual_ativo_por_ano",
             )
         ]
+        ordering = ["-ano_referencia", "-periodo_inicial"]
+
+    def __str__(self):
+        return (
+            f"{self.ano_referencia} | "
+            f"{self.periodo_inicial:%d/%m/%Y} → {self.periodo_final:%d/%m/%Y}"
+        )
+
+    def clean(self):
+        super().clean()
+
+        if not self.periodo_inicial or not self.periodo_final:
+            raise ValidationError("Período inicial e período final são obrigatórios.")
+
+        if self.periodo_inicial > self.periodo_final:
+            raise ValidationError(
+                {
+                    "periodo_final": "O período final deve ser maior ou igual ao período inicial."
+                }
+            )
+
+        conflito = ParametroInventarioAnual.objects.filter(
+            ano_referencia=self.ano_referencia
+        ).exclude(pk=self.pk)
+
+        conflito = conflito.filter(
+            Q(periodo_inicial__lte=self.periodo_final)
+            & Q(periodo_final__gte=self.periodo_inicial)
+        )
+
+        if conflito.exists():
+            raise ValidationError(
+                "Já existe um período cadastrado que se sobrepõe a este intervalo."
+            )
+
+        if self.ativo:
+            ja_ativo = ParametroInventarioAnual.objects.filter(
+                ano_referencia=self.ano_referencia,
+                ativo=True,
+            ).exclude(pk=self.pk)
+
+            if ja_ativo.exists():
+                raise ValidationError("Já existe um parâmetro ativo para este ano.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def esta_vigente(self):
+        """
+        Indica se o período está em aberto no dia atual.
+        """
+        hoje = timezone.localdate()
+        return self.periodo_inicial <= hoje <= self.periodo_final
 
 
 class InventarioUA(models.Model):
