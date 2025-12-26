@@ -126,7 +126,6 @@ class CustomTokenVerifyView(TokenVerifyView):
     },
     tags=["Autenticação"],
     auth=None,
-    security=[],
 )
 class PasswordResetRequestAPIView(generics.GenericAPIView):
     serializer_class = PasswordResetRequestSerializer
@@ -219,7 +218,6 @@ class PasswordResetRequestAPIView(generics.GenericAPIView):
     },
     tags=["Autenticação"],
     auth=None,
-    security=[],
 )
 class PasswordResetConfirmAPIView(generics.GenericAPIView):
     serializer_class = PasswordResetConfirmSerializer
