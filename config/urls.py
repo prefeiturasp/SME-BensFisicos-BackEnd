@@ -14,7 +14,12 @@ from bem_patrimonial.views import download_documento_cimbpm
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.conf.urls.static import static
-from django.conf import settings
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+    SpectacularRedocView,
+)
+from usuario import api_urls as auth_api_urls
 
 
 # Módulo de Suporte desabilitado temporariamente
@@ -35,6 +40,16 @@ urlpatterns = [
     path(
         "", auth_views.LoginView.as_view(template_name="admin/login.html"), name="login"
     ),
+    # API de Autenticação
+    path("api/auth/", include(auth_api_urls)),
+    # Swagger/OpenAPI Documentação
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path(
+        "api/docs/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     # Download protegido de documentos CIMBPM
     path(
         "documento-cimbpm/<int:pk>/download/",
