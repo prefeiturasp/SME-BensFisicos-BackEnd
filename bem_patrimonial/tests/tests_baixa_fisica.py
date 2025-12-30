@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from unittest.mock import patch
+from django.utils import timezone
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -18,6 +19,8 @@ from bem_patrimonial.constants import (
     ENVIADA,
     ACEITA,
     CANCELADA,
+    SOLICITADA,
+    RECUSADA,
 )
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
@@ -96,13 +99,14 @@ class BaixaFisicaModelCleanTestCase(TestCase):
         self.bem.status = APROVADO
         self.bem.save()
 
-    def _cria_baixa_com_item(self, status=AGUARDANDO_ENVIO, bem=None):
+    def _cria_baixa_com_item(self, status=AGUARDANDO_ENVIO, bem=None, data_baixa=None):
         bem = bem or self.bem
         baixa = BaixaFisicaBemPatrimonial.objects.create(
             unidade_administrativa_origem=self.ua_origem,
             numero_processo_baixa="PROC-123",
             status=status,
             criado_por=self.operador_origem,
+            data_baixa=data_baixa or timezone.localdate(),
         )
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
         return baixa
@@ -111,6 +115,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
         baixa = BaixaFisicaBemPatrimonial(
             unidade_administrativa_origem=self.ua_origem,
             criado_por=self.operador_origem,
+            data_baixa=timezone.localdate()
         )
         with self.assertRaises(ValidationError) as ctx:
             baixa.clean()
@@ -122,6 +127,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             numero_processo_baixa="PROC-123",
             status=AGUARDANDO_ENVIO,
             criado_por=self.operador_origem,
+            data_baixa=timezone.localdate()
         )
         with self.assertRaises(ValidationError) as ctx:
             baixa.clean()
@@ -160,7 +166,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
 
     def test_clean_impede_bem_em_outra_baixa_em_andamento(self):
         # primeira baixa enviada
-        baixa1 = self._cria_baixa_com_item(status=ENVIADA)
+        baixa1 = self._cria_baixa_com_item(status=SOLICITADA)
         baixa1.clean()  # não deve levantar erro
 
         # segunda baixa com o mesmo bem
@@ -169,6 +175,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             numero_processo_baixa="PROC-456",
             status=AGUARDANDO_ENVIO,
             criado_por=self.operador_origem,
+            data_baixa=timezone.localdate()
         )
         BaixaFisicaBensItem.objects.create(baixa=baixa2, bem=self.bem)
 
@@ -185,6 +192,8 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             baixa.clean()
         except ValidationError:
             self.fail("clean() não deveria falhar quando o bem está na mesma baixa.")
+    
+    
 
 
 class BaixaFisicaFluxoEnvioAprovacaoTestCase(TestCase):
@@ -228,7 +237,7 @@ class BaixaFisicaFluxoEnvioAprovacaoTestCase(TestCase):
         self.baixa.refresh_from_db()
         self.bem.refresh_from_db()
 
-        self.assertEqual(self.baixa.status, ENVIADA)
+        self.assertEqual(self.baixa.status, SOLICITADA)
         self.assertEqual(self.bem.status, BAIXA_FISICA_AGUARDANDO_APROVACAO)
 
     def test_aprovar_somente_quando_enviada(self):
@@ -430,7 +439,7 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
 
         self.baixa.refresh_from_db()
         self.bem.refresh_from_db()
-        self.assertEqual(self.baixa.status, ENVIADA)
+        self.assertEqual(self.baixa.status, SOLICITADA)
         self.assertEqual(self.bem.status, BAIXA_FISICA_AGUARDANDO_APROVACAO)
 
     def test_acao_aprovar_baixa_somente_para_gestor(self):
@@ -469,7 +478,7 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
 
         self.baixa.refresh_from_db()
         self.bem.refresh_from_db()
-        self.assertEqual(self.baixa.status, CANCELADA)
+        self.assertEqual(self.baixa.status, RECUSADA)
         self.assertEqual(self.bem.status, APROVADO)
 
     def test_acao_cancelar_nao_cancela_baixas_aceitas(self):
