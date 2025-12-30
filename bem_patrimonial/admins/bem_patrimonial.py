@@ -267,7 +267,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 "unidade_administrativa",
                 "numero_patrimonial",
                 "numero_formato_antigo",
-                "sem_numeracao",
                 "nome",
                 "descricao",
                 "valor_unitario",
@@ -279,9 +278,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
         return base + (
             "unidade_administrativa",
-            "numero_patrimonial",
-            "numero_formato_antigo",
-            "sem_numeracao",
             "nome",
             "descricao",
             "valor_unitario",
@@ -312,6 +308,19 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     ordering = ("-criado_em",)
 
     inlines = [HistoricoGeralInline]
+
+    def has_change_permission(self, request, obj=None):
+        perm = super().has_change_permission(request, obj)
+        if not perm:
+            return False
+
+        if obj and obj.status == constants.BAIXA_FISICA:
+            return False
+
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def get_form(self, request, obj=None, **kwargs):
         BaseForm = super().get_form(request, obj, **kwargs)
@@ -412,6 +421,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         return EditForm
 
     def save_model(self, request, obj, form, change):
+        if change and obj.pk:
+            original = BemPatrimonial.objects.get(pk=obj.pk)
+            if original.status == constants.BAIXA_FISICA:
+                raise ValidationError(
+                    "Este bem está com status 'Baixa Física' e não pode ser editado."
+                )
         if obj.id is None:
             obj.criado_por = request.user
             if not obj.status:

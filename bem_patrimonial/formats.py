@@ -222,6 +222,7 @@ class PDFFormat(Format):
         headers = [
             "Nº Patrimonial",
             "Nome",
+            "Status",
             "Descrição",
             "Marca",
             "Modelo",
@@ -264,10 +265,11 @@ class PDFFormat(Format):
             if bem.unidade_administrativa:
                 unidade_adm_text = str(bem.unidade_administrativa.nome)
             unidade_administrativa = Paragraph(unidade_adm_text, cell_style)
-
+            status_formatado = Paragraph(bem.get_status_display(), cell_style)
             row = [
                 numero_patrimonial,
                 nome,
+                status_formatado,
                 descricao,
                 marca,
                 modelo,
@@ -280,14 +282,15 @@ class PDFFormat(Format):
             data.append(row)
 
         col_widths = [
-            2.3 * cm,  # Nº Patrimonial
+            2.2 * cm,  # Nº Patrimonial
             3.5 * cm,  # Nome
-            5.0 * cm,  # Descrição
+            3.0 * cm,  # Status
+            4.5 * cm,  # Descrição
             2.2 * cm,  # Marca
             2.2 * cm,  # Modelo
             2.2 * cm,  # Localização
             2.0 * cm,  # Valor Unit.
-            2.0 * cm,  # Nº Processo
+            1.7 * cm,  # Nº Processo
             4.0 * cm,  # Unidade Adm.
         ]
 

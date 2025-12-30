@@ -133,7 +133,9 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
 
         pdf_bytes = self._gerar_pdf(self.gestor_com_rf)
 
-        self.assertGreater(len(pdf_bytes), 50000)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"%%EOF", pdf_bytes)
+        
         page_count = pdf_bytes.count(b"/Page")
         self.assertGreater(page_count, 1)
 

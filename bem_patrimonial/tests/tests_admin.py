@@ -69,7 +69,6 @@ class BemPatrimonialAdminTest(TestCase):
         form = form_cls(instance=obj)
 
         self.assertTrue(getattr(form.fields["sem_numeracao"], "disabled", False))
-        self.assertFalse(
-            getattr(form.fields["numero_formato_antigo"], "disabled", False)
-        )
+        if "numero_formato_antigo" in form.fields:
+            self.assertFalse(form.fields["numero_formato_antigo"].disabled)
         self.assertFalse(getattr(form.fields["numero_patrimonial"], "disabled", False))

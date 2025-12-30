@@ -1,6 +1,8 @@
 from django.contrib import admin, messages
 from django.forms.models import BaseInlineFormSet
 from django.core.exceptions import ValidationError
+from django.forms import DateInput
+from django.utils import timezone
 
 from bem_patrimonial.models import (
     BaixaFisicaBemPatrimonial,
@@ -126,6 +128,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
                 "data_criacao",
                 "aprovado_por",
                 "data_aprovacao",
+                "data_baixa",
             )
         return ()
 
@@ -133,6 +136,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         campos_basicos = (
             "unidade_administrativa_origem",
             "numero_processo_baixa",
+            "data_baixa",
         )
 
         if obj:
@@ -286,7 +290,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
             level=messages.SUCCESS,
         )
 
-    acao_enviar_baixa.short_description = "Seolicitar Baixa Física selecionadas"
+    acao_enviar_baixa.short_description = "Solicitar Baixa Física selecionadas"
 
     def acao_aprovar_baixa(self, request, queryset):
         if not request.user.is_gestor_patrimonio:
@@ -411,3 +415,14 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
             )
 
     acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"
+    
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "data_baixa":
+            hoje = timezone.localdate()
+            kwargs["widget"] = DateInput(
+                attrs={
+                    "type": "date",
+                    "max": hoje.strftime("%Y-%m-%d"),
+                }
+            )
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
