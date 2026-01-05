@@ -5,6 +5,7 @@ from django.db.models import OuterRef, Subquery
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils import timezone
 
 from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
@@ -13,6 +14,7 @@ from bem_patrimonial.admins.actions.extracao_numeros import (
 from bem_patrimonial.admins.filters.bem_patrimonial_filters import SemNumeroFilter
 from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
 from bem_patrimonial.models import (
+    BaixaFisicaBensItem,
     BemPatrimonial,
     StatusBemPatrimonial,
 )
@@ -28,6 +30,9 @@ from django.contrib.contenttypes.admin import GenericTabularInline
 from django.db.models.functions import Cast
 from bem_patrimonial import constants
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from bem_patrimonial.admins.filters.baixados_periodo_filter import (
+    BaixadosMaisDeUmPeriodoFilter,
+)
 
 
 @admin.action(description="Aprovar bens selecionados")
@@ -218,6 +223,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         SemNumeroFilter,
         "numero_formato_antigo",
         ("criado_em", DateRangeFilter),
+        BaixadosMaisDeUmPeriodoFilter,
     )
 
     readonly_fields = (
@@ -463,6 +469,28 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         else:
             qs = qs.none()
 
+        baixa_data_sq = (
+            BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
+            .order_by("-baixa__data_baixa")
+            .values("baixa__data_baixa")[:1]
+        )
+        qs = qs.annotate(
+            baixa_data=Subquery(baixa_data_sq),
+        )
+        is_changelist = (
+            request.resolver_match
+            and request.resolver_match.url_name.endswith("_changelist")
+        )
+
+        if is_changelist and "baixados_mais_de_um_periodo" not in request.GET:
+            ano_corrente = timezone.localdate().year
+            ano_limite = ano_corrente - 1
+
+            qs = qs.exclude(
+                status=constants.BAIXA_FISICA,
+                baixa_data__year__lt=ano_limite,
+            )
+
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
 
@@ -487,6 +515,21 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             queryset = queryset.filter(unidade_administrativa=ua_user)
         else:
             queryset = queryset.none()
+
+        baixa_data_sq = (
+            BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
+            .order_by("-baixa__data_baixa")
+            .values("baixa__data_baixa")[:1]
+        )
+        queryset = queryset.annotate(baixa_data=Subquery(baixa_data_sq))
+
+        if "baixados_mais_de_um_periodo" not in request.GET:
+            ano_corrente = timezone.localdate().year
+            ano_limite = ano_corrente - 1
+            queryset = queryset.exclude(
+                status=constants.BAIXA_FISICA,
+                baixa_data__year__lt=ano_limite,
+            )
 
         return queryset
 
