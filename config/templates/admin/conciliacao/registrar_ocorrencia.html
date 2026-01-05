@@ -36,8 +36,8 @@
 {% block breadcrumbs %}
 <div class="breadcrumbs">
     <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
-    &rsaquo; <a href="{% url 'admin:inventario_inventarioua_changelist' %}">Inventários</a>
-    &rsaquo; <a href="{% url 'admin:inventario_inventarioua_change' item.inventario.pk %}">{{ item.inventario.numero_inventario }}</a>
+    &rsaquo; <a href="{% url 'admin:inventario_conciliacaoua_changelist' %}">Inventários</a>
+    &rsaquo; <a href="{% url 'admin:inventario_conciliacaoua_change' item.conciliacao.pk %}">{{ item.conciliacao.numero_conciliacao }}</a>
     &rsaquo; Registrar Ocorrência
 </div>
 {% endblock %}
@@ -95,7 +95,7 @@
         
         <div class="actions-bar">
             <button type="submit" class="btn btn-primary">Salvar</button>
-            <a href="{% url 'admin:inventario_inventarioua_change' item.inventario.pk %}" class="btn btn-secondary">Cancelar</a>
+            <a href="{% url 'admin:inventario_conciliacaoua_change' item.conciliacao.pk %}" class="btn btn-secondary">Cancelar</a>
             {% if item.tem_ocorrencia %}
             <a href="{% url 'admin:inventario_item_excluir_ocorrencia' item.pk %}" class="btn btn-danger">Excluir Ocorrência</a>
             {% endif %}

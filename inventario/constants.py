@@ -1,14 +1,16 @@
 # Tipos de Inventário
-INVENTARIO_ANUAL = "anual"
-INVENTARIO_EVENTUAL = "eventual"
-TIPOS_INVENTARIO = ((INVENTARIO_ANUAL, "Anual"), (INVENTARIO_EVENTUAL, "Eventual"))
+CONCILIACAO_ANUAL = "anual"
+CONCILIACAO_EVENTUAL = "eventual"
+TIPOS_CONCILIACAO = ((CONCILIACAO_ANUAL, "Anual"), (CONCILIACAO_EVENTUAL, "Eventual"))
 
 # Status do Inventário
-INVENTARIO_EM_ABERTO = "em_aberto"
-INVENTARIO_FECHADO = "fechado"
-STATUS_INVENTARIO = (
-    (INVENTARIO_EM_ABERTO, "Em aberto"),
-    (INVENTARIO_FECHADO, "Fechado"),
+CONCILIACAO_EM_ABERTO = "em_aberto"
+CONCILIACAO_FECHADO = "fechado"
+CONCILIACAO_FECHADO_ADMIN = "fechado_admin"
+STATUS_CONCILIACAO = (
+    (CONCILIACAO_EM_ABERTO, "Aberta"),
+    (CONCILIACAO_FECHADO, "Fechada"),
+    (CONCILIACAO_FECHADO_ADMIN, "Fechado pelo Administrador - Não Conciliado")
 )
 
 # Situações de Item no Inventário
@@ -18,7 +20,7 @@ NAO_ENCONTRADO = "nao_encontrado"
 DIVERGENTE = "divergente"
 BAIXA_FISICA = "baixa_fisica"
 
-SITUACOES_ITEM_INVENTARIO = (
+SITUACOES_ITEM_CONCILIACAO = (
     (ENCONTRADO_SEM_DIVERGENCIA, "Encontrado sem divergência"),
     (ENCONTRADO, "Encontrado"),
     (NAO_ENCONTRADO, "Não encontrado"),

@@ -1,0 +1,12 @@
+{% load i18n %}
+<div class="admin-filter-ano">
+  <label for="ano-vigencia">Por Ano de Vigência</label>
+  <select id="ano-vigencia" onchange="location = this.value;">
+    {% for choice in choices %}
+      <option value="{{ choice.query_string }}"
+              {% if choice.selected %}selected{% endif %}>
+        {{ choice.display }}
+      </option>
+    {% endfor %}
+  </select>
+</div>
