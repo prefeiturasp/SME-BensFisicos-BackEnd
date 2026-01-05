@@ -1,14 +1,15 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from datetime import date
 
-from .models import InventarioUA, ParametroInventarioAnual
+from .models import ConciliacaoUA, ParametroConciliacaoAnual
 from . import constants
 
 
-class InventarioUAAdminForm(forms.ModelForm):
+class ConciliacaoUAAdminForm(forms.ModelForm):
     class Meta:
-        model = InventarioUA
+        model = ConciliacaoUA
         fields = ("unidade_administrativa", "tipo", "periodo_final")
 
     def __init__(self, *args, **kwargs):
@@ -63,44 +64,48 @@ class InventarioUAAdminForm(forms.ModelForm):
             raise ValidationError({"unidade_administrativa": "Campo obrigatório."})
 
         if not self.instance.pk:
-            existe_aberto = InventarioUA.objects.filter(
+            existe_aberto = ConciliacaoUA.objects.filter(
                 unidade_administrativa=unidade_administrativa,
-                status=constants.INVENTARIO_EM_ABERTO,
+                status=constants.CONCILIACAO_EM_ABERTO,
             ).exists()
 
             if existe_aberto:
                 raise ValidationError(
                     {
                         "unidade_administrativa": (
-                            "Já existe um inventário em aberto para esta Unidade Administrativa. "
-                            "Feche o inventário anterior para abrir um novo."
+                            "Já existe uma conciliação em aberto para esta Unidade Administrativa. "
+                            "Feche a conciliação anterior para abrir uma nova."
                         )
                     }
                 )
 
         hoje = timezone.localdate()
-        ano_atual = hoje.year
+        ano_corrente = hoje.year
 
-        if tipo == constants.INVENTARIO_ANUAL:
-            parametro = ParametroInventarioAnual.objects.filter(
-                ano_referencia=ano_atual,
+        if tipo == constants.CONCILIACAO_ANUAL:
+            ano_referencia = hoje.year - 1
+
+            parametro = ParametroConciliacaoAnual.objects.filter(
+                ano_referencia=ano_referencia,
                 ativo=True,
             ).first()
 
-            if not parametro:
+            if parametro:
+                data_inicio = parametro.periodo_inicial
+                data_fim = parametro.periodo_final
+            else:
+                data_inicio = date(ano_corrente, 1, 1)
+                data_fim = date(ano_corrente, 3, 31)
+
+            if not (data_inicio <= hoje <= data_fim):
                 raise ValidationError(
-                    f"Não existe parâmetro ativo para inventário anual do ano {ano_atual}."
+                    f"A conciliação anual {ano_referencia} só pode ser criada entre "
+                    f"{data_inicio:%d/%m/%Y} e {data_fim:%d/%m/%Y}."
                 )
 
-            if not (parametro.periodo_inicial <= hoje <= parametro.periodo_final):
-                raise ValidationError(
-                    f"O inventário anual {ano_atual} só pode ser criado entre "
-                    f"{parametro.periodo_inicial:%d/%m/%Y} e {parametro.periodo_final:%d/%m/%Y}."
-                )
+            cleaned["periodo_final"] = date(ano_referencia, 12, 31)
 
-            cleaned["periodo_final"] = None
-
-        elif tipo == constants.INVENTARIO_EVENTUAL:
+        elif tipo == constants.CONCILIACAO_EVENTUAL:
             if not periodo_final:
                 raise ValidationError({"periodo_final": "Este campo é obrigatório."})
 

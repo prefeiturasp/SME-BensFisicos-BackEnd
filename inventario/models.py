@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+from datetime import date
 
 from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
@@ -10,21 +11,21 @@ from usuario.models import Usuario
 from . import constants
 
 
-class ParametroInventarioAnual(models.Model):
+class ParametroConciliacaoAnual(models.Model):
 
     ano_referencia = models.PositiveSmallIntegerField(
         "Ano de Referência",
-        help_text="Ano do inventário anual ao qual este parâmetro se refere (ex.: 2025).",
+        help_text="Ano da conciliação anual ao qual este parâmetro se refere (ex.: 2025).",
     )
 
     periodo_inicial = models.DateField(
         "Período Inicial Permitido",
-        help_text="Data inicial em que inventários anuais podem ser criados/fechados.",
+        help_text="Data inicial em que conciliações anuais podem ser criadas/fechadas.",
     )
 
     periodo_final = models.DateField(
         "Período Final Permitido",
-        help_text="Data final em que inventários anuais podem ser criados/fechados.",
+        help_text="Data final em que conciliações anuais podem ser criadas/fechadas.",
     )
 
     ativo = models.BooleanField(
@@ -34,13 +35,13 @@ class ParametroInventarioAnual(models.Model):
     )
 
     class Meta:
-        verbose_name = "Parâmetro de Inventário Anual"
-        verbose_name_plural = "Parâmetros de Inventário Anual"
+        verbose_name = "Parâmetro de Conciliação Anual"
+        verbose_name_plural = "Parâmetros de Conciliação Anual"
         constraints = [
             models.UniqueConstraint(
                 fields=["ano_referencia"],
                 condition=Q(ativo=True),
-                name="unique_parametro_inventario_anual_ativo_por_ano",
+                name="unique_parametro_conciliacao_anual_ativo_por_ano",
             )
         ]
         ordering = ["-ano_referencia", "-periodo_inicial"]
@@ -64,7 +65,7 @@ class ParametroInventarioAnual(models.Model):
                 }
             )
 
-        conflito = ParametroInventarioAnual.objects.filter(
+        conflito = ParametroConciliacaoAnual.objects.filter(
             ano_referencia=self.ano_referencia
         ).exclude(pk=self.pk)
 
@@ -79,7 +80,7 @@ class ParametroInventarioAnual(models.Model):
             )
 
         if self.ativo:
-            ja_ativo = ParametroInventarioAnual.objects.filter(
+            ja_ativo = ParametroConciliacaoAnual.objects.filter(
                 ano_referencia=self.ano_referencia,
                 ativo=True,
             ).exclude(pk=self.pk)
@@ -100,12 +101,11 @@ class ParametroInventarioAnual(models.Model):
         return self.periodo_inicial <= hoje <= self.periodo_final
 
 
-class InventarioUA(models.Model):
+class ConciliacaoUA(models.Model):
 
-    numero_inventario = models.CharField(
-        "Número do Inventário",
+    numero_conciliacao = models.CharField(
+        "Número do Conciliação",
         max_length=30,
-        unique=True,
         help_text="Formato: 001.XXXX/AAAA (anual) ou 001.XXXX/AAAA/VVV (eventual)",
     )
 
@@ -113,33 +113,35 @@ class InventarioUA(models.Model):
         "Período Final",
         null=True,
         blank=True,
-        help_text="Data final do período do inventário.",
+        help_text="Data final do período da conciliação.",
     )
 
     tipo = models.CharField(
         "Tipo",
         max_length=20,
-        choices=constants.TIPOS_INVENTARIO,
+        choices=constants.TIPOS_CONCILIACAO,
     )
 
     unidade_administrativa = models.ForeignKey(
         UnidadeAdministrativa,
         on_delete=models.PROTECT,
-        related_name="inventarios",
+        related_name="conciliacoes",
         verbose_name="Unidade Administrativa",
     )
 
     status = models.CharField(
         "Status",
         max_length=20,
-        choices=constants.STATUS_INVENTARIO,
-        default=constants.INVENTARIO_EM_ABERTO,
+        choices=constants.STATUS_CONCILIACAO,
+        default=constants.CONCILIACAO_EM_ABERTO,
     )
 
     criado_por = models.ForeignKey(
         Usuario,
         on_delete=models.PROTECT,
-        related_name="inventarios_criados",
+        null=True,
+        blank=True,
+        related_name="conciliacoes_criadas",
         verbose_name="Criado por",
     )
     criado_em = models.DateTimeField("Criado em", auto_now_add=True)
@@ -149,15 +151,15 @@ class InventarioUA(models.Model):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="inventarios_fechados",
+        related_name="conciliacoes_fechadas",
         verbose_name="Fechado por",
     )
     fechado_em = models.DateTimeField("Fechado em", null=True, blank=True)
 
     class Meta:
 
-        verbose_name = "Gerenciamento de Inventário"
-        verbose_name_plural = "Gerenciamento de Inventário"
+        verbose_name = "Conciliação"
+        verbose_name_plural = "Conciliações"
         ordering = ["-criado_em", "unidade_administrativa"]
 
         indexes = [
@@ -168,31 +170,34 @@ class InventarioUA(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["unidade_administrativa", "tipo", "periodo_final"],
-                name="uniq_inventario_ua_tipo_periodo_final",
+                name="uniq_conciliacao_ua_tipo_periodo_final",
             ),
         ]
 
     def __str__(self):
-        return f"{self.numero_inventario} - {self.unidade_administrativa.sigla}"
+        return f"{self.numero_conciliacao} - {self.unidade_administrativa.sigla}"
 
-    def _get_ano_do_inventario(self):
+    def _get_ano_referencia(self):
         """
-        EVENTUAL: ano vem do periodo_final
-        ANUAL: ano corrente (criação/fechamento controlados por ParametroInventarioAnual)
+        EVENTUAL:
+        - ano vem do periodo_final (se existir)
+        ANUAL:
+        - sempre o ano anterior ao ano corrente
         """
-        if self.tipo == constants.INVENTARIO_EVENTUAL:
+        hoje = timezone.localdate()
+
+        if self.tipo == constants.CONCILIACAO_EVENTUAL:
             if self.periodo_final:
                 return self.periodo_final.year
-            return timezone.localdate().year
+            return hoje.year
 
-        return timezone.localdate().year
+        return hoje.year - 1
 
     def _get_proxima_versao_eventual(self):
-        ano = self._get_ano_do_inventario()
-
-        qs = InventarioUA.objects.filter(
+        ano = self._get_ano_referencia()
+        qs = ConciliacaoUA.objects.filter(
             unidade_administrativa=self.unidade_administrativa,
-            tipo=constants.INVENTARIO_EVENTUAL,
+            tipo=constants.CONCILIACAO_EVENTUAL,
             periodo_final__year=ano,
         )
 
@@ -201,31 +206,62 @@ class InventarioUA(models.Model):
 
         return qs.count() + 1
 
-    def _validar_parametro_anual_por_data_atual(self):
-        if self.tipo != constants.INVENTARIO_ANUAL:
+
+
+    def _validar_unicidade_conciliacao_anual(self):
+        if self.tipo != constants.CONCILIACAO_ANUAL:
+            return
+        
+        if not self.unidade_administrativa_id:
             return
 
-        ano = self._get_ano_do_inventario()
+        if self.pk:
+            return
+
+        ano = self._get_ano_referencia()
+
+        existe = ConciliacaoUA.objects.filter(
+            unidade_administrativa=self.unidade_administrativa,
+            tipo=constants.CONCILIACAO_ANUAL,
+            periodo_final=date(ano, 12, 31),
+        ).exists()
+
+        if existe:
+            raise ValidationError(
+                {
+                    "tipo": (
+                        f"Já existe uma conciliação anual para o ano de referência "
+                        f"{ano} nesta Unidade Administrativa."
+                    )
+                }
+            )
+
+    def _validar_parametro_anual_por_data_atual(self):
+        if self.tipo != constants.CONCILIACAO_ANUAL:
+            return
+
         hoje = timezone.localdate()
+        ano_referencia = self._get_ano_referencia()
+        ano_corrente = hoje.year
 
-        from .models import (
-            ParametroInventarioAnual,
-        )
+        from .models import ParametroConciliacaoAnual
 
-        parametro = ParametroInventarioAnual.objects.filter(
-            ano_referencia=ano,
+        parametro = ParametroConciliacaoAnual.objects.filter(
+            ano_referencia=ano_referencia,
             ativo=True,
         ).first()
 
-        if not parametro:
-            raise ValidationError(
-                f"Não existe parâmetro ativo para inventário anual do ano {ano}."
-            )
+        if parametro:
+            data_inicio = parametro.periodo_inicial
+            data_fim = parametro.periodo_final
+        else:
+            data_inicio = timezone.datetime(year=ano_corrente, month=1, day=1).date()
+            data_fim = timezone.datetime(year=ano_corrente, month=3, day=31).date()
 
-        if not (parametro.periodo_inicial <= hoje <= parametro.periodo_final):
+        if not (data_inicio <= hoje <= data_fim):
             raise ValidationError(
-                f"O inventário anual {ano} só pode ser criado ou fechado entre "
-                f"{parametro.periodo_inicial:%d/%m/%Y} e {parametro.periodo_final:%d/%m/%Y}."
+                f"A conciliação anual {ano_referencia} só pode ser criada ou fechada entre "
+                f"{data_inicio:%d/%m/%Y} e {data_fim:%d/%m/%Y}."
             )
 
     def clean(self):
@@ -234,74 +270,76 @@ class InventarioUA(models.Model):
         if not self.tipo:
             raise ValidationError({"tipo": "Campo obrigatório."})
 
-        if self.tipo == constants.INVENTARIO_EVENTUAL and not self.periodo_final:
+        if self.tipo == constants.CONCILIACAO_EVENTUAL and not self.periodo_final:
             raise ValidationError(
-                {"periodo_final": "Campo obrigatório para inventário eventual."}
+                {"periodo_final": "Campo obrigatório para conciliação eventual."}
             )
 
-        if self.tipo == constants.INVENTARIO_ANUAL:
-            self.periodo_final = None
+        if self.tipo == constants.CONCILIACAO_ANUAL:
+            ano_referencia = self._get_ano_referencia()
+            self.periodo_final = date(ano_referencia, 12, 31)
 
+        self._validar_unicidade_conciliacao_anual()
         self._validar_parametro_anual_por_data_atual()
 
     def save(self, *args, **kwargs):
-        self.full_clean(exclude=["numero_inventario"])
+        self.full_clean(exclude=["numero_conciliacao"])
 
-        if not self.numero_inventario:
+        if not self.numero_conciliacao:
             if not self.unidade_administrativa_id:
                 raise ValidationError(
                     {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
                 )
 
             codigo = self.unidade_administrativa.codigo.replace(".", "")[-4:]
-            ano = self._get_ano_do_inventario()
+            ano = self._get_ano_referencia()
 
-            if self.tipo == constants.INVENTARIO_EVENTUAL:
+            if self.tipo == constants.CONCILIACAO_EVENTUAL:
                 versao = self._get_proxima_versao_eventual()
-                self.numero_inventario = f"001.{codigo}/{ano}/{versao:03d}"
+                self.numero_conciliacao = f"001.{codigo}/{ano}/{versao:03d}"
             else:
-                self.numero_inventario = f"001.{codigo}/{ano}"
+                self.numero_conciliacao = f"001.{codigo}/{ano}"
 
         super().save(*args, **kwargs)
 
     def finalizar(self, usuario):
-        if self.status == constants.INVENTARIO_FECHADO:
+        if self.status == constants.CONCILIACAO_FECHADO:
             return
 
         self._validar_parametro_anual_por_data_atual()
 
-        self.status = constants.INVENTARIO_FECHADO
+        self.status = constants.CONCILIACAO_FECHADO
         self.fechado_por = usuario
         self.fechado_em = timezone.now()
         self.save(update_fields=["status", "fechado_por", "fechado_em"])
 
     @property
     def esta_aberto(self):
-        return self.status == constants.INVENTARIO_EM_ABERTO
+        return self.status == constants.CONCILIACAO_EM_ABERTO
 
 
-class ItemInventario(models.Model):
+class ItemConciliacao(models.Model):
 
-    inventario = models.ForeignKey(
-        InventarioUA,
+    conciliacao = models.ForeignKey(
+        ConciliacaoUA,
         on_delete=models.CASCADE,
         related_name="itens",
-        verbose_name="Inventário",
+        verbose_name="Conciliação",
     )
 
     bem = models.ForeignKey(
         BemPatrimonial,
         on_delete=models.PROTECT,
-        related_name="itens_inventario",
+        related_name="itens_conciliacao",
         verbose_name="Bem Patrimonial",
     )
 
     situacao = models.CharField(
         "Situação",
         max_length=30,
-        choices=constants.SITUACOES_ITEM_INVENTARIO,
+        choices=constants.SITUACOES_ITEM_CONCILIACAO,
         default=constants.ENCONTRADO_SEM_DIVERGENCIA,
-        help_text="Situação do bem no momento da criação do inventário",
+        help_text="Situação do bem no momento da criação da conciliação",
     )
 
     observacao = models.TextField(
@@ -326,13 +364,13 @@ class ItemInventario(models.Model):
     atualizado_em = models.DateTimeField("Atualizado em", auto_now=True)
 
     class Meta:
-        unique_together = ("inventario", "bem")
-        verbose_name = "Item de Inventário"
-        verbose_name_plural = "Itens de Inventário"
+        unique_together = ("conciliacao", "bem")
+        verbose_name = "Item de Conciliação"
+        verbose_name_plural = "Itens de Conciliação"
         ordering = ["bem__numero_patrimonial"]
 
         indexes = [
-            models.Index(fields=["inventario", "bem"]),
+            models.Index(fields=["conciliacao", "bem"]),
             models.Index(fields=["bem"]),
             models.Index(fields=["situacao"]),
         ]
@@ -377,19 +415,19 @@ class ItemInventario(models.Model):
         return True
 
 
-class OcorrenciaInventario(models.Model):
+class OcorrenciaConciliacao(models.Model):
 
     item = models.ForeignKey(
-        ItemInventario,
+        ItemConciliacao,
         on_delete=models.CASCADE,
         related_name="ocorrencias",
-        verbose_name="Item de Inventário",
+        verbose_name="Item de Conciliação",
     )
 
     situacao = models.CharField(
         "Situação",
         max_length=30,
-        choices=constants.SITUACOES_ITEM_INVENTARIO,
+        choices=constants.SITUACOES_ITEM_CONCILIACAO,
         default=constants.DIVERGENTE,
         help_text="Situação na ocorrencia",
     )
@@ -406,8 +444,8 @@ class OcorrenciaInventario(models.Model):
 
     class Meta:
         ordering = ["-registrado_em"]
-        verbose_name = "Ocorrência de Inventário"
-        verbose_name_plural = "Ocorrências de Inventário"
+        verbose_name = "Ocorrência de Conciliação"
+        verbose_name_plural = "Ocorrências de Conciliação"
 
         indexes = [
             models.Index(fields=["item", "registrado_em"]),

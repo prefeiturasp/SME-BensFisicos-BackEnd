@@ -3,13 +3,13 @@ from django.db import transaction
 
 from bem_patrimonial import constants as bem_constants
 
-from .models import InventarioUA, ItemInventario, OcorrenciaInventario
+from .models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 from . import constants
 
 
 @transaction.atomic
 def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=None):
-    if not item.inventario.esta_aberto:
+    if not item.conciliacao.esta_aberto:
         raise ValidationError("Inventário fechado não permite edições")
 
     if situacao == constants.DIVERGENTE and not divergencia:
@@ -31,7 +31,7 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
         ocorrencia = ultima_ocorrencia
     else:
         # Nova ocorrência: cria novo registro
-        ocorrencia = OcorrenciaInventario.objects.create(
+        ocorrencia = OcorrenciaConciliacao.objects.create(
             item=item,
             situacao=situacao,
             observacao=observacao,
@@ -46,19 +46,19 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
     item.save()
 
     if situacao == constants.NAO_ENCONTRADO:
-        item.bem.bloqueado_inventario = True
-        item.bem.save(update_fields=["bloqueado_inventario"])
+        item.bem.bloqueado_conciliacao = True
+        item.bem.save(update_fields=["bloqueado_conciliacao"])
 
     elif situacao in (constants.ENCONTRADO, constants.BAIXA_FISICA):
-        item.bem.bloqueado_inventario = False
-        item.bem.save(update_fields=["bloqueado_inventario"])
+        item.bem.bloqueado_conciliacao = False
+        item.bem.save(update_fields=["bloqueado_conciliacao"])
 
     return ocorrencia
 
 
 @transaction.atomic
 def excluir_ocorrencia(item, usuario):
-    if not item.inventario.esta_aberto:
+    if not item.conciliacao.esta_aberto:
         raise ValidationError("Inventário fechado não permite edições")
 
     ultima_ocorrencia = item.ocorrencias.order_by("-registrado_em").first()
@@ -78,12 +78,12 @@ def excluir_ocorrencia(item, usuario):
         item.observacao = ocorrencia_anterior.observacao
         item.divergencia = ocorrencia_anterior.divergencia
     else:
-        inventario_anterior = (
-            InventarioUA.objects.filter(
-                unidade_administrativa=item.inventario.unidade_administrativa,
-                status=constants.INVENTARIO_FECHADO,
+        conciliacao_anterior = (
+            ConciliacaoUA.objects.filter(
+                unidade_administrativa=item.conciliacao.unidade_administrativa,
+                status=constants.CONCILIACAO_FECHADO,
             )
-            .exclude(pk=item.inventario.pk)
+            .exclude(pk=item.conciliacao.pk)
             .order_by("-criado_em")
             .first()
         )
@@ -92,9 +92,9 @@ def excluir_ocorrencia(item, usuario):
         divergencia_inicial = ""
         observacao_inicial = ""
 
-        if inventario_anterior:
-            item_anterior = ItemInventario.objects.filter(
-                inventario=inventario_anterior, bem=item.bem
+        if conciliacao_anterior:
+            item_anterior = ItemConciliacao.objects.filter(
+                conciliacao=conciliacao_anterior, bem=item.bem
             ).first()
             if item_anterior and item_anterior.situacao in (
                 constants.NAO_ENCONTRADO,
@@ -114,9 +114,9 @@ def excluir_ocorrencia(item, usuario):
     item.atualizado_por = usuario
     item.save()
 
-    item.bem.bloqueado_inventario = item.situacao == constants.NAO_ENCONTRADO
-    item.bem.save(update_fields=["bloqueado_inventario"])
+    item.bem.bloqueado_conciliacao = item.situacao == constants.NAO_ENCONTRADO
+    item.bem.save(update_fields=["bloqueado_conciliacao"])
 
 
-def finalizar_inventario(inventario, usuario):
-    inventario.finalizar(usuario)
+def finalizar_conciliacao(conciliacao, usuario):
+    conciliacao.finalizar(usuario)

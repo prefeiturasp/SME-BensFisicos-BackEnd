@@ -5,31 +5,39 @@ from django.db.models import OuterRef, Subquery, Q
 from django.utils import timezone
 
 from bem_patrimonial.models import BemPatrimonial
-from inventario.models import InventarioUA, ItemInventario, OcorrenciaInventario
+from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 from inventario import constants
 
 from bem_patrimonial import constants as bem_constants
 
 
-def get_or_create_inventario(unidade_administrativa, usuario):
+def get_or_create_conciliacao(unidade_administrativa, usuario):
     ano = date.today().year
-    inventario, created = InventarioUA.objects.get_or_create(
+    conciliacao, created = ConciliacaoUA.objects.get_or_create(
         unidade_administrativa=unidade_administrativa,
         ano_referencia=ano,
         defaults={"criado_por": usuario},
     )
 
     if created:
-        criar_itens_inventario(inventario)
+        criar_itens_conciliacao(conciliacao)
 
-    return inventario, created
-
-
-def finalizar_inventario(inventario, usuario):
-    inventario.finalizar(usuario)
+    return conciliacao, created
 
 
-def criar_itens_inventario(inventario):
+def finalizar_conciliacao(conciliacao, usuario):
+    conciliacao.finalizar(usuario)
+
+
+def get_filtro_bens_baixados(ano_baixa_minimo):
+    return Q(
+        status=bem_constants.BAIXA_FISICA,
+        baixas_fisicas_itens__baixa__status=bem_constants.ACEITA,
+        baixas_fisicas_itens__baixa__data_baixa__year__gte=ano_baixa_minimo,
+    )
+
+
+def criar_itens_conciliacao(conciliacao):
     """
     - bens da UA
     - incluir bens ativos
@@ -40,21 +48,19 @@ def criar_itens_inventario(inventario):
       * Se situação anterior foi ENCONTRADO ou ENCONTRADO_SEM_DIVERGENCIA → inicia como ENCONTRADO_SEM_DIVERGENCIA
       * Se não tinha situação anterior → inicia como ENCONTRADO_SEM_DIVERGENCIA
     """
-    hoje = timezone.localdate()
 
-    if inventario.tipo == constants.INVENTARIO_EVENTUAL:
-        if not inventario.periodo_final:
+    if conciliacao.tipo == constants.CONCILIACAO_EVENTUAL:
+        if not conciliacao.periodo_final:
             raise ValueError("Inventário eventual precisa de periodo_final.")
-        ano_inventario = inventario.periodo_final.year
+        ano_conciliacao = conciliacao.periodo_final.year - 1
     else:
+        ano_conciliacao = conciliacao._get_ano_referencia()
 
-        ano_inventario = hoje.year
+    ano_baixa_minimo = ano_conciliacao - 1
 
-    ano_baixa_minimo = ano_inventario - 1
-
-    ultima_ocorrencia_base = OcorrenciaInventario.objects.filter(
+    ultima_ocorrencia_base = OcorrenciaConciliacao.objects.filter(
         item__bem_id=OuterRef("pk"),
-        item__inventario__status=constants.INVENTARIO_FECHADO,
+        item__conciliacao__status=constants.CONCILIACAO_FECHADO,
     ).order_by("-registrado_em")
 
     ultima_situacao_sq = ultima_ocorrencia_base.values("situacao")[:1]
@@ -62,11 +68,11 @@ def criar_itens_inventario(inventario):
     ultima_observacao_sq = ultima_ocorrencia_base.values("observacao")[:1]
 
     qs_bens = BemPatrimonial.objects.filter(
-        unidade_administrativa=inventario.unidade_administrativa
+        unidade_administrativa=conciliacao.unidade_administrativa
     ).annotate(
-        ultima_situacao_inventario=Subquery(ultima_situacao_sq),
-        ultima_divergencia_inventario=Subquery(ultima_divergencia_sq),
-        ultima_observacao_inventario=Subquery(ultima_observacao_sq),
+        ultima_situacao_conciliacao=Subquery(ultima_situacao_sq),
+        ultima_divergencia_conciliacao=Subquery(ultima_divergencia_sq),
+        ultima_observacao_conciliacao=Subquery(ultima_observacao_sq),
     )
 
     filtro_ativos = ~Q(
@@ -76,14 +82,9 @@ def criar_itens_inventario(inventario):
         ]
     )
 
-    filtro_baixados_a_partir_do_ano_anterior = Q(
-        status=bem_constants.BAIXA_FISICA,
-        baixas_fisicas_itens__baixa__status=bem_constants.ACEITA,
-        baixas_fisicas_itens__baixa__data_aprovacao__year__gte=ano_baixa_minimo,
-    )
+    filtro_baixados = get_filtro_bens_baixados(ano_baixa_minimo)
 
-    bens = qs_bens.filter(filtro_ativos | filtro_baixados_a_partir_do_ano_anterior).distinct()
-
+    bens = qs_bens.filter(filtro_ativos | filtro_baixados).distinct()
     situacoes_problematicas = (
         constants.NAO_ENCONTRADO,
         constants.DIVERGENTE,
@@ -92,25 +93,25 @@ def criar_itens_inventario(inventario):
 
     itens = []
     for bem in bens:
-        ultima_situacao = bem.ultima_situacao_inventario
+        ultima_situacao = bem.ultima_situacao_conciliacao
 
         if ultima_situacao in situacoes_problematicas:
             situacao = ultima_situacao
 
             divergencia = (
-                bem.ultima_divergencia_inventario
+                bem.ultima_divergencia_conciliacao
                 if ultima_situacao == constants.DIVERGENTE
                 else ""
             )
-            observacao = bem.ultima_observacao_inventario or ""
+            observacao = bem.ultima_observacao_conciliacao or ""
         else:
             situacao = constants.ENCONTRADO_SEM_DIVERGENCIA
             divergencia = ""
             observacao = ""
 
         itens.append(
-            ItemInventario(
-                inventario=inventario,
+            ItemConciliacao(
+                conciliacao=conciliacao,
                 bem=bem,
                 situacao=situacao,
                 divergencia=divergencia,
@@ -119,5 +120,5 @@ def criar_itens_inventario(inventario):
         )
 
     with transaction.atomic():
-        ItemInventario.objects.filter(inventario=inventario).delete()
-        ItemInventario.objects.bulk_create(itens, batch_size=1000)
+        ItemConciliacao.objects.filter(conciliacao=conciliacao).delete()
+        ItemConciliacao.objects.bulk_create(itens, batch_size=1000)

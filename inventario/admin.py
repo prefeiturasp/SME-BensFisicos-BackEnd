@@ -4,22 +4,45 @@ from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.contrib.admin import SimpleListFilter
+from django.db.models.functions import ExtractYear
+from django.utils.timezone import localdate
 
-from inventario.utils_inventario.inventario_utils import (
-    criar_itens_inventario,
-    finalizar_inventario,
+from inventario.utils_conciliacao.conciliacao_utils import (
+    criar_itens_conciliacao,
+    finalizar_conciliacao,
+)
+from inventario.utils_conciliacao.conciliacao_automatica import (
+    processar_conciliacao_anual_automatica,
 )
 
-from .models import ParametroInventarioAnual, InventarioUA, ItemInventario
-from .forms import InventarioUAAdminForm
+from .models import ParametroConciliacaoAnual, ConciliacaoUA, ItemConciliacao
+from .forms import ConciliacaoUAAdminForm
 
 
-from inventario.utils import excluir_ocorrencia, registrar_ocorrencia
+from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
 from . import constants
 
 
-@admin.register(ParametroInventarioAnual)
-class ParametroInventarioAnualAdmin(admin.ModelAdmin):
+class AnoVigenciaSelectFilter(SimpleListFilter):
+    title = "Ano de Vigência"
+    parameter_name = "ano_vigencia"
+    template = "admin/filters/ano_select.html"
+
+    def lookups(self, request, model_admin):
+        anos = ConciliacaoUA.objects.exclude(periodo_final__isnull=True).dates(
+            "periodo_final", "year", order="DESC"
+        )
+        return [(str(a.year), str(a.year)) for a in anos]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(periodo_final__year=self.value())
+        return queryset
+
+
+@admin.register(ParametroConciliacaoAnual)
+class ParametroConciliacaoAnualAdmin(admin.ModelAdmin):
     list_display = (
         "ano_referencia",
         "periodo_final",
@@ -30,8 +53,8 @@ class ParametroInventarioAnualAdmin(admin.ModelAdmin):
     ordering = ("-ano_referencia", "-ativo")
 
 
-class ItemInventarioInline(admin.TabularInline):
-    model = ItemInventario
+class ItemConciliacaoInline(admin.TabularInline):
+    model = ItemConciliacao
     extra = 0
     can_delete = False
     fields = (
@@ -104,8 +127,8 @@ class ItemInventarioInline(admin.TabularInline):
         if not obj or not obj.pk:
             return "-"
 
-        if not obj.inventario.esta_aberto:
-            return format_html('<span style="color: gray;">Inventário fechado</span>')
+        if not obj.conciliacao.esta_aberto:
+            return format_html('<span style="color: gray;">Conciliação fechada</span>')
 
         if not obj.permite_registrar_ocorrencia:
             return format_html(
@@ -136,32 +159,33 @@ class ItemInventarioInline(admin.TabularInline):
     acoes_inline.short_description = "Ocorrência"
 
 
-@admin.register(InventarioUA)
-class InventarioUAAdmin(admin.ModelAdmin):
-    form = InventarioUAAdminForm
+@admin.register(ConciliacaoUA)
+class ConciliacaoUAAdmin(admin.ModelAdmin):
+    form = ConciliacaoUAAdminForm
 
     list_display = [
-        "numero_inventario",
+        "numero_conciliacao",
         "unidade_administrativa",
+        "total_itens",
+        "periodo_display",
         "tipo",
         "status_display",
-        "periodo_display",
-        "total_itens",
-        "criado_em",
+        "acao_visualizar",
     ]
     list_filter = [
-        "status",
+        AnoVigenciaSelectFilter,
         "tipo",
+        "status",
     ]
     search_fields = [
-        "numero_inventario",
+        "numero_conciliacao",
         "unidade_administrativa__nome",
         "unidade_administrativa__codigo",
         "unidade_administrativa__sigla",
     ]
 
     readonly_fields = [
-        "numero_inventario",
+        "numero_conciliacao",
         "criado_por",
         "criado_em",
         "fechado_por",
@@ -170,12 +194,22 @@ class InventarioUAAdmin(admin.ModelAdmin):
         "status_display",
     ]
 
-    inlines = [ItemInventarioInline]
-    actions = ["action_finalizar_inventario"]
+    inlines = [ItemConciliacaoInline]
+    actions = ["action_finalizar_conciliacao"]
 
     class Media:
-        css = {"all": ("css/hide_crud_icons.css",)}
-        js = ("admin/inventario_inventarioua_add.js",)
+        css = {
+            "all": (
+                "css/hide_crud_icons.css",
+                "css/admin_filtros.css",
+            )
+        }
+        js = ("admin/conciliacao_conciliacaoua_add.js",)
+
+    def get_model_perms(self, request):
+        perms = super().get_model_perms(request)
+        self.model._meta.verbose_name_plural = "Gerenciamento de Conciliações"
+        return perms
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -183,6 +217,8 @@ class InventarioUAAdmin(admin.ModelAdmin):
     def get_actions(self, request):
         actions = super().get_actions(request)
         actions.pop("delete_selected", None)
+        if not request.user.is_gestor_patrimonio:
+            actions.pop("action_finalizar_conciliacao", None)
         return actions
 
     def get_form(self, request, obj=None, **kwargs):
@@ -202,7 +238,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
         if obj is None:
             return (
                 (
-                    "Criar Inventário",
+                    "Criar Conciliação",
                     {
                         "fields": (
                             "unidade_administrativa",
@@ -218,7 +254,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
                 "Dados Básicos",
                 {
                     "fields": (
-                        "numero_inventario",
+                        "numero_conciliacao",
                         "unidade_administrativa",
                         "tipo",
                         "periodo_final",
@@ -246,7 +282,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
           - Salvar e adicionar outro
           - Salvar e continuar editando
           - Apagar (já removido por has_delete_permission)
-        E: Salvar só aparece se inventário estiver EM_ABERTO
+        E: Salvar só aparece se conciliação estiver EM_ABERTO
         """
         extra_context = extra_context or {}
         extra_context["show_save_and_add_another"] = False
@@ -264,24 +300,24 @@ class InventarioUAAdmin(admin.ModelAdmin):
         qs = super().get_queryset(request)
 
         ua = getattr(request.user, "unidade_administrativa", None)
-        if (
-            request.user.is_operador_inventario
-            and not request.user.is_gestor_patrimonio
-        ):
-            return qs.filter(unidade_administrativa=ua) if ua else qs.none()
+        if ua:
+            return qs.filter(unidade_administrativa=ua)
 
-        return qs
+        if request.user.is_gestor_patrimonio or request.user.is_superuser:
+            return qs
+
+        return qs.none()
 
     def save_model(self, request, obj, form, change):
         if change and "status" in getattr(form, "changed_data", []):
             messages.error(
                 request,
-                "Status do inventário só pode ser alterado pela ação 'Fechar inventário'.",
+                "Status da conciliação só pode ser alterada pela ação 'Fechar conciliação'.",
             )
             return
 
         if change and obj and not obj.esta_aberto:
-            messages.error(request, "Inventário fechado não permite edições.")
+            messages.error(request, "Conciliação fechada não permite edições.")
             return
 
         if not change:
@@ -290,22 +326,22 @@ class InventarioUAAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
         if not change:
-            criar_itens_inventario(obj)
+            criar_itens_conciliacao(obj)
             messages.success(
                 request,
-                f"Inventário criado com sucesso! {obj.itens.count()} itens foram adicionados automaticamente.",
+                f"Conciliação criada com sucesso! {obj.itens.count()} itens foram adicionados automaticamente.",
             )
 
     def status_display(self, obj):
         cores = {
-            constants.INVENTARIO_EM_ABERTO: "#28a745",
-            constants.INVENTARIO_FECHADO: "#6c757d",
+            constants.CONCILIACAO_EM_ABERTO: "#28a745",
+            constants.CONCILIACAO_FECHADO: "#6c757d",
         }
         cor = cores.get(obj.status, "#000")
 
         return format_html(
-            '<span style="background-color: {}; color: white; padding: 3px 8px; '
-            'border-radius: 3px; font-weight: bold;">{}</span>',
+            '<span style="background-color: {}; color: white; padding: 2px 4px; '
+            'border-radius: 3px;">{}</span>',
             cor,
             obj.get_status_display(),
         )
@@ -314,8 +350,6 @@ class InventarioUAAdmin(admin.ModelAdmin):
     status_display.admin_order_field = "status"
 
     def periodo_display(self, obj):
-        if obj.tipo == constants.INVENTARIO_ANUAL:
-            return "-"
         if not obj.periodo_final:
             return "-"
         return format_html(
@@ -351,34 +385,45 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
     total_itens.short_description = "Itens"
 
-    @admin.action(description="Finalizar inventários selecionados")
-    def action_finalizar_inventario(self, request, queryset):
+    def acao_visualizar(self, obj):
+        url = reverse("admin:inventario_conciliacaoua_change", args=[obj.pk])
+        return format_html(
+            '<a class="button" href="{}" '
+            'style="padding: 4px 12px; font-size: 12px; color: white;">Visualizar</a>',
+            url,
+        )
+
+    acao_visualizar.short_description = "Ação"
+    acao_visualizar.allow_tags = True
+
+    @admin.action(description="Finalizar conciliacões selecionadas")
+    def action_finalizar_conciliacao(self, request, queryset):
         finalizados = 0
         erros = 0
 
-        for inventario in queryset:
-            if inventario.status == constants.INVENTARIO_FECHADO:
+        for conciliacao in queryset:
+            if conciliacao.status == constants.CONCILIACAO_FECHADO:
                 erros += 1
                 continue
 
             try:
-                finalizar_inventario(inventario, request.user)
+                finalizar_conciliacao(conciliacao, request.user)
                 finalizados += 1
             except Exception as e:
                 erros += 1
                 messages.error(
                     request,
-                    f"Erro ao finalizar {inventario.numero_inventario}: {str(e)}",
+                    f"Erro ao finalizar {conciliacao.numero_conciliacao}: {str(e)}",
                 )
 
         if finalizados > 0:
             messages.success(
-                request, f"{finalizados} inventário(s) finalizado(s) com sucesso"
+                request, f"{finalizados} conciliação(ões) finalizada(s) com sucesso"
             )
 
         if erros > 0:
             messages.warning(
-                request, f"{erros} inventário(s) não puderam ser finalizados"
+                request, f"{erros} conciliação(s) não puderam ser finalizadas"
             )
 
     def get_urls(self):
@@ -399,16 +444,18 @@ class InventarioUAAdmin(admin.ModelAdmin):
 
     def registrar_ocorrencia_view(self, request, item_id):
         try:
-            item = ItemInventario.objects.select_related("bem", "inventario").get(
+            item = ItemConciliacao.objects.select_related("bem", "conciliacao").get(
                 pk=item_id
             )
-        except ItemInventario.DoesNotExist:
+        except ItemConciliacao.DoesNotExist:
             messages.error(request, "Item não encontrado")
-            return redirect("admin:inventario_inventarioua_changelist")
+            return redirect("admin:inventario_conciliacaoua_changelist")
 
-        if not item.inventario.esta_aberto:
-            messages.error(request, "Inventário fechado não permite edições")
-            return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
+        if not item.conciliacao.esta_aberto:
+            messages.error(request, "Conciliação fechada não permite edições")
+            return redirect(
+                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
+            )
 
         if not item.permite_registrar_ocorrencia:
             messages.error(
@@ -416,7 +463,9 @@ class InventarioUAAdmin(admin.ModelAdmin):
                 "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
                 "Este status é definitivo.",
             )
-            return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
+            return redirect(
+                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
+            )
 
         if request.method == "POST":
             situacao = request.POST.get("situacao")
@@ -433,12 +482,12 @@ class InventarioUAAdmin(admin.ModelAdmin):
                 )
                 messages.success(request, "Ocorrência registrada com sucesso")
                 return redirect(
-                    "admin:inventario_inventarioua_change", item.inventario.pk
+                    "admin:inventario_conciliacaoua_change", item.conciliacao.pk
                 )
             except ValidationError as e:
                 messages.error(request, str(e))
 
-        situacoes_disponiveis = list(constants.SITUACOES_ITEM_INVENTARIO)
+        situacoes_disponiveis = list(constants.SITUACOES_ITEM_CONCILIACAO)
 
         # não permitir registrar "Encontrado sem divergência" manualmente
         situacoes_disponiveis = [
@@ -468,7 +517,7 @@ class InventarioUAAdmin(admin.ModelAdmin):
             "DIVERGENTE": constants.DIVERGENTE,
             "opts": self.model._meta,
             "has_view_permission": self.has_view_permission(request),
-            "original": item.inventario,
+            "original": item.conciliacao,
             "title": f"Registrar Ocorrência - {item.bem.numero_patrimonial}",
             "is_edicao": is_edicao,
             "situacao_atual": situacao_atual,
@@ -476,20 +525,22 @@ class InventarioUAAdmin(admin.ModelAdmin):
             "divergencia_atual": divergencia_atual,
         }
 
-        return render(request, "admin/inventario/registrar_ocorrencia.html", context)
+        return render(request, "admin/conciliacao/registrar_ocorrencia.html", context)
 
     def excluir_ocorrencia_view(self, request, item_id):
         try:
-            item = ItemInventario.objects.select_related("bem", "inventario").get(
+            item = ItemConciliacao.objects.select_related("bem", "conciliacao").get(
                 pk=item_id
             )
-        except ItemInventario.DoesNotExist:
+        except ItemConciliacao.DoesNotExist:
             messages.error(request, "Item não encontrado")
-            return redirect("admin:inventario_inventarioua_changelist")
+            return redirect("admin:inventario_conciliacaoua_changelist")
 
-        if not item.inventario.esta_aberto:
-            messages.error(request, "Inventário fechado não permite edições")
-            return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
+        if not item.conciliacao.esta_aberto:
+            messages.error(request, "Conciliação fechada não permite edições")
+            return redirect(
+                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
+            )
 
         if request.method == "POST":
             try:
@@ -498,7 +549,9 @@ class InventarioUAAdmin(admin.ModelAdmin):
             except ValidationError as e:
                 messages.error(request, str(e))
 
-            return redirect("admin:inventario_inventarioua_change", item.inventario.pk)
+            return redirect(
+                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
+            )
 
         context = {
             "item": item,
@@ -506,4 +559,8 @@ class InventarioUAAdmin(admin.ModelAdmin):
             "title": f"Confirmar exclusão de ocorrência - {item.bem.numero_patrimonial}",
         }
 
-        return render(request, "admin/inventario/excluir_ocorrencia.html", context)
+        return render(request, "admin/conciliacao/excluir_ocorrencia.html", context)
+
+    def changelist_view(self, request, extra_context=None):
+        processar_conciliacao_anual_automatica(request.user)
+        return super().changelist_view(request, extra_context)
