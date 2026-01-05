@@ -217,8 +217,6 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     def get_actions(self, request):
         actions = super().get_actions(request)
         actions.pop("delete_selected", None)
-        if not request.user.is_gestor_patrimonio:
-            actions.pop("action_finalizar_conciliacao", None)
         return actions
 
     def get_form(self, request, obj=None, **kwargs):
@@ -562,5 +560,5 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return render(request, "admin/conciliacao/excluir_ocorrencia.html", context)
 
     def changelist_view(self, request, extra_context=None):
-        processar_conciliacao_anual_automatica(request.user)
+        # processar_conciliacao_anual_automatica(request.user)
         return super().changelist_view(request, extra_context)
