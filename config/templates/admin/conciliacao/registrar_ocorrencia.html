@@ -1,0 +1,126 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .ocorrencia-container { max-width: 720px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; overflow: hidden; }
+    .card-header { background: linear-gradient(135deg, #417690 0%, #2a5a70 100%); color: #fff; padding: 14px 20px; font-size: 15px; font-weight: 600; }
+    .card-body { padding: 20px; }
+    .info-grid { display: grid; grid-template-columns: 160px 1fr; gap: 12px 16px; }
+    .info-label { color: #666; font-size: 13px; font-weight: 500; }
+    .info-value { color: #333; font-size: 14px; font-weight: 600; }
+    .form-field { margin-bottom: 16px; }
+    .form-field label { display: block; font-size: 13px; font-weight: 600; color: #333; margin-bottom: 8px; }
+    .form-field label .opcional { color: #888; font-weight: 400; }
+    .form-field select { width: 100%; height: 42px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 14px; }
+    .form-field select:focus { outline: none; border-color: #417690; }
+    .form-field textarea { width: 100%; padding: 12px; border: 1px solid #d0d0d0; border-radius: 6px; font-size: 14px; transition: border-color 0.2s, box-shadow 0.2s; box-sizing: border-box; resize: vertical; min-height: 80px; }
+    .form-field textarea:focus { outline: none; border-color: #417690; box-shadow: 0 0 0 3px rgba(65,118,144,0.1); }
+    .form-field .help-text { font-size: 12px; color: #666; margin-top: 6px; }
+    .campo-condicional { display: none; animation: fadeIn 0.3s ease; }
+    .campo-condicional.ativo { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .actions-bar { display: flex; align-items: center; gap: 12px; padding: 20px; background: #f8f8f8; border-radius: 8px; }
+    .btn { padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; cursor: pointer; transition: all 0.2s ease; border: none; display: inline-flex; align-items: center; }
+    .btn-primary { background: #417690; color: #fff; }
+    .btn-primary:hover { background: #2a5a70; }
+    a.btn-secondary, .btn-secondary { background: #e0e0e0; color: #333 !important; }
+    a.btn-secondary:hover, .btn-secondary:hover { background: #c0c0c0; color: #222 !important; }
+    a.btn-danger, .btn-danger { background: #ba2121; color: #fff !important; margin-left: auto; }
+    a.btn-danger:hover, .btn-danger:hover { background: #981b1b; color: #fff !important; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:inventario_conciliacaoua_changelist' %}">Inventários</a>
+    &rsaquo; <a href="{% url 'admin:inventario_conciliacaoua_change' item.conciliacao.pk %}">{{ item.conciliacao.numero_conciliacao }}</a>
+    &rsaquo; Registrar Ocorrência
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="ocorrencia-container">
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="card">
+            <div class="card-header">📦 Dados do Bem</div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <span class="info-label">Número Patrimonial</span>
+                    <span class="info-value">{{ item.bem.numero_patrimonial }}</span>
+                    <span class="info-label">Descrição</span>
+                    <span class="info-value">{{ item.bem.nome }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">📋 Registrar Ocorrência</div>
+            <div class="card-body">
+                <div class="form-field">
+                    <label for="situacao">Situação</label>
+                    <select name="situacao" id="situacao" required>
+                        <option value="">Selecione uma situação...</option>
+                        {% if is_edicao and situacao_atual %}
+                        <option value="{{ situacao_atual }}" selected>{{ item.get_situacao_display }} (atual)</option>
+                        {% endif %}
+                        {% for value, label in situacoes_disponiveis %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if item.pode_marcar_como_encontrado %}
+                    <p class="help-text">ℹ️ A opção "Encontrado" está disponível pois o bem estava marcado como "Não encontrado" no inventário anterior.</p>
+                    {% elif item.pode_resolver_situacao %}
+                    <p class="help-text">ℹ️ Este bem foi marcado como "Divergente" no inventário anterior. Selecione "Encontrado sem divergência" se a divergência foi corrigida.</p>
+                    {% endif %}
+                </div>
+                
+                <div id="campo-observacao" class="form-field campo-condicional{% if is_edicao %} ativo{% endif %}">
+                    <label for="observacao">Observação <span class="opcional">(opcional)</span></label>
+                    <textarea name="observacao" id="observacao" placeholder="Adicione informações complementares...">{{ observacao_atual }}</textarea>
+                </div>
+                
+                <div id="campo-divergencia" class="form-field campo-condicional{% if is_edicao and divergencia_atual %} ativo{% endif %}">
+                    <label for="divergencia">Divergência</label>
+                    <textarea name="divergencia" id="divergencia" placeholder="Descreva a divergência encontrada...">{{ divergencia_atual }}</textarea>
+                    <p class="help-text">Campo obrigatório. Detalhe a divergência identificada no bem patrimonial.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="actions-bar">
+            <button type="submit" class="btn btn-primary">Salvar</button>
+            <a href="{% url 'admin:inventario_conciliacaoua_change' item.conciliacao.pk %}" class="btn btn-secondary">Cancelar</a>
+            {% if item.tem_ocorrencia %}
+            <a href="{% url 'admin:inventario_item_excluir_ocorrencia' item.pk %}" class="btn btn-danger">Excluir Ocorrência</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const select = document.getElementById('situacao');
+    const campoObs = document.getElementById('campo-observacao');
+    const campoDiverg = document.getElementById('campo-divergencia');
+    const DIVERGENTE = '{{ DIVERGENTE }}';
+    
+    function atualizar() {
+        const valor = select.value;
+        if (!valor) { campoObs.classList.remove('ativo'); campoDiverg.classList.remove('ativo'); return; }
+        campoObs.classList.add('ativo');
+        const isDiverg = valor === DIVERGENTE;
+        campoDiverg.classList.toggle('ativo', isDiverg);
+        document.getElementById('divergencia').required = isDiverg;
+    }
+    
+    select.addEventListener('change', atualizar);
+    atualizar();
+});
+</script>
+{% endblock %}

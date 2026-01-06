@@ -33,6 +33,11 @@ def setup_grupos_e_permissoes():
         "_unidadeadministrativa": ["add", "change", "delete", "view"],
         "_baixafisicabempatrimonial": ["view", "add", "change", "delete"],
         "_baixafisicabensitem": ["view", "add", "change", "delete"],
+        # conciliacao
+        "_parametroconciliacaoanual": ["add", "change", "delete", "view"],
+        "_conciliacaoua": ["add", "change", "delete", "view"],
+        "_itemconciliacao": ["add", "change", "delete", "view"],
+        "_ocorrenciaconciliacao": ["add", "change", "delete", "view"],
         # Módulo de Suporte desabilitado temporariamente
         # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
         # '_configagendasuporte': ['view', 'change'],
@@ -51,6 +56,13 @@ def setup_grupos_e_permissoes():
         "_unidadeadministrativa": ["view"],
         "_baixafisicabempatrimonial": ["view", "add", "change"],
         "_baixafisicabensitem": ["view", "add"],
+        "_inventarioua": ["view"],
+        "_iteminventario": ["change", "view"],
+        "_ocorrenciainventario": ["view"],
+        # conciliacao
+        "_conciliacaoua": ["add", "change", "view"],
+        "_itemconciliacao": ["add", "change", "view"],
+        "_ocorrenciaconciliacao": ["add", "view"],
         # Módulo de Suporte desabilitado temporariamente
         # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
     }

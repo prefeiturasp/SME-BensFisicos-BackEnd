@@ -68,6 +68,11 @@ class BemPatrimonial(models.Model):
         null=False,
         blank=False,
     )
+    bloqueado_conciliacao = models.BooleanField(
+        "Bloqueado por inventário",
+        default=False,
+        help_text="Se True, bem não pode ser movimentado até atualização de situação na consiliaçãp",
+    )
     unidade_administrativa = models.ForeignKey(
         UnidadeAdministrativa,
         on_delete=models.SET_NULL,
@@ -101,6 +106,7 @@ class BemPatrimonial(models.Model):
         "foto",
         "unidade_administrativa",
         "status",
+        "bloqueado_conciliacao",
     )
     AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
@@ -195,7 +201,7 @@ class BemPatrimonial(models.Model):
 
     @property
     def pode_solicitar_movimentacao(self):
-        return self.status == constants.APROVADO
+        return self.status == constants.APROVADO and not self.bloqueado_conciliacao
 
     @property
     def tem_movimentacao_pendente(self):
@@ -615,6 +621,12 @@ class BaixaFisicaBemPatrimonial(models.Model):
         auto_now_add=True,
     )
 
+    data_baixa = models.DateField(
+        "Data da Baixa Física",
+        default=timezone.now,
+        help_text="Data informada no processo de baixa física",
+    )
+
     aprovado_por = models.ForeignKey(
         Usuario,
         verbose_name="Gestor que aprovou a baixa",
@@ -639,6 +651,18 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
     def clean(self):
         super().clean()
+        
+        if self.data_baixa:
+            if hasattr(self.data_baixa, "date"):
+                data_baixa = self.data_baixa.date()
+            else:
+                data_baixa = self.data_baixa
+
+            hoje = timezone.localdate()
+            if data_baixa > hoje:
+                raise ValidationError(
+                    {"data_baixa": "A data da Baixa Física não pode ser maior que a data atual."}
+                )
 
         if not self.numero_processo_baixa:
             raise ValidationError(
@@ -707,18 +731,22 @@ class BaixaFisicaBemPatrimonial(models.Model):
         - limpa 'numero_processo' (incorporação)
         """
         if self.status != constants.SOLICITADA:
-            raise ValidationError("Só é possível aprovar baixas com status 'Solicitada'.")
+            raise ValidationError(
+                "Só é possível aprovar baixas com status 'Solicitada'."
+            )
 
         self.status = constants.ACEITA
         self.aprovado_por = usuario_aprovador
         self.data_aprovacao = timezone.now()
         self.save(update_fields=["status", "aprovado_por", "data_aprovacao"])
-
+        texto_localizacao = f"Baixa Física - {self.numero_processo_baixa}"
+       
         for item in self.itens.select_related("bem"):
             bem = item.bem
             bem.status = constants.BAIXA_FISICA
+            bem.localizacao = texto_localizacao
             bem.numero_processo = None
-            bem.save(update_fields=["status", "numero_processo"])
+            bem.save(update_fields=["status", "numero_processo", "localizacao"])
 
 
 class BaixaFisicaBensItem(models.Model):

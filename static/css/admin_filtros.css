@@ -1,0 +1,19 @@
+/* Container do filtro */
+.admin-filter-ano {
+  display: block;
+  margin-bottom: 14px;
+}
+
+/* Label */
+.admin-filter-ano label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+/* Select */
+.admin-filter-ano select {
+  width: 90%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+}

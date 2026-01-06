@@ -46,6 +46,35 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["*"])
 # https://docs.djangoproject.com/en/4.1/ref/settings/#csrf-trusted-origins
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
+# Configurações CORS para permitir comunicação com frontend
+CORS_ALLOWED_ORIGINS = env.list("DJANGO_CORS_ALLOWED_ORIGINS", default=[
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+])
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
 # Application definition
 
 DJANGO_APPS = [
@@ -60,6 +89,9 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "corsheaders",
     "rest_framework",
+    "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+    "drf_spectacular",
     "import_export",
     "django_admin_listfilter_dropdown",
     "rangefilter",
@@ -70,6 +102,7 @@ LOCAL_APPS = [
     "usuario",
     "dados_comuns",
     "bem_patrimonial",
+    "inventario",
     # Módulo de Suporte desabilitado temporariamente
     # 'agendamento_suporte'
 ]
@@ -212,8 +245,33 @@ DEFAULT_TO_EMAIL = env("DJANGO_DEFAULT_TO_EMAIL")
 # https://www.django-rest-framework.org/api-guide/settings/
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.BasicAuthentication"
-    ]
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# Simple JWT Settings
+# https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=5),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
+    "TOKEN_TYPE_CLAIM": "token_type",
 }
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#admins
@@ -256,3 +314,14 @@ LOGIN_REDIRECT_URL = "/admin"
 
 ADMIN_URL = env("DJANGO_ADMIN_URL")
 API_URL = env("DJANGO_API_URL")
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
+
+# DRF Spectacular (Swagger/OpenAPI)
+# https://drf-spectacular.readthedocs.io/
+SPECTACULAR_SETTINGS = {
+    "TITLE": "SME Bens Físicos API",
+    "DESCRIPTION": "API para gestão de bens patrimoniais da Secretaria Municipal de Educação de São Paulo",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+}

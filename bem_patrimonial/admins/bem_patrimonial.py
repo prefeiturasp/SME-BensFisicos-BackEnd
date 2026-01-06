@@ -5,6 +5,7 @@ from django.db.models import OuterRef, Subquery
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils import timezone
 
 from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
@@ -13,6 +14,7 @@ from bem_patrimonial.admins.actions.extracao_numeros import (
 from bem_patrimonial.admins.filters.bem_patrimonial_filters import SemNumeroFilter
 from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
 from bem_patrimonial.models import (
+    BaixaFisicaBensItem,
     BemPatrimonial,
     StatusBemPatrimonial,
 )
@@ -28,6 +30,9 @@ from django.contrib.contenttypes.admin import GenericTabularInline
 from django.db.models.functions import Cast
 from bem_patrimonial import constants
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from bem_patrimonial.admins.filters.baixados_periodo_filter import (
+    BaixadosMaisDeUmPeriodoFilter,
+)
 
 
 @admin.action(description="Aprovar bens selecionados")
@@ -199,7 +204,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "localizacao",
         "numero_processo",
         "unidade_administrativa__codigo",
-        "unidade_administrativa__nome", 
+        "unidade_administrativa__nome",
     )
 
     search_help_text = (
@@ -210,7 +215,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "numero_patrimonial",
         "nome",
     )
-    
+
     resource_class = BemPatrimonialResource
 
     list_filter = (
@@ -218,6 +223,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         SemNumeroFilter,
         "numero_formato_antigo",
         ("criado_em", DateRangeFilter),
+        BaixadosMaisDeUmPeriodoFilter,
     )
 
     readonly_fields = (
@@ -252,6 +258,42 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             return ("numero_patrimonial", "nome", "status")
         return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
+    def get_readonly_fields(self, request, obj=None):
+
+        base = ("status", "criado_por", "criado_em")
+
+        if obj is None:
+            return base
+
+        if request.user.is_gestor_patrimonio:
+            return base
+
+        if request.user.is_operador_inventario:
+            return base + (
+                "unidade_administrativa",
+                "numero_patrimonial",
+                "numero_formato_antigo",
+                "nome",
+                "descricao",
+                "valor_unitario",
+                "marca",
+                "modelo",
+                "numero_processo",
+                "foto",
+            )
+
+        return base + (
+            "unidade_administrativa",
+            "nome",
+            "descricao",
+            "valor_unitario",
+            "marca",
+            "modelo",
+            "localizacao",
+            "numero_processo",
+            "foto",
+        )
+
     def get_fields(self, request, obj=None):
         base = [
             "cadastro_modo",
@@ -272,6 +314,19 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     ordering = ("-criado_em",)
 
     inlines = [HistoricoGeralInline]
+
+    def has_change_permission(self, request, obj=None):
+        perm = super().has_change_permission(request, obj)
+        if not perm:
+            return False
+
+        if obj and obj.status == constants.BAIXA_FISICA:
+            return False
+
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def get_form(self, request, obj=None, **kwargs):
         BaseForm = super().get_form(request, obj, **kwargs)
@@ -372,6 +427,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         return EditForm
 
     def save_model(self, request, obj, form, change):
+        if change and obj.pk:
+            original = BemPatrimonial.objects.get(pk=obj.pk)
+            if original.status == constants.BAIXA_FISICA:
+                raise ValidationError(
+                    "Este bem está com status 'Baixa Física' e não pode ser editado."
+                )
         if obj.id is None:
             obj.criado_por = request.user
             if not obj.status:
@@ -408,6 +469,28 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         else:
             qs = qs.none()
 
+        baixa_data_sq = (
+            BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
+            .order_by("-baixa__data_baixa")
+            .values("baixa__data_baixa")[:1]
+        )
+        qs = qs.annotate(
+            baixa_data=Subquery(baixa_data_sq),
+        )
+        is_changelist = (
+            request.resolver_match
+            and request.resolver_match.url_name.endswith("_changelist")
+        )
+
+        if is_changelist and "baixados_mais_de_um_periodo" not in request.GET:
+            ano_corrente = timezone.localdate().year
+            ano_limite = ano_corrente - 1
+
+            qs = qs.exclude(
+                status=constants.BAIXA_FISICA,
+                baixa_data__year__lt=ano_limite,
+            )
+
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
 
@@ -432,6 +515,21 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             queryset = queryset.filter(unidade_administrativa=ua_user)
         else:
             queryset = queryset.none()
+
+        baixa_data_sq = (
+            BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
+            .order_by("-baixa__data_baixa")
+            .values("baixa__data_baixa")[:1]
+        )
+        queryset = queryset.annotate(baixa_data=Subquery(baixa_data_sq))
+
+        if "baixados_mais_de_um_periodo" not in request.GET:
+            ano_corrente = timezone.localdate().year
+            ano_limite = ano_corrente - 1
+            queryset = queryset.exclude(
+                status=constants.BAIXA_FISICA,
+                baixa_data__year__lt=ano_limite,
+            )
 
         return queryset
 
@@ -724,9 +822,8 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 ua_origem = request.GET.get("ua_origem")
                 if not ua_origem:
                     return qs.none(), use_distinct
-                qs = (
-                    qs.filter(status=constants.APROVADO)
-                    .filter(unidade_administrativa_id=ua_origem)
+                qs = qs.filter(status=constants.APROVADO).filter(
+                    unidade_administrativa_id=ua_origem
                 )
 
                 exclude_bens = request.GET.get("exclude_bens")
