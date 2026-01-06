@@ -1,4 +1,4 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, views
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import (
@@ -6,6 +6,8 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from django.conf import settings
 from django.template.loader import render_to_string
@@ -21,9 +23,23 @@ from usuario.serializers import (
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 
 
+def set_refresh_token_cookie(response, refresh_token):
+    secure = getattr(settings, "SESSION_COOKIE_SECURE", not settings.DEBUG)
+    samesite = "Lax"
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=secure,
+        samesite=samesite,
+        max_age=7 * 24 * 60 * 60,
+    )
+
+
 @extend_schema(
     summary="Login",
-    description="Autentica usuário e retorna tokens JWT (access e refresh) junto com dados do perfil.",
+    description="Autentica usuário e retorna access token. O refresh token é definido em um cookie HttpOnly seguro e removido do corpo da resposta.",
     responses={
         200: OpenApiResponse(
             description="Login realizado com sucesso",
@@ -32,7 +48,6 @@ from django.contrib.auth.tokens import PasswordResetTokenGenerator
                     "Sucesso",
                     value={
                         "access": "eyJhbGc...",
-                        "refresh": "eyJhbGc...",
                         "user": {
                             "id": 1,
                             "username": "usuario",
@@ -54,10 +69,20 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
     serializer_class = CustomTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+
+        if "refresh" in response.data:
+            refresh_token = response.data["refresh"]
+            set_refresh_token_cookie(response, refresh_token)
+            del response.data["refresh"]
+
+        return response
+
 
 @extend_schema(
     summary="Renovar token de acesso",
-    description="Renova o access token usando o refresh token. Com rotação ativada, retorna um novo refresh token e invalida o antigo.",
+    description="Renova o access token usando o refresh token (buscando automaticamente no cookie HttpOnly se não estiver no body).",
     responses={
         200: OpenApiResponse(
             description="Token renovado com sucesso",
@@ -66,7 +91,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                     "Sucesso",
                     value={
                         "access": "eyJhbGc...",
-                        "refresh": "eyJhbGc...",
                     },
                 )
             ],
@@ -76,8 +100,57 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     tags=["Autenticação"],
 )
 class CustomTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        data = request.data.copy()
 
-    pass
+        if "refresh" not in data and "refresh_token" in request.COOKIES:
+            data["refresh"] = request.COOKIES["refresh_token"]
+
+        serializer = self.get_serializer(data=data)
+
+        try:
+            serializer.is_valid(raise_exception=True)
+        except (InvalidToken, TokenError):
+            response = Response(
+                {"detail": "Token inválido ou expirado."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            response.delete_cookie("refresh_token")
+            return response
+
+        response = Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+        if "refresh" in response.data:
+            refresh_token = response.data["refresh"]
+            set_refresh_token_cookie(response, refresh_token)
+            del response.data["refresh"]
+
+        return response
+
+
+@extend_schema(
+    summary="Logout",
+    description="Realiza logout removendo o cookie seguro de refresh token e invalidando-o (blacklist).",
+    responses={
+        200: OpenApiResponse(description="Logout realizado com sucesso"),
+    },
+    tags=["Autenticação"],
+)
+class LogoutAPIView(views.APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get("refresh_token")
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            except Exception:
+                pass
+
+        response = Response({"detail": "Logout realizado com sucesso."})
+        response.delete_cookie("refresh_token")
+        return response
 
 
 @extend_schema(
