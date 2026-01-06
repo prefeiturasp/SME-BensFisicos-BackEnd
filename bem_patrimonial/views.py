@@ -22,19 +22,30 @@ def download_documento_cimbpm(request, pk):
                 "relacionadas à sua Unidade Administrativa."
             )
 
+    if not movimentacao.numero_cimbpm:
+        raise Http404("Erro: Número CIMBPM não foi gerado para esta movimentação")
+
+    from bem_patrimonial.cimbpm import gerar_pdf_cimbpm
+    from django.utils import timezone
+
+    data_aceite = None
+    if movimentacao.aceita and movimentacao.aprovado_por:
+        data_aceite = movimentacao.atualizado_em
+
     try:
-        movimentacao.regenerar_documento_cimbpm(force=True)
-        movimentacao.refresh_from_db()
+        pdf_buffer = gerar_pdf_cimbpm(
+            movimentacao,
+            data_aceite=data_aceite,
+            usuario_gerador=request.user,
+            data_geracao=timezone.now(),
+        )
     except Exception as e:
         raise Http404(f"Erro ao gerar documento: {str(e)}")
-
-    if not movimentacao.documento_cimbpm:
-        raise Http404("Erro: Documento não foi gerado")
 
     filename = f"CIMBPM_{movimentacao.numero_cimbpm.replace('.', '_')}.pdf"
 
     response = FileResponse(
-        movimentacao.documento_cimbpm.open("rb"),
+        pdf_buffer,
         as_attachment=True,
         filename=filename,
         content_type="application/pdf",

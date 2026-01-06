@@ -107,9 +107,7 @@ def gerar_numero_cimbpm(movimentacao):
                 numero_cimbpm__endswith=f".{ano_movimentacao}",
                 numero_cimbpm__isnull=False,
             )
-            .annotate(
-                sequencial_str=Substr("numero_cimbpm", 9, 7)
-            )
+            .annotate(sequencial_str=Substr("numero_cimbpm", 9, 7))
             .aggregate(max_seq=Max(Cast("sequencial_str", IntegerField())))["max_seq"]
         )
 
@@ -120,7 +118,9 @@ def gerar_numero_cimbpm(movimentacao):
     )
 
 
-def gerar_pdf_cimbpm(movimentacao, data_aceite=None):
+def gerar_pdf_cimbpm(
+    movimentacao, data_aceite=None, usuario_gerador=None, data_geracao=None
+):
     buffer = BytesIO()
 
     doc = BaseDocTemplate(
@@ -139,7 +139,9 @@ def gerar_pdf_cimbpm(movimentacao, data_aceite=None):
     def on_page(canvas, doc):
         canvas.saveState()
         _desenhar_cabecalho_em_pagina(canvas, doc, movimentacao, data_aceite)
-        _desenhar_rodape_em_pagina(canvas, doc, movimentacao, data_aceite)
+        _desenhar_rodape_em_pagina(
+            canvas, doc, movimentacao, data_aceite, usuario_gerador, data_geracao
+        )
         canvas.restoreState()
 
     template = PageTemplate(id="todas_paginas", frames=[frame], onPage=on_page)
@@ -167,7 +169,9 @@ def _desenhar_cabecalho_em_pagina(canvas, doc, movimentacao, data_aceite):
         header_table.drawOn(canvas, doc.leftMargin, y_pos - header_table._height)
 
 
-def _desenhar_rodape_em_pagina(canvas, doc, movimentacao, data_aceite):
+def _desenhar_rodape_em_pagina(
+    canvas, doc, movimentacao, data_aceite, usuario_gerador=None, data_geracao=None
+):
     y_base = 1.5 * cm
     page_num = canvas.getPageNumber()
 
@@ -183,7 +187,7 @@ def _desenhar_rodape_em_pagina(canvas, doc, movimentacao, data_aceite):
         rodape_table.wrapOn(canvas, doc.width, A4[1])
         rodape_table.drawOn(canvas, doc.leftMargin, y_base + 0.8 * cm)
 
-    info_elements = _criar_info_geracao(movimentacao)
+    info_elements = _criar_info_geracao(movimentacao, usuario_gerador, data_geracao)
     if len(info_elements) > 1:
         info_para = info_elements[1]
         info_para.wrapOn(canvas, doc.width, A4[1])
@@ -641,7 +645,7 @@ def _criar_rodape_cimbpm(movimentacao, data_aceite):
     return elements
 
 
-def _criar_info_geracao(movimentacao):
+def _criar_info_geracao(movimentacao, usuario_gerador=None, data_geracao=None):
     elements = []
     styles = getSampleStyleSheet()
 
@@ -650,10 +654,23 @@ def _criar_info_geracao(movimentacao):
     )
 
     tz_sp = pytz.timezone("America/Sao_Paulo")
-    data_geracao = timezone.now().astimezone(tz_sp).strftime("%d/%m/%Y às %H:%M")
-    nome_usuario = obter_nome_usuario(movimentacao.solicitado_por)
 
-    info_text = f"Gerado por {nome_usuario} em {data_geracao}"
+    if data_geracao:
+        data_ref = data_geracao
+    else:
+        data_ref = timezone.now()
+
+    if timezone.is_naive(data_ref):
+        data_ref = timezone.make_aware(data_ref)
+
+    data_geracao_str = data_ref.astimezone(tz_sp).strftime("%d/%m/%Y às %H:%M")
+
+    if usuario_gerador:
+        nome_usuario = obter_nome_usuario(usuario_gerador)
+    else:
+        nome_usuario = obter_nome_usuario(movimentacao.solicitado_por)
+
+    info_text = f"Gerado por {nome_usuario} em {data_geracao_str}"
     elements.append(Spacer(1, 0.2 * cm))
     elements.append(Paragraph(info_text, info_style))
 
