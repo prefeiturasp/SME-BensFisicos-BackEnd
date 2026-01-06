@@ -14,6 +14,7 @@ from bem_patrimonial.cimbpm import (
     formatar_moeda_brasileira,
     obter_bens_movimentacao,
     obter_nome_usuario,
+    gerar_pdf_cimbpm,
 )
 from bem_patrimonial import constants
 from dados_comuns.models import UnidadeAdministrativa
@@ -273,261 +274,6 @@ class TestGeracaoNumeroCIMBPM(CIMBPMTestBase):
         self.assertEqual(mov_2025.numero_cimbpm, "379.408.0000001.2025")
 
 
-class TestGeracaoDocumentoPDF(CIMBPMTestBase):
-
-    def test_geracao_automatica_pdf(self):
-        bem = self.criar_bem()
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        self.assertIsNotNone(mov.numero_cimbpm)
-        self.assertRegex(mov.numero_cimbpm, r"^\d{3}\.\d{3}\.\d{7}\.\d{4}$")
-
-        self.assertFalse(mov.documento_cimbpm)
-
-        mov.regenerar_documento_cimbpm(force=True)
-        self.assertTrue(mov.documento_cimbpm)
-        self.assertIn("CIMBPM_", mov.documento_cimbpm.name)
-        self.assertTrue(mov.documento_cimbpm.name.endswith(".pdf"))
-
-    def test_validacao_conteudo_pdf(self):
-        bem = self.criar_bem()
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        mov.regenerar_documento_cimbpm(force=True)
-
-        pdf_file = mov.documento_cimbpm.open("rb")
-        pdf_content = pdf_file.read()
-        pdf_file.close()
-
-        self.assertTrue(pdf_content.startswith(b"%PDF"))
-        self.assertGreater(len(pdf_content), 1000)
-
-    def test_atualizacao_pdf_apos_aprovacao(self):
-        bem = self.criar_bem()
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-        numero_original = mov.numero_cimbpm
-
-        mov.regenerar_documento_cimbpm(force=True)
-
-        mov.aprovar_solicitacao(self.gestor)
-        mov.refresh_from_db()
-
-        self.assertEqual(mov.numero_cimbpm, numero_original)
-        self.assertTrue(mov.documento_cimbpm)
-        self.assertEqual(mov.status, constants.ACEITA)
-
-    def test_pdf_multiplos_bens(self):
-        bens = [
-            self.criar_bem(
-                numero_patrimonial=f"001.{str(i).zfill(9)}-{i % 10}",
-                nome=f"Item {i}",
-                descricao=f"Descrição do item {i}",
-            )
-            for i in range(1, 101)
-        ]
-
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bens[0],
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.AGUARDANDO_APROVACAO,
-        )
-
-        for bem in bens:
-            MovimentacaoBensItem.objects.create(movimentacao=mov, bem=bem)
-
-        mov.regenerar_documento_cimbpm(force=True)
-        mov.refresh_from_db()
-
-        self.assertTrue(mov.documento_cimbpm)
-        self.assertTrue(mov.documento_existe())
-
-
-class TestEdgeCasesPDF(CIMBPMTestBase):
-
-    def test_bem_sem_numero_patrimonial(self):
-        bem = self.criar_bem(sem_numeracao=True)
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        mov.regenerar_documento_cimbpm(force=True)
-
-        self.assertTrue(mov.documento_existe())
-
-    def test_bem_com_descricao_vazia(self):
-        bem = self.criar_bem(descricao="")
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        mov.regenerar_documento_cimbpm(force=True)
-
-        self.assertTrue(mov.documento_existe())
-
-    def test_bem_com_valor_zero(self):
-        bem = self.criar_bem(valor_unitario=Decimal("0.00"))
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        mov.regenerar_documento_cimbpm(force=True)
-
-        self.assertTrue(mov.documento_existe())
-
-    def test_usuario_sem_rf(self):
-        usuario_sem_rf = Usuario.objects.create_user(
-            username="sem_rf",
-            nome="Usuário Sem RF",
-            rf=None,
-            unidade_administrativa=self.ua_origem,
-        )
-        usuario_sem_rf.groups.add(self.grupo_operador)
-
-        bem = self.criar_bem(criado_por=usuario_sem_rf)
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=usuario_sem_rf,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        mov.regenerar_documento_cimbpm(force=True)
-
-        self.assertTrue(mov.documento_existe())
-
-    def test_pdf_com_logo_inexistente(self):
-        import os
-        from unittest.mock import patch
-
-        bem = self.criar_bem()
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        with patch("os.path.exists", return_value=False):
-            mov.regenerar_documento_cimbpm(force=True)
-            self.assertTrue(mov.documento_existe())
-
-
-class TestRegeneracaoDocumento(CIMBPMTestBase):
-
-    def test_metodo_documento_existe(self):
-        bem = self.criar_bem()
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        self.assertFalse(mov.documento_existe())
-
-        mov.regenerar_documento_cimbpm(force=True)
-        self.assertTrue(mov.documento_existe())
-
-        import os
-
-        if mov.documento_cimbpm:
-            caminho = mov.documento_cimbpm.path
-            if os.path.exists(caminho):
-                os.remove(caminho)
-
-        self.assertFalse(mov.documento_existe())
-
-    def test_regenerar_documento_force(self):
-        bem = self.criar_bem()
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        self.assertTrue(mov.regenerar_documento_cimbpm(force=False))
-
-        self.assertFalse(mov.regenerar_documento_cimbpm(force=False))
-
-        self.assertTrue(mov.regenerar_documento_cimbpm(force=True))
-
-    def test_regeneracao_automatica_via_admin(self):
-        from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
-            MovimentacaoBemPatrimonialAdmin,
-        )
-        from django.contrib.admin.sites import AdminSite
-
-        bem = self.criar_bem()
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador,
-            status=constants.ENVIADA,
-        )
-        mov.refresh_from_db()
-
-        self.assertIsNotNone(mov.numero_cimbpm)
-        self.assertFalse(mov.documento_existe())
-
-        admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, AdminSite())
-        link_html = admin.get_documento_cimbpm_link(mov)
-
-        self.assertIn("href=", link_html)
-        self.assertIn("Baixar Documento CIMBPM", link_html)
-        self.assertIn(f"/documento-cimbpm/{mov.pk}/download/", link_html)
-
-        mov.refresh_from_db()
-        self.assertFalse(mov.documento_existe())
-
-
 class TestSegurancaDownload(CIMBPMTestBase):
 
     def setUp(self):
@@ -616,3 +362,149 @@ class TestSegurancaDownload(CIMBPMTestBase):
             f"CIMBPM_{self.movimentacao.numero_cimbpm.replace('.', '_')}.pdf",
             response["Content-Disposition"],
         )
+
+
+class TestConteudoDownload(CIMBPMTestBase):
+    def setUp(self):
+        super().setUp()
+        self.bem = self.criar_bem()
+        self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=self.bem,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador,
+            status=constants.ENVIADA,
+        )
+        self.movimentacao.refresh_from_db()
+        self.url = reverse(
+            "download_documento_cimbpm", kwargs={"pk": self.movimentacao.pk}
+        )
+
+    def test_conteudo_pdf_valido(self):
+        self.client.login(username="gestor", password="senha123")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        content = b"".join(response.streaming_content)
+        self.assertTrue(content.startswith(b"%PDF"))
+        self.assertGreater(len(content), 1000)
+
+    def test_data_emissao_fixa_apos_aprovacao(self):
+        data_criacao_original = self.movimentacao.criado_em
+
+        self.movimentacao.aprovar_solicitacao(self.gestor)
+        self.movimentacao.refresh_from_db()
+
+        self.assertEqual(self.movimentacao.criado_em, data_criacao_original)
+
+        self.client.login(username="gestor", password="senha123")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+
+class TestEdgeCasesPDF(CIMBPMTestBase):
+    def test_geracao_com_campos_vazios(self):
+        bem = self.criar_bem(
+            descricao="",
+            marca="",
+            modelo="",
+            numero_processo="",
+            valor_unitario=Decimal("0.00"),
+        )
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador,
+            status=constants.ENVIADA,
+        )
+
+        buffer = gerar_pdf_cimbpm(mov, usuario_gerador=self.operador)
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+
+    def test_geracao_sem_logo(self):
+        from unittest.mock import patch
+
+        bem = self.criar_bem()
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador,
+            status=constants.ENVIADA,
+        )
+
+        with patch(
+            "bem_patrimonial.cimbpm.Image", side_effect=Exception("Logo não encontrado")
+        ):
+            try:
+                buffer = gerar_pdf_cimbpm(mov, usuario_gerador=self.operador)
+                self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+            except Exception as e:
+                self.fail(f"Geração de PDF falhou sem logo: {e}")
+
+    def test_geracao_com_nomes_longos(self):
+        ua_longa = UnidadeAdministrativa.objects.create(
+            codigo="01.16.10.999",
+            sigla="LONGA",
+            nome="Unidade com Nome Extremamente Longo Para Testar Quebra de Linha no PDF "
+            * 3,
+            status=UnidadeAdministrativa.ATIVA,
+        )
+
+        bem = self.criar_bem(
+            nome="Bem com nome muito longo " * 5,
+            descricao="Descrição muito longa " * 10,
+        )
+
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=ua_longa,
+            solicitado_por=self.operador,
+            status=constants.ENVIADA,
+        )
+
+        buffer = gerar_pdf_cimbpm(mov, usuario_gerador=self.operador)
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+
+    def test_geracao_com_multiplos_bens(self):
+        bem1 = self.criar_bem(numero_patrimonial="001.000000001-1")
+        bem2 = self.criar_bem(numero_patrimonial="001.000000002-2")
+
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem1,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador,
+            status=constants.ENVIADA,
+        )
+
+        MovimentacaoBensItem.objects.create(movimentacao=mov, bem=bem1)
+        MovimentacaoBensItem.objects.create(movimentacao=mov, bem=bem2)
+
+        buffer = gerar_pdf_cimbpm(mov, usuario_gerador=self.operador)
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+
+    def test_geracao_condicoes_limite_formatacao(self):
+        operador_sem_rf = Usuario.objects.create_user(
+            username="semrf",
+            nome="Sem RF",
+            rf="",
+            password="123",
+            unidade_administrativa=self.ua_origem,
+        )
+        operador_sem_rf.groups.add(self.grupo_operador)
+
+        bem_sem_num = self.criar_bem(numero_patrimonial="")
+
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem_sem_num,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=operador_sem_rf,
+            status=constants.ENVIADA,
+        )
+
+        buffer = gerar_pdf_cimbpm(mov, usuario_gerador=operador_sem_rf)
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF"))

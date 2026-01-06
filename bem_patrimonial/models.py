@@ -8,7 +8,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from django.contrib.contenttypes.models import ContentType
-from django.core.files.base import ContentFile
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.context import get_user
 from dados_comuns.utils import dict_changes
@@ -367,7 +366,7 @@ class MovimentacaoBemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
-    criado_em = models.DateTimeField("Criado em", auto_now=True)
+    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
     atualizado_em = models.DateTimeField(
         "Atualizado em", auto_now=True, null=True, blank=True
     )
@@ -412,38 +411,6 @@ class MovimentacaoBemPatrimonial(models.Model):
     def cancelada(self):
         return self.status == constants.CANCELADA
 
-    def documento_existe(self):
-        if not self.documento_cimbpm:
-            return False
-        try:
-            return self.documento_cimbpm.storage.exists(self.documento_cimbpm.name)
-        except Exception:
-            return False
-
-    def regenerar_documento_cimbpm(self, force=False):
-        if not force and self.documento_existe():
-            return False
-
-        from bem_patrimonial.cimbpm import gerar_pdf_cimbpm
-
-        data_aceite = None
-        if self.aceita and self.aprovado_por:
-            data_aceite = (
-                self.criado_em
-                if not hasattr(self, "atualizado_em")
-                else self.atualizado_em
-            )
-
-        if self.numero_cimbpm:
-            pdf_buffer = gerar_pdf_cimbpm(self, data_aceite=data_aceite)
-            filename = f"CIMBPM_{self.numero_cimbpm.replace('.', '_')}.pdf"
-            self.documento_cimbpm.save(
-                filename, ContentFile(pdf_buffer.read()), save=True
-            )
-            return True
-
-        return False
-
     def aprovar_solicitacao(self, usuario):
         if self.aceita or self.status != constants.ENVIADA:
             return
@@ -459,16 +426,6 @@ class MovimentacaoBemPatrimonial(models.Model):
         self.status = constants.ACEITA
         self.aprovado_por = usuario
         self.save()
-
-        from bem_patrimonial.cimbpm import gerar_pdf_cimbpm
-        from django.utils import timezone
-
-        if self.numero_cimbpm:
-            pdf_buffer = gerar_pdf_cimbpm(self, data_aceite=timezone.now())
-            filename = f"CIMBPM_{self.numero_cimbpm.replace('.', '_')}.pdf"
-            self.documento_cimbpm.save(
-                filename, ContentFile(pdf_buffer.read()), save=True
-            )
 
     def rejeitar_solicitacao(self, usuario):
         if self.rejeitada or self.status != constants.ENVIADA:
@@ -651,7 +608,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
     def clean(self):
         super().clean()
-        
+
         if self.data_baixa:
             if hasattr(self.data_baixa, "date"):
                 data_baixa = self.data_baixa.date()
@@ -661,7 +618,9 @@ class BaixaFisicaBemPatrimonial(models.Model):
             hoje = timezone.localdate()
             if data_baixa > hoje:
                 raise ValidationError(
-                    {"data_baixa": "A data da Baixa Física não pode ser maior que a data atual."}
+                    {
+                        "data_baixa": "A data da Baixa Física não pode ser maior que a data atual."
+                    }
                 )
 
         if not self.numero_processo_baixa:
@@ -740,7 +699,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
         self.data_aprovacao = timezone.now()
         self.save(update_fields=["status", "aprovado_por", "data_aprovacao"])
         texto_localizacao = f"Baixa Física - {self.numero_processo_baixa}"
-       
+
         for item in self.itens.select_related("bem"):
             bem = item.bem
             bem.status = constants.BAIXA_FISICA
