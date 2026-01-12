@@ -370,9 +370,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         return True
 
     def has_delete_permission(self, request, obj=None):
-        if not request.user.is_superuser:
-            return False
-
         if obj is None:
             return False
 
