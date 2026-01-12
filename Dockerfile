@@ -1,5 +1,5 @@
 FROM python:3.11-bullseye
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1
 ADD . /code
 WORKDIR /code
 RUN apt-get update && \
