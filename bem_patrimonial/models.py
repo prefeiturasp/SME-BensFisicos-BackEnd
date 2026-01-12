@@ -1,11 +1,14 @@
 from datetime import datetime
 import re
+from django.db.models import Q
 from django.dispatch import receiver
 from django.db.models.signals import post_save
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db import transaction
 from django.utils import timezone
+from django.apps import apps
+
 
 from django.contrib.contenttypes.models import ContentType
 from dados_comuns.models import HistoricoGeral
@@ -23,7 +26,61 @@ NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
 
-class BemPatrimonial(models.Model):
+class SoftDeleteQuerySet(models.QuerySet):
+    def delete(self):
+        return super().update(excluido=True)
+
+    def hard_delete(self):
+        return super().delete()
+
+    def alive(self):
+        return self.filter(excluido=False)
+
+    def dead(self):
+        return self.filter(excluido=True)
+
+
+class SoftDeleteManager(models.Manager):
+    def get_queryset(self):
+        return SoftDeleteQuerySet(self.model, using=self._db).filter(excluido=False)
+
+    def hard_delete(self):
+        return self.get_queryset().hard_delete()
+
+
+class AllObjectsManager(models.Manager):
+    def get_queryset(self):
+        return SoftDeleteQuerySet(self.model, using=self._db)
+
+
+class SoftDeleteModel(models.Model):
+    excluido = models.BooleanField(default=False)
+
+    objects = SoftDeleteManager()
+    all_objects = AllObjectsManager()
+
+    def delete(self, using=None, keep_parents=False):
+        if self.excluido:
+            return
+       
+        with transaction.atomic():
+            self.excluido = True
+            self.save(update_fields=["excluido"])
+
+            hook = getattr(self, "_on_soft_delete", None)
+            if callable(hook):
+                hook()
+
+    class Meta:
+        abstract = True
+
+
+class BaseModel(SoftDeleteModel):
+    class Meta:
+        abstract = True
+
+
+class BemPatrimonial(BaseModel):
     "Classe que representa um bem patrimonial"
 
     # obrigatórios
@@ -42,7 +99,6 @@ class BemPatrimonial(models.Model):
     numero_patrimonial = models.CharField(
         "Número Patrimonial",
         max_length=20,
-        unique=True,
         null=True,
         blank=True,
         help_text="Formato padrão: 000.000000000-0",
@@ -86,7 +142,7 @@ class BemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
-    criado_em = models.DateTimeField("Criado em", auto_now=True)
+    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
     atualizado_em = models.DateTimeField(
         "Atualizado em", auto_now=True, null=True, blank=True
     )
@@ -119,6 +175,13 @@ class BemPatrimonial(models.Model):
     class Meta:
         verbose_name = "bem patrimonial"
         verbose_name_plural = "bens patrimoniais"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["numero_patrimonial"],
+                condition=Q(excluido=False),
+                name="uniq_numero_patrimonial_ativo",
+            )
+        ]
 
     def clean(self):
         if not self.pk and self.numero_formato_antigo and self.sem_numeracao:
@@ -211,6 +274,15 @@ class BemPatrimonial(models.Model):
     def set_unidade_administrative(self, unidade):
         self.unidade_administrativa = unidade
         self.save()
+        
+    def _on_soft_delete(self):
+        from inventario.models import ItemConciliacao
+        from inventario import constants as inv_constants
+        
+        ItemConciliacao.objects.filter(
+            bem_id=self.pk,
+            conciliacao__status=inv_constants.CONCILIACAO_EM_ABERTO,
+        ).delete()
 
 
 class StatusBemPatrimonial(models.Model):

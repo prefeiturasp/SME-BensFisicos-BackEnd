@@ -1,0 +1,10 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+  <h1>Confirmar exclusão</h1>
+  <p>Tem certeza que deseja apagar o bem patrimonial <strong>{{ object }}</strong>?</p>
+
+  <form method="post">{% csrf_token %}
+    <input type="submit" value="Sim, apagar" class="deletelink" />
+    <a href="../" class="button cancel-link">Cancelar</a>
+  </form>
+{% endblock %}

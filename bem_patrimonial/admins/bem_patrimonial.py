@@ -1,11 +1,13 @@
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.db import IntegrityError, models, transaction
 from django.db.models import OuterRef, Subquery
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html
 from django.utils import timezone
+from django.template.response import TemplateResponse
 
 from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
@@ -244,11 +246,50 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_actions(self, request):
         actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
         if not request.user.is_gestor_patrimonio:
             actions.pop("aplicar_extracao_numero", None)
             actions.pop("aprovar_bens", None)
             actions.pop("reprovar_bens", None)
         return actions
+
+    def delete_view(self, request, object_id, extra_context=None):
+        obj = self.get_object(request, object_id)
+
+        if obj is None:
+            return HttpResponseRedirect(
+                reverse(
+                    f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
+                )
+            )
+
+        if not self.has_delete_permission(request, obj=obj):
+            raise PermissionDenied
+
+        if request.method == "POST":
+            with transaction.atomic():
+                obj.delete()
+            messages.success(request, _("Bem patrimonial apagado com sucesso."))
+            return HttpResponseRedirect(
+                reverse(
+                    f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
+                )
+            )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "object": obj,
+            "opts": self.model._meta,
+            "title": _("Confirmar exclusão"),
+        }
+        if extra_context:
+            context.update(extra_context)
+
+        return TemplateResponse(
+            request,
+            "admin/bem_patrimonial/bem_delete_confirm.html",
+            context,
+        )
 
     def get_list_display(self, request):
         if (
@@ -320,13 +361,31 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         if not perm:
             return False
 
+        if obj and getattr(obj, "excluido", False):
+            return False
+
         if obj and obj.status == constants.BAIXA_FISICA:
             return False
 
         return True
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        if not request.user.is_superuser:
+            return False
+
+        if obj is None:
+            return False
+
+        if getattr(obj, "excluido", False):
+            return False
+
+        if not request.user.is_gestor_patrimonio:
+            return False
+
+        if obj.status == constants.BAIXA_FISICA:
+            return False
+
+        return True
 
     def get_form(self, request, obj=None, **kwargs):
         BaseForm = super().get_form(request, obj, **kwargs)
