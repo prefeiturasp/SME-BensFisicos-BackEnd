@@ -162,7 +162,8 @@ class ItemConciliacaoInline(admin.TabularInline):
 @admin.register(ConciliacaoUA)
 class ConciliacaoUAAdmin(admin.ModelAdmin):
     form = ConciliacaoUAAdminForm
-
+    change_form_template = "admin/inventario/conciliacaoua/change_form.html"
+    
     list_display = [
         "numero_conciliacao",
         "unidade_administrativa",
