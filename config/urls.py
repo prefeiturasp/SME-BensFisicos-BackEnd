@@ -56,6 +56,7 @@ urlpatterns = [
         download_documento_cimbpm,
         name="download_documento_cimbpm",
     ),
+    path('', include('inventario.urls')),
     # Módulo de Suporte desabilitado temporariamente
     # path('api/agenda/', include(agenda_urls.urlpatterns)),
     # Recuperação de senha
