@@ -59,7 +59,7 @@ def formatar_moeda_brasileira(valor):
 
 
 def obter_nome_usuario(usuario):
-    
+
     if not usuario:
         return "-"
     return usuario.nome if getattr(usuario, "nome", None) else usuario.username
@@ -144,9 +144,6 @@ def _criar_info_geracao(usuario_gerador=None, data_geracao=None):
     info_text = f"Gerado por {nome_usuario} em {data_geracao_str}"
     elements.append(Paragraph(info_text, info_style))
     return elements
-
-
-
 
 
 def _criar_cabecalho_e_registro_conciliacao(conciliacao, data_emissao):
@@ -241,7 +238,6 @@ def _criar_cabecalho_e_registro_conciliacao(conciliacao, data_emissao):
             Paragraph(periodo_final_str, value_style),
             Paragraph(numero_conciliacao, value_style),
         ],
-        
         [Paragraph(f"TIPO: {tipo}  •  STATUS: {status}", label_style), "", ""],
     ]
 
@@ -254,30 +250,23 @@ def _criar_cabecalho_e_registro_conciliacao(conciliacao, data_emissao):
     registro_table.setStyle(
         TableStyle(
             [
-                
                 ("SPAN", (0, 0), (2, 0)),
                 ("BACKGROUND", (0, 0), (2, 0), PDFConfig.COR_HEADER),
                 ("FONTNAME", (0, 0), (2, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (2, 0), 8),
-                
                 ("BACKGROUND", (0, 1), (2, 1), PDFConfig.COR_CINZA_CLARO),
-                
                 ("BACKGROUND", (0, 2), (2, 2), PDFConfig.COR_CINZA_MEDIO),
-                
                 ("SPAN", (0, 3), (2, 3)),
                 ("BACKGROUND", (0, 3), (2, 3), PDFConfig.COR_CINZA_CLARO),
                 ("FONTNAME", (0, 3), (2, 3), "Helvetica-Bold"),
-                
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("BOX", (0, 0), (-1, -1), 1, colors.black),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                
                 ("TOPPADDING", (0, 0), (-1, -1), 1),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
                 ("LEFTPADDING", (0, 0), (-1, -1), 2),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-                
                 ("TOPPADDING", (0, 3), (2, 3), 0.5),
                 ("BOTTOMPADDING", (0, 3), (2, 3), 0.5),
             ]
@@ -407,17 +396,13 @@ class NumberedCanvas(canvas.Canvas):
     def _draw_page_number(self, page_count):
         page_num = self.getPageNumber()
 
-        
         y = 1.5 * cm + 0.2 * cm
 
-        
         x = self._pagesize[0] - PDFConfig.MARGEM_DIREITA
 
-        
         self.setFont("Helvetica", 6)
         self.setFillColor(colors.grey)
 
-        
         self.drawRightString(x, y, f"{page_num}/{page_count}")
 
 
@@ -512,7 +497,6 @@ def _criar_blocos_itens_conciliacao(conciliacao):
     elements = []
     styles = getSampleStyleSheet()
 
-    
     font = 6
     leading = 7
 
@@ -544,12 +528,11 @@ def _criar_blocos_itens_conciliacao(conciliacao):
         "GrupoTitulo",
         styles,
         fontName="Helvetica-Bold",
-        fontSize=7,  
+        fontSize=7,
         leading=8,
         alignment=TA_LEFT,
     )
 
-    
     itens = (
         conciliacao.itens.select_related("bem")
         .prefetch_related("ocorrencias__registrado_por")
@@ -557,7 +540,6 @@ def _criar_blocos_itens_conciliacao(conciliacao):
         .order_by("bem__numero_patrimonial")
     )
 
-    
     encontrados_sem_ocorrencia = []
     com_ocorrencia = []
 
@@ -565,18 +547,17 @@ def _criar_blocos_itens_conciliacao(conciliacao):
         if item.tem_ocorrencia:
             com_ocorrencia.append(item)
         else:
-            
+
             if item.situacao == inv_constants.ENCONTRADO_SEM_DIVERGENCIA:
                 encontrados_sem_ocorrencia.append(item)
             else:
-                
+
                 encontrados_sem_ocorrencia.append(item)
 
     def render_grupo(titulo, lista):
         if not lista:
             return
 
-        
         elements.append(Paragraph(f"<b>{titulo}</b> ({len(lista)})", titulo_grupo))
         elements.append(Spacer(1, 0.15 * cm))
 
@@ -594,30 +575,20 @@ def _criar_blocos_itens_conciliacao(conciliacao):
 
             situacao = item.get_situacao_display()
 
-            
             oc = item.ocorrencias.first() if item.tem_ocorrencia else None
 
-            
-            
-            
             linha_topo = [
                 Paragraph(f"<b>Nº PATRIMONIAL:</b> {num}", txt),
                 Paragraph("", txt),
                 Paragraph(f"<b>VALOR:</b> {val}", txt_center),
             ]
 
-            
-            
-            
             linha_desc = [
                 Paragraph(f"<b>DESCRIÇÃO:</b> {descricao}", txt),
                 Paragraph(f"<b>MARCA:</b> {marca}", txt),
                 Paragraph(f"<b>MODELO:</b> {modelo}", txt),
             ]
 
-            
-            
-            
             linha_situacao = [
                 Paragraph(f"<b>SITUAÇÃO:</b> {situacao}", txt),
                 Paragraph("", txt),
@@ -630,9 +601,6 @@ def _criar_blocos_itens_conciliacao(conciliacao):
                 linha_situacao,
             ]
 
-            
-            
-            
             if oc:
                 registrado_por = obter_nome_usuario(getattr(oc, "registrado_por", None))
                 registrado_em = _fmt_date(getattr(oc, "registrado_em", None))
@@ -640,7 +608,6 @@ def _criar_blocos_itens_conciliacao(conciliacao):
                 obs = (getattr(oc, "observacao", "") or "").strip() or "-"
                 div = (getattr(oc, "divergencia", "") or "").strip() or "-"
 
-                
                 rows.append(
                     [
                         Paragraph(f"<b>Observação/Divergência:</b> {obs}", txt),
@@ -663,13 +630,11 @@ def _criar_blocos_itens_conciliacao(conciliacao):
                     ]
                 )
 
-            
             box = Table(
                 rows,
                 colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm],
             )
 
-            
             style_cmds = [
                 ("BOX", (0, 0), (-1, -1), 1, colors.black),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
@@ -678,17 +643,14 @@ def _criar_blocos_itens_conciliacao(conciliacao):
                 ("RIGHTPADDING", (0, 0), (-1, -1), 2),
                 ("TOPPADDING", (0, 0), (-1, -1), 2),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                
                 ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_CINZA_CLARO),
             ]
 
-            
             if oc:
-                
-                
+
                 style_cmds += [
-                    ("SPAN", (0, 3), (2, 3)),  
-                    ("SPAN", (0, 4), (2, 4)),  
+                    ("SPAN", (0, 3), (2, 3)),
+                    ("SPAN", (0, 4), (2, 4)),
                     ("BACKGROUND", (0, 3), (2, 4), PDFConfig.COR_CINZA_ZEBRA),
                 ]
 
@@ -698,11 +660,9 @@ def _criar_blocos_itens_conciliacao(conciliacao):
 
         elements.append(Spacer(1, 0.25 * cm))
 
-    
     render_grupo("Itens encontrados sem divergência", encontrados_sem_ocorrencia)
     render_grupo("Itens com ocorrência / divergência", com_ocorrencia)
 
-    
     if not encontrados_sem_ocorrencia and not com_ocorrencia:
         elements.append(Paragraph("Nenhum item encontrado para esta conciliação.", txt))
 

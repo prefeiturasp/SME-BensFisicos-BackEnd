@@ -410,8 +410,7 @@ class ItemConciliacao(models.Model):
     @property
     def permite_registrar_ocorrencia(self):
         if self.situacao == constants.BAIXA_FISICA:
-
-            return self.tem_ocorrencia
+            return False
         return True
 
 
