@@ -2,10 +2,15 @@ import os
 import re
 from io import BytesIO
 from decimal import Decimal
+
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, IntegerField, Value
+from django.db.models.functions import Cast, Substr, Replace
 from django.utils import timezone
+from django.http import HttpResponse
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
@@ -21,8 +26,11 @@ from reportlab.platypus import (
     Frame,
     PageTemplate,
 )
+
 import pytz
 
+from bem_patrimonial.models import BaixaFisicaBemPatrimonial
+from bem_patrimonial import constants
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
     extrair_codigo_ua,
@@ -34,50 +42,61 @@ from bem_patrimonial.pdf_utils import (
 )
 
 
-def obter_bens_movimentacao(movimentacao):
-    bens_itens = movimentacao.itens.select_related("bem").all()
-    bens = [item.bem for item in bens_itens]
-
-    # Fallback para compatibilidade com modelo antigo
-    if not bens and movimentacao.bem_patrimonial:
-        bens = [movimentacao.bem_patrimonial]
-
+def obter_bens_baixa(baixa):
+    itens = baixa.itens.select_related("bem").all()
+    bens = [item.bem for item in itens]
     return sorted(bens, key=lambda b: b.numero_patrimonial or "")
 
 
-def gerar_numero_cimbpm(movimentacao):
-    from bem_patrimonial.models import MovimentacaoBemPatrimonial
-    from django.db.models import Max
-    from django.db.models.functions import Cast, Substr
-    from django.db.models import IntegerField
+def gerar_numero_nbbpm(baixa):
+    """
+    Modelo alinhado ao CIMBPM: <COD_UA>.<SEQ_7>.<ANO>
+    Ex: 287.0000001.2025
+    """
+    if not isinstance(baixa, BaixaFisicaBemPatrimonial):
+        raise ValidationError("Objeto inválido para geração de NBBPM.")
 
-    ano_movimentacao = movimentacao.criado_em.year
-    codigo_origem = extrair_codigo_ua(movimentacao.unidade_administrativa_origem.codigo)
-    codigo_destino = extrair_codigo_ua(
-        movimentacao.unidade_administrativa_destino.codigo
+    ano_baixa = baixa.data_baixa.year if baixa.data_baixa else timezone.localdate().year
+    codigo_ua = extrair_codigo_ua(
+        getattr(baixa.unidade_administrativa_origem, "codigo", "")
     )
 
     with transaction.atomic():
-        ultimo_sequencial = (
-            MovimentacaoBemPatrimonial.objects.select_for_update()
+        qs = (
+            BaixaFisicaBemPatrimonial.objects.select_for_update()
             .filter(
-                numero_cimbpm__endswith=f".{ano_movimentacao}",
-                numero_cimbpm__isnull=False,
+                numero_nbbpm__endswith=f".{ano_baixa}",
+                numero_nbbpm__isnull=False,
             )
-            .annotate(sequencial_str=Substr("numero_cimbpm", 9, 7))
-            .aggregate(max_seq=Max(Cast("sequencial_str", IntegerField())))["max_seq"]
+            .exclude(numero_nbbpm__exact="")
         )
+
+        sequencial_raw = Substr("numero_nbbpm", 5, 7)
+
+        sequencial_digits = Replace(sequencial_raw, Value("."), Value(""))
+
+        ultimo_sequencial = qs.annotate(
+            sequencial_int=Cast(sequencial_digits, IntegerField())
+        ).aggregate(max_seq=Max("sequencial_int"))["max_seq"]
 
         numero_sequencial = (ultimo_sequencial or 0) + 1
 
-    return (
-        f"{codigo_origem}.{codigo_destino}.{numero_sequencial:07d}.{ano_movimentacao}"
-    )
+    return f"{codigo_ua}.{numero_sequencial:07d}.{ano_baixa}"
 
 
-def gerar_pdf_cimbpm(
-    movimentacao, data_aceite=None, usuario_gerador=None, data_geracao=None
-):
+def gerar_pdf_nbbpm(baixa, usuario_gerador=None, data_geracao=None):
+    if not isinstance(baixa, BaixaFisicaBemPatrimonial):
+        raise ValidationError("Objeto inválido para gerar NBBPM.")
+
+    if baixa.status != constants.ACEITA:
+        raise ValidationError(
+            "Só é possível gerar NBBPM para Baixas Físicas aprovadas (ACEITA)."
+        )
+
+    if not getattr(baixa, "numero_nbbpm", None):
+        baixa.numero_nbbpm = gerar_numero_nbbpm(baixa)
+        baixa.save(update_fields=["numero_nbbpm"])
+
     buffer = BytesIO()
 
     doc = BaseDocTemplate(
@@ -87,38 +106,36 @@ def gerar_pdf_cimbpm(
         rightMargin=PDFConfig.MARGEM_DIREITA,
         topMargin=PDFConfig.MARGEM_SUPERIOR,
         bottomMargin=PDFConfig.MARGEM_INFERIOR,
-        title=f"CIMBPM {movimentacao.numero_cimbpm}",
+        title=f"NBBPM {baixa.numero_nbbpm}",
         author="Sistema de Bens Físicos - SME",
     )
 
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
 
-    def on_page(canvas, doc):
+    def on_page(canvas, doc_):
         canvas.saveState()
-        _desenhar_cabecalho_em_pagina(canvas, doc, movimentacao, data_aceite)
-        _desenhar_rodape_em_pagina(
-            canvas, doc, movimentacao, data_aceite, usuario_gerador, data_geracao
-        )
+        _desenhar_cabecalho_em_pagina(canvas, doc_, baixa)
+        _desenhar_rodape_em_pagina(canvas, doc_, baixa, usuario_gerador, data_geracao)
         canvas.restoreState()
 
     template = PageTemplate(id="todas_paginas", frames=[frame], onPage=on_page)
     doc.addPageTemplates([template])
 
     elements = []
-    elements.extend(_criar_informacoes_gerais(movimentacao))
+    elements.extend(_criar_informacoes_gerais(baixa))
     elements.append(Spacer(1, 0.2 * cm))
-    elements.extend(_criar_tabela_bens(movimentacao))
+    elements.extend(_criar_tabela_bens(baixa))
     elements.append(Spacer(1, 0.1 * cm))
-    elements.extend(_criar_total_bens(movimentacao))
+    elements.extend(_criar_total_bens(baixa))
 
     doc.build(elements)
     buffer.seek(0)
     return buffer
 
 
-def _desenhar_cabecalho_em_pagina(canvas, doc, movimentacao, data_aceite):
+def _desenhar_cabecalho_em_pagina(canvas, doc, baixa):
     y_pos = A4[1] - 1.0 * cm
-    header_elements = _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite)
+    header_elements = _criar_cabecalho_e_registro_nbbpm(baixa)
 
     if header_elements:
         header_table = header_elements[0]
@@ -127,7 +144,7 @@ def _desenhar_cabecalho_em_pagina(canvas, doc, movimentacao, data_aceite):
 
 
 def _desenhar_rodape_em_pagina(
-    canvas, doc, movimentacao, data_aceite, usuario_gerador=None, data_geracao=None
+    canvas, doc, baixa, usuario_gerador=None, data_geracao=None
 ):
     y_base = 1.5 * cm
     page_num = canvas.getPageNumber()
@@ -138,13 +155,13 @@ def _desenhar_rodape_em_pagina(
         A4[0] - doc.rightMargin, y_base + 0.2 * cm, f"Página {page_num}"
     )
 
-    rodape_elements = _criar_rodape_cimbpm(movimentacao, data_aceite)
+    rodape_elements = _criar_rodape_nbbpm(baixa)
     if rodape_elements:
         rodape_table = rodape_elements[0]
         rodape_table.wrapOn(canvas, doc.width, A4[1])
         rodape_table.drawOn(canvas, doc.leftMargin, y_base + 0.8 * cm)
 
-    usuario = usuario_gerador or getattr(movimentacao, "solicitado_por", None)
+    usuario = usuario_gerador or getattr(baixa, "criado_por", None)
     info_elements = criar_info_geracao_paragraph(
         usuario=usuario,
         data_geracao=data_geracao,
@@ -156,8 +173,7 @@ def _desenhar_rodape_em_pagina(
         info_para.drawOn(canvas, doc.leftMargin, y_base + 0.2 * cm)
 
 
-def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
-    elements = []
+def _criar_cabecalho_e_registro_nbbpm(baixa):
     styles = getSampleStyleSheet()
 
     title_style = criar_estilo_base(
@@ -179,10 +195,17 @@ def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
         leading=8,
     )
     desc_style = criar_estilo_base(
-        "CabecalhoDesc", styles, fontSize=6, alignment=TA_CENTER, leading=7
+        "CabecalhoDesc",
+        styles,
+        fontSize=6,
+        alignment=TA_CENTER,
+        leading=7,
     )
     label_style = criar_estilo_base(
-        "RegistroLabel", styles, fontName="Helvetica-Bold", alignment=TA_CENTER
+        "RegistroLabel",
+        styles,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
     )
     value_style = criar_estilo_base(
         "RegistroValue",
@@ -192,10 +215,10 @@ def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
         leading=10,
     )
 
-    data_emissao = (
-        movimentacao.criado_em.strftime("%d/%m/%Y") if movimentacao.criado_em else ""
+    data_baixa = baixa.data_baixa.strftime("%d/%m/%Y") if baixa.data_baixa else ""
+    data_aprov = (
+        baixa.data_aprovacao.strftime("%d/%m/%Y") if baixa.data_aprovacao else ""
     )
-    data_aceite_formatada = data_aceite.strftime("%d/%m/%Y") if data_aceite else ""
 
     header_data = [
         [
@@ -205,7 +228,7 @@ def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
                 Paragraph("PREFEITURA MUNICIPAL DE SÃO PAULO", title_style),
                 Paragraph("SECRETARIA MUNICIPAL DE EDUCAÇÃO", subtitle_style),
                 Paragraph(
-                    "CONTROLE INTERNO DA MOVIMENTAÇÃO DE BENS PATRIMONIAIS MÓVEIS E INTANGÍVEIS (CIMBPM)",
+                    "NOTA DE BAIXA DE BENS PATRIMONIAIS MÓVEIS E INTANGÍVEIS (NBBPM)",
                     desc_style,
                 ),
                 Spacer(1, 0.1 * cm),
@@ -214,7 +237,9 @@ def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
     ]
 
     header_table = Table(
-        header_data, colWidths=[2.5 * cm, 8.6 * cm], rowHeights=[2.0 * cm]
+        header_data,
+        colWidths=[2.5 * cm, 8.6 * cm],
+        rowHeights=[2.0 * cm],
     )
     header_table.setStyle(
         TableStyle(
@@ -231,13 +256,13 @@ def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
     )
 
     registro_data = [
-        [Paragraph("REGISTRO DA CIMBPM", label_style), "", ""],
-        [Paragraph("DATA", label_style), "", Paragraph("NÚMERO CIMBPM", label_style)],
-        [Paragraph("EMISSÃO", label_style), Paragraph("ACEITE", label_style), ""],
+        [Paragraph("REGISTRO DA NBBPM", label_style), "", ""],
+        [Paragraph("DATA", label_style), "", Paragraph("NÚMERO NBBPM", label_style)],
+        [Paragraph("BAIXA", label_style), Paragraph("APROVAÇÃO", label_style), ""],
         [
-            Paragraph(data_emissao, value_style),
-            Paragraph(data_aceite_formatada, value_style),
-            Paragraph(movimentacao.numero_cimbpm or "", value_style),
+            Paragraph(data_baixa, value_style),
+            Paragraph(data_aprov, value_style),
+            Paragraph(baixa.numero_nbbpm or "", value_style),
         ],
     ]
 
@@ -288,27 +313,26 @@ def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
         )
     )
 
-    elements.append(main_table)
-    return elements
+    return [main_table]
 
 
 def _criar_linha_ua(label, sigla, nome, codigo, label_style, value_style):
+
     return [
         [
-            Paragraph(f"<b>PREFIXO</b>", label_style),
+            Paragraph("<b>PREFIXO</b>", label_style),
             Paragraph(f"<b>{label}</b>", label_style),
-            Paragraph(f"<b>CÓDIGO</b>", label_style),
+            Paragraph("<b>CÓDIGO</b>", label_style),
         ],
         [
-            Paragraph(sigla.upper(), value_style),
-            Paragraph(nome.upper(), value_style),
-            Paragraph(codigo, value_style),
+            Paragraph((sigla or "-").upper(), value_style),
+            Paragraph((nome or "-").upper(), value_style),
+            Paragraph(str(codigo or "-"), value_style),
         ],
     ]
 
 
-def _criar_informacoes_gerais(movimentacao):
-    elements = []
+def _criar_informacoes_gerais(baixa):
     styles = getSampleStyleSheet()
 
     label_style = criar_estilo_base(
@@ -316,8 +340,7 @@ def _criar_informacoes_gerais(movimentacao):
     )
     value_style = criar_estilo_base("InfoValue", styles, alignment=TA_LEFT)
 
-    ua_origem = movimentacao.unidade_administrativa_origem
-    ua_destino = movimentacao.unidade_administrativa_destino
+    ua_origem = baixa.unidade_administrativa_origem
 
     info_data = [
         [
@@ -334,27 +357,45 @@ def _criar_informacoes_gerais(movimentacao):
 
     info_data.extend(
         _criar_linha_ua(
-            "UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA QUE ENTREGA",
-            ua_origem.sigla,
-            ua_origem.nome,
-            ua_origem.codigo,
+            "UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA (BAIXA)",
+            getattr(ua_origem, "sigla", "-"),
+            getattr(ua_origem, "nome", "-"),
+            getattr(ua_origem, "codigo", "-"),
             label_style,
             value_style,
         )
     )
 
     info_data.extend(
-        _criar_linha_ua(
-            "UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA QUE RECEBE",
-            ua_destino.sigla,
-            ua_destino.nome,
-            ua_destino.codigo,
-            label_style,
-            value_style,
-        )
+        [
+            [
+                Paragraph("<b>NÚMERO DO PROCESSO DE BAIXA</b>", label_style),
+                Paragraph("<b>DATA DA BAIXA</b>", label_style),
+                Paragraph("<b>STATUS</b>", label_style),
+            ],
+            [
+                Paragraph(str(baixa.numero_processo_baixa or "-").upper(), value_style),
+                Paragraph(
+                    (
+                        baixa.data_baixa.strftime("%d/%m/%Y")
+                        if baixa.data_baixa
+                        else "-"
+                    ),
+                    value_style,
+                ),
+                Paragraph(
+                    str(
+                        baixa.get_status_display()
+                        if hasattr(baixa, "get_status_display")
+                        else baixa.status
+                    ).upper(),
+                    value_style,
+                ),
+            ],
+        ]
     )
 
-    info_table = Table(info_data, colWidths=[2.5 * cm, 12.5 * cm, 3 * cm])
+    info_table = Table(info_data, colWidths=[5.0 * cm, 10.0 * cm, 3.0 * cm])
     info_table.setStyle(
         TableStyle(
             [
@@ -379,12 +420,10 @@ def _criar_informacoes_gerais(movimentacao):
         )
     )
 
-    elements.append(info_table)
-    return elements
+    return [info_table]
 
 
-def _criar_tabela_bens(movimentacao):
-    elements = []
+def _criar_tabela_bens(baixa):
     styles = getSampleStyleSheet()
 
     cell_style = criar_estilo_base(
@@ -405,16 +444,15 @@ def _criar_tabela_bens(movimentacao):
     ]
 
     data = [headers]
-
-    bens = obter_bens_movimentacao(movimentacao)
+    bens = obter_bens_baixa(baixa)
 
     for bem in bens:
         numero_pat = bem.numero_patrimonial or "-"
-        descricao = bem.descricao.upper() if bem.descricao else "-"
+        descricao = (bem.descricao or bem.nome or "-").upper()
         valor_unitario = bem.valor_unitario or Decimal("0.00")
 
         row = [
-            Paragraph(numero_pat, cell_style_center),
+            Paragraph(str(numero_pat), cell_style_center),
             Paragraph(descricao, cell_style),
             Paragraph("1", cell_style_center),
             Paragraph(formatar_moeda_brasileira(valor_unitario), cell_style_center),
@@ -434,19 +472,16 @@ def _criar_tabela_bens(movimentacao):
     bens_table.setStyle(
         TableStyle(
             [
-                # Header
                 ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_HEADER),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, 0), PDFConfig.FONTE_PADRAO),
                 ("ALIGN", (0, 0), (-1, 0), "CENTER"),
                 ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
-                # Corpo
                 ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
                 ("FONTSIZE", (0, 1), (-1, -1), PDFConfig.FONTE_PADRAO),
                 ("ALIGN", (0, 1), (0, -1), "CENTER"),
                 ("ALIGN", (2, 1), (3, -1), "CENTER"),
                 ("VALIGN", (0, 1), (-1, -1), "TOP"),
-                # Bordas e zebra
                 ("BOX", (0, 0), (-1, -1), 1, colors.black),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ("LEFTPADDING", (0, 0), (-1, -1), 3),
@@ -463,21 +498,20 @@ def _criar_tabela_bens(movimentacao):
         )
     )
 
-    elements.append(bens_table)
-    return elements
+    return [bens_table]
 
 
-def _criar_total_bens(movimentacao):
-    elements = []
+def _criar_total_bens(baixa):
     styles = getSampleStyleSheet()
 
     header_style = criar_estilo_base(
-        "HeaderStyle", styles, fontName="Helvetica-Bold", alignment=TA_CENTER
+        "HeaderStyleTotal", styles, fontName="Helvetica-Bold", alignment=TA_CENTER
     )
-    cell_style = criar_estilo_base("CellStyle", styles, leading=8, alignment=TA_LEFT)
+    cell_style = criar_estilo_base(
+        "CellStyleTotal", styles, leading=8, alignment=TA_LEFT
+    )
 
-    bens = obter_bens_movimentacao(movimentacao)
-
+    bens = obter_bens_baixa(baixa)
     quantidade_total = len(bens)
     valor_total_geral = sum((bem.valor_unitario or Decimal("0.00")) for bem in bens)
 
@@ -518,12 +552,10 @@ def _criar_total_bens(movimentacao):
         )
     )
 
-    elements.append(total_table)
-    return elements
+    return [total_table]
 
 
-def _criar_rodape_cimbpm(movimentacao, data_aceite):
-    elements = []
+def _criar_rodape_nbbpm(baixa):
     styles = getSampleStyleSheet()
 
     label_style = criar_estilo_base(
@@ -531,25 +563,26 @@ def _criar_rodape_cimbpm(movimentacao, data_aceite):
     )
     value_style = criar_estilo_base("RodapeValue", styles, alignment=TA_CENTER)
 
-    responsavel_entrega = movimentacao.solicitado_por
-    nome_entrega = obter_nome_usuario(responsavel_entrega).upper()
-    rf_entrega = responsavel_entrega.rf if responsavel_entrega.rf else "-"
+    resp_baixa = getattr(baixa, "criado_por", None)
+    nome_baixa = obter_nome_usuario(resp_baixa).upper()
+    rf_baixa = getattr(resp_baixa, "rf", None) or "-"
 
-    responsavel_recebimento = ""
-    if data_aceite and movimentacao.aprovado_por:
-        responsavel_rec = movimentacao.aprovado_por
-        nome_recebimento = obter_nome_usuario(responsavel_rec).upper()
-        rf_recebimento = responsavel_rec.rf if responsavel_rec.rf else "-"
-        responsavel_recebimento = f"{nome_recebimento} - RF: {rf_recebimento}"
+    resp_aprov = getattr(baixa, "aprovado_por", None)
+    if resp_aprov:
+        nome_aprov = obter_nome_usuario(resp_aprov).upper()
+        rf_aprov = getattr(resp_aprov, "rf", None) or "-"
+        resp_aprov_txt = f"{nome_aprov} - RF: {rf_aprov}"
+    else:
+        resp_aprov_txt = ""
 
     rodape_data = [
         [
-            Paragraph("<b>RESPONSÁVEL PELA ENTREGA</b>", label_style),
-            Paragraph("<b>RESPONSÁVEL PELO RECEBIMENTO</b>", label_style),
+            Paragraph("<b>RESPONSÁVEL PELA BAIXA</b>", label_style),
+            Paragraph("<b>RESPONSÁVEL PELA APROVAÇÃO</b>", label_style),
         ],
         [
-            Paragraph(f"{nome_entrega} - RF: {rf_entrega}", value_style),
-            Paragraph(responsavel_recebimento, value_style),
+            Paragraph(f"{nome_baixa} - RF: {rf_baixa}", value_style),
+            Paragraph(resp_aprov_txt, value_style),
         ],
         [
             Paragraph("", value_style),
@@ -580,5 +613,13 @@ def _criar_rodape_cimbpm(movimentacao, data_aceite):
         )
     )
 
-    elements.append(rodape_table)
-    return elements
+    return [rodape_table]
+
+
+def http_response_nbbpm(baixa, usuario_gerador=None):
+    buffer = gerar_pdf_nbbpm(baixa, usuario_gerador=usuario_gerador)
+    filename = f"NBBPM_{baixa.numero_nbbpm}.pdf"
+
+    resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp

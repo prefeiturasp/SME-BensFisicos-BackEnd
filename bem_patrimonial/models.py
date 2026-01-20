@@ -670,6 +670,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
+    
+    numero_nbbpm = models.CharField(max_length=32, null=True, blank=True, db_index=True)
 
     class Meta:
         verbose_name = "Baixa Física de Bem Patrimonial"

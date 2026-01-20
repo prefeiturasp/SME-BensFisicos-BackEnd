@@ -1,8 +1,10 @@
+from django.urls import path
 from django.contrib import admin, messages
 from django.forms.models import BaseInlineFormSet
 from django.core.exceptions import ValidationError
 from django.forms import DateInput
 from django.utils import timezone
+from django.shortcuts import get_object_or_404, redirect
 
 from bem_patrimonial.models import (
     BaixaFisicaBemPatrimonial,
@@ -14,6 +16,7 @@ from bem_patrimonial.emails import (
     envia_email_baixa_fisica_cancelada,
 )
 from bem_patrimonial import constants
+from bem_patrimonial.nbbpm import http_response_nbbpm
 
 
 class BaixaFisicaBensItemInlineFormSet(BaseInlineFormSet):
@@ -107,6 +110,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
 
     inlines = [BaixaFisicaBensItemInline]
     autocomplete_fields = ("unidade_administrativa_origem",)
+    change_form_template = "admin/bem_patrimonial/baixa_fisica/change_form.html"
 
     class Media:
         js = ("admin/baixa_fisica_autocomplete.js",)
@@ -415,7 +419,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
             )
 
     acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"
-    
+
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == "data_baixa":
             hoje = timezone.localdate()
@@ -426,3 +430,26 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
                 }
             )
         return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<int:baixa_id>/nbbpm/",
+                self.admin_site.admin_view(self.baixar_nbbpm),
+                name="baixafisica_nbbpm",
+            ),
+        ]
+        return custom_urls + urls
+
+    def baixar_nbbpm(self, request, baixa_id):
+        baixa = get_object_or_404(BaixaFisicaBemPatrimonial, pk=baixa_id)
+
+        if baixa.status != constants.ACEITA:
+            messages.error(
+                request,
+                "A Nota NBBPM só pode ser gerada para Baixas Físicas aprovadas.",
+            )
+            return redirect(f"../{baixa_id}/change/")
+
+        return http_response_nbbpm(baixa)
