@@ -48,7 +48,9 @@ class OcorrenciaBaseTest(TestCase):
 
     def criar_conciliacao(self, fechado=False, ano=None):
         status = (
-            constants.CONCILIACAO_FECHADO if fechado else constants.CONCILIACAO_EM_ABERTO
+            constants.CONCILIACAO_FECHADO
+            if fechado
+            else constants.CONCILIACAO_EM_ABERTO
         )
         if ano:
             periodo_final = datetime.date(ano, 12, 31)
@@ -167,21 +169,24 @@ class RegistrarOcorrenciaTest(OcorrenciaBaseTest):
         self.assertEqual(ocorrencia.divergencia, "Marca diferente")
         self.assertFalse(bem.bloqueado_conciliacao)
 
-    def test_baixa_fisica_desbloqueia_bem(self):
+    def test_em_processo_baixa_bloqueia_bem(self):
         _, bem, item = self.criar_cenario_basico()
-        bem.bloqueado_conciliacao = True
-        bem.save()
+        self.assertFalse(bem.bloqueado_conciliacao)
 
         ocorrencia = registrar_ocorrencia(
             item=item,
-            situacao=constants.BAIXA_FISICA,
-            observacao="Equipamento danificado",
+            situacao=constants.EM_PROCESSO_BAIXA_FISICA,
+            observacao="Em processo de baixa",
             usuario=self.usuario,
         )
 
         bem.refresh_from_db()
-        self.assertEqual(ocorrencia.situacao, constants.BAIXA_FISICA)
-        self.assertFalse(bem.bloqueado_conciliacao)
+        item.refresh_from_db()
+
+        self.assertEqual(ocorrencia.situacao, constants.EM_PROCESSO_BAIXA_FISICA)
+        self.assertEqual(item.situacao, constants.EM_PROCESSO_BAIXA_FISICA)
+        self.assertTrue(bem.bloqueado_conciliacao)
+        self.assertFalse(bem.pode_solicitar_movimentacao)
 
     def test_editar_ocorrencia_atualiza_ao_inves_de_criar_nova(self):
         _, bem, item = self.criar_cenario_basico()
@@ -189,7 +194,7 @@ class RegistrarOcorrenciaTest(OcorrenciaBaseTest):
         # Registra primeira ocorrência
         registrar_ocorrencia(
             item=item,
-            situacao=constants.BAIXA_FISICA,
+            situacao=constants.EM_PROCESSO_BAIXA_FISICA,
             observacao="Equipamento danificado",
             usuario=self.usuario,
         )
@@ -436,6 +441,7 @@ class PropertiesItemConciliacaoTest(OcorrenciaBaseTest):
             (constants.ENCONTRADO_SEM_DIVERGENCIA, True),
             (constants.NAO_ENCONTRADO, True),
             (constants.DIVERGENTE, True),
+            (constants.EM_PROCESSO_BAIXA_FISICA, True),
         ]
 
         for situacao, esperado in cenarios:
@@ -444,21 +450,20 @@ class PropertiesItemConciliacaoTest(OcorrenciaBaseTest):
                 item = self.criar_item(conciliacao, bem, situacao=situacao)
                 self.assertEqual(item.permite_registrar_ocorrencia, esperado)
 
-        # BAIXA_FISICA herdada (sem ocorrência) - não permite
+        # BAIXA_FISICA (definitivo) - nunca permite registrar/editar ocorrência
         bem = self.criar_bem()
-        item_herdado = self.criar_item(conciliacao, bem, situacao=constants.BAIXA_FISICA)
-        self.assertFalse(item_herdado.permite_registrar_ocorrencia)
+        item_baixa = self.criar_item(conciliacao, bem, situacao=constants.BAIXA_FISICA)
+        self.assertFalse(item_baixa.permite_registrar_ocorrencia)
 
-        # BAIXA_FISICA registrada neste inventário (com ocorrência) - permite editar
+        # Tentar registrar BAIXA_FISICA manualmente deve falhar (regra nova)
         bem2 = self.criar_bem()
-        item_registrado = self.criar_item(conciliacao, bem2)
-        registrar_ocorrencia(
-            item=item_registrado,
-            situacao=constants.BAIXA_FISICA,
-            usuario=self.usuario,
-        )
-        item_registrado.refresh_from_db()
-        self.assertTrue(item_registrado.permite_registrar_ocorrencia)
+        item2 = self.criar_item(conciliacao, bem2)
+        with self.assertRaises(ValidationError):
+            registrar_ocorrencia(
+                item=item2,
+                situacao=constants.BAIXA_FISICA,
+                usuario=self.usuario,
+            )
 
     def test_tem_ocorrencia_verifica_registros(self):
         conciliacao = self.criar_conciliacao()
