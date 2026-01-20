@@ -1,18 +1,51 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from bem_patrimonial import constants as bem_constants
-
 from .models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
-from . import constants
+from . import constants as inv_constants
+from bem_patrimonial import constants as bem_constants
+from bem_patrimonial.models import BemPatrimonial
+
+
+def _recalcular_bloqueio_bem_por_inventario(bem: BemPatrimonial):
+    """
+    Bloqueia o bem se existir QUALQUER ItemConciliacao em conciliação EM ABERTO
+    com situação EM_PROCESSO_BAIXA_FISICA para este bem.
+
+    Desbloqueia caso contrário (desde que o bem ainda esteja APROVADO, porque se estiver BAIXA_FISICA,
+    já não pode movimentar mesmo).
+    """
+    existe_bloqueio_em_aberto = ItemConciliacao.objects.filter(
+        bem_id=bem.pk,
+        conciliacao__status=inv_constants.CONCILIACAO_EM_ABERTO,
+        situacao__in=[
+            inv_constants.NAO_ENCONTRADO,
+            inv_constants.EM_PROCESSO_BAIXA_FISICA,
+        ],
+    ).exists()
+
+    novo_valor = bool(existe_bloqueio_em_aberto)
+
+    if bem.status == bem_constants.BAIXA_FISICA:
+        novo_valor = False
+
+    if bem.bloqueado_conciliacao != novo_valor:
+        bem.bloqueado_conciliacao = novo_valor
+        bem.save(update_fields=["bloqueado_conciliacao"])
 
 
 @transaction.atomic
 def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=None):
     if not item.conciliacao.esta_aberto:
         raise ValidationError("Inventário fechado não permite edições")
-
-    if situacao == constants.DIVERGENTE and not divergencia:
+    
+    if situacao == inv_constants.BAIXA_FISICA:
+        raise ValidationError(
+            "Situação 'Baixa Física' é definitiva e não pode ser registrada manualmente. "
+            "Use 'Em processo de baixa'."
+        )
+    
+    if situacao == inv_constants.DIVERGENTE and not divergencia:
         raise ValidationError(
             "Campo divergência é obrigatório quando situação é Divergente"
         )
@@ -25,7 +58,7 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
         ultima_ocorrencia.situacao = situacao
         ultima_ocorrencia.observacao = observacao
         ultima_ocorrencia.divergencia = (
-            divergencia if situacao == constants.DIVERGENTE else ""
+            divergencia if situacao == inv_constants.DIVERGENTE else ""
         )
         ultima_ocorrencia.save()
         ocorrencia = ultima_ocorrencia
@@ -35,23 +68,17 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
             item=item,
             situacao=situacao,
             observacao=observacao,
-            divergencia=divergencia if situacao == constants.DIVERGENTE else "",
+            divergencia=divergencia if situacao == inv_constants.DIVERGENTE else "",
             registrado_por=usuario,
         )
 
     item.situacao = situacao
     item.observacao = observacao
-    item.divergencia = divergencia if situacao == constants.DIVERGENTE else ""
+    item.divergencia = divergencia if situacao == inv_constants.DIVERGENTE else ""
     item.atualizado_por = usuario
-    item.save()
+    item.save(update_fields=["situacao", "observacao", "divergencia", "atualizado_por"])
 
-    if situacao == constants.NAO_ENCONTRADO:
-        item.bem.bloqueado_conciliacao = True
-        item.bem.save(update_fields=["bloqueado_conciliacao"])
-
-    elif situacao in (constants.ENCONTRADO, constants.BAIXA_FISICA):
-        item.bem.bloqueado_conciliacao = False
-        item.bem.save(update_fields=["bloqueado_conciliacao"])
+    _recalcular_bloqueio_bem_por_inventario(item.bem)
 
     return ocorrencia
 
@@ -60,7 +87,7 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
 def excluir_ocorrencia(item, usuario):
     if not item.conciliacao.esta_aberto:
         raise ValidationError("Inventário fechado não permite edições")
-
+    
     ultima_ocorrencia = item.ocorrencias.order_by("-registrado_em").first()
     if not ultima_ocorrencia:
         raise ValidationError("Item não tem ocorrência para excluir")
@@ -81,14 +108,14 @@ def excluir_ocorrencia(item, usuario):
         conciliacao_anterior = (
             ConciliacaoUA.objects.filter(
                 unidade_administrativa=item.conciliacao.unidade_administrativa,
-                status=constants.CONCILIACAO_FECHADO,
+                status=inv_constants.CONCILIACAO_FECHADO,
             )
             .exclude(pk=item.conciliacao.pk)
             .order_by("-criado_em")
             .first()
         )
 
-        situacao_inicial = constants.ENCONTRADO_SEM_DIVERGENCIA
+        situacao_inicial = inv_constants.ENCONTRADO_SEM_DIVERGENCIA
         divergencia_inicial = ""
         observacao_inicial = ""
 
@@ -97,14 +124,15 @@ def excluir_ocorrencia(item, usuario):
                 conciliacao=conciliacao_anterior, bem=item.bem
             ).first()
             if item_anterior and item_anterior.situacao in (
-                constants.NAO_ENCONTRADO,
-                constants.DIVERGENTE,
-                constants.BAIXA_FISICA,
+                inv_constants.NAO_ENCONTRADO,
+                inv_constants.DIVERGENTE,
+                inv_constants.BAIXA_FISICA,
+                inv_constants.EM_PROCESSO_BAIXA_FISICA,
             ):
                 situacao_inicial = item_anterior.situacao
                 observacao_inicial = item_anterior.observacao
 
-                if item_anterior.situacao == constants.DIVERGENTE:
+                if item_anterior.situacao == inv_constants.DIVERGENTE:
                     divergencia_inicial = item_anterior.divergencia
 
         item.situacao = situacao_inicial
@@ -114,8 +142,7 @@ def excluir_ocorrencia(item, usuario):
     item.atualizado_por = usuario
     item.save()
 
-    item.bem.bloqueado_conciliacao = item.situacao == constants.NAO_ENCONTRADO
-    item.bem.save(update_fields=["bloqueado_conciliacao"])
+    _recalcular_bloqueio_bem_por_inventario(item.bem)
 
 
 def finalizar_conciliacao(conciliacao, usuario):

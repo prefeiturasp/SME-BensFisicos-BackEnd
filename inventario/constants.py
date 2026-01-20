@@ -18,12 +18,14 @@ ENCONTRADO_SEM_DIVERGENCIA = "encontrado_sem_divergencia"
 ENCONTRADO = "encontrado"
 NAO_ENCONTRADO = "nao_encontrado"
 DIVERGENTE = "divergente"
+EM_PROCESSO_BAIXA_FISICA = "em_processo_de_baixa_fisica"
 BAIXA_FISICA = "baixa_fisica"
-
 SITUACOES_ITEM_CONCILIACAO = (
     (ENCONTRADO_SEM_DIVERGENCIA, "Encontrado sem divergência"),
     (ENCONTRADO, "Encontrado"),
     (NAO_ENCONTRADO, "Não encontrado"),
     (DIVERGENTE, "Divergente"),
+    (EM_PROCESSO_BAIXA_FISICA, "Em processo de baixa"),
     (BAIXA_FISICA, "Baixa Física"),
+
 )
