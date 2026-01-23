@@ -7,6 +7,7 @@ from usuario.api_views import (
     PasswordResetRequestAPIView,
     PasswordResetConfirmAPIView,
     PasswordChangeAPIView,
+    FirstAccessPasswordChangeAPIView,
     UserProfileAPIView,
 )
 
@@ -27,4 +28,9 @@ urlpatterns = [
         name="password_reset_confirm",
     ),
     path("password-change/", PasswordChangeAPIView.as_view(), name="password_change"),
+    path(
+        "first-access-password-change/",
+        FirstAccessPasswordChangeAPIView.as_view(),
+        name="first_access_password_change",
+    ),
 ]
