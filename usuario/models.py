@@ -14,7 +14,10 @@ class Usuario(AbstractUser):
         null=True,
         blank=True,
         validators=[
-            RegexValidator(regex=r"^\d+$", message="RF deve conter apenas números.")
+            RegexValidator(
+                regex=r"^[A-Z][0-9]+$",
+                message="RF deve começar com uma letra maiúscula e conter apenas números após ela. Ex: F53399."
+            )
         ],
     )
     unidade_administrativa = models.ForeignKey(
