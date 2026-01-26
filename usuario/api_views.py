@@ -18,6 +18,7 @@ from usuario.serializers import (
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
     PasswordChangeSerializer,
+    FirstAccessPasswordChangeSerializer,
     UserProfileSerializer,
 )
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -39,7 +40,7 @@ def set_refresh_token_cookie(response, refresh_token):
 
 @extend_schema(
     summary="Login",
-    description="Autentica usuário e retorna access token. O refresh token é definido em um cookie HttpOnly seguro e removido do corpo da resposta.",
+    description="Autentica usuário e retorna access token. O refresh token é definido em um cookie HttpOnly seguro e removido do corpo da resposta.",  # noqa: E501
     responses={
         200: OpenApiResponse(
             description="Login realizado com sucesso",
@@ -82,7 +83,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 @extend_schema(
     summary="Renovar token de acesso",
-    description="Renova o access token usando o refresh token (buscando automaticamente no cookie HttpOnly se não estiver no body).",
+    description="Renova o access token usando o refresh token (buscando automaticamente no cookie HttpOnly se não estiver no body).",  # noqa: E501
     responses={
         200: OpenApiResponse(
             description="Token renovado com sucesso",
@@ -183,7 +184,7 @@ class CustomTokenVerifyView(TokenVerifyView):
 
 @extend_schema(
     summary="Solicitar recuperação de senha",
-    description="Envia email com link para redefinir senha. Por segurança, sempre retorna sucesso mesmo se o email não existir.",
+    description="Envia email com link para redefinir senha. Por segurança, sempre retorna sucesso mesmo se o email não existir.",  # noqa: E501
     responses={
         200: OpenApiResponse(
             description="Email enviado (se o email existir no sistema)",
@@ -191,7 +192,7 @@ class CustomTokenVerifyView(TokenVerifyView):
                 OpenApiExample(
                     "Sucesso",
                     value={
-                        "detail": "Se o email informado estiver cadastrado, você receberá instruções para recuperação de senha."
+                        "detail": "Se o email informado estiver cadastrado, você receberá instruções para recuperação de senha."  # noqa: E501
                     },
                 )
             ],
@@ -343,6 +344,54 @@ class PasswordChangeAPIView(generics.GenericAPIView):
 
         return Response(
             {"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK
+        )
+
+
+@extend_schema(
+    summary="Trocar senha no primeiro acesso",
+    description="Permite que usuários marcados com must_change_password=True troquem sua senha sem informar a senha antiga. Este endpoint deve ser usado no fluxo de primeiro acesso.",  # noqa: E501
+    responses={
+        200: OpenApiResponse(
+            description="Senha alterada com sucesso no primeiro acesso",
+            examples=[
+                OpenApiExample(
+                    "Sucesso",
+                    value={
+                        "detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."
+                    },
+                )
+            ],
+        ),
+        400: OpenApiResponse(
+            description="Usuário não precisa trocar senha ou senhas não conferem",
+            examples=[
+                OpenApiExample(
+                    "Não marcado para troca",
+                    value={
+                        "detail": "Usuário não está marcado para troca obrigatória de senha."
+                    },
+                )
+            ],
+        ),
+        401: OpenApiResponse(description="Não autenticado"),
+    },
+    tags=["Autenticação"],
+)
+class FirstAccessPasswordChangeAPIView(generics.GenericAPIView):
+
+    serializer_class = FirstAccessPasswordChangeSerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            {
+                "detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."
+            },
+            status=status.HTTP_200_OK,
         )
 
 

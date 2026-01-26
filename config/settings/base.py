@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 
 import os
 import environ
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = environ.Path(__file__) - 3
@@ -189,6 +190,9 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
+    {
+        "NAME": "usuario.validators.PasswordComplexityValidator",
+    },
 ]
 # Token de recuperação de senha expira em 24 horas (86400 segundos)
 PASSWORD_RESET_TIMEOUT = 86400
@@ -263,7 +267,6 @@ REST_FRAMEWORK = {
 
 # Simple JWT Settings
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
-from datetime import timedelta
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
