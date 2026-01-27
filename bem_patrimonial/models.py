@@ -2,14 +2,11 @@ from datetime import datetime
 import re
 from django.db.models import Q
 from django.dispatch import receiver
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db import transaction
 from django.utils import timezone
-from django.apps import apps
-
-
 from django.contrib.contenttypes.models import ContentType
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.context import get_user
@@ -21,6 +18,9 @@ from bem_patrimonial.emails import (
     envia_email_cadastro_nao_aprovado,
 )
 from bem_patrimonial import constants
+
+from inventario.services.conciliacao_sync import sync_bem_pos_save
+
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
@@ -62,7 +62,7 @@ class SoftDeleteModel(models.Model):
     def delete(self, using=None, keep_parents=False):
         if self.excluido:
             return
-       
+
         with transaction.atomic():
             self.excluido = True
             self.save(update_fields=["excluido"])
@@ -274,11 +274,11 @@ class BemPatrimonial(BaseModel):
     def set_unidade_administrative(self, unidade):
         self.unidade_administrativa = unidade
         self.save()
-        
+
     def _on_soft_delete(self):
         from inventario.models import ItemConciliacao
         from inventario import constants as inv_constants
-        
+
         ItemConciliacao.objects.filter(
             bem_id=self.pk,
             conciliacao__status=inv_constants.CONCILIACAO_EM_ABERTO,
@@ -330,7 +330,7 @@ class StatusBemPatrimonial(models.Model):
         verbose_name_plural = "histórico status do bem patrimonial"
 
     def sincroniza_status_bem_patrimonial(self):
-        if self.bem_patrimonial.status is not constants.APROVADO:
+        if self.bem_patrimonial.status != constants.APROVADO:
             self.bem_patrimonial.status = self.status
             self.bem_patrimonial.save()
 
@@ -605,6 +605,43 @@ def gerar_numero_cimbpm_signal(sender, instance, created, **kwargs):
             instance.save(update_fields=["numero_cimbpm"])
 
 
+@receiver(pre_save, sender=BemPatrimonial)
+def bempatrimonial_guardar_estado_anterior(sender, instance, **kwargs):
+    """
+    Captura o old_ua_id antes de salvar, para o post_save conseguir:
+    - remover o bem da conciliação EM ABERTO da UA antiga
+    - incluir/atualizar na conciliação EM ABERTO da UA nova
+    Funciona para qualquer origem (admin, API, services, scripts, etc.)
+    """
+    if not instance.pk:
+        instance._old_ua_id = None
+        return
+
+    old = (
+        BemPatrimonial.all_objects.filter(pk=instance.pk)
+        .only("unidade_administrativa_id")
+        .first()
+    )
+
+    instance._old_ua_id = getattr(old, "unidade_administrativa_id", None)
+
+
+@receiver(post_save, sender=BemPatrimonial)
+def bempatrimonial_sync_conciliacao_em_aberto(sender, instance, created, **kwargs):
+    """
+    Executa o sync somente após commit para garantir consistência.
+    Usa o _old_ua_id capturado no pre_save (inclusive fora do admin).
+    """
+    old_ua_id = getattr(instance, "_old_ua_id", None)
+
+    def _run():
+        from inventario.services.conciliacao_sync import sync_bem_pos_save
+
+        sync_bem_pos_save(instance, old_ua_id=old_ua_id)
+
+    transaction.on_commit(_run)
+
+
 class BaixaFisicaBemPatrimonial(models.Model):
     """
     Registro de Baixa Física de bens em uma Unidade Administrativa.
@@ -670,7 +707,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
-    
+
     numero_nbbpm = models.CharField(max_length=32, null=True, blank=True, db_index=True)
 
     class Meta:

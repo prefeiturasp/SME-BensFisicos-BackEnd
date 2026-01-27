@@ -207,31 +207,47 @@ class UsuarioRFFieldTestCase(TestCase):
         usuario = Usuario.objects.create(
             username="user_rf_zeros",
             nome="Usuario RF Zeros",
-            rf="001234",
+            rf="F001234",
             email="rfzeros@teste.com",
             unidade_administrativa=self.unidade,
         )
-        self.assertEqual(usuario.rf, "001234")
+        self.assertEqual(usuario.rf, "F001234")
 
-    def test_rf_validation_rejects_letters(self):
+    def test_rf_validation_rejects_invalid_pattern(self):
         usuario = Usuario(
-            username="user_rf_letters",
-            nome="Usuario RF Letras",
-            rf="ABC123",
-            email="rfletters@teste.com",
+            username="user_rf_invalid",
+            nome="Usuario RF Invalido",
+            rf="FG093393",
+            email="rfinvalid@teste.com",
             unidade_administrativa=self.unidade,
         )
+        usuario.set_password("Senha@123")
         with self.assertRaises(ValidationError) as context:
             usuario.full_clean()
 
         self.assertIn("rf", context.exception.error_dict)
-        self.assertIn("RF deve conter apenas números", str(context.exception))
+        self.assertIn(
+            "RF deve começar com uma letra maiúscula e conter apenas números após ela. Ex: F53399.",
+            str(context.exception),
+        )
+
+    def test_rf_validation_accepts_valid_pattern(self):
+        usuario = Usuario(
+            username="user_rf_valid",
+            nome="Usuario RF Valido",
+            rf="B098890",
+            email="rfvalido@teste.com",
+            unidade_administrativa=self.unidade,
+        )
+        usuario.set_password("Senha@123")
+
+        usuario.full_clean()
 
     def test_rf_validation_rejects_special_characters(self):
         usuario = Usuario(
             username="user_rf_special",
             nome="Usuario RF Especial",
-            rf="123-456",
+            rf="F123-456",
             email="rfspecial@teste.com",
             unidade_administrativa=self.unidade,
         )
@@ -244,7 +260,7 @@ class UsuarioRFFieldTestCase(TestCase):
         usuario = Usuario(
             username="user_rf_spaces",
             nome="Usuario RF Espacos",
-            rf="123 456",
+            rf="F123 456",
             email="rfspaces@teste.com",
             unidade_administrativa=self.unidade,
         )
@@ -257,11 +273,11 @@ class UsuarioRFFieldTestCase(TestCase):
         usuario = Usuario.objects.create(
             username="user_rf_large",
             nome="Usuario RF Grande",
-            rf="9999999999999999",
+            rf="F9999999999999999",
             email="rflarge@teste.com",
             unidade_administrativa=self.unidade,
         )
-        self.assertEqual(usuario.rf, "9999999999999999")
+        self.assertEqual(usuario.rf, "F9999999999999999")
 
 
 class CustomUserModelAdminReadonlyFieldsTestCase(TestCase):
