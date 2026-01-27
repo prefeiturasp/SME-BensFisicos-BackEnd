@@ -15,8 +15,8 @@ class Usuario(AbstractUser):
         blank=True,
         validators=[
             RegexValidator(
-                regex=r"^[A-Z][0-9]+$",
-                message="RF deve começar com uma letra maiúscula e conter apenas números após ela. Ex: F53399."
+                regex=r"^[A-Za-z][0-9]+$",
+                message="RF deve começar com uma letra e conter apenas números após ela. Ex: F53399 ou f53399."
             )
         ],
     )
