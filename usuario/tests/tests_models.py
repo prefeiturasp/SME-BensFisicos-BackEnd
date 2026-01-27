@@ -217,17 +217,18 @@ class UsuarioRFFieldTestCase(TestCase):
         usuario = Usuario(
             username="user_rf_invalid",
             nome="Usuario RF Invalido",
-            rf="FG093393",
+            rf="FG093393",  # duas letras → inválido
             email="rfinvalid@teste.com",
             unidade_administrativa=self.unidade,
         )
         usuario.set_password("Senha@123")
+
         with self.assertRaises(ValidationError) as context:
             usuario.full_clean()
 
         self.assertIn("rf", context.exception.error_dict)
         self.assertIn(
-            "RF deve começar com uma letra maiúscula e conter apenas números após ela. Ex: F53399.",
+            "RF deve começar com uma letra e conter apenas números após ela. Ex: F53399 ou f53399.",
             str(context.exception),
         )
 
