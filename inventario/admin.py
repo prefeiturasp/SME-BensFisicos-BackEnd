@@ -82,9 +82,15 @@ class ItemConciliacaoInline(admin.TabularInline):
     numero_patrimonial_bem.short_description = "Número Patrimonial"
 
     def nome_bem(self, obj):
-        return getattr(obj.bem, "nome", "-")
+        nome = getattr(obj.bem, "nome", None)
 
-    nome_bem.short_description = "Nome do Bem"
+        if not nome:
+            return "-"
+
+        return format_html(
+            '<div style="max-width: 360px; white-space: pre-wrap; word-wrap: break-word;">{}</div>',
+            nome,
+        )
 
     def situacao_display(self, obj):
         if not obj or not obj.pk:
@@ -95,6 +101,7 @@ class ItemConciliacaoInline(admin.TabularInline):
             constants.ENCONTRADO: ("#007bff", "white"),
             constants.NAO_ENCONTRADO: ("#dc3545", "white"),
             constants.DIVERGENTE: ("#ffc107", "#212529"),
+            constants.EM_PROCESSO_BAIXA_FISICA: ("#17a2b8", "white"),
             constants.BAIXA_FISICA: ("#6c757d", "white"),
         }
         cor_fundo, cor_texto = cores.get(obj.situacao, ("#000", "white"))
@@ -113,13 +120,19 @@ class ItemConciliacaoInline(admin.TabularInline):
         if not obj or not obj.pk:
             return "-"
 
+        texto = None
+
         if obj.observacao:
-            return obj.observacao[:40] + ("..." if len(obj.observacao) > 40 else "")
-        if obj.divergencia:
-            return f"[Divergência] {obj.divergencia[:30]}" + (
-                "..." if len(obj.divergencia) > 30 else ""
-            )
-        return "-"
+            texto = obj.observacao
+        elif obj.divergencia:
+            texto = f"[Divergência] {obj.divergencia}"
+        else:
+            return "-"
+
+        return format_html(
+            '<div style="max-width: 420px; white-space: pre-wrap; word-wrap: break-word;">{}</div>',
+            texto,
+        )
 
     observacao_resumida.short_description = "Observação/Divergência"
 
@@ -162,7 +175,8 @@ class ItemConciliacaoInline(admin.TabularInline):
 @admin.register(ConciliacaoUA)
 class ConciliacaoUAAdmin(admin.ModelAdmin):
     form = ConciliacaoUAAdminForm
-
+    change_form_template = "admin/inventario/conciliacaoua/change_form.html"
+    
     list_display = [
         "numero_conciliacao",
         "unidade_administrativa",
@@ -370,6 +384,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 situacao=constants.NAO_ENCONTRADO
             ).count(),
             "Divergentes": obj.itens.filter(situacao=constants.DIVERGENTE).count(),
+            "Em processo de baixa": obj.itens.filter(situacao=constants.EM_PROCESSO_BAIXA_FISICA).count(),
             "Baixa Física": obj.itens.filter(situacao=constants.BAIXA_FISICA).count(),
         }
 
@@ -489,7 +504,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         # não permitir registrar "Encontrado sem divergência" manualmente
         situacoes_disponiveis = [
-            s for s in situacoes_disponiveis if s[0] != item.situacao
+            s for s in situacoes_disponiveis if s[0] != constants.BAIXA_FISICA
         ]
 
         if not item.pode_resolver_situacao:

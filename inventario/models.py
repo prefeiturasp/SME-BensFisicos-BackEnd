@@ -4,7 +4,6 @@ from django.db.models import Q
 from django.utils import timezone
 from datetime import date
 
-from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
 from usuario.models import Usuario
 
@@ -328,7 +327,7 @@ class ItemConciliacao(models.Model):
     )
 
     bem = models.ForeignKey(
-        BemPatrimonial,
+        "bem_patrimonial.BemPatrimonial",
         on_delete=models.PROTECT,
         related_name="itens_conciliacao",
         verbose_name="Bem Patrimonial",
@@ -410,8 +409,7 @@ class ItemConciliacao(models.Model):
     @property
     def permite_registrar_ocorrencia(self):
         if self.situacao == constants.BAIXA_FISICA:
-
-            return self.tem_ocorrencia
+            return False
         return True
 
 

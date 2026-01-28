@@ -7,8 +7,19 @@ from django.utils import timezone
 from bem_patrimonial.models import BemPatrimonial
 from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 from inventario import constants
+from bem_patrimonial.models import BaixaFisicaBensItem
 
 from bem_patrimonial import constants as bem_constants
+
+
+def _get_ano_referencia_conciliacao(conciliacao):
+    if conciliacao.tipo == constants.CONCILIACAO_EVENTUAL:
+        return (
+            conciliacao.periodo_final.year
+            if conciliacao.periodo_final
+            else timezone.localdate().year
+        )
+    return conciliacao._get_ano_referencia()
 
 
 def get_or_create_conciliacao(unidade_administrativa, usuario):
@@ -25,8 +36,64 @@ def get_or_create_conciliacao(unidade_administrativa, usuario):
     return conciliacao, created
 
 
+@transaction.atomic
+def _confirmar_baixas_fisicas_pos_conciliacao(conciliacao, usuario):
+    ano_ref = _get_ano_referencia_conciliacao(conciliacao)
+
+    itens = ItemConciliacao.objects.filter(
+        conciliacao=conciliacao, situacao=constants.EM_PROCESSO_BAIXA_FISICA
+    ).select_related("bem")
+
+    if not itens.exists():
+        return 0
+
+    bem_ids = list(itens.values_list("bem_id", flat=True))
+
+    bem_ids_confirmados = set(
+        BaixaFisicaBensItem.objects.filter(
+            bem_id__in=bem_ids,
+            baixa__status=bem_constants.ACEITA,
+            baixa__data_baixa__year=ano_ref,
+        ).values_list("bem_id", flat=True)
+    )
+
+    if not bem_ids_confirmados:
+        return 0
+
+    ocorrencias = []
+    itens_para_atualizar = []
+
+    for item in itens:
+        if item.bem_id not in bem_ids_confirmados:
+            continue
+
+        ocorrencias.append(
+            OcorrenciaConciliacao(
+                item=item,
+                situacao=constants.BAIXA_FISICA,
+                observacao="Baixa Física confirmada automaticamente após fechamento da conciliação.",
+                divergencia="",
+                registrado_por=usuario,
+            )
+        )
+
+        item.situacao = constants.BAIXA_FISICA
+        itens_para_atualizar.append(item)
+
+    if ocorrencias:
+        OcorrenciaConciliacao.objects.bulk_create(ocorrencias, batch_size=500)
+
+    if itens_para_atualizar:
+        ItemConciliacao.objects.bulk_update(
+            itens_para_atualizar, ["situacao"], batch_size=500
+        )
+
+    return len(ocorrencias)
+
+
 def finalizar_conciliacao(conciliacao, usuario):
     conciliacao.finalizar(usuario)
+    _confirmar_baixas_fisicas_pos_conciliacao(conciliacao, usuario)
 
 
 def get_filtro_bens_baixados(ano_baixa_minimo):
@@ -89,6 +156,7 @@ def criar_itens_conciliacao(conciliacao):
         constants.NAO_ENCONTRADO,
         constants.DIVERGENTE,
         constants.BAIXA_FISICA,
+        constants.EM_PROCESSO_BAIXA_FISICA,
     )
 
     itens = []
