@@ -107,13 +107,16 @@
         <div class="content">
           <p>Olá!</p>
           <p>
-            Existem movimentações pendentes de aceite há mais de <strong>7 dias</strong>
+            Existem movimentações pendentes de aceite há mais de
+            <strong>{{ context.dias_minimo }} dias</strong>
             para a unidade administrativa <strong>{{ context.ua_info }}</strong>.
           </p>
           <div class="summary">
             Total pendente: <strong>{{ context.total }}</strong>
             {% if context.total_urgentes %}
-              <span class="badge">{{ context.total_urgentes }} com mais de 30 dias</span>
+              <span class="badge">
+                {{ context.total_urgentes }} com mais de {{ context.dias_urgente }} dias
+              </span>
             {% endif %}
             {% if context.mov_excedentes %}
               <div style="margin-top: 6px; font-size: 12px; color: #6b4e00;">

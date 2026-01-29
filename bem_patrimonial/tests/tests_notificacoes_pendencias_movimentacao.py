@@ -100,6 +100,7 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
             self.ua_destino,
             [mov],
             ["destino@test.com"],
+            dias_minimo=9,
             dias_urgente=30,
             max_movimentacoes=5,
             max_bens_por_mov=3,
@@ -119,6 +120,8 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
         self.assertEqual(context["exibidas"], 1)
         self.assertEqual(context["mov_excedentes"], 0)
         self.assertEqual(context["total_urgentes"], 0)
+        self.assertEqual(context["dias_minimo"], 9)
+        self.assertEqual(context["dias_urgente"], 30)
         self.assertEqual(len(context["movimentacoes"]), 1)
         self.assertEqual(context["movimentacoes"][0]["bens_excedentes"], 3)
 
@@ -197,11 +200,14 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
 
         self.assertEqual(mock_envia.call_count, 1)
         args = mock_envia.call_args[0]
+        kwargs = mock_envia.call_args.kwargs
         self.assertEqual(args[0], self.ua_destino)
         self.assertEqual(len(args[1]), 1)
         self.assertEqual(
             sorted(args[2]), sorted(["operador@test.com", "gestor@test.com"])
         )
+        self.assertEqual(kwargs.get("dias_minimo"), 7)
+        self.assertEqual(kwargs.get("dias_urgente"), 30)
 
     @patch(COMMAND_ENVIA_PATH)
     def test_comando_filtra_por_ua_codigo(self, mock_envia):

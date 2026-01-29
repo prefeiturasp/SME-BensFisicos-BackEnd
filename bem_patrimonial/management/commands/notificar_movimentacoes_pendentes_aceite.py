@@ -134,7 +134,11 @@ class Command(BaseCommand):
                 linhas_log.append(msg)
             else:
                 envia_email_movimentacoes_pendentes_aceite(
-                    ua, movs, emails, dias_urgente=dias_urgente
+                    ua,
+                    movs,
+                    emails,
+                    dias_minimo=dias_minimo,
+                    dias_urgente=dias_urgente,
                 )
                 total_emails += 1
                 msg = (
