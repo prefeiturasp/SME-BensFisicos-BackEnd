@@ -8,18 +8,10 @@ from bem_patrimonial.models import BemPatrimonial
 
 
 def _recalcular_bloqueio_bem_por_inventario(bem: BemPatrimonial):
-    """
-    Bloqueia o bem se existir QUALQUER ItemConciliacao em conciliação EM ABERTO
-    com situação EM_PROCESSO_BAIXA_FISICA para este bem.
-
-    Desbloqueia caso contrário (desde que o bem ainda esteja APROVADO, porque se estiver BAIXA_FISICA,
-    já não pode movimentar mesmo).
-    """
     existe_bloqueio_em_aberto = ItemConciliacao.objects.filter(
         bem_id=bem.pk,
         conciliacao__status=inv_constants.CONCILIACAO_EM_ABERTO,
         situacao__in=[
-            inv_constants.NAO_ENCONTRADO,
             inv_constants.EM_PROCESSO_BAIXA_FISICA,
         ],
     ).exists()

@@ -2,6 +2,7 @@ import datetime
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group
+from uuid import uuid4
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants as bem_constants
@@ -33,7 +34,7 @@ class OcorrenciaBaseTest(TestCase):
 
     def criar_bem(self, numero=None):
         if not numero:
-            numero = f"001.{str(BemPatrimonial.objects.count() + 1).zfill(9)}-0"
+            numero = f"001.{str(uuid4().int)[:9].zfill(9)}-0"
         return BemPatrimonial.objects.create(
             numero_patrimonial=numero,
             nome="Computador",
@@ -74,21 +75,19 @@ class OcorrenciaBaseTest(TestCase):
 
         return inv
 
-    def criar_item(
-        self,
-        conciliacao,
-        bem,
-        situacao=constants.ENCONTRADO_SEM_DIVERGENCIA,
-        divergencia="",
-        observacao="",
-    ):
-        return ItemConciliacao.objects.create(
+    def criar_item(self, conciliacao, bem, situacao=constants.ENCONTRADO_SEM_DIVERGENCIA, **kwargs):
+        defaults = {
+            "situacao": situacao,
+            "observacao": kwargs.get("observacao", ""),
+            "divergencia": kwargs.get("divergencia", ""),
+        }
+
+        item, _ = ItemConciliacao.objects.update_or_create(
             conciliacao=conciliacao,
             bem=bem,
-            situacao=situacao,
-            divergencia=divergencia,
-            observacao=observacao,
+            defaults=defaults,
         )
+        return item
 
     def criar_item_com_ocorrencia(
         self,
@@ -123,7 +122,7 @@ class OcorrenciaBaseTest(TestCase):
 
 class RegistrarOcorrenciaTest(OcorrenciaBaseTest):
 
-    def test_nao_encontrado_bloqueia_bem_e_impede_movimentacao(self):
+    def test_nao_encontrado_nao_bloqueia_bem_e_nao_impede_movimentacao(self):
         _, bem, item = self.criar_cenario_basico()
         self.assertTrue(bem.pode_solicitar_movimentacao)
 
@@ -139,8 +138,9 @@ class RegistrarOcorrenciaTest(OcorrenciaBaseTest):
 
         self.assertEqual(ocorrencia.situacao, constants.NAO_ENCONTRADO)
         self.assertEqual(item.situacao, constants.NAO_ENCONTRADO)
-        self.assertTrue(bem.bloqueado_conciliacao)
-        self.assertFalse(bem.pode_solicitar_movimentacao)
+
+        self.assertFalse(bem.bloqueado_conciliacao)
+        self.assertTrue(bem.pode_solicitar_movimentacao)
 
     def test_divergente_exige_campo_divergencia(self):
         _, bem, item = self.criar_cenario_basico()
@@ -247,7 +247,7 @@ class ExcluirOcorrenciaTest(OcorrenciaBaseTest):
             usuario=self.usuario,
         )
         bem.refresh_from_db()
-        self.assertTrue(bem.bloqueado_conciliacao)
+        self.assertFalse(bem.bloqueado_conciliacao)
 
         excluir_ocorrencia(item=item, usuario=self.usuario)
 

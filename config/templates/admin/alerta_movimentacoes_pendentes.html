@@ -1,0 +1,7 @@
+{% if pendencias %}
+  <div class="alerta-movimentacoes{% if css_class %} {{ css_class }}{% endif %}">
+    <strong>⚠️ Atenção:</strong>
+    Sua Unidade Administrativa tem <strong>{{ pendencias.total }}</strong> movimentação(ões) pendente(s) de aceite.
+    <a class="alerta-link" href="{{ pendencias.url }}">Clique aqui e verifique</a>
+  </div>
+{% endif %}

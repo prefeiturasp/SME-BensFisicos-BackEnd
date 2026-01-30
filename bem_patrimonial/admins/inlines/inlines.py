@@ -63,7 +63,7 @@ class MovimentacaoBensItemInlineFormSet(BaseInlineFormSet):
                         bem=bem,
                         conciliacao__status=inv_constants.CONCILIACAO_EM_ABERTO,
                     )
-                    .exclude(situacao=inv_constants.ENCONTRADO_SEM_DIVERGENCIA)
+                    .filter(situacao=inv_constants.EM_PROCESSO_BAIXA_FISICA)
                     .select_related("conciliacao")
                     .first()
                 )
