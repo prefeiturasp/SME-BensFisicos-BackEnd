@@ -87,14 +87,14 @@ def processar_conciliacao_anual_automatica(usuario):
         eventual_aberta = ConciliacaoUA.objects.filter(
             unidade_administrativa=ua,
             tipo=constants.CONCILIACAO_EVENTUAL,
-            status=constants.CONCILIACAO_EM_ABERTO,
-            periodo_final__year=ano_referencia,
+            status=constants.CONCILIACAO_EM_ABERTO
         ).first()
 
         if inicio <= hoje <= fim:
 
-            if eventual_aberta:
+            if eventual_aberta and not anual_existente:
                 fechar_pelo_sistema(eventual_aberta)
+            
             if not anual_existente:
                 criar_conciliacao_anual(ua, ano_referencia)
 

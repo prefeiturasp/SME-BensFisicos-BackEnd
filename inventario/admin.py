@@ -176,7 +176,7 @@ class ItemConciliacaoInline(admin.TabularInline):
 class ConciliacaoUAAdmin(admin.ModelAdmin):
     form = ConciliacaoUAAdminForm
     change_form_template = "admin/inventario/conciliacaoua/change_form.html"
-    
+
     list_display = [
         "numero_conciliacao",
         "unidade_administrativa",
@@ -209,7 +209,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     ]
 
     inlines = [ItemConciliacaoInline]
-    actions = ["action_finalizar_conciliacao"]
+    actions = []
 
     class Media:
         css = {
@@ -229,9 +229,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return False
 
     def get_actions(self, request):
-        actions = super().get_actions(request)
-        actions.pop("delete_selected", None)
-        return actions
+        return {}
 
     def get_form(self, request, obj=None, **kwargs):
         """
@@ -384,7 +382,9 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 situacao=constants.NAO_ENCONTRADO
             ).count(),
             "Divergentes": obj.itens.filter(situacao=constants.DIVERGENTE).count(),
-            "Em processo de baixa": obj.itens.filter(situacao=constants.EM_PROCESSO_BAIXA_FISICA).count(),
+            "Em processo de baixa": obj.itens.filter(
+                situacao=constants.EM_PROCESSO_BAIXA_FISICA
+            ).count(),
             "Baixa Física": obj.itens.filter(situacao=constants.BAIXA_FISICA).count(),
         }
 
@@ -409,36 +409,6 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     acao_visualizar.short_description = "Ação"
     acao_visualizar.allow_tags = True
 
-    @admin.action(description="Finalizar conciliacões selecionadas")
-    def action_finalizar_conciliacao(self, request, queryset):
-        finalizados = 0
-        erros = 0
-
-        for conciliacao in queryset:
-            if conciliacao.status == constants.CONCILIACAO_FECHADO:
-                erros += 1
-                continue
-
-            try:
-                finalizar_conciliacao(conciliacao, request.user)
-                finalizados += 1
-            except Exception as e:
-                erros += 1
-                messages.error(
-                    request,
-                    f"Erro ao finalizar {conciliacao.numero_conciliacao}: {str(e)}",
-                )
-
-        if finalizados > 0:
-            messages.success(
-                request, f"{finalizados} conciliação(ões) finalizada(s) com sucesso"
-            )
-
-        if erros > 0:
-            messages.warning(
-                request, f"{erros} conciliação(s) não puderam ser finalizadas"
-            )
-
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -452,8 +422,32 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.excluir_ocorrencia_view),
                 name="inventario_item_excluir_ocorrencia",
             ),
+            path(
+                "<int:pk>/finalizar/",
+                self.admin_site.admin_view(self.finalizar_conciliacao_view),
+                name="inventario_conciliacaoua_finalizar",
+            ),
         ]
         return custom_urls + urls
+
+    def finalizar_conciliacao_view(self, request, pk: int):
+        obj = self.get_object(request, pk)
+        if not obj:
+            messages.error(request, "Conciliação não encontrada.")
+            return redirect("admin:inventario_conciliacaoua_changelist")
+
+        if not obj.esta_aberto:
+            messages.warning(request, "Conciliação já está finalizada.")
+            return redirect("admin:inventario_conciliacaoua_change", obj.pk)
+
+        if request.method == "POST":
+            try:
+                finalizar_conciliacao(obj, request.user)
+                messages.success(request, "Conciliação finalizada com sucesso.")
+            except Exception as e:
+                messages.error(request, f"Erro ao finalizar conciliação: {e}")
+
+        return redirect("admin:inventario_conciliacaoua_change", obj.pk)
 
     def registrar_ocorrencia_view(self, request, item_id):
         try:
@@ -575,5 +569,5 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return render(request, "admin/conciliacao/excluir_ocorrencia.html", context)
 
     def changelist_view(self, request, extra_context=None):
-        # processar_conciliacao_anual_automatica(request.user)
+        processar_conciliacao_anual_automatica(request.user)
         return super().changelist_view(request, extra_context)
