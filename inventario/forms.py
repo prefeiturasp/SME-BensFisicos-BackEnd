@@ -16,6 +16,14 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
         self.request = kwargs.pop("request", None)
         super().__init__(*args, **kwargs)
 
+        if not self.instance.pk:
+            if "tipo" in self.fields:
+                self.fields["tipo"].choices = [
+                    (constants.CONCILIACAO_EVENTUAL, "Eventual"),
+                ]
+                self.fields["tipo"].initial = constants.CONCILIACAO_EVENTUAL
+                self.fields["tipo"].disabled = True
+                
         if "unidade_administrativa" in self.fields:
             self.fields["unidade_administrativa"].required = True
         if "tipo" in self.fields:
