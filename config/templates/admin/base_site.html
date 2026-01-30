@@ -254,6 +254,7 @@ hr {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: relative;
   }
 
   #branding {
@@ -294,6 +295,50 @@ hr {
     color: #ccffe8;
   }
 
+  .alerta-movimentacoes {
+    margin: 0;
+    padding: 10px 14px;
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    color: #6b4e00;
+    font-size: 12px;
+    border-radius: 6px;
+    display: inline-block;
+    max-width: none;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .alerta-movimentacoes.alerta-header {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+  }
+
+  .alerta-movimentacoes .alerta-destaque {
+    font-weight: 700;
+    color: #b71c1c;
+  }
+
+  .alerta-movimentacoes .alerta-link {
+    margin-left: 8px;
+    font-weight: 600;
+    color: #1a1200 !important;
+    text-decoration: underline;
+  }
+
+  .alerta-movimentacoes .alerta-link:visited {
+    color: #1a1200 !important;
+  }
+
+  .alerta-movimentacoes .alerta-link:hover,
+  .alerta-movimentacoes .alerta-link:focus,
+  .alerta-movimentacoes .alerta-link:active {
+    color: #1a1200 !important;
+  }
+
   /* Responsive adjustments */
   @media (max-width: 768px) {
     #header {
@@ -309,6 +354,17 @@ hr {
       width: 100%;
       justify-content: flex-end;
       margin-top: 10px;
+    }
+
+    .alerta-movimentacoes {
+      display: block;
+      max-width: none;
+      margin: 10px 20px 0;
+    }
+
+    .alerta-movimentacoes.alerta-header {
+      position: static;
+      transform: none;
     }
   }
   /* #header {
@@ -364,7 +420,7 @@ hr {
 </style>
 {% endblock %}
 
-{% load static %}
+{% load static movimentacoes_pendentes_tags %}
 
 {% block title %}{{ title }} | {{ site_title|default:_('Bens Físicos SME') }}{% endblock %}
 
@@ -374,10 +430,13 @@ hr {
     <img src="{% static 'img/bens_white_logo.png' %}" alt="Logo Bens Físicos" />
     <img src="{% static 'img/prefeitura_white_logo.png' %}" alt="Logo Prefeitura de São Paulo" />
   </div>
+  {% alerta_movimentacoes_pendentes "alerta-header" %}
 </div>
 {% endblock %}
 
-{% block nav-global %}{% endblock %}
+{% block messages %}
+  {{ block.super }}
+{% endblock %}
 
 {% block dark-mode-vars %}
 {{ block.super }}

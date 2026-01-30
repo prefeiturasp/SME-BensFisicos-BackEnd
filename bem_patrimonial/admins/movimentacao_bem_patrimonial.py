@@ -8,9 +8,11 @@ from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,
 )
+from bem_patrimonial.admins.filters.movimentacao_filters import (
+    MovimentacaoAtrasadaFilter,
+)
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
-    MovimentacaoBensItem,
 )
 from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_aceita,
@@ -19,8 +21,6 @@ from bem_patrimonial.emails import (
 )
 from bem_patrimonial import constants
 
-from dados_comuns.libs.unidade_administrativa import uas_do_usuario
-from dados_comuns.models import UnidadeAdministrativa
 from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
@@ -338,7 +338,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "unidade_administrativa_destino",
     )
 
-    list_filter = ("status",)
+    list_filter = ("status", MovimentacaoAtrasadaFilter)
     actions = [
         aprovar_solicitacao,
         rejeitar_solicitacao,
