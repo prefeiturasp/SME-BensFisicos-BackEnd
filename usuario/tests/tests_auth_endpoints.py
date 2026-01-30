@@ -42,8 +42,8 @@ class AuthEndpointsTestCase(APITestCase):
             {
                 "uidb64": uidb64,
                 "token": "tokeninvalido",
-                "new_password": "novaSenha123",
-                "new_password_confirm": "novaSenha123",
+                "new_password": "NovaSenha@123",
+                "new_password_confirm": "NovaSenha@123",
             },
             format="json",
         )
@@ -62,8 +62,8 @@ class AuthEndpointsTestCase(APITestCase):
             change_url,
             {
                 "old_password": "errada",
-                "new_password": "outrasenha123",
-                "new_password_confirm": "outrasenha123",
+                "new_password": "OutraSenha@123",
+                "new_password_confirm": "OutraSenha@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
@@ -85,8 +85,8 @@ class AuthEndpointsTestCase(APITestCase):
             change_url,
             {
                 "old_password": "testpass123",
-                "new_password": "outrasenha123",
-                "new_password_confirm": "outrasenha123",
+                "new_password": "OutraSenha@123",
+                "new_password_confirm": "OutraSenha@123",
             },
             format="json",
         )
@@ -201,14 +201,14 @@ class AuthEndpointsTestCase(APITestCase):
             {
                 "uidb64": uidb64,
                 "token": token,
-                "new_password": "newpass123",
-                "new_password_confirm": "newpass123",
+                "new_password": "NewPass@123",
+                "new_password_confirm": "NewPass@123",
             },
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password("newpass123"))
+        self.assertTrue(self.user.check_password("NewPass@123"))
 
     def test_password_change_authenticated(self):
         login_url = "/api/auth/login/"
@@ -223,12 +223,84 @@ class AuthEndpointsTestCase(APITestCase):
             change_url,
             {
                 "old_password": "testpass123",
-                "new_password": "outrasenha123",
-                "new_password_confirm": "outrasenha123",
+                "new_password": "OutraSenha@123",
+                "new_password_confirm": "OutraSenha@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password("outrasenha123"))
+        self.assertTrue(self.user.check_password("OutraSenha@123"))
+
+    def test_first_access_password_change_unauthenticated(self):
+        url = "/api/auth/first-access-password-change/"
+        resp = self.client.post(
+            url,
+            {
+                "new_password": "PrimeiroAcesso@123",
+                "new_password_confirm": "PrimeiroAcesso@123",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_first_access_password_change_not_required(self):
+        self.user.must_change_password = False
+        self.user.save(update_fields=["must_change_password"])
+
+        login_url = "/api/auth/login/"
+        resp = self.client.post(
+            login_url,
+            {"username": "testuser", "password": "testpass123"},
+            format="json",
+        )
+        access = resp.data["access"]
+        url = "/api/auth/first-access-password-change/"
+        resp = self.client.post(
+            url,
+            {
+                "new_password": "PrimeiroAcesso@123",
+                "new_password_confirm": "PrimeiroAcesso@123",
+            },
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", resp.data)
+        self.assertEqual(
+            resp.data["detail"][0],
+            "Usuário não está marcado para troca obrigatória de senha.",
+        )
+
+    def test_first_access_password_change_success(self):
+        from django.utils import timezone
+
+        self.user.must_change_password = True
+        self.user.save(update_fields=["must_change_password"])
+
+        login_url = "/api/auth/login/"
+        resp = self.client.post(
+            login_url,
+            {"username": "testuser", "password": "testpass123"},
+            format="json",
+        )
+        access = resp.data["access"]
+
+        url = "/api/auth/first-access-password-change/"
+        resp = self.client.post(
+            url,
+            {
+                "new_password": "PrimeiroAcesso@123",
+                "new_password_confirm": "PrimeiroAcesso@123",
+            },
+            HTTP_AUTHORIZATION=f"Bearer {access}",
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.must_change_password)
+        self.assertTrue(self.user.check_password("PrimeiroAcesso@123"))
+        self.assertIsNotNone(self.user.last_password_change)
+        self.assertLessEqual(self.user.last_password_change, timezone.now())
