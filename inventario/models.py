@@ -239,6 +239,9 @@ class ConciliacaoUA(models.Model):
         if self.tipo != constants.CONCILIACAO_ANUAL:
             return
 
+        if self.pk:
+            return
+
         hoje = timezone.localdate()
         ano_referencia = self._get_ano_referencia()
         ano_corrente = hoje.year
@@ -259,7 +262,7 @@ class ConciliacaoUA(models.Model):
 
         if not (data_inicio <= hoje <= data_fim):
             raise ValidationError(
-                f"A conciliação anual {ano_referencia} só pode ser criada ou fechada entre "
+                f"A conciliação anual {ano_referencia} só pode ser criada entre "
                 f"{data_inicio:%d/%m/%Y} e {data_fim:%d/%m/%Y}."
             )
 
@@ -304,8 +307,6 @@ class ConciliacaoUA(models.Model):
     def finalizar(self, usuario):
         if self.status == constants.CONCILIACAO_FECHADO:
             return
-
-        self._validar_parametro_anual_por_data_atual()
 
         self.status = constants.CONCILIACAO_FECHADO
         self.fechado_por = usuario
