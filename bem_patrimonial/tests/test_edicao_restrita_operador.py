@@ -6,6 +6,7 @@ from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -15,18 +16,21 @@ class EdicaoRestritaOperadorTestCase(TestCase):
     def setUp(self):
         self.grupo_gestor = Group.objects.create(name=GRUPO_GESTOR_PATRIMONIO)
         self.grupo_operador = Group.objects.create(name=GRUPO_OPERADOR_INVENTARIO)
-
-        self.ua1 = UnidadeAdministrativa.objects.create(
+        self.uo = criar_uo(codigo="100", nome="UO 100")
+        
+        self.ua1 = criar_ua(
             codigo="UA001",
             nome="Unidade 1",
             sigla="U1",
             status=UnidadeAdministrativa.ATIVA,
+            uo=self.uo
         )
-        self.ua2 = UnidadeAdministrativa.objects.create(
+        self.ua2 = criar_ua(
             codigo="UA002",
             nome="Unidade 2",
             sigla="U2",
             status=UnidadeAdministrativa.ATIVA,
+            uo=self.uo
         )
 
         self.gestor = Usuario.objects.create_user(
@@ -34,6 +38,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             email="gestor@test.com",
             password="test123",
             is_staff=True,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria
         )
         self.gestor.groups.add(self.grupo_gestor)
 
@@ -43,6 +48,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria
         )
         self.operador_ua1.groups.add(self.grupo_operador)
 
@@ -205,6 +211,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua2,
+            unidade_orcamentaria=self.ua2.unidade_orcamentaria
         )
         operador_ua2.groups.add(self.grupo_operador)
 

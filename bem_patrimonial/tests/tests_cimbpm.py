@@ -18,6 +18,7 @@ from bem_patrimonial.cimbpm import (
 )
 from bem_patrimonial import constants
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -30,17 +31,18 @@ class CIMBPMTestBase(TestCase):
             name=GRUPO_OPERADOR_INVENTARIO
         )
 
-        self.ua_origem = UnidadeAdministrativa.objects.create(
+        self.ua_origem = criar_ua(
             codigo="01.16.10.379",
             sigla="COSERV",
             nome="Coordenadoria de Contratos",
-            status=UnidadeAdministrativa.ATIVA,
+            status=UnidadeAdministrativa.ATIVA
         )
-        self.ua_destino = UnidadeAdministrativa.objects.create(
+        self.ua_destino = criar_ua(
             codigo="01.16.10.408",
             sigla="ALMOXZE",
             nome="Almoxarifado Zeladoria",
             status=UnidadeAdministrativa.ATIVA,
+            uo=self.ua_origem.unidade_orcamentaria
         )
 
         self.operador = Usuario.objects.create_user(
@@ -50,6 +52,7 @@ class CIMBPMTestBase(TestCase):
             email="operador@exemplo.com",
             password="senha123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
 
@@ -60,6 +63,7 @@ class CIMBPMTestBase(TestCase):
             email="gestor@exemplo.com",
             password="senha123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         self.gestor.groups.add(self.grupo_gestor)
 
@@ -114,12 +118,13 @@ class TestFuncoesAuxiliares(TestCase):
                 self.assertEqual(extrair_codigo_ua(entrada), esperado)
 
     def test_obter_nome_usuario_fallback(self):
-        ua = UnidadeAdministrativa.objects.create(
-            codigo="01.16.10.001", sigla="T", nome="Teste", status="A"
-        )
+        ua = criar_ua(codigo="01.16.10.001", sigla="T", nome="Teste", status="A")
 
         u1 = Usuario.objects.create_user(
-            username="user1", nome="Nome Completo", unidade_administrativa=ua
+            username="user1",
+            nome="Nome Completo",
+            unidade_administrativa=ua,
+            unidade_orcamentaria=ua.unidade_orcamentaria,
         )
         self.assertEqual(obter_nome_usuario(u1), "Nome Completo")
 
@@ -279,7 +284,8 @@ class TestSegurancaDownload(CIMBPMTestBase):
     def setUp(self):
         super().setUp()
 
-        self.ua_terceira = UnidadeAdministrativa.objects.create(
+        self.ua_terceira = criar_ua(
+            uo=self.ua_origem.unidade_orcamentaria,
             codigo="01.16.10.500",
             sigla="OUTRA",
             nome="Outra Unidade",
@@ -292,6 +298,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
             rf="9999999",
             password="senha123",
             unidade_administrativa=self.ua_terceira,
+            unidade_orcamentaria=self.ua_terceira.unidade_orcamentaria,
         )
         self.operador_terceiro.groups.add(self.grupo_operador)
 
@@ -301,6 +308,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
             rf="5555555",
             password="senha123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         self.operador_destino.groups.add(self.grupo_operador)
 
@@ -444,12 +452,12 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
                 self.fail(f"Geração de PDF falhou sem logo: {e}")
 
     def test_geracao_com_nomes_longos(self):
-        ua_longa = UnidadeAdministrativa.objects.create(
+        ua_longa = criar_ua(
             codigo="01.16.10.999",
             sigla="LONGA",
             nome="Unidade com Nome Extremamente Longo Para Testar Quebra de Linha no PDF "
             * 3,
-            status=UnidadeAdministrativa.ATIVA,
+            status=UnidadeAdministrativa.ATIVA, uo=self.ua_origem.unidade_orcamentaria
         )
 
         bem = self.criar_bem(
@@ -493,6 +501,7 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             rf="",
             password="123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         operador_sem_rf.groups.add(self.grupo_operador)
 

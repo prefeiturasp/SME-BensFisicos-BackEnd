@@ -4,11 +4,15 @@ from django.core.exceptions import ValidationError
 from bem_patrimonial.models import MovimentacaoBemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
 
+from dados_comuns.escopo import (
+    filtrar_ua_origem_por_escopo,
+    filtrar_ua_destino_por_uo_do_usuario,
+)
+
 
 class MovimentacaoBemPatrimonialForm(forms.ModelForm):
     class Meta:
         model = MovimentacaoBemPatrimonial
-
         exclude = (
             "solicitado_por",
             "aprovado_por",
@@ -20,17 +24,34 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         )
 
     def __init__(self, *args, **kwargs):
-        super(MovimentacaoBemPatrimonialForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
-        if "unidade_administrativa_origem" in self.fields:
-            self.fields["unidade_administrativa_origem"].queryset = (
-                UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
-            )
+        user = None
+        if hasattr(self, "request") and getattr(self.request, "user", None):
+            user = self.request.user
 
-        if "unidade_administrativa_destino" in self.fields:
-            self.fields["unidade_administrativa_destino"].queryset = (
-                UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
-            )
+        qs_ativas = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
+
+        if user:
+            if "unidade_administrativa_origem" in self.fields:
+                self.fields["unidade_administrativa_origem"].queryset = (
+                    filtrar_ua_origem_por_escopo(user, qs_ativas, campo_ua="id")
+                    if False
+                    else filtrar_ua_origem_por_escopo(user, qs_ativas)
+                )
+
+            if "unidade_administrativa_destino" in self.fields:
+                self.fields["unidade_administrativa_destino"].queryset = (
+                    filtrar_ua_destino_por_uo_do_usuario(user, qs_ativas)
+                )
+        else:
+
+            if "unidade_administrativa_origem" in self.fields:
+                self.fields["unidade_administrativa_origem"].queryset = qs_ativas
+            if "unidade_administrativa_destino" in self.fields:
+                self.fields["unidade_administrativa_destino"].queryset = qs_ativas
 
     def clean(self):
         cleaned_data = super().clean()
@@ -44,29 +65,61 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             ua_destino = cleaned_data.get("unidade_administrativa_destino")
 
             if not ua_origem:
-                raise ValidationError("Unidade administrativa de origem é obrigatória.")
+                raise ValidationError(
+                    {
+                        "unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."
+                    }
+                )
 
             if not ua_destino:
                 raise ValidationError(
-                    "Unidade administrativa de destino é obrigatória."
+                    {
+                        "unidade_administrativa_destino": "Unidade administrativa de destino é obrigatória."
+                    }
                 )
 
             if not ua_origem.is_ativa:
                 raise ValidationError(
-                    f"A unidade de origem '{ua_origem.nome}' está inativa. "
-                    "Não é possível criar movimentações a partir de unidades inativas."
+                    {
+                        "unidade_administrativa_origem": f"A unidade de origem '{ua_origem.nome}' está inativa. "
+                        "Não é possível criar movimentações a partir de unidades inativas."
+                    }
                 )
 
             if not ua_destino.is_ativa:
                 raise ValidationError(
-                    f"A unidade de destino '{ua_destino.nome}' está inativa. "
-                    "Não é possível criar movimentações para unidades inativas."
+                    {
+                        "unidade_administrativa_destino": f"A unidade de destino '{ua_destino.nome}' está inativa. "
+                        "Não é possível criar movimentações para unidades inativas."
+                    }
                 )
 
             if ua_destino == ua_origem:
                 raise ValidationError(
                     "Operação não permitida: origem e destino são iguais."
                 )
+
+            if user:
+
+                qs_origem = filtrar_ua_origem_por_escopo(
+                    user, UnidadeAdministrativa.objects.all()
+                )
+                if not qs_origem.filter(pk=ua_origem.pk).exists():
+                    raise ValidationError(
+                        {
+                            "unidade_administrativa_origem": "UA de origem fora do seu escopo de acesso."
+                        }
+                    )
+
+                qs_destino = filtrar_ua_destino_por_uo_do_usuario(
+                    user, UnidadeAdministrativa.objects.all()
+                )
+                if not qs_destino.filter(pk=ua_destino.pk).exists():
+                    raise ValidationError(
+                        {
+                            "unidade_administrativa_destino": "UA de destino fora das UAs permitidas para sua UO."
+                        }
+                    )
 
         if is_editing and user and getattr(user, "is_operador_inventario", False):
             if self.instance.solicitado_por_id != user.id:

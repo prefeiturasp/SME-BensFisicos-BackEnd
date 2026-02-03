@@ -3,6 +3,7 @@ from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.admin import CustomUserModelAdmin
 from dados_comuns.models import UnidadeAdministrativa
@@ -14,18 +15,18 @@ User = get_user_model()
 
 
 class SetupData:
-    def create_unidade(self):
-        UnidadeAdministrativa.objects.create(codigo=123, nome="COTIC", sigla="COTIC")
 
     def create_instance(self):
-        self.create_unidade()
+        uo = criar_uo()
+        ua = criar_ua(uo=uo)
 
         obj = {
             "username": "usuario",
             "password": "@@User20201",
             "nome": "Veronica Silva",
             "email": "usuario@gmail.com",
-            "unidade_administrativa": UnidadeAdministrativa.objects.first(),
+            "unidade_orcamentaria": uo,  # ✅ novo
+            "unidade_administrativa": ua,  # ✅ usar a UA criada
             "is_staff": True,
         }
         usuario = Usuario.objects.create(**obj)
@@ -66,14 +67,22 @@ class CustomUserModelAdminTestCase(TestCase):
         self.admin = CustomUserModelAdmin(Usuario, self.site)
         self.factory = RequestFactory()
 
-        self.unidade1 = UnidadeAdministrativa.objects.create(
-            codigo=200, nome="Unidade B", sigla="UB"
+        self.unidade1 = criar_ua(
+            codigo=200,
+            sigla="UB",
+            nome="Unidade B",
         )
-        self.unidade2 = UnidadeAdministrativa.objects.create(
-            codigo=100, nome="Unidade A", sigla="UA"
+        self.unidade2 = criar_ua(
+            uo=self.unidade1.unidade_orcamentaria,
+            codigo=100,
+            nome="Unidade A",
+            sigla="UA",
         )
-        self.unidade3 = UnidadeAdministrativa.objects.create(
-            codigo=150, nome="Unidade C", sigla="UC"
+        self.unidade3 = criar_ua(
+            uo=self.unidade1.unidade_orcamentaria,
+            codigo=150,
+            nome="Unidade C",
+            sigla="UC",
         )
 
         self.group_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
@@ -99,19 +108,22 @@ class CustomUserModelAdminTestCase(TestCase):
             username="user1",
             nome="Usuario 1",
             email="user1@teste.com",
-            unidade_administrativa=self.unidade1,  # codigo=200
+            unidade_administrativa=self.unidade1,
+            unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
         usuario2 = Usuario.objects.create(
             username="user2",
             nome="Usuario 2",
             email="user2@teste.com",
-            unidade_administrativa=self.unidade2,  # codigo=100
+            unidade_administrativa=self.unidade2,
+            unidade_orcamentaria=self.unidade2.unidade_orcamentaria,
         )
         usuario3 = Usuario.objects.create(
             username="user3",
             nome="Usuario 3",
             email="user3@teste.com",
-            unidade_administrativa=self.unidade3,  # codigo=150
+            unidade_administrativa=self.unidade3,
+            unidade_orcamentaria=self.unidade3.unidade_orcamentaria,
         )
 
         request = self.factory.get("/admin/usuario/usuario/")
@@ -128,6 +140,7 @@ class CustomUserModelAdminTestCase(TestCase):
             nome="Gestor Teste",
             email="gestor@teste.com",
             unidade_administrativa=self.unidade1,
+            unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
         usuario.groups.add(self.group_gestor)
 
@@ -140,6 +153,7 @@ class CustomUserModelAdminTestCase(TestCase):
             nome="Operador Teste",
             email="operador@teste.com",
             unidade_administrativa=self.unidade1,
+            unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
         usuario.groups.add(self.group_operador)
 
@@ -152,6 +166,7 @@ class CustomUserModelAdminTestCase(TestCase):
             nome="Sem Grupo",
             email="semgrupo@teste.com",
             unidade_administrativa=self.unidade1,
+            unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
 
         result = self.admin.get_grupo(usuario)
@@ -163,6 +178,7 @@ class CustomUserModelAdminTestCase(TestCase):
             nome="Ambos Grupos",
             email="ambos@teste.com",
             unidade_administrativa=self.unidade1,
+            unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
         usuario.groups.add(self.group_gestor)
         usuario.groups.add(self.group_operador)
@@ -180,9 +196,7 @@ class CustomUserModelAdminTestCase(TestCase):
 class UsuarioRFFieldTestCase(TestCase):
 
     def setUp(self):
-        self.unidade = UnidadeAdministrativa.objects.create(
-            codigo=100, nome="Unidade Teste", sigla="UT"
-        )
+        self.unidade = criar_ua()
 
     def test_usuario_can_be_created_with_valid_rf(self):
         usuario = Usuario.objects.create(
@@ -191,6 +205,7 @@ class UsuarioRFFieldTestCase(TestCase):
             rf="123456",
             email="rfvalid@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         self.assertEqual(usuario.rf, "123456")
 
@@ -200,6 +215,7 @@ class UsuarioRFFieldTestCase(TestCase):
             nome="Usuario Sem RF",
             email="norf@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         self.assertIsNone(usuario.rf)
 
@@ -210,6 +226,7 @@ class UsuarioRFFieldTestCase(TestCase):
             rf="F001234",
             email="rfzeros@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         self.assertEqual(usuario.rf, "F001234")
 
@@ -220,6 +237,7 @@ class UsuarioRFFieldTestCase(TestCase):
             rf="FG093393",  # duas letras → inválido
             email="rfinvalid@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         usuario.set_password("Senha@123")
 
@@ -239,6 +257,7 @@ class UsuarioRFFieldTestCase(TestCase):
             rf="B098890",
             email="rfvalido@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         usuario.set_password("Senha@123")
 
@@ -251,6 +270,7 @@ class UsuarioRFFieldTestCase(TestCase):
             rf="F123-456",
             email="rfspecial@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         with self.assertRaises(ValidationError) as context:
             usuario.full_clean()
@@ -264,6 +284,7 @@ class UsuarioRFFieldTestCase(TestCase):
             rf="F123 456",
             email="rfspaces@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         with self.assertRaises(ValidationError) as context:
             usuario.full_clean()
@@ -277,6 +298,7 @@ class UsuarioRFFieldTestCase(TestCase):
             rf="F9999999999999999",
             email="rflarge@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
         self.assertEqual(usuario.rf, "F9999999999999999")
 
@@ -288,9 +310,7 @@ class CustomUserModelAdminReadonlyFieldsTestCase(TestCase):
         self.admin = CustomUserModelAdmin(Usuario, self.site)
         self.factory = RequestFactory()
 
-        self.unidade = UnidadeAdministrativa.objects.create(
-            codigo=100, nome="Unidade Teste", sigla="UT"
-        )
+        self.unidade = criar_ua()
 
     def test_username_is_readonly_when_editing_existing_user(self):
         usuario = Usuario.objects.create(
@@ -298,6 +318,7 @@ class CustomUserModelAdminReadonlyFieldsTestCase(TestCase):
             nome="Usuario Existente",
             email="existing@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
 
         request = self.factory.get("/admin/usuario/usuario/")
@@ -317,6 +338,7 @@ class CustomUserModelAdminReadonlyFieldsTestCase(TestCase):
             nome="Usuario Tuple",
             email="tuple@teste.com",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
 
         request = self.factory.get("/admin/usuario/usuario/")

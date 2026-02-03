@@ -14,6 +14,7 @@ from bem_patrimonial.models import (
     MovimentacaoBensItem,
 )
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
@@ -26,16 +27,15 @@ COMMAND_ENVIA_PATH = (
 
 class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
     def setUp(self):
-        self.ua_origem = UnidadeAdministrativa.objects.create(
-            nome="UA Origem", codigo="00.00.00.010", sigla="UA-O"
-        )
-        self.ua_destino = UnidadeAdministrativa.objects.create(
-            nome="UA Destino", codigo="00.00.00.020", sigla="UA-D"
+        self.ua_origem = criar_ua()
+        self.ua_destino = criar_ua(
+            nome="UA Destino", codigo="00.00.00.020", sigla="UA-D", uo=self.ua_origem.unidade_orcamentaria
         )
         self.usuario = Usuario.objects.create_user(
             username="operador",
             password="test123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.bem = BemPatrimonial.objects.create(
             nome="CADEIRA",
@@ -128,13 +128,13 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
 
 class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
     def setUp(self):
-        self.ua_origem = UnidadeAdministrativa.objects.create(
+        self.ua_origem = criar_ua(
             nome="UA Origem", codigo="00.00.00.030", sigla="UA-O"
         )
-        self.ua_destino = UnidadeAdministrativa.objects.create(
+        self.ua_destino = criar_ua(uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino", codigo="00.00.00.040", sigla="UA-D"
         )
-        self.ua_destino_2 = UnidadeAdministrativa.objects.create(
+        self.ua_destino_2 = criar_ua(uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino 2", codigo="00.00.00.050", sigla="UA-D2"
         )
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
@@ -145,6 +145,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
             email="operador@test.com",
             password="test123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
         )
         self.operador.groups.add(grupo_operador)
@@ -154,6 +155,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
             email="gestor@test.com",
             password="test123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
         )
         self.gestor.groups.add(grupo_gestor)
@@ -163,6 +165,8 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
             email="",
             password="test123",
             unidade_administrativa=self.ua_destino_2,
+
+            unidade_orcamentaria=self.ua_destino_2.unidade_orcamentaria,
             is_active=True,
         )
         self.sem_email.groups.add(grupo_operador)
@@ -171,6 +175,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
             username="solicitante",
             password="test123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
 
     def _cria_movimentacao(self, ua_destino, dias_atraso=10, status=constants.ENVIADA):

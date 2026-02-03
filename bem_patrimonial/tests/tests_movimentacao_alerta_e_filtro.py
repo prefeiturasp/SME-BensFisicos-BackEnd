@@ -16,6 +16,7 @@ from bem_patrimonial.templatetags.movimentacoes_pendentes_tags import (
     alerta_movimentacoes_pendentes,
 )
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
@@ -23,17 +24,19 @@ from usuario.models import Usuario
 class AlertaMovimentacoesPendentesTagTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.ua_origem = UnidadeAdministrativa.objects.create(
-            nome="UA Origem", codigo="00.00.00.100", sigla="UA-O"
-        )
-        self.ua_destino = UnidadeAdministrativa.objects.create(
-            nome="UA Destino", codigo="00.00.00.200", sigla="UA-D"
+        self.ua_origem = criar_ua(nome="UA Origem", codigo="00.00.00.100", sigla="UA-O")
+        self.ua_destino = criar_ua(
+            uo=self.ua_origem.unidade_orcamentaria,
+            nome="UA Destino",
+            codigo="00.00.00.200",
+            sigla="UA-D",
         )
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
         self.usuario = Usuario.objects.create_user(
             username="operador",
             password="test123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         self.usuario.groups.add(grupo_operador)
 
@@ -82,6 +85,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
             username="sem_grupo",
             password="test123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         request = self.factory.get("/")
         request.user = usuario
@@ -119,16 +123,18 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
 class MovimentacaoAtrasadaFilterTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.ua_origem = UnidadeAdministrativa.objects.create(
-            nome="UA Origem", codigo="00.00.00.101", sigla="UA-O"
-        )
-        self.ua_destino = UnidadeAdministrativa.objects.create(
-            nome="UA Destino", codigo="00.00.00.201", sigla="UA-D"
+        self.ua_origem = criar_ua(nome="UA Origem", codigo="00.00.00.101", sigla="UA-O")
+        self.ua_destino = criar_ua(
+            uo=self.ua_origem.unidade_orcamentaria,
+            nome="UA Destino",
+            codigo="00.00.00.201",
+            sigla="UA-D",
         )
         self.usuario = Usuario.objects.create_user(
             username="operador2",
             password="test123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.model_admin = admin.ModelAdmin(MovimentacaoBemPatrimonial, AdminSite())
 

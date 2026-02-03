@@ -3,6 +3,9 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from datetime import date
 
+from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.escopo import filtrar_ua_origem_por_escopo, usuario_e_super_admin
+
 from .models import ConciliacaoUA, ParametroConciliacaoAnual
 from . import constants
 
@@ -16,6 +19,8 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
         self.request = kwargs.pop("request", None)
         super().__init__(*args, **kwargs)
 
+        user = getattr(self.request, "user", None)
+
         if not self.instance.pk:
             if "tipo" in self.fields:
                 self.fields["tipo"].choices = [
@@ -23,35 +28,27 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
                 ]
                 self.fields["tipo"].initial = constants.CONCILIACAO_EVENTUAL
                 self.fields["tipo"].disabled = True
-                
+
         if "unidade_administrativa" in self.fields:
             self.fields["unidade_administrativa"].required = True
+            
         if "tipo" in self.fields:
             self.fields["tipo"].required = True
-
+            
         if "periodo_final" in self.fields:
             self.fields["periodo_final"].required = False
 
-        user = getattr(self.request, "user", None)
+        if user and "unidade_administrativa" in self.fields:
+            base_qs = UnidadeAdministrativa.objects.filter(
+                status=UnidadeAdministrativa.ATIVA
+            )
+            allowed_qs = filtrar_ua_origem_por_escopo(user, base_qs)
+            self.fields["unidade_administrativa"].queryset = allowed_qs
 
-        if (
-            user
-            and getattr(user, "is_operador_inventario", False)
-            and not getattr(user, "is_gestor_patrimonio", False)
-        ):
-            ua = getattr(user, "unidade_administrativa", None)
-            if not ua:
-                raise ValidationError(
-                    "Como operador você deve estar vinculado a uma unidade administrativa."
-                )
-            if "unidade_administrativa" in self.fields:
-                self.fields["unidade_administrativa"].initial = ua
+            ua_user = getattr(user, "unidade_administrativa", None)
+            if ua_user and ua_user.is_ativa and not usuario_e_super_admin(user):
+                self.fields["unidade_administrativa"].initial = ua_user
                 self.fields["unidade_administrativa"].disabled = True
-
-        if user and getattr(user, "is_gestor_patrimonio", False):
-            ua = getattr(user, "unidade_administrativa", None)
-            if ua and "unidade_administrativa" in self.fields:
-                self.fields["unidade_administrativa"].initial = ua
 
         if self.instance and self.instance.pk:
             for f in ("unidade_administrativa", "tipo", "periodo_final"):
@@ -60,6 +57,8 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+
+        user = getattr(self.request, "user", None)
 
         unidade_administrativa = cleaned.get("unidade_administrativa")
         tipo = cleaned.get("tipo")
@@ -71,12 +70,29 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
         if not unidade_administrativa:
             raise ValidationError({"unidade_administrativa": "Campo obrigatório."})
 
+        if user:
+            base_qs = UnidadeAdministrativa.objects.filter(
+                status=UnidadeAdministrativa.ATIVA
+            )
+            allowed_qs = filtrar_ua_origem_por_escopo(user, base_qs)
+
+            ua_user = getattr(user, "unidade_administrativa", None)
+            if ua_user and ua_user.is_ativa and not usuario_e_super_admin(user):
+                cleaned["unidade_administrativa"] = ua_user
+                unidade_administrativa = ua_user
+
+            if not allowed_qs.filter(pk=unidade_administrativa.pk).exists():
+                raise ValidationError(
+                    {
+                        "unidade_administrativa": "Você não tem permissão para usar esta Unidade Administrativa."
+                    }
+                )
+
         if not self.instance.pk:
             existe_aberto = ConciliacaoUA.objects.filter(
                 unidade_administrativa=unidade_administrativa,
                 status=constants.CONCILIACAO_EM_ABERTO,
             ).exists()
-
             if existe_aberto:
                 raise ValidationError(
                     {
@@ -93,7 +109,10 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
         if tipo == constants.CONCILIACAO_ANUAL:
             ano_referencia = hoje.year - 1
 
+            uo_id = getattr(unidade_administrativa, "unidade_orcamentaria_id", None)
+
             parametro = ParametroConciliacaoAnual.objects.filter(
+                unidade_orcamentaria_id=uo_id,
                 ano_referencia=ano_referencia,
                 ativo=True,
             ).first()

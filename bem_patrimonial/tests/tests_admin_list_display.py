@@ -3,6 +3,7 @@ from django.contrib.admin.sites import AdminSite
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -14,8 +15,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         self.site = AdminSite()
         self.admin = BemPatrimonialAdmin(BemPatrimonial, self.site)
         self.factory = RequestFactory()
-
-        self.unidade = UnidadeAdministrativa.objects.create(
+        self.unidade = criar_ua(
             codigo="UA001", nome="Unidade Teste", sigla="DRE"
         )
 
@@ -24,6 +24,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
             email="gestor@teste.com",
             password="senha123",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria
         )
         from django.contrib.auth.models import Group
 
@@ -35,6 +36,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
             email="operador@teste.com",
             password="senha123",
             unidade_administrativa=self.unidade,
+            unidade_orcamentaria=self.unidade.unidade_orcamentaria
         )
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
         self.operador.groups.add(grupo_operador)

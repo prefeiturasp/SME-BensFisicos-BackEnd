@@ -16,6 +16,7 @@ from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
 )
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -23,13 +24,14 @@ from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 class MovimentacaoEdicaoReadonlyTestCase(TestCase):
 
     def setUp(self):
-        self.ua1 = UnidadeAdministrativa.objects.create(
+        self.ua1 = criar_ua(
             codigo="001",
             nome="DRE Centro",
             sigla="DRC",
             status=UnidadeAdministrativa.ATIVA,
         )
-        self.ua2 = UnidadeAdministrativa.objects.create(
+        self.ua2 = criar_ua(
+            uo=self.ua1.unidade_orcamentaria,
             codigo="002",
             nome="DRE Sul",
             sigla="DRS",
@@ -46,6 +48,7 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
             email="gestor@test.com",
             password="test123",
             is_staff=True,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.gestor.groups.add(self.grupo_gestor)
 
@@ -55,6 +58,7 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.operador_ua1.groups.add(self.grupo_operador)
 

@@ -3,7 +3,11 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib import messages
 
-from bem_patrimonial.models import MovimentacaoBemPatrimonial, BemPatrimonial, MovimentacaoBensItem
+from bem_patrimonial.models import (
+    MovimentacaoBemPatrimonial,
+    BemPatrimonial,
+    MovimentacaoBensItem,
+)
 from bem_patrimonial.constants import ENVIADA, ACEITA
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
@@ -14,8 +18,8 @@ from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,
 )
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from .tests_unidade_administrativa_setup import SetupUnidadeAdministrativaStatusData
-
 
 
 class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
@@ -63,12 +67,14 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         errors = str(form.errors).lower()
         self.assertIn("faça uma escolha válida", errors)
         self.assertIn("unidade administrativa de destino", errors)
+
     def test_nao_pode_criar_movimentacao_com_ambas_uas_inativas(self):
-        ua_inativa_2 = UnidadeAdministrativa.objects.create(
+        ua_inativa_2 = criar_ua(
             nome="DRE Leste Inativa",
             codigo="DRE-LESTE",
             sigla="DREL",
             status=UnidadeAdministrativa.INATIVA,
+            uo=self.ua_inativa.unidade_orcamentaria,
         )
 
         data = {
@@ -79,7 +85,10 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         form = self._create_form_with_request(self.gestor, data)
         self.assertFalse(form.is_valid())
 
-        self.assertIn("faça uma escolha válida. sua escolha não é uma das disponíveis", str(form.errors).lower())
+        self.assertIn(
+            "faça uma escolha válida. sua escolha não é uma das disponíveis",
+            str(form.errors).lower(),
+        )
 
     def test_pode_criar_movimentacao_com_ambas_uas_ativas(self):
         data = {
@@ -98,8 +107,8 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
         self.ua_origem, self.ua_destino, self.ua_inativa = (
             setup.create_unidades_administrativas()
         )
-        self.operador_origem, self.operador_destino, self.gestor = setup.create_usuarios(
-            self.ua_origem, self.ua_destino
+        self.operador_origem, self.operador_destino, self.gestor = (
+            setup.create_usuarios(self.ua_origem, self.ua_destino)
         )
         self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
@@ -182,11 +191,12 @@ class InativacaoUAComBensTestCase(TestCase):
         self.assertFalse(self.ua_ativa_1.pode_inativar())
 
     def test_pode_inativar_ua_sem_bens(self):
-        nova = UnidadeAdministrativa.objects.create(
+        nova = criar_ua(
             nome="DRE Teste",
             codigo="DRE-TESTE",
             sigla="DRET",
             status=UnidadeAdministrativa.ATIVA,
+            uo=self.ua_ativa_1.unidade_orcamentaria,
         )
         self.assertTrue(nova.pode_inativar())
 

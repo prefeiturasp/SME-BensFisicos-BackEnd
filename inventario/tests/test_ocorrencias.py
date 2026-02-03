@@ -7,6 +7,7 @@ from uuid import uuid4
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants as bem_constants
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 
@@ -23,7 +24,7 @@ class OcorrenciaBaseTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.ua = UnidadeAdministrativa.objects.create(
+        cls.ua = criar_ua(
             codigo="001.0391", sigla="DRE-01", nome="DRE Teste"
         )
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
