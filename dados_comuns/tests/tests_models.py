@@ -42,7 +42,7 @@ class SetupData:
             },
         ]
 
-        uas = [criar_ua(uo=uo, **obj) for obj in instances]
+        return [criar_ua(uo=uo, **obj) for obj in instances]
 
 
 class UnidadeAdministrativaTestCase(TestCase):
@@ -107,10 +107,10 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
 
     def setUp(self):
         setup = SetupData()
-        setup.create_multiple_instances()
+        uas = setup.create_multiple_instances()
         self.site = AdminSite()
         self.admin = UnidadeAdministrativaAdmin(UnidadeAdministrativa, self.site)
-        self.ua = criar_ua()
+        self.ua = uas[0] if uas else criar_ua()
 
     def test_list_display_fields(self):
         expected_fields = ("codigo", "sigla", "nome", "unidade_orcamentaria", "status")
@@ -145,11 +145,12 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
             username="admin",
             email="admin@test.com",
             password="123",
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 
         queryset = self.admin.get_queryset(request)
         unidades_list = list(queryset)
-
+        
         self.assertGreater(len(unidades_list), 0)
         self.assertEqual(unidades_list[0].codigo, "050")
         self.assertEqual(unidades_list[-1].codigo, "200")
