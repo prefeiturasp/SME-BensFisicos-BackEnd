@@ -4,20 +4,22 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
 from inventario import constants
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants as bem_constants
 
+
 class ConciliacaoAnualModelTest(TestCase):
 
     def setUp(self):
-        self.ua = UnidadeAdministrativa.objects.create(
-            codigo="001.0001", sigla="UA", nome="Unidade Teste"
-        )
+        self.ua = criar_ua(codigo="001.0001", sigla="UA", nome="Unidade Teste")
         self.usuario = Usuario.objects.create_user(
-            username="gestor", password="123"
+            username="gestor",
+            password="123",
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 
     def criar_bem(self):
@@ -66,6 +68,7 @@ class ConciliacaoAnualModelTest(TestCase):
             periodo_inicial=date(2020, 1, 1),
             periodo_final=date(2020, 3, 31),
             ativo=True,
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 
         with self.assertRaises(ValidationError):

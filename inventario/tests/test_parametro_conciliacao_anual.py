@@ -2,10 +2,13 @@ from datetime import date, timedelta
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 
+from dados_comuns.tests.factories import criar_uo
 from inventario.models import ParametroConciliacaoAnual
 
 
 class ParametroConciliacaoAnualTest(TestCase):
+    def setUp(self):
+        self.uo = criar_uo()
 
     def test_criar_parametro_valido(self):
         p = ParametroConciliacaoAnual.objects.create(
@@ -13,6 +16,7 @@ class ParametroConciliacaoAnualTest(TestCase):
             periodo_inicial=date(2026, 1, 1),
             periodo_final=date(2026, 3, 31),
             ativo=True,
+            unidade_orcamentaria=self.uo,
         )
         self.assertTrue(p.pk)
 
@@ -21,6 +25,7 @@ class ParametroConciliacaoAnualTest(TestCase):
             ano_referencia=2025,
             periodo_inicial=date(2026, 4, 1),
             periodo_final=date(2026, 3, 31),
+            unidade_orcamentaria=self.uo,
         )
         with self.assertRaises(ValidationError):
             p.full_clean()
@@ -31,6 +36,7 @@ class ParametroConciliacaoAnualTest(TestCase):
             periodo_inicial=date(2026, 1, 1),
             periodo_final=date(2026, 3, 31),
             ativo=True,
+            unidade_orcamentaria=self.uo,
         )
 
         p2 = ParametroConciliacaoAnual(
@@ -38,6 +44,7 @@ class ParametroConciliacaoAnualTest(TestCase):
             periodo_inicial=date(2026, 4, 1),
             periodo_final=date(2026, 6, 30),
             ativo=True,
+            unidade_orcamentaria=self.uo,
         )
 
         with self.assertRaises(ValidationError):
@@ -49,6 +56,7 @@ class ParametroConciliacaoAnualTest(TestCase):
             periodo_inicial=date(2026, 1, 1),
             periodo_final=date(2026, 3, 31),
             ativo=False,
+            unidade_orcamentaria=self.uo,
         )
 
         p2 = ParametroConciliacaoAnual(
@@ -56,6 +64,7 @@ class ParametroConciliacaoAnualTest(TestCase):
             periodo_inicial=date(2026, 3, 1),
             periodo_final=date(2026, 4, 30),
             ativo=False,
+            unidade_orcamentaria=self.uo,
         )
 
         with self.assertRaises(ValidationError):

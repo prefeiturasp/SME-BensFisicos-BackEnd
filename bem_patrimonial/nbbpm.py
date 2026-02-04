@@ -316,7 +316,7 @@ def _criar_cabecalho_e_registro_nbbpm(baixa):
     return [main_table]
 
 
-def _criar_linha_ua(label, sigla, nome, codigo, label_style, value_style):
+def _criar_linha_ua(unidade_ocrcamentaria, label, sigla, nome, codigo, label_style, value_style):
 
     return [
         [
@@ -326,7 +326,7 @@ def _criar_linha_ua(label, sigla, nome, codigo, label_style, value_style):
         ],
         [
             Paragraph((sigla or "-").upper(), value_style),
-            Paragraph((nome or "-").upper(), value_style),
+            Paragraph(f"{unidade_ocrcamentaria.upper()} / {nome.upper()}", value_style),
             Paragraph(str(codigo or "-"), value_style),
         ],
     ]
@@ -357,6 +357,7 @@ def _criar_informacoes_gerais(baixa):
 
     info_data.extend(
         _criar_linha_ua(
+            ua_origem.unidade_orcamentaria.nome,
             "UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA (BAIXA)",
             getattr(ua_origem, "sigla", "-"),
             getattr(ua_origem, "nome", "-"),

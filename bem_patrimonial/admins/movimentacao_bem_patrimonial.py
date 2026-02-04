@@ -1,6 +1,5 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.db.models import Q
 from django.db import transaction
 from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
     verificar_movimentacoes_duplicadas,
@@ -22,6 +21,11 @@ from bem_patrimonial.emails import (
 from bem_patrimonial import constants
 
 from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
+
+from dados_comuns.escopo import (
+    filtrar_queryset_movimentacao_por_escopo,
+)
+
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 
@@ -389,34 +393,33 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         return self.readonly_fields
 
     def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        form.request = request
+        FormClass = super().get_form(request, obj, **kwargs)
 
-        if obj is None:
-            ua_user = getattr(request.user, "unidade_administrativa", None)
-            if ua_user and ua_user.is_ativa and hasattr(form, "base_fields"):
-                if UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in form.base_fields:
-                    form.base_fields[
-                        UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                    ].initial = ua_user.pk
+        class RequestForm(FormClass):
+            def __init__(self_inner, *a, **kw):
+                super().__init__(*a, **kw)
+                self_inner.request = request
 
-        return form
+                if obj is None:
+                    ua_user = getattr(request.user, "unidade_administrativa", None)
+                    if (
+                        ua_user
+                        and ua_user.is_ativa
+                        and hasattr(self_inner, "base_fields")
+                    ):
+                        if (
+                            UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                            in self_inner.base_fields
+                        ):
+                            self_inner.base_fields[
+                                UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                            ].initial = ua_user.pk
+
+        return RequestForm
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        user = request.user
-        ua_user = getattr(user, "unidade_administrativa", None)
-
-        if user.is_gestor_patrimonio and not ua_user:
-            return qs
-
-        if ua_user:
-            return qs.filter(
-                Q(unidade_administrativa_origem=ua_user)
-                | Q(unidade_administrativa_destino=ua_user)
-            )
-
-        return qs.none()
+        return filtrar_queryset_movimentacao_por_escopo(request.user, qs)
 
     def save_model(self, request, obj, form, change):
         if obj.id is None:

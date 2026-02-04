@@ -9,6 +9,7 @@ from django.contrib.auth.models import Group
 from django.utils import timezone
 
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -32,13 +33,14 @@ class ConciliacaoPDFTestBase(TestCase):
             name=GRUPO_OPERADOR_INVENTARIO
         )
 
-        self.ua_a = UnidadeAdministrativa.objects.create(
+        self.ua_a = criar_ua(
             codigo="01.16.10.379",
             sigla="UA_A",
             nome="Unidade A",
             status=UnidadeAdministrativa.ATIVA,
         )
-        self.ua_b = UnidadeAdministrativa.objects.create(
+        self.ua_b = criar_ua(
+            uo=self.ua_a.unidade_orcamentaria,
             codigo="01.16.10.408",
             sigla="UA_B",
             nome="Unidade B",
@@ -52,6 +54,7 @@ class ConciliacaoPDFTestBase(TestCase):
             email="operador_a@exemplo.com",
             password="senha123",
             unidade_administrativa=self.ua_a,
+            unidade_orcamentaria=self.ua_a.unidade_orcamentaria,
         )
         self.operador_a.groups.add(self.grupo_operador)
 
@@ -62,6 +65,7 @@ class ConciliacaoPDFTestBase(TestCase):
             email="operador_b@exemplo.com",
             password="senha123",
             unidade_administrativa=self.ua_b,
+            unidade_orcamentaria=self.ua_b.unidade_orcamentaria,
         )
         self.operador_b.groups.add(self.grupo_operador)
 

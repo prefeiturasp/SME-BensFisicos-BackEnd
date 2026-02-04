@@ -4,6 +4,36 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils import timezone
 from django.conf import settings
+import re
+from django.core.exceptions import ValidationError
+
+
+class UnidadeOrcamentaria(models.Model):
+    codigo = models.CharField(
+        "Código",
+        max_length=20,
+        unique=True,
+        help_text="Código da Unidade Orçamentária (ex.: 01.16.10).",
+    )
+    nome = models.CharField(
+        "Nome",
+        max_length=255,
+    )
+
+    sigla = models.CharField("sigla", max_length=255, null=True, blank=True)
+    
+    ativa = models.BooleanField(
+        "Ativa",
+        default=True,
+    )
+
+    class Meta:
+        verbose_name = "Unidade Orçamentária"
+        verbose_name_plural = "Unidades Orçamentárias"
+        ordering = ["codigo"]
+
+    def __str__(self):
+        return f"{self.codigo} - {self.nome}"
 
 
 class UnidadeAdministrativa(models.Model):
@@ -15,6 +45,15 @@ class UnidadeAdministrativa(models.Model):
     STATUS_CHOICES = (
         (ATIVA, "Ativa"),
         (INATIVA, "Inativa"),
+    )
+
+    unidade_orcamentaria = models.ForeignKey(
+        "dados_comuns.UnidadeOrcamentaria",
+        verbose_name="Unidade Orçamentária",
+        on_delete=models.PROTECT,
+        related_name="unidades_administrativas",
+        null=True,
+        blank=True,
     )
 
     codigo = models.CharField("Codigo", max_length=255, null=False, blank=False)
@@ -42,6 +81,14 @@ class UnidadeAdministrativa(models.Model):
         verbose_name_plural = "unidades administrativas"
         ordering = ["codigo", "sigla", "nome"]
 
+    def clean(self):
+        super().clean()
+
+        if not self.unidade_orcamentaria_id:
+            raise ValidationError(
+                {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
+            )
+
     def save(self, *args, **kwargs):
         self.updated_at = datetime.now()
         return super(UnidadeAdministrativa, self).save(*args, **kwargs)
@@ -57,16 +104,22 @@ class UnidadeAdministrativa(models.Model):
 class HistoricoGeral(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.CharField(max_length=64, db_index=True)
-    content_object = GenericForeignKey('content_type', 'object_id')
+    content_object = GenericForeignKey("content_type", "object_id")
 
     campo = models.CharField("Campo alterado", max_length=128)
     valor_antigo = models.TextField("Valor antigo", null=True, blank=True)
     valor_novo = models.TextField("Valor novo", null=True, blank=True)
 
     alterado_por = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Alterado por"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Alterado por",
     )
-    alterado_em = models.DateTimeField("Alterado em", default=timezone.now, db_index=True)
+    alterado_em = models.DateTimeField(
+        "Alterado em", default=timezone.now, db_index=True
+    )
 
     class Meta:
         verbose_name = "histórico geral"

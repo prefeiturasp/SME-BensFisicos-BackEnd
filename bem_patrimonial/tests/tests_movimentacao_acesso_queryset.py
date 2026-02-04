@@ -12,6 +12,7 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
 )
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -19,19 +20,16 @@ from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 class MovimentacaoQuerysetAcessoTestCase(TestCase):
 
     def setUp(self):
-        self.ua1 = UnidadeAdministrativa.objects.create(
-            codigo="001",
-            nome="DRE Centro",
-            sigla="DRC",
-            status=UnidadeAdministrativa.ATIVA,
-        )
-        self.ua2 = UnidadeAdministrativa.objects.create(
+        self.ua1 = criar_ua(codigo="001", nome="DRE Centro", sigla="DRC")
+        self.ua2 = criar_ua(
+            uo=self.ua1.unidade_orcamentaria,
             codigo="002",
             nome="DRE Sul",
             sigla="DRS",
             status=UnidadeAdministrativa.ATIVA,
         )
-        self.ua3 = UnidadeAdministrativa.objects.create(
+        self.ua3 = criar_ua(
+            uo=self.ua1.unidade_orcamentaria,
             codigo="003",
             nome="DRE Norte",
             sigla="DRN",
@@ -48,6 +46,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
             email="gestor_sem_ua@test.com",
             password="test123",
             is_staff=True,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.gestor_sem_ua.groups.add(self.grupo_gestor)
 
@@ -57,6 +56,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.gestor_com_ua1.groups.add(self.grupo_gestor)
 
@@ -66,6 +66,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.operador_ua1.groups.add(self.grupo_operador)
 
@@ -75,6 +76,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua2,
+            unidade_orcamentaria=self.ua2.unidade_orcamentaria,
         )
         self.operador_ua2.groups.add(self.grupo_operador)
 

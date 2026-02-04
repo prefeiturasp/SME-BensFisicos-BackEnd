@@ -1,8 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
+from django.core.exceptions import ValidationError
 
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import UnidadeOrcamentaria, UnidadeAdministrativa
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
@@ -16,9 +17,17 @@ class Usuario(AbstractUser):
         validators=[
             RegexValidator(
                 regex=r"^[A-Za-z][0-9]+$",
-                message="RF deve começar com uma letra e conter apenas números após ela. Ex: F53399 ou f53399."
+                message="RF deve começar com uma letra e conter apenas números após ela. Ex: F53399 ou f53399.",
             )
         ],
+    )
+    unidade_orcamentaria = models.ForeignKey(
+        UnidadeOrcamentaria,
+        verbose_name="Unidade Orçamentária",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="usuarios",
     )
     unidade_administrativa = models.ForeignKey(
         UnidadeAdministrativa,
@@ -29,6 +38,23 @@ class Usuario(AbstractUser):
     )
     must_change_password = models.BooleanField(default=True)
     last_password_change = models.DateTimeField(null=True, blank=True)
+    
+    def clean(self):
+        super().clean()
+
+        if self.unidade_administrativa and not self.unidade_orcamentaria:
+            raise ValidationError(
+                {"unidade_orcamentaria": "Informe a Unidade Orçamentária antes de definir a Unidade Administrativa."}
+            )
+
+        if (
+            self.unidade_orcamentaria
+            and self.unidade_administrativa
+            and self.unidade_administrativa.unidade_orcamentaria_id != self.unidade_orcamentaria_id
+        ):
+            raise ValidationError(
+                {"unidade_administrativa": "A Unidade Administrativa deve pertencer à Unidade Orçamentária selecionada."}
+            )
 
     @property
     def is_gestor_patrimonio(self):

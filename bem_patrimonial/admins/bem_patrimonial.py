@@ -35,6 +35,11 @@ from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     BaixadosMaisDeUmPeriodoFilter,
 )
+from dados_comuns.escopo import (
+    filtrar_queryset_por_escopo,
+    filtrar_ua_origem_por_escopo,
+    usuario_e_super_admin,
+)
 
 
 @admin.action(description="Aprovar bens selecionados")
@@ -397,60 +402,50 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     modo = (getattr(self_inner, "data", None) or {}).get(
                         "cadastro_modo"
                     ) or (getattr(self_inner, "initial", {}) or {}).get("cadastro_modo")
+
                     if modo == "multi" and "localizacao" in self_inner.fields:
                         self_inner.fields["localizacao"].required = False
 
                     if "unidade_administrativa" in self_inner.fields:
                         fld = self_inner.fields["unidade_administrativa"]
                         fld.required = True
+
                         ua_user = getattr(request.user, "unidade_administrativa", None)
 
-                        if ua_user:
-                            fld.queryset = UnidadeAdministrativa.objects.filter(
-                                pk=ua_user.pk, status=UnidadeAdministrativa.ATIVA
-                            )
+                        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+                        fld.queryset = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
+
+                        ua_user = getattr(request.user, "unidade_administrativa", None)
+                        if ua_user and not usuario_e_super_admin(request.user):
                             fld.initial = ua_user
                             fld.disabled = True
-                        else:
-                            fld.queryset = UnidadeAdministrativa.objects.filter(
-                                status=UnidadeAdministrativa.ATIVA
-                            )
 
                 def clean(self_inner):
                     cleaned_data = original_clean(self_inner)
+
                     ua_user = getattr(request.user, "unidade_administrativa", None)
                     ua_form = cleaned_data.get("unidade_administrativa")
 
-                    if (
-                        not ua_form
-                        and ua_user
-                        and request.user.is_operador_inventario
-                        and not request.user.is_gestor_patrimonio
-                    ):
-                        cleaned_data["unidade_administrativa"] = ua_user
-                        ua_form = ua_user
-
                     if not ua_form:
+                        raise ValidationError({"unidade_administrativa": "Selecione a Unidade Administrativa."})
+
+                    if ua_form.status != UnidadeAdministrativa.ATIVA:
+                        raise ValidationError({"unidade_administrativa": "A Unidade Administrativa selecionada está inativa."})
+
+                    qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+                    qs_permitidas = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
+
+                    if not qs_permitidas.filter(pk=ua_form.pk).exists():
                         raise ValidationError(
-                            {
-                                "unidade_administrativa": "Selecione a Unidade Administrativa."
-                            }
+                            {"unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."}
                         )
 
+                    ua_user = getattr(request.user, "unidade_administrativa", None)
                     if ua_user and not ua_user.is_ativa:
                         raise ValidationError(
                             f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
                             f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
                         )
-
-                    if ua_user and ua_form != ua_user:
-                        raise ValidationError(
-                            {
-                                "unidade_administrativa": "Você só pode criar bens na Unidade Administrativa vinculada ao seu usuário."
-                            }
-                        )
-
-                    return cleaned_data
 
             return CreateForm
 
@@ -466,6 +461,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 if self_inner.instance and self_inner.instance.pk:
                     ua_original = self_inner.instance.unidade_administrativa
                     ua_post = cleaned.get("unidade_administrativa") or ua_original
+
                     if ua_post != ua_original:
                         raise ValidationError(
                             {
@@ -515,15 +511,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             .select_related("unidade_administrativa", "criado_por")
         )
 
-        user = request.user
-        ua_user = getattr(user, "unidade_administrativa", None)
-
-        if user.is_gestor_patrimonio and not ua_user:
-            pass
-        elif ua_user:
-            qs = qs.filter(unidade_administrativa=ua_user)
-        else:
-            qs = qs.none()
+        qs = filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=qs,
+            campo_ua="unidade_administrativa",
+        )
 
         baixa_data_sq = (
             BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
@@ -562,15 +554,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_export_queryset(self, request):
         queryset = super().get_export_queryset(request)
-        user = request.user
-        ua_user = getattr(user, "unidade_administrativa", None)
-
-        if user.is_gestor_patrimonio and not ua_user:
-            pass
-        elif ua_user:
-            queryset = queryset.filter(unidade_administrativa=ua_user)
-        else:
-            queryset = queryset.none()
+        queryset = filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=queryset,
+            campo_ua="unidade_administrativa",
+        )
 
         baixa_data_sq = (
             BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
@@ -864,6 +852,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_search_results(self, request, queryset, search_term):
         qs, use_distinct = super().get_search_results(request, queryset, search_term)
+        qs = filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=qs,
+            campo_ua="unidade_administrativa",
+        )
 
         if request.path.endswith("/autocomplete/"):
             app_label = request.GET.get("app_label")
