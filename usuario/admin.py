@@ -66,12 +66,16 @@ class CustomUserModelAdmin(UserAdmin):
         js = ("admin/usuario_uo_ua.js",)
 
     def get_fieldsets(self, request, obj=None):
-        base = self.fieldsets
+        if obj is None:
+            base = self.add_fieldsets
+        else:
+            base = self.fieldsets
+            
         if request.user.is_superuser:
             base = base + (
                 (
                     "Super-admin",
-                    {"fields": ("is_superuser", "user_permissions")},
+                    {"fields": ("is_superuser",)},
                 ),
             )
         return base
@@ -82,51 +86,9 @@ class CustomUserModelAdmin(UserAdmin):
             base = base + (
                 (
                     "Super-admin",
-                    {"fields": ("is_superuser", "user_permissions")},
+                    {"fields": ("is_superuser",)},
                 ),
             )
-        return base
-
-    def get_add_fieldsets(self, request):
-        base = (
-            ("Acesso", {"fields": ("username", "password1", "password2")}),
-            (
-                "Informações pessoais",
-                {
-                    "fields": (
-                        "nome",
-                        "rf",
-                        "email",
-                        "unidade_orcamentaria",
-                        "unidade_administrativa",
-                    )
-                },
-            ),
-            (
-                "Permissões",
-                {
-                    "fields": (
-                        "is_active",
-                        "is_staff",
-                        "groups",
-                    )
-                },
-            ),
-        )
-
-        if request.user.is_superuser:
-            base = base + (
-                (
-                    "Super-admin",
-                    {
-                        "fields": (
-                            "is_superuser",
-                            "user_permissions",
-                        )
-                    },
-                ),
-            )
-
         return base
 
     def get_readonly_fields(self, request, obj=None):

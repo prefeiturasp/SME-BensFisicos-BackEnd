@@ -106,9 +106,10 @@ class ParametroConciliacaoAnualAdminForm(forms.ModelForm):
                 if cleaned.get("unidade_orcamentaria")
                 else None
             )
-            escopo = resolver_ids_escopo(user)
-            uos_permitidas = set(escopo.get("uo_ids", []) or [])
-            if uo_id and uo_id not in uos_permitidas:
+
+            is_super, _is_gestor, _ua_id, uo_id = resolver_ids_escopo(user)
+
+            if not uo_id == uo_id:
                 raise ValidationError(
                     {
                         "unidade_orcamentaria": "Você não tem permissão para usar esta UO."
