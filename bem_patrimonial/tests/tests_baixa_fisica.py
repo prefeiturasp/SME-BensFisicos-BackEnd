@@ -536,6 +536,7 @@ class BaixaFisicaAdminQuerysetPermissionsTestCase(TestCase):
     def test_get_queryset_gestor_sem_ua_ve_todas(self):
         # remove vinculo de UA do gestor
         self.gestor.unidade_administrativa = None
+        
         self.gestor.save(update_fields=["unidade_administrativa"])
 
         request = self.factory.get("/admin/")
