@@ -478,6 +478,8 @@ class EmailCancelamentoTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua_origem,
+            
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria
         )
         gestor_sem_nome.groups.add(grupo_gestor)
 

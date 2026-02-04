@@ -16,6 +16,7 @@ from bem_patrimonial.admins.bem_patrimonial import (
     reprovar_bens,
 )
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -25,12 +26,12 @@ class BaseAprovacaoTestCase(TestCase):
     def setUp(self):
         self.grupo_gestor = Group.objects.create(name=GRUPO_GESTOR_PATRIMONIO)
         self.grupo_operador = Group.objects.create(name=GRUPO_OPERADOR_INVENTARIO)
-
-        self.ua = UnidadeAdministrativa.objects.create(
+        self.uo = criar_uo(codigo="100", nome="UO 100")
+        self.ua =criar_ua(
             nome="UA Teste",
             codigo="001",
             sigla="UAT",
-            status=UnidadeAdministrativa.ATIVA,
+            status=UnidadeAdministrativa.ATIVA
         )
 
         self.gestor = Usuario.objects.create_user(
@@ -38,6 +39,7 @@ class BaseAprovacaoTestCase(TestCase):
             email="gestor@test.com",
             password="senha123",
             unidade_administrativa=self.ua,
+            unidade_orcamentaria=self.ua.unidade_orcamentaria
         )
         self.gestor.groups.add(self.grupo_gestor)
 
@@ -46,6 +48,7 @@ class BaseAprovacaoTestCase(TestCase):
             email="operador@test.com",
             password="senha123",
             unidade_administrativa=self.ua,
+            unidade_orcamentaria=self.ua.unidade_orcamentaria
         )
         self.operador.groups.add(self.grupo_operador)
 
@@ -67,6 +70,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
             sem_numeracao=True,
             criado_por=self.operador,
             unidade_administrativa=self.ua,
+            
             status=AGUARDANDO_APROVACAO,
         )
 

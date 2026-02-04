@@ -198,7 +198,7 @@ def _criar_cabecalho_e_registro_conciliacao(conciliacao, data_emissao):
             _carregar_logo(styles),
             [
                 Spacer(1, 0.1 * cm),
-                Paragraph("PREFEITURA DO MUNICÍPIO DE SÃO PAULO", title_style),
+                Paragraph("PREFEITURA MUNICIPAL DE SÃO PAULO", title_style),
                 Paragraph("SECRETARIA MUNICIPAL DE EDUCAÇÃO", subtitle_style),
                 Paragraph(
                     "INVENTÁRIO ANUAL - RELATÓRIO DE CAMPO - FÍSICO (CONCILIAÇÃO)",
@@ -451,13 +451,17 @@ def _criar_informacoes_gerais_conciliacao(conciliacao):
             Paragraph("16", value_style),
         ],
         [
-            Paragraph("<b>UNIDADE ADMINISTRATIVA</b>", label_style),
             Paragraph("<b>NOME</b>", label_style),
+            Paragraph(
+                "<b>UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA</b>", label_style
+            ),
             Paragraph("<b>CÓDIGO</b>", label_style),
         ],
         [
             Paragraph((ua.sigla or "-").upper(), value_style),
-            Paragraph((ua.nome or "-").upper(), value_style),
+            Paragraph(
+                f"{ua.unidade_orcamentaria.nome} / {ua.nome }".upper(), value_style
+            ),
             Paragraph((ua.codigo or "-"), value_style),
         ],
     ]

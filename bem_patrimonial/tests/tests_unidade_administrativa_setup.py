@@ -5,6 +5,7 @@ from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.constants import APROVADO
 
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 from django.contrib.auth.models import Group
@@ -13,19 +14,21 @@ from django.contrib.auth.models import Group
 class SetupUnidadeAdministrativaStatusData(TestCase):
 
     def create_unidades_administrativas(self):
-        ua_ativa_1 = UnidadeAdministrativa.objects.create(
+        ua_ativa_1 = criar_ua(
             nome="DRE Centro Ativa",
             codigo="DRE-CENTRO",
             sigla="DREC",
             status=UnidadeAdministrativa.ATIVA,
         )
-        ua_ativa_2 = UnidadeAdministrativa.objects.create(
+        ua_ativa_2 = criar_ua(
+            uo=ua_ativa_1.unidade_orcamentaria,
             nome="DRE Sul Ativa",
             codigo="DRE-SUL",
             sigla="DRES",
             status=UnidadeAdministrativa.ATIVA,
         )
-        ua_inativa = UnidadeAdministrativa.objects.create(
+        ua_inativa = criar_ua(
+            uo=ua_ativa_1.unidade_orcamentaria,
             nome="DRE Norte Inativa",
             codigo="DRE-NORTE",
             sigla="DREN",
@@ -67,7 +70,7 @@ class SetupUnidadeAdministrativaStatusData(TestCase):
 
     def create_bem_patrimonial(self, criado_por, ua_origem):
         """
-        Agora os bens são sempre associados via inline. 
+        Agora os bens são sempre associados via inline.
         Neste método só criamos o bem aprovado.
         A geração automática do número acontece no save().
         """

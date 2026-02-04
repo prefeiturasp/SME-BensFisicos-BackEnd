@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 
 
 class BemPatrimonialAdminTest(TestCase):
@@ -13,8 +14,9 @@ class BemPatrimonialAdminTest(TestCase):
         self.admin_user = User.objects.create_superuser(
             username="admin", email="admin@example.com", password="admin123"
         )
+        self.uo = criar_uo(codigo="100", nome="UO 100")
 
-        self.ua = UnidadeAdministrativa.objects.create(nome="UA Teste")
+        self.ua = criar_ua(nome="UA Teste",  unidade_orcamentaria=self.uo)
         self.admin_user.unidade_administrativa = self.ua
         self.admin_user.save()
 

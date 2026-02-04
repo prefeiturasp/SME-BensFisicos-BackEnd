@@ -10,17 +10,22 @@ from bem_patrimonial.models import (
 )
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO
 
 
 class EmailNovaMovimentacaoTestCase(TestCase):
     def setUp(self):
-        self.ua_origem = UnidadeAdministrativa.objects.create(
+
+        self.ua_origem = criar_ua(
             nome="DRE Centro", codigo="01.16.10.500", sigla="DRE-CENTRO"
         )
-        self.ua_destino = UnidadeAdministrativa.objects.create(
-            nome="MEMORIAL", codigo="01.16.10.600", sigla="MEMORIAL"
+        self.ua_destino = criar_ua(
+            uo=self.ua_origem.unidade_orcamentaria,
+            nome="MEMORIAL",
+            codigo="01.16.10.600",
+            sigla="MEMORIAL",
         )
 
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
@@ -31,6 +36,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             nome="Operador Origem",
             password="test123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.operador_origem.groups.add(grupo_operador)
 
@@ -40,6 +46,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             nome="Operador Destino 1",
             password="test123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
         )
         self.operador_destino_1.groups.add(grupo_operador)
@@ -50,6 +57,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             nome="Operador Destino 2",
             password="test123",
             unidade_administrativa=self.ua_destino,
+            unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
         )
         self.operador_destino_2.groups.add(grupo_operador)

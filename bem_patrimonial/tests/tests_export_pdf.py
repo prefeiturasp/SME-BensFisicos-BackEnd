@@ -9,6 +9,7 @@ from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.formats import PDFFormat
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.constants import APROVADO, NAO_APROVADO, AGUARDANDO_APROVACAO
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from dados_comuns.models import UnidadeAdministrativa
@@ -18,10 +19,11 @@ NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
 
 class SetupExportData:
-    def create_unidade_administrativa(self, codigo=100, nome="DRE Teste", sigla="DT"):
-        return UnidadeAdministrativa.objects.create(
-            codigo=codigo, nome=nome, sigla=sigla
-        )
+    def __init__(self):
+        self.uo = criar_uo()
+
+    def create_unidade_administrativa(self, codigo=None, nome=None):
+        return criar_ua(uo=self.uo, codigo=codigo, nome=nome)
 
     def create_usuario(
         self, username="testuser", unidade=None, grupo=GRUPO_GESTOR_PATRIMONIO
@@ -35,6 +37,7 @@ class SetupExportData:
             nome=f"Usuario {username}",
             email=f"{username}@teste.com",
             unidade_administrativa=unidade,
+            unidade_orcamentaria=unidade.unidade_orcamentaria,
             is_staff=True,
         )
 
@@ -120,6 +123,7 @@ class PDFExportDataTestCase(TestCase):
 
     def setUp(self):
         self.setup = SetupExportData()
+
         self.unidade = self.setup.create_unidade_administrativa()
         self.usuario = self.setup.create_usuario(unidade=self.unidade)
         self.factory = RequestFactory()
@@ -233,7 +237,7 @@ class BemPatrimonialAdminExportTestCase(TestCase):
             codigo=100, nome="DRE A"
         )
         self.unidade2 = self.setup.create_unidade_administrativa(
-            codigo=200, nome="DRE B"
+            codigo=202, nome="DRE B"
         )
 
         self.gestor = self.setup.create_usuario(
@@ -269,8 +273,8 @@ class BemPatrimonialAdminExportTestCase(TestCase):
             password="testpass123",
             nome="Gestor Sem UA",
             email="gestor_sem_ua@teste.com",
-            unidade_administrativa=None,
             is_staff=True,
+            unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
         group, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         gestor_sem_ua.groups.add(group)

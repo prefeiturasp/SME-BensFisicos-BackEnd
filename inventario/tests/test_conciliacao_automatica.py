@@ -5,8 +5,9 @@ from django.utils import timezone
 
 from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from inventario.utils_conciliacao.conciliacao_automatica import (
-    processar_conciliacao_anual_automatica
+    processar_conciliacao_anual_automatica,
 )
 from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
 from inventario import constants
@@ -17,11 +18,11 @@ from usuario.models import Usuario
 class ConciliacaoAutomaticaTest(TestCase):
 
     def setUp(self):
-        self.ua = UnidadeAdministrativa.objects.create(
-            codigo="001.0002", sigla="UA2", nome="Unidade Auto"
-        )
+        self.ua = criar_ua(codigo="001.0002", sigla="UA2", nome="Unidade Auto")
         self.usuario = Usuario.objects.create_user(
-            username="gestor", password="123"
+            username="gestor",
+            password="123",
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 
     @patch.object(
@@ -52,12 +53,12 @@ class ConciliacaoAutomaticaTest(TestCase):
         )
 
         ano_ref = timezone.localdate().year - 1
-
         ParametroConciliacaoAnual.objects.create(
             ano_referencia=ano_ref,
             periodo_inicial=timezone.localdate() - timezone.timedelta(days=1),
             periodo_final=timezone.localdate() + timezone.timedelta(days=1),
             ativo=True,
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 
         processar_conciliacao_anual_automatica(self.usuario)

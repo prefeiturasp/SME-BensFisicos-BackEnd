@@ -292,7 +292,9 @@ def _criar_cabecalho_e_registro_cimbpm(movimentacao, data_aceite):
     return elements
 
 
-def _criar_linha_ua(label, sigla, nome, codigo, label_style, value_style):
+def _criar_linha_ua(
+    unidade_orcamentaria, label, sigla, nome, codigo, label_style, value_style
+):
     return [
         [
             Paragraph(f"<b>PREFIXO</b>", label_style),
@@ -301,7 +303,7 @@ def _criar_linha_ua(label, sigla, nome, codigo, label_style, value_style):
         ],
         [
             Paragraph(sigla.upper(), value_style),
-            Paragraph(nome.upper(), value_style),
+            Paragraph(f"{unidade_orcamentaria.upper()} / {nome.upper()}", value_style),
             Paragraph(codigo, value_style),
         ],
     ]
@@ -334,6 +336,7 @@ def _criar_informacoes_gerais(movimentacao):
 
     info_data.extend(
         _criar_linha_ua(
+            ua_origem.unidade_orcamentaria.nome,
             "UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA QUE ENTREGA",
             ua_origem.sigla,
             ua_origem.nome,
@@ -345,6 +348,7 @@ def _criar_informacoes_gerais(movimentacao):
 
     info_data.extend(
         _criar_linha_ua(
+            ua_destino.unidade_orcamentaria.nome,
             "UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA QUE RECEBE",
             ua_destino.sigla,
             ua_destino.nome,
