@@ -176,12 +176,10 @@ class UnidadeAdministrativaAdmin(ImportExportModelAdmin):
 
     class Media:
         js = ("admin/ua_codigo_prefixo.js",)
+        css = {"all": ("css/hide_crud_icons.css",)}
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-
-        if request.user.is_superuser:
-            return qs
 
         uo = getattr(request.user, "unidade_orcamentaria", None)
         if uo:
@@ -196,15 +194,12 @@ class UnidadeAdministrativaAdmin(ImportExportModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "unidade_orcamentaria":
 
-            if not request.user.is_superuser:
-                if request.user.unidade_orcamentaria_id:
-                    kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(
-                        pk=request.user.unidade_orcamentaria_id
-                    )
-                else:
-                    kwargs["queryset"] = UnidadeOrcamentaria.objects.none()
+            if request.user.unidade_orcamentaria_id:
+                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(
+                    pk=request.user.unidade_orcamentaria_id
+                )
             else:
-                kwargs["queryset"] = UnidadeOrcamentaria.objects.all()
+                kwargs["queryset"] = UnidadeOrcamentaria.objects.none()
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
@@ -237,13 +232,12 @@ class UnidadeAdministrativaAdmin(ImportExportModelAdmin):
                     {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
                 )
 
-            if not request.user.is_superuser:
-                if uo != request.user.unidade_orcamentaria:
-                    raise ValidationError(
-                        {
-                            "unidade_orcamentaria": "Você não pode cadastrar Unidade Administrativa em outra Unidade Orçamentária."
-                        }
-                    )
+            if uo != request.user.unidade_orcamentaria:
+                raise ValidationError(
+                    {
+                        "unidade_orcamentaria": "Você não pode cadastrar Unidade Administrativa em outra Unidade Orçamentária."
+                    }
+                )
 
             return cleaned_data
 
