@@ -188,6 +188,11 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.assertIn(self.mov2, qs)
         self.assertNotIn(self.mov3, qs)
 
+        qs = self._search(self.gestor_uo_a, "DRC")
+        self.assertIn(self.mov1, qs)
+        self.assertIn(self.mov2, qs)
+        self.assertNotIn(self.mov3, qs)
+
     def test_busca_por_unidade_orcamentaria(self):
         self._assert_search_contains(self.gestor_uo_b, "UO-200", self.mov3, self.mov1)
         self._assert_search_contains(self.gestor_uo_b, "UO Beta", self.mov3, self.mov1)
