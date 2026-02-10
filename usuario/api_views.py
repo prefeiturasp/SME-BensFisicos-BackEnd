@@ -20,8 +20,13 @@ from usuario.serializers import (
     PasswordChangeSerializer,
     FirstAccessPasswordChangeSerializer,
     UserProfileSerializer,
+    SelecionarUnidadeAdministrativaSerializer,
 )
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.db import transaction
+from django.contrib.contenttypes.models import ContentType
+from dados_comuns.models import HistoricoGeral
+from dados_comuns.utils import dict_changes
 
 
 def set_refresh_token_cookie(response, refresh_token):
@@ -411,3 +416,65 @@ class UserProfileAPIView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+@extend_schema(
+    summary="Selecionar UA ativa",
+    description="Define a Unidade Administrativa ativa do usuario autenticado. Envie unidade_administrativa_id=null para selecionar UO (todas as UAs).",  # noqa: E501
+    request=SelecionarUnidadeAdministrativaSerializer,
+    responses={
+        200: UserProfileSerializer,
+        400: OpenApiResponse(description="Dados invalidos"),
+        401: OpenApiResponse(description="Nao autenticado"),
+    },
+    tags=["Autenticação"],
+)
+class SelecionarUnidadeAdministrativaAPIView(generics.GenericAPIView):
+    serializer_class = SelecionarUnidadeAdministrativaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        original = Usuario.objects.get(pk=user.pk)
+
+        ua = serializer.validated_data.get("ua_obj")
+        uo = serializer.validated_data.get("uo_obj")
+
+        update_fields = []
+        if user.unidade_administrativa_id != (ua.id if ua else None):
+            user.unidade_administrativa = ua
+            update_fields.append("unidade_administrativa")
+
+        if uo and user.unidade_orcamentaria_id != uo.id:
+            user.unidade_orcamentaria = uo
+            update_fields.append("unidade_orcamentaria")
+
+        with transaction.atomic():
+            if update_fields:
+                user.save(update_fields=update_fields)
+
+            changes = dict_changes(
+                original,
+                user,
+                fields=["unidade_administrativa", "unidade_orcamentaria"],
+            )
+            if changes:
+                ct = ContentType.objects.get_for_model(Usuario)
+                HistoricoGeral.objects.bulk_create(
+                    [
+                        HistoricoGeral(
+                            content_type=ct,
+                            object_id=str(user.pk),
+                            campo=field,
+                            valor_antigo=old,
+                            valor_novo=new,
+                            alterado_por=user,
+                        )
+                        for field, (old, new) in changes.items()
+                    ]
+                )
+
+        return Response(UserProfileSerializer(user).data, status=status.HTTP_200_OK)

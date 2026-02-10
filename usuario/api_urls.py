@@ -9,6 +9,7 @@ from usuario.api_views import (
     PasswordChangeAPIView,
     FirstAccessPasswordChangeAPIView,
     UserProfileAPIView,
+    SelecionarUnidadeAdministrativaAPIView,
 )
 
 urlpatterns = [
@@ -17,6 +18,11 @@ urlpatterns = [
     path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path("token/verify/", CustomTokenVerifyView.as_view(), name="token_verify"),
     path("me/", UserProfileAPIView.as_view(), name="user_profile"),
+    path(
+        "me/selecionar-ua/",
+        SelecionarUnidadeAdministrativaAPIView.as_view(),
+        name="selecionar_ua",
+    ),
     path(
         "password-reset/",
         PasswordResetRequestAPIView.as_view(),
