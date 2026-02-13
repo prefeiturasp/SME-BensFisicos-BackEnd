@@ -1,7 +1,8 @@
 from io import BytesIO
 from decimal import Decimal
-from datetime import date
-from unittest.mock import patch
+from datetime import date, datetime
+from unittest.mock import patch, MagicMock
+import os
 
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -248,6 +249,95 @@ class TestHelpersRelatorioConciliacao(TestCase):
 
         self.assertEqual(formatar_status_para_header(Dummy()), "Fechado")
 
+    def test_formatar_moeda_brasileira_com_none(self):
+        from inventario.relatorio_conciliacao_pdf import formatar_moeda_brasileira
+
+        resultado = formatar_moeda_brasileira(None)
+        self.assertEqual(resultado, "R$ 0,00")
+
+    def test_formatar_moeda_brasileira_com_valor(self):
+        from inventario.relatorio_conciliacao_pdf import formatar_moeda_brasileira
+
+        resultado = formatar_moeda_brasileira(Decimal("1234.56"))
+        self.assertEqual(resultado, "R$ 1.234,56")
+
+    def test_obter_nome_usuario_com_none(self):
+        from inventario.relatorio_conciliacao_pdf import obter_nome_usuario
+
+        resultado = obter_nome_usuario(None)
+        self.assertEqual(resultado, "-")
+
+    def test_obter_nome_usuario_com_nome(self):
+        from inventario.relatorio_conciliacao_pdf import obter_nome_usuario
+
+        usuario = MagicMock()
+        usuario.nome = "João Silva"
+        usuario.username = "joao"
+
+        resultado = obter_nome_usuario(usuario)
+        self.assertEqual(resultado, "João Silva")
+
+    def test_obter_nome_usuario_sem_nome_usa_username(self):
+        from inventario.relatorio_conciliacao_pdf import obter_nome_usuario
+
+        usuario = MagicMock()
+        usuario.nome = None
+        usuario.username = "joao"
+
+        resultado = obter_nome_usuario(usuario)
+        self.assertEqual(resultado, "joao")
+
+    def test_fmt_date_com_none(self):
+        from inventario.relatorio_conciliacao_pdf import _fmt_date
+
+        resultado = _fmt_date(None)
+        self.assertEqual(resultado, "-")
+
+    def test_fmt_date_com_data(self):
+        from inventario.relatorio_conciliacao_pdf import _fmt_date
+
+        data = date(2025, 2, 13)
+        resultado = _fmt_date(data)
+        self.assertEqual(resultado, "13/02/2025")
+
+    def test_fmt_date_com_string(self):
+        from inventario.relatorio_conciliacao_pdf import _fmt_date
+
+        resultado = _fmt_date("2025-02-13")
+        self.assertEqual(resultado, "2025-02-13")
+
+    def test_fmt_date_com_excecao(self):
+        from inventario.relatorio_conciliacao_pdf import _fmt_date
+
+        class ObjetoComExcecao:
+            def strftime(self, fmt):
+                raise Exception("Erro")
+
+        obj = ObjetoComExcecao()
+        resultado = _fmt_date(obj)
+        self.assertEqual(resultado, str(obj))
+
+    def test_quebrar_texto_longo_com_none(self):
+        from inventario.relatorio_conciliacao_pdf import _quebrar_texto_longo
+
+        resultado = _quebrar_texto_longo(None)
+        self.assertEqual(resultado, "-")
+
+    def test_quebrar_texto_longo_com_texto_curto(self):
+        from inventario.relatorio_conciliacao_pdf import _quebrar_texto_longo
+
+        texto = "Texto curto"
+        resultado = _quebrar_texto_longo(texto)
+        self.assertEqual(resultado, "Texto curto")
+
+    def test_quebrar_texto_longo_com_texto_longo(self):
+        from inventario.relatorio_conciliacao_pdf import _quebrar_texto_longo
+
+        texto = "A" * 200
+        resultado = _quebrar_texto_longo(texto, max_chars=180)
+        self.assertEqual(len(resultado), 183)  # 180 + "..."
+        self.assertTrue(resultado.endswith("..."))
+
 
 class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
     def setUp(self):
@@ -304,3 +394,162 @@ class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
             )
 
         self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_gerar_pdf_conciliacao_com_data_geracao(self):
+        from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
+
+        data_geracao = timezone.now()
+        buf = gerar_pdf_conciliacao(
+            self.conciliacao,
+            usuario_gerador=self.operador_a,
+            data_geracao=data_geracao,
+        )
+
+        self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_gerar_pdf_conciliacao_sem_usuario_gerador(self):
+        from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
+
+        buf = gerar_pdf_conciliacao(self.conciliacao, usuario_gerador=None)
+        self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_gerar_pdf_conciliacao_com_data_naive(self):
+        from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
+
+        data_naive = datetime(2025, 2, 13, 10, 30)
+        buf = gerar_pdf_conciliacao(
+            self.conciliacao,
+            usuario_gerador=self.operador_a,
+            data_geracao=data_naive,
+        )
+
+        self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_gerar_pdf_conciliacao_sem_itens(self):
+        from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
+
+        conciliacao_vazia = self.criar_conciliacao_eventual(ua=self.ua_a)
+        buf = gerar_pdf_conciliacao(
+            conciliacao_vazia, usuario_gerador=self.operador_a
+        )
+
+        raw = buf.getvalue()
+        self.assertTrue(raw.startswith(b"%PDF"))
+        # Verifica que contém a mensagem de nenhum item
+        self.assertIn(b"Nenhum item encontrado", raw)
+
+    def test_gerar_pdf_conciliacao_com_item_sem_ocorrencia_outra_situacao(self):
+        from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
+
+        conciliacao = self.criar_conciliacao_eventual(ua=self.ua_a)
+        bem = self.criar_bem(ua=self.ua_a, numero_patrimonial="001.000000003-3")
+
+        ItemConciliacao.objects.create(
+            conciliacao=conciliacao,
+            bem=bem,
+            situacao=constants.NAO_ENCONTRADO,
+            observacao="",
+            divergencia="",
+            atualizado_por=self.operador_a,
+        )
+
+        buf = gerar_pdf_conciliacao(conciliacao, usuario_gerador=self.operador_a)
+        self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_gerar_pdf_conciliacao_com_multiplas_paginas(self):
+        from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
+
+        conciliacao = self.criar_conciliacao_eventual(ua=self.ua_a)
+
+        # Cria muitos itens para forçar múltiplas páginas
+        for i in range(50):
+            bem = self.criar_bem(
+                ua=self.ua_a, numero_patrimonial=f"001.000000{i:03d}-{i}"
+            )
+            ItemConciliacao.objects.create(
+                conciliacao=conciliacao,
+                bem=bem,
+                situacao=constants.ENCONTRADO_SEM_DIVERGENCIA,
+                observacao="",
+                divergencia="",
+                atualizado_por=self.operador_a,
+            )
+
+        buf = gerar_pdf_conciliacao(conciliacao, usuario_gerador=self.operador_a)
+        raw = buf.getvalue()
+
+        self.assertTrue(raw.startswith(b"%PDF"))
+        # Verifica que tem numeração de páginas (indicando múltiplas páginas)
+        self.assertGreater(len(raw), 5000)
+
+    def test_criar_info_geracao_sem_usuario(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_info_geracao
+
+        elements = _criar_info_geracao(usuario_gerador=None)
+        self.assertGreater(len(elements), 0)
+
+    def test_criar_info_geracao_com_data_geracao(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_info_geracao
+
+        data_geracao = timezone.now()
+        elements = _criar_info_geracao(
+            usuario_gerador=self.operador_a, data_geracao=data_geracao
+        )
+        self.assertGreater(len(elements), 0)
+
+    def test_criar_rodape_conciliacao_com_fechado_por(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_rodape_conciliacao
+
+        conciliacao = self.criar_conciliacao_eventual(
+            ua=self.ua_a,
+            status=constants.CONCILIACAO_FECHADO,
+            fechado_por=self.gestor,
+        )
+
+        elements = _criar_rodape_conciliacao(conciliacao, usuario_gerador=self.operador_a)
+        self.assertGreater(len(elements), 0)
+
+    def test_criar_rodape_conciliacao_sem_fechado_por(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_rodape_conciliacao
+
+        conciliacao = self.criar_conciliacao_eventual(
+            ua=self.ua_a, status=constants.CONCILIACAO_FECHADO, fechado_por=None
+        )
+
+        elements = _criar_rodape_conciliacao(conciliacao, usuario_gerador=self.operador_a)
+        self.assertGreater(len(elements), 0)
+
+    def test_criar_rodape_conciliacao_sem_usuario_gerador(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_rodape_conciliacao
+
+        elements = _criar_rodape_conciliacao(
+            self.conciliacao, usuario_gerador=None
+        )
+        self.assertGreater(len(elements), 0)
+
+    def test_carregar_logo_com_fallback(self):
+        from inventario.relatorio_conciliacao_pdf import _carregar_logo
+        from reportlab.lib.styles import getSampleStyleSheet
+        from django.conf import settings
+
+        styles = getSampleStyleSheet()
+
+        with patch("inventario.relatorio_conciliacao_pdf.settings") as mock_settings:
+            mock_settings.STATIC_ROOT = None
+            mock_settings.STATICFILES_DIRS = []
+            resultado = _carregar_logo(styles)
+            # Deve retornar o fallback (Paragraph com PMSP)
+            self.assertIsNotNone(resultado)
+
+    def test_carregar_logo_com_logo_inexistente(self):
+        from inventario.relatorio_conciliacao_pdf import _carregar_logo
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        styles = getSampleStyleSheet()
+
+        with patch("inventario.relatorio_conciliacao_pdf.os.path.exists", return_value=False):
+            with patch("inventario.relatorio_conciliacao_pdf.settings") as mock_settings:
+                mock_settings.STATIC_ROOT = "/fake/path"
+                resultado = _carregar_logo(styles)
+                # Deve retornar o fallback quando logo não existe
+                self.assertIsNotNone(resultado)
