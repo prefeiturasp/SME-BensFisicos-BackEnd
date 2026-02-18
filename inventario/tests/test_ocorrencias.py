@@ -2,6 +2,7 @@ import datetime
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group
+from django.utils import timezone as django_timezone
 from uuid import uuid4
 
 from bem_patrimonial.models import BemPatrimonial
@@ -70,7 +71,7 @@ class OcorrenciaBaseTest(TestCase):
             ConciliacaoUA.objects.filter(pk=inv.pk).update(
                 status=constants.CONCILIACAO_FECHADO,
                 fechado_por=self.usuario,
-                fechado_em=datetime.datetime.now(),
+                fechado_em=django_timezone.now(),
             )
             inv.refresh_from_db()
 
@@ -520,7 +521,7 @@ class FluxoCompletoTest(OcorrenciaBaseTest):
         ConciliacaoUA.objects.filter(pk=inv_2024.pk).update(
             status=constants.CONCILIACAO_FECHADO,
             fechado_por=self.usuario,
-            fechado_em=datetime.datetime.now(),
+            fechado_em=django_timezone.now(),
         )
 
         # Inventário 2025 - herda NAO_ENCONTRADO, operador encontra
@@ -537,7 +538,7 @@ class FluxoCompletoTest(OcorrenciaBaseTest):
         ConciliacaoUA.objects.filter(pk=inv_2025.pk).update(
             status=constants.CONCILIACAO_FECHADO,
             fechado_por=self.usuario,
-            fechado_em=datetime.datetime.now(),
+            fechado_em=django_timezone.now(),
         )
 
         bem.refresh_from_db()
