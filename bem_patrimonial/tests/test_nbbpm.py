@@ -242,3 +242,20 @@ class TestGeracaoPDFNBBPM(NBBPMTestBase):
         self.assertIn("attachment", resp["Content-Disposition"])
 
         self.assertIn(f"NBBPM_{baixa.numero_nbbpm}.pdf", resp["Content-Disposition"])
+
+    def test_objeto_invalido_gera_validationerror(self):
+        """Testa cobertura da linha 89 - objeto inválido para gerar_pdf_nbbpm"""
+        with self.assertRaises(ValidationError) as context:
+            gerar_pdf_nbbpm(object())
+        
+        self.assertIn("Objeto inválido para gerar NBBPM", str(context.exception))
+
+    def test_pdf_com_baixa_sem_aprovador(self):
+        """Testa cobertura da linha 577 - baixa aceita mas sem aprovado_por"""
+        baixa = self.criar_baixa(status=constants.ACEITA, aprovado_por=None)
+        bem = self.criar_bem()
+        self.vincular_bem_na_baixa(baixa, bem)
+
+        buffer = gerar_pdf_nbbpm(baixa, usuario_gerador=self.operador)
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+        self.assertGreater(len(buffer.getvalue()), 1000)
