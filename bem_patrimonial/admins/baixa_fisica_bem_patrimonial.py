@@ -17,6 +17,12 @@ from bem_patrimonial.emails import (
 )
 from bem_patrimonial import constants
 from bem_patrimonial.nbbpm import http_response_nbbpm
+from dados_comuns.escopo import (
+    filtrar_queryset_por_escopo,
+    filtrar_ua_origem_por_escopo,
+    usuario_e_super_admin,
+)
+from dados_comuns.models import UnidadeAdministrativa
 
 
 class BaixaFisicaBensItemInlineFormSet(BaseInlineFormSet):
@@ -50,6 +56,75 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
     extra = 0
     autocomplete_fields = ("bem",)
     formset = BaixaFisicaBensItemInlineFormSet
+
+    def get_form(self, request, obj=None, **kwargs):
+        Form = super().get_form(request, obj, **kwargs)
+
+        class ScopedForm(Form):
+            def __init__(self_inner, *a, **kw):
+                super().__init__(*a, **kw)
+
+                if "unidade_administrativa_origem" in self_inner.fields:
+                    fld = self_inner.fields["unidade_administrativa_origem"]
+
+                    base_qs = UnidadeAdministrativa.objects.filter(
+                        status=UnidadeAdministrativa.ATIVA
+                    )
+
+                    fld.queryset = filtrar_ua_origem_por_escopo(request.user, base_qs)
+
+                    ua_user = getattr(request.user, "unidade_administrativa", None)
+                    if (
+                        ua_user
+                        and ua_user.is_ativa
+                        and not usuario_e_super_admin(request.user)
+                    ):
+                        fld.initial = ua_user.pk
+                        fld.disabled = True
+
+            def clean(self_inner):
+                cleaned = super().clean()
+                ua_origem = cleaned.get("unidade_administrativa_origem")
+
+                ua_user = getattr(request.user, "unidade_administrativa", None)
+                if (
+                    ua_user
+                    and ua_user.is_ativa
+                    and not usuario_e_super_admin(request.user)
+                ):
+                    cleaned["unidade_administrativa_origem"] = ua_user
+                    ua_origem = ua_user
+
+                if not ua_origem:
+                    raise ValidationError(
+                        {
+                            "unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."
+                        }
+                    )
+
+                if ua_origem.status != UnidadeAdministrativa.ATIVA:
+                    raise ValidationError(
+                        {
+                            "unidade_administrativa_origem": "A unidade de origem está inativa."
+                        }
+                    )
+
+                allowed = filtrar_ua_origem_por_escopo(
+                    request.user,
+                    UnidadeAdministrativa.objects.filter(
+                        status=UnidadeAdministrativa.ATIVA
+                    ),
+                )
+                if not allowed.filter(pk=ua_origem.pk).exists():
+                    raise ValidationError(
+                        {
+                            "unidade_administrativa_origem": "Você não tem permissão para usar esta Unidade Administrativa como origem."
+                        }
+                    )
+
+                return cleaned
+
+        return ScopedForm
 
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
@@ -218,17 +293,17 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         return False
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        user = request.user
+        qs = (
+            super()
+            .get_queryset(request)
+            .select_related("unidade_administrativa_origem", "criado_por")
+        )
 
-        ua = getattr(user, "unidade_administrativa", None)
-        if ua:
-            return qs.filter(unidade_administrativa_origem=ua)
-
-        if user.is_gestor_patrimonio or user.is_superuser:
-            return qs
-
-        return qs.none()
+        return filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=qs,
+            campo_ua="unidade_administrativa_origem",
+        )
 
     def changelist_view(self, request, extra_context=None):
         user = request.user
@@ -249,7 +324,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
 
         actions.pop("delete_selected", None)
 
-        if not request.user.is_gestor_patrimonio:
+        if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
             actions.pop("acao_aprovar_baixa", None)
             actions.pop("acao_cancelar_baixa", None)
 
@@ -297,7 +372,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     acao_enviar_baixa.short_description = "Solicitar Baixa Física selecionadas"
 
     def acao_aprovar_baixa(self, request, queryset):
-        if not request.user.is_gestor_patrimonio:
+        if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
             self.message_user(
                 request,
                 "Apenas Gestor de Patrimônio pode aprovar Baixa Física.",
@@ -347,7 +422,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     acao_aprovar_baixa.short_description = "Aprovar Baixa Física selecionadas"
 
     def acao_cancelar_baixa(self, request, queryset):
-        if not request.user.is_gestor_patrimonio:
+        if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
             self.message_user(
                 request,
                 "Apenas Gestor de Patrimônio pode recusar Baixa Física.",

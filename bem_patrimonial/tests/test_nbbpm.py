@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
@@ -32,12 +33,11 @@ class NBBPMTestBase(TestCase):
         self.grupo_operador, _ = Group.objects.get_or_create(
             name=GRUPO_OPERADOR_INVENTARIO
         )
-
-        self.ua_origem = UnidadeAdministrativa.objects.create(
+        self.ua_origem = criar_ua(
             codigo="01.16.10.287",
             sigla="UATEST",
             nome="Unidade Administrativa Teste",
-            status=UnidadeAdministrativa.ATIVA,
+            status=UnidadeAdministrativa.ATIVA
         )
 
         self.operador = Usuario.objects.create_user(
@@ -47,6 +47,7 @@ class NBBPMTestBase(TestCase):
             email="operador@exemplo.com",
             password="senha123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
 
@@ -57,6 +58,7 @@ class NBBPMTestBase(TestCase):
             email="gestor@exemplo.com",
             password="senha123",
             unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.gestor.groups.add(self.grupo_gestor)
 

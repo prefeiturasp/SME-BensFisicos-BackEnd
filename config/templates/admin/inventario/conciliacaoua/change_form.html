@@ -2,16 +2,37 @@
 {% load i18n admin_urls %}
 
 {% block object-tools-items %}
-	{{ block.super }}
-	{% if original %}
-		<li>
-			<a
-				href="{% url 'download_conciliacao_pdf' original.pk %}"
-				class="button"
-				style="background: #0b5ed7; border-color: #0b5ed7; color: #fff;"
-			>
-				Exportar Conciliação
-			</a>
-		</li>
-	{% endif %}
+  {{ block.super }}
+  {% if original %}
+
+    {% if original.esta_aberto %}
+      <li>
+        <form id="finalizar-conciliacao-form" method="post"
+              action="{% url 'admin:inventario_conciliacaoua_finalizar' original.pk %}"
+              style="display:none;">
+          {% csrf_token %}
+        </form>
+
+        <a
+          href="#"
+          class="button"
+          style="background:#ba2121; border-color:#ba2121; color:#fff;"
+          onclick="if (confirm('Esta ação é irreversível. Deseja finalizar a conciliação agora?')) { document.getElementById('finalizar-conciliacao-form').submit(); } return false;"
+        >
+          Finalizar Conciliação
+        </a>
+      </li>
+    {% endif %}
+
+    <li>
+      <a
+        href="{% url 'download_conciliacao_pdf' original.pk %}"
+        class="button"
+        style="background:#0b5ed7; border-color:#0b5ed7; color:#fff;"
+      >
+        Exportar Conciliação
+      </a>
+    </li>
+
+  {% endif %}
 {% endblock %}

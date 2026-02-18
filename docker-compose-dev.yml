@@ -35,7 +35,7 @@ services:
       dockerfile: Dockerfile.dev
     container_name: sme_bens_fisicos_web
     command: >
-      python -m debugpy --wait-for-client --listen 0.0.0.0:5678
+      python -Xfrozen_modules=off -m debugpy --wait-for-client --listen 0.0.0.0:5678
       manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/code

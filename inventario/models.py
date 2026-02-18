@@ -4,14 +4,20 @@ from django.db.models import Q
 from django.utils import timezone
 from datetime import date
 
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.models import Usuario
 
 from . import constants
 
 
 class ParametroConciliacaoAnual(models.Model):
-
+    unidade_orcamentaria = models.ForeignKey(
+        UnidadeOrcamentaria,
+        on_delete=models.PROTECT,
+        related_name="parametros_conciliacao_anual",
+        verbose_name="Unidade Orçamentária",
+    )
+    
     ano_referencia = models.PositiveSmallIntegerField(
         "Ano de Referência",
         help_text="Ano da conciliação anual ao qual este parâmetro se refere (ex.: 2025).",
@@ -38,9 +44,9 @@ class ParametroConciliacaoAnual(models.Model):
         verbose_name_plural = "Parâmetros de Conciliação Anual"
         constraints = [
             models.UniqueConstraint(
-                fields=["ano_referencia"],
+                fields=["unidade_orcamentaria", "ano_referencia"],
                 condition=Q(ativo=True),
-                name="unique_parametro_conciliacao_anual_ativo_por_ano",
+                name="unique_parametro_conciliacao_anual_ativo_por_uo_ano",
             )
         ]
         ordering = ["-ano_referencia", "-periodo_inicial"]
@@ -205,12 +211,10 @@ class ConciliacaoUA(models.Model):
 
         return qs.count() + 1
 
-
-
     def _validar_unicidade_conciliacao_anual(self):
         if self.tipo != constants.CONCILIACAO_ANUAL:
             return
-        
+
         if not self.unidade_administrativa_id:
             return
 
@@ -239,13 +243,22 @@ class ConciliacaoUA(models.Model):
         if self.tipo != constants.CONCILIACAO_ANUAL:
             return
 
+        if self.pk:
+            return
+
         hoje = timezone.localdate()
         ano_referencia = self._get_ano_referencia()
         ano_corrente = hoje.year
 
         from .models import ParametroConciliacaoAnual
 
+        uo_id = getattr(self.unidade_administrativa, "unidade_orcamentaria_id", None)
+        if not uo_id:
+            raise ValidationError(
+                {"unidade_administrativa": "UA sem Unidade Orçamentária vinculada."}
+            )
         parametro = ParametroConciliacaoAnual.objects.filter(
+            unidade_orcamentaria_id=uo_id,
             ano_referencia=ano_referencia,
             ativo=True,
         ).first()
@@ -259,7 +272,7 @@ class ConciliacaoUA(models.Model):
 
         if not (data_inicio <= hoje <= data_fim):
             raise ValidationError(
-                f"A conciliação anual {ano_referencia} só pode ser criada ou fechada entre "
+                f"A conciliação anual {ano_referencia} só pode ser criada entre "
                 f"{data_inicio:%d/%m/%Y} e {data_fim:%d/%m/%Y}."
             )
 
@@ -304,8 +317,6 @@ class ConciliacaoUA(models.Model):
     def finalizar(self, usuario):
         if self.status == constants.CONCILIACAO_FECHADO:
             return
-
-        self._validar_parametro_anual_por_data_atual()
 
         self.status = constants.CONCILIACAO_FECHADO
         self.fechado_por = usuario

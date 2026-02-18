@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.contrib.admin.sites import AdminSite
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.admin import UnidadeAdministrativaAdmin
+from dados_comuns.tests.factories import criar_ua, criar_uo
 
 
 class SetupData:
@@ -12,9 +13,11 @@ class SetupData:
             "sigla": "COTIC",
             "nome": "Centro de tecnologia",
         }
-        UnidadeAdministrativa.objects.create(**obj)
+        criar_ua(**obj)
 
     def create_multiple_instances(self):
+        uo = criar_uo(codigo="100", nome="UO 100")  # ou sem params
+
         instances = [
             {
                 "codigo": "100",
@@ -38,8 +41,8 @@ class SetupData:
                 "nome": "Diretoria Regional de Educação Capela do Socorro",
             },
         ]
-        for obj in instances:
-            UnidadeAdministrativa.objects.create(**obj)
+
+        return [criar_ua(uo=uo, **obj) for obj in instances]
 
 
 class UnidadeAdministrativaTestCase(TestCase):
@@ -104,24 +107,31 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
 
     def setUp(self):
         setup = SetupData()
-        setup.create_multiple_instances()
+        uas = setup.create_multiple_instances()
         self.site = AdminSite()
         self.admin = UnidadeAdministrativaAdmin(UnidadeAdministrativa, self.site)
+        self.ua = uas[0] if uas else criar_ua()
 
     def test_list_display_fields(self):
-        expected_fields = ("codigo", "sigla", "nome", "status")
+        expected_fields = ("codigo", "sigla", "nome", "unidade_orcamentaria", "status")
         self.assertEqual(self.admin.list_display, expected_fields)
 
     def test_search_fields_order(self):
-        expected_fields = ("sigla", "nome", "codigo")
+        expected_fields = (
+            "sigla",
+            "nome",
+            "codigo",
+            "unidade_orcamentaria__codigo",
+            "unidade_orcamentaria__nome",
+        )
         self.assertEqual(self.admin.search_fields, expected_fields)
 
     def test_search_help_text(self):
-        expected_text = "Pesquise por sigla, nome ou código."
+        expected_text = "Pesquise por sigla, nome, código ou Unidade Orçamentária."
         self.assertEqual(self.admin.search_help_text, expected_text)
 
     def test_admin_ordering(self):
-        expected_ordering = ("codigo", "sigla", "nome")
+        expected_ordering = ("unidade_orcamentaria__codigo", "codigo", "sigla", "nome")
         self.assertEqual(self.admin.ordering, expected_ordering)
 
     def test_admin_queryset_ordering(self):
@@ -130,11 +140,17 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
 
         factory = RequestFactory()
         request = factory.get("/admin/dados_comuns/unidadeadministrativa/")
-        request.user = Usuario()
+
+        request.user = Usuario.objects.create_superuser(
+            username="admin",
+            email="admin@test.com",
+            password="123",
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
+        )
 
         queryset = self.admin.get_queryset(request)
         unidades_list = list(queryset)
-
+        
         self.assertGreater(len(unidades_list), 0)
         self.assertEqual(unidades_list[0].codigo, "050")
         self.assertEqual(unidades_list[-1].codigo, "200")

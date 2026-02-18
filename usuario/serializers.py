@@ -106,6 +106,41 @@ class PasswordChangeSerializer(serializers.Serializer):
         return user
 
 
+class FirstAccessPasswordChangeSerializer(serializers.Serializer):
+
+    new_password = serializers.CharField(
+        write_only=True, required=True, validators=[validate_password]
+    )
+    new_password_confirm = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+
+        if not getattr(user, "must_change_password", False):
+            raise serializers.ValidationError(
+                {"detail": "Usuário não está marcado para troca obrigatória de senha."}
+            )
+
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password_confirm": "As senhas não conferem."}
+            )
+
+        return attrs
+
+    def save(self):
+        from django.utils import timezone
+
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.must_change_password = False
+        user.last_password_change = timezone.now()
+        user.save(
+            update_fields=["password", "must_change_password", "last_password_change"]
+        )
+        return user
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     is_gestor_patrimonio = serializers.BooleanField(read_only=True)
     is_operador_inventario = serializers.BooleanField(read_only=True)

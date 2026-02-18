@@ -7,6 +7,7 @@ from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.admin import UnidadeAdministrativaAdmin
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -14,19 +15,22 @@ from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 class UnidadeAdministrativaAutocompleteTestCase(TestCase):
 
     def setUp(self):
-        self.ua1_ativa = UnidadeAdministrativa.objects.create(
+
+        self.ua1_ativa = criar_ua(
             codigo="001",
             nome="DRE Centro",
             sigla="DRC",
             status=UnidadeAdministrativa.ATIVA,
         )
-        self.ua2_ativa = UnidadeAdministrativa.objects.create(
+        self.ua2_ativa = criar_ua(
+            uo=self.ua1_ativa.unidade_orcamentaria,
             codigo="002",
             nome="DRE Sul",
             sigla="DRS",
             status=UnidadeAdministrativa.ATIVA,
         )
-        self.ua3_inativa = UnidadeAdministrativa.objects.create(
+        self.ua3_inativa = criar_ua(
+            uo=self.ua1_ativa.unidade_orcamentaria,
             codigo="003",
             nome="DRE Norte",
             sigla="DRN",
@@ -43,6 +47,7 @@ class UnidadeAdministrativaAutocompleteTestCase(TestCase):
             email="gestor_sem_ua@test.com",
             password="test123",
             is_staff=True,
+            unidade_orcamentaria=self.ua1_ativa.unidade_orcamentaria,
         )
         self.gestor_sem_ua.groups.add(self.grupo_gestor)
 
@@ -52,6 +57,7 @@ class UnidadeAdministrativaAutocompleteTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1_ativa,
+            unidade_orcamentaria=self.ua1_ativa.unidade_orcamentaria,
         )
         self.operador_com_ua1.groups.add(self.grupo_operador)
 

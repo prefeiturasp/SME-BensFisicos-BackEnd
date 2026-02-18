@@ -3,6 +3,7 @@ from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.admin import CustomUserModelAdmin
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
@@ -15,13 +16,14 @@ from bem_patrimonial.constants import APROVADO
 class GestorComUATestCase(TestCase):
 
     def setUp(self):
-        self.ua1 = UnidadeAdministrativa.objects.create(
-            codigo="001",
-            nome="DRE Centro",
-            sigla="DRC",
+        self.ua1 = criar_ua(
+            codigo="002",
+            nome="DRE Sul",
+            sigla="DRS",
             status=UnidadeAdministrativa.ATIVA,
         )
-        self.ua2 = UnidadeAdministrativa.objects.create(
+        self.ua2 = criar_ua(
+            uo=self.ua1.unidade_orcamentaria,
             codigo="002",
             nome="DRE Sul",
             sigla="DRS",
@@ -38,6 +40,7 @@ class GestorComUATestCase(TestCase):
             email="gestor_sem_ua@test.com",
             password="test123",
             is_staff=True,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.gestor_sem_ua.groups.add(self.grupo_gestor)
 
@@ -47,6 +50,7 @@ class GestorComUATestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.gestor_com_ua.groups.add(self.grupo_gestor)
 
@@ -56,6 +60,7 @@ class GestorComUATestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua2,
+            unidade_orcamentaria=self.ua2.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
 
@@ -131,17 +136,22 @@ class GestorComUATestCase(TestCase):
 
     def test_operador_sem_ua_nao_valida(self):
         admin_usuario = CustomUserModelAdmin(Usuario, self.site)
-        form_class = admin_usuario.get_form(self.factory.get("/admin/"), obj=None)
+
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.gestor_sem_ua  # pode ser superuser também
+
+        form_class = admin_usuario.get_form(request, obj=None)
 
         form = form_class(
-            {
+            data={
                 "username": "novo_operador",
-                "password1": "senha123",
-                "password2": "senha123",
+                "password1": "Teste@12345!x",
+                "password2": "Teste@12345!x",
                 "nome": "Novo Operador",
                 "email": "novo@test.com",
                 "is_staff": True,
                 "groups": [self.grupo_operador.id],
+                "unidade_orcamentaria": self.ua1.unidade_orcamentaria_id,
             }
         )
 
@@ -163,13 +173,14 @@ class GestorComUATestCase(TestCase):
 class GestorMaisOperadorComUATestCase(TestCase):
 
     def setUp(self):
-        self.ua1 = UnidadeAdministrativa.objects.create(
+        self.ua1 = criar_ua(
             codigo="001",
             nome="DRE Centro",
             sigla="DRC",
             status=UnidadeAdministrativa.ATIVA,
         )
-        self.ua2 = UnidadeAdministrativa.objects.create(
+        self.ua2 = criar_ua(
+            uo=self.ua1.unidade_orcamentaria,
             codigo="002",
             nome="DRE Sul",
             sigla="DRS",
@@ -187,6 +198,7 @@ class GestorMaisOperadorComUATestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1,
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.gestor_operador.groups.add(self.grupo_gestor, self.grupo_operador)
 

@@ -22,6 +22,7 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     rejeitar_solicitacao,
 )
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 from django.contrib.auth.models import Group
@@ -29,11 +30,9 @@ from django.contrib.auth.models import Group
 
 class SetupMovimentacaoData:
     def create_unidades_administrativas(self):
-        ua_origem = UnidadeAdministrativa.objects.create(
-            nome="DRE Centro", codigo="DRE-CENTRO"
-        )
-        ua_destino = UnidadeAdministrativa.objects.create(
-            nome="DRE Sul", codigo="DRE-SUL"
+        ua_origem = criar_ua()
+        ua_destino = criar_ua(
+            uo=ua_origem.unidade_orcamentaria, nome="DRE Sul", codigo="DRE-SUL"
         )
         return ua_origem, ua_destino
 
@@ -45,6 +44,7 @@ class SetupMovimentacaoData:
             username="operador_origem",
             email="operador.origem@test.com",
             password="test123",
+            unidade_orcamentaria=ua_origem.unidade_orcamentaria,
             unidade_administrativa=ua_origem,
         )
         operador_origem.groups.add(grupo_operador)
@@ -54,6 +54,8 @@ class SetupMovimentacaoData:
             email="operador.destino@test.com",
             password="test123",
             unidade_administrativa=ua_destino,
+            unidade_orcamentaria=ua_destino.unidade_orcamentaria,
+
         )
         operador_destino.groups.add(grupo_operador)
 
@@ -64,6 +66,7 @@ class SetupMovimentacaoData:
             is_staff=True,
             is_superuser=True,
             unidade_administrativa=ua_origem,
+            unidade_orcamentaria=ua_origem.unidade_orcamentaria,
         )
         gestor.groups.add(grupo_gestor)
 
@@ -117,7 +120,7 @@ class SetupMovimentacaoData:
         Isso garante que as regras que usam mov.itens funcionem.
         """
         mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=bem,  
+            bem_patrimonial=bem,
             unidade_administrativa_origem=ua_origem,
             unidade_administrativa_destino=ua_destino,
             solicitado_por=solicitado_por,
@@ -524,7 +527,6 @@ class IntegracaoCompletaTestCase(TestCase):
         mov1.aprovar_solicitacao(self.operador_destino)
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.unidade_administrativa, self.ua_destino)
-
 
         mov2 = self.setup.create_movimentacao_com_item(
             bem=self.bem,

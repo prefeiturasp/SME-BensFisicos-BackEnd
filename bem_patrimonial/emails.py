@@ -1,5 +1,6 @@
 import pytz
 from django.conf import settings
+from django.utils import timezone
 from config.utils import email_utils
 from usuario.models import Usuario
 
@@ -75,7 +76,7 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
         "subject": subject,
         "title": "Olá!",
         "subtitle": (
-            f"A Unidade Administrativa {ua_info} recebeu a movimentação dos seguintes bens patrimoniais para aceite:\n\n"
+            f"A Unidade Administrativa {ua_info} recebeu a movimentação dos seguintes bens patrimoniais para aceite:\n\n"  # noqa: E501
             f"{lista_bens_formatada}\n\n"
             f"Acesse {settings.ADMIN_URL} para concluir a movimentação."
         ),
@@ -135,6 +136,101 @@ def envia_email_solicitacao_movimentacao_cancelada(
     email_utils.send_email_ctrl(subject, dict, "simple_message.html", emails)
 
 
+def envia_email_movimentacoes_pendentes_aceite(
+    unidade_destino,
+    movimentacoes,
+    emails,
+    dias_minimo=7,
+    dias_urgente=30,
+    max_movimentacoes=5,
+    max_bens_por_mov=3,
+):
+    if not emails or not movimentacoes:
+        return
+
+    ua_info = (
+        f"{unidade_destino.codigo} – {unidade_destino.nome}"
+        if getattr(unidade_destino, "codigo", None)
+        else unidade_destino.nome
+    )
+
+    hoje = timezone.localdate()
+    movimentacoes_info = []
+    total_movimentacoes = len(movimentacoes)
+    exibidas = movimentacoes[:max_movimentacoes]
+
+    for mov in exibidas:
+        data_envio = timezone.localdate(mov.criado_em)
+        dias_pendentes = (hoje - data_envio).days
+        itens_qs = mov.itens.select_related("bem").all()
+        total_itens = itens_qs.count()
+        itens = itens_qs[:max_bens_por_mov]
+
+        bens_info = []
+        for item in itens:
+            bem = item.bem
+            if not bem:
+                continue
+            identificador = (
+                f"{bem.numero_patrimonial} – {bem.nome}"
+                if bem.numero_patrimonial
+                else bem.nome
+            )
+            bens_info.append(identificador)
+
+        if not bens_info and mov.bem_patrimonial:
+            bem = mov.bem_patrimonial
+            identificador = (
+                f"{bem.numero_patrimonial} – {bem.nome}"
+                if bem.numero_patrimonial
+                else bem.nome
+            )
+            bens_info.append(identificador)
+
+        bens_excedentes = 0
+        if total_itens > max_bens_por_mov:
+            bens_excedentes = total_itens - max_bens_por_mov
+
+        movimentacoes_info.append(
+            {
+                "id": mov.pk,
+                "ua_origem": str(mov.unidade_administrativa_origem),
+                "data_envio": data_envio.strftime("%d/%m/%Y"),
+                "dias_pendentes": dias_pendentes,
+                "urgente": dias_pendentes > dias_urgente,
+                "bens": bens_info,
+                "bens_excedentes": bens_excedentes,
+            }
+        )
+
+    total_urgentes = sum(1 for mov in movimentacoes_info if mov["urgente"])
+    pendentes_url = (
+        f"{settings.ADMIN_URL}/bem_patrimonial/movimentacaobempatrimonial/?atrasada=1"
+    )
+
+    subject = "[Bens Físicos] Movimentações pendentes de aceite"
+    dict_params = {
+        "subject": subject,
+        "title": "Movimentações pendentes de aceite",
+        "ua_info": ua_info,
+        "dias_minimo": dias_minimo,
+        "dias_urgente": dias_urgente,
+        "total": total_movimentacoes,
+        "exibidas": len(movimentacoes_info),
+        "mov_excedentes": max(0, total_movimentacoes - len(movimentacoes_info)),
+        "total_urgentes": total_urgentes,
+        "movimentacoes": movimentacoes_info,
+        "pendentes_url": pendentes_url,
+    }
+
+    email_utils.send_email_ctrl(
+        subject,
+        dict_params,
+        "movimentacoes_pendentes_aceite_email.html",
+        emails,
+    )
+
+
 def _formata_lista_bens_baixa(baixa_fisica):
     """
     Monta uma lista de identificação dos bens associados à baixa física,
@@ -169,7 +265,7 @@ def envia_email_baixa_fisica_solicitada(baixa_fisica):
     # gestores da UA de origem
     gestores = Usuario.objects.filter(
         is_active=True,
-        unidade_administrativa=baixa_fisica.unidade_administrativa_origem
+        unidade_administrativa=baixa_fisica.unidade_administrativa_origem,
     ).only("email")
 
     emails = [u.email for u in gestores if u.email]

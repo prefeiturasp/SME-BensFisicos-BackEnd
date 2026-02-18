@@ -5,9 +5,15 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.contrib.admin import SimpleListFilter
-from django.db.models.functions import ExtractYear
-from django.utils.timezone import localdate
+from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 
+from django import forms
+
+from dados_comuns.escopo import (
+    filtrar_queryset_por_escopo,
+    resolver_ids_escopo,
+    usuario_e_super_admin,
+)
 from inventario.utils_conciliacao.conciliacao_utils import (
     criar_itens_conciliacao,
     finalizar_conciliacao,
@@ -41,16 +47,134 @@ class AnoVigenciaSelectFilter(SimpleListFilter):
         return queryset
 
 
+class ParametroConciliacaoAnualAdminForm(forms.ModelForm):
+    class Meta:
+        model = ParametroConciliacaoAnual
+        fields = (
+            "unidade_orcamentaria",
+            "ano_referencia",
+            "periodo_inicial",
+            "periodo_final",
+            "ativo",
+        )
+
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop("request", None)
+        super().__init__(*args, **kwargs)
+
+        user = getattr(self.request, "user", None)
+
+        if "unidade_orcamentaria" in self.fields:
+            fld = self.fields["unidade_orcamentaria"]
+
+            uo_user = getattr(user, "unidade_orcamentaria", None) if user else None
+
+            if uo_user:
+                fld.initial = uo_user.pk
+
+                if not fld.queryset.filter(pk=uo_user.pk).exists():
+                    fld.queryset = (
+                        fld.queryset.model.objects.filter(pk=uo_user.pk) | fld.queryset
+                    )
+
+                fld.disabled = True
+
+            if not uo_user and user and not usuario_e_super_admin(user):
+                raise ValidationError(
+                    "Usuário precisa estar vinculado a uma Unidade Orçamentária (UO)."
+                )
+
+        if self.instance and self.instance.pk and "unidade_orcamentaria" in self.fields:
+            self.fields["unidade_orcamentaria"].disabled = True
+
+    def clean(self):
+        cleaned = super().clean()
+        user = getattr(self.request, "user", None)
+
+        if user and not usuario_e_super_admin(user):
+            uo_user = getattr(user, "unidade_orcamentaria", None)
+            if not uo_user:
+                raise ValidationError(
+                    "Usuário precisa estar vinculado a uma Unidade Orçamentária (UO)."
+                )
+
+            cleaned["unidade_orcamentaria"] = uo_user
+
+        if user and not usuario_e_super_admin(user):
+            uo_id = (
+                cleaned.get("unidade_orcamentaria").id
+                if cleaned.get("unidade_orcamentaria")
+                else None
+            )
+
+            is_super, _is_gestor, _ua_id, uo_id = resolver_ids_escopo(user)
+
+            if not uo_id == uo_id:
+                raise ValidationError(
+                    {
+                        "unidade_orcamentaria": "Você não tem permissão para usar esta UO."
+                    }
+                )
+
+        return cleaned
+
+
 @admin.register(ParametroConciliacaoAnual)
 class ParametroConciliacaoAnualAdmin(admin.ModelAdmin):
+    form = ParametroConciliacaoAnualAdminForm
+
     list_display = (
+        "unidade_orcamentaria",
         "ano_referencia",
         "periodo_final",
         "ativo",
     )
-    list_filter = ("ativo", "ano_referencia")
-    search_fields = ("ano_referencia",)
+    list_filter = ("ativo", "ano_referencia", "unidade_orcamentaria")
+    search_fields = (
+        "ano_referencia",
+        "unidade_orcamentaria__codigo",
+        "unidade_orcamentaria__nome",
+    )
     ordering = ("-ano_referencia", "-ativo")
+
+    class Media:
+        css = {"all": ("css/hide_crud_icons.css",)}
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related("unidade_orcamentaria")
+
+        ua = getattr(request.user, "unidade_administrativa", None)
+
+        if ua:
+            uo_da_ua_id = getattr(ua, "unidade_orcamentaria_id", None)
+            if not uo_da_ua_id:
+                return qs.none()
+            return qs.filter(unidade_orcamentaria_id=uo_da_ua_id)
+
+        if request.user.is_gestor_patrimonio:
+            uo_user_id = getattr(request.user, "unidade_orcamentaria_id", None)
+            if not uo_user_id:
+                return qs.none()
+            return qs.filter(unidade_orcamentaria_id=uo_user_id)
+
+        return qs.none()
+
+    def get_form(self, request, obj=None, **kwargs):
+        Form = super().get_form(request, obj, **kwargs)
+
+        class RequestForm(Form):
+            def __init__(self, *args, **kw):
+                kw["request"] = request
+                super().__init__(*args, **kw)
+
+        return RequestForm
+
+    def get_readonly_fields(self, request, obj=None):
+
+        ro = list(super().get_readonly_fields(request, obj))
+        if obj and "unidade_orcamentaria" not in ro:
+            ro.append("unidade_orcamentaria")
+        return ro
 
 
 class ItemConciliacaoInline(admin.TabularInline):
@@ -176,7 +300,7 @@ class ItemConciliacaoInline(admin.TabularInline):
 class ConciliacaoUAAdmin(admin.ModelAdmin):
     form = ConciliacaoUAAdminForm
     change_form_template = "admin/inventario/conciliacaoua/change_form.html"
-    
+
     list_display = [
         "numero_conciliacao",
         "unidade_administrativa",
@@ -209,7 +333,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     ]
 
     inlines = [ItemConciliacaoInline]
-    actions = ["action_finalizar_conciliacao"]
+    actions = []
 
     class Media:
         css = {
@@ -229,9 +353,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return False
 
     def get_actions(self, request):
-        actions = super().get_actions(request)
-        actions.pop("delete_selected", None)
-        return actions
+        return {}
 
     def get_form(self, request, obj=None, **kwargs):
         """
@@ -309,16 +431,12 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return super().changeform_view(request, object_id, form_url, extra_context)
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
-
-        ua = getattr(request.user, "unidade_administrativa", None)
-        if ua:
-            return qs.filter(unidade_administrativa=ua)
-
-        if request.user.is_gestor_patrimonio or request.user.is_superuser:
-            return qs
-
-        return qs.none()
+        qs = super().get_queryset(request).select_related("unidade_administrativa")
+        return filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=qs,
+            campo_ua="unidade_administrativa",
+        )
 
     def save_model(self, request, obj, form, change):
         if change and "status" in getattr(form, "changed_data", []):
@@ -384,7 +502,9 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 situacao=constants.NAO_ENCONTRADO
             ).count(),
             "Divergentes": obj.itens.filter(situacao=constants.DIVERGENTE).count(),
-            "Em processo de baixa": obj.itens.filter(situacao=constants.EM_PROCESSO_BAIXA_FISICA).count(),
+            "Em processo de baixa": obj.itens.filter(
+                situacao=constants.EM_PROCESSO_BAIXA_FISICA
+            ).count(),
             "Baixa Física": obj.itens.filter(situacao=constants.BAIXA_FISICA).count(),
         }
 
@@ -409,36 +529,6 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     acao_visualizar.short_description = "Ação"
     acao_visualizar.allow_tags = True
 
-    @admin.action(description="Finalizar conciliacões selecionadas")
-    def action_finalizar_conciliacao(self, request, queryset):
-        finalizados = 0
-        erros = 0
-
-        for conciliacao in queryset:
-            if conciliacao.status == constants.CONCILIACAO_FECHADO:
-                erros += 1
-                continue
-
-            try:
-                finalizar_conciliacao(conciliacao, request.user)
-                finalizados += 1
-            except Exception as e:
-                erros += 1
-                messages.error(
-                    request,
-                    f"Erro ao finalizar {conciliacao.numero_conciliacao}: {str(e)}",
-                )
-
-        if finalizados > 0:
-            messages.success(
-                request, f"{finalizados} conciliação(ões) finalizada(s) com sucesso"
-            )
-
-        if erros > 0:
-            messages.warning(
-                request, f"{erros} conciliação(s) não puderam ser finalizadas"
-            )
-
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -452,8 +542,32 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.excluir_ocorrencia_view),
                 name="inventario_item_excluir_ocorrencia",
             ),
+            path(
+                "<int:pk>/finalizar/",
+                self.admin_site.admin_view(self.finalizar_conciliacao_view),
+                name="inventario_conciliacaoua_finalizar",
+            ),
         ]
         return custom_urls + urls
+
+    def finalizar_conciliacao_view(self, request, pk: int):
+        obj = self.get_object(request, pk)
+        if not obj:
+            messages.error(request, "Conciliação não encontrada.")
+            return redirect("admin:inventario_conciliacaoua_changelist")
+
+        if not obj.esta_aberto:
+            messages.warning(request, "Conciliação já está finalizada.")
+            return redirect("admin:inventario_conciliacaoua_change", obj.pk)
+
+        if request.method == "POST":
+            try:
+                finalizar_conciliacao(obj, request.user)
+                messages.success(request, "Conciliação finalizada com sucesso.")
+            except Exception as e:
+                messages.error(request, f"Erro ao finalizar conciliação: {e}")
+
+        return redirect("admin:inventario_conciliacaoua_change", obj.pk)
 
     def registrar_ocorrencia_view(self, request, item_id):
         try:
@@ -502,7 +616,6 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         situacoes_disponiveis = list(constants.SITUACOES_ITEM_CONCILIACAO)
 
-        # não permitir registrar "Encontrado sem divergência" manualmente
         situacoes_disponiveis = [
             s for s in situacoes_disponiveis if s[0] != constants.BAIXA_FISICA
         ]
@@ -575,5 +688,5 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return render(request, "admin/conciliacao/excluir_ocorrencia.html", context)
 
     def changelist_view(self, request, extra_context=None):
-        # processar_conciliacao_anual_automatica(request.user)
+        processar_conciliacao_anual_automatica(request.user)
         return super().changelist_view(request, extra_context)

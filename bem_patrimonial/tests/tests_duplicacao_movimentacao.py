@@ -15,6 +15,7 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
 )
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO
 from django.contrib.auth.models import Group
@@ -23,11 +24,9 @@ from django.contrib.auth.models import Group
 class SetupDuplicacaoData:
 
     def create_unidades_administrativas(self):
-        ua_origem = UnidadeAdministrativa.objects.create(
-            nome="DRE Centro", codigo="DRE-CENTRO"
-        )
-        ua_destino = UnidadeAdministrativa.objects.create(
-            nome="DRE Sul", codigo="DRE-SUL"
+        ua_origem = criar_ua()
+        ua_destino = criar_ua(
+            uo=ua_origem.unidade_orcamentaria, nome="DRE Sul", codigo="DRE-SUL"
         )
         return ua_origem, ua_destino
 
@@ -153,6 +152,7 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             "aguarde a resolução da movimentação pendente",
             errors,
         )
+
     def test_permitir_movimentacao_apos_aprovar_anterior(self):
         mov1 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,

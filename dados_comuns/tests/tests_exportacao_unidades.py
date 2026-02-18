@@ -5,6 +5,7 @@ from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.admin import UnidadeAdministrativaAdmin
 from dados_comuns.formats import UnidadeAdministrativaPDFFormat
 from dados_comuns.resources import UnidadeAdministrativaResource
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -12,13 +13,16 @@ from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 class ExportacaoUnidadeAdministrativaTestCase(TestCase):
 
     def setUp(self):
-        UnidadeAdministrativa.objects.create(
+        uo = criar_uo(codigo="100", nome="UO 100")
+        criar_ua(
+            uo=uo,
             codigo="01.01.01.0001",
             sigla="SME",
             nome="Secretaria Municipal de Educação",
             status=UnidadeAdministrativa.ATIVA,
         )
-        UnidadeAdministrativa.objects.create(
+        criar_ua(
+            uo=uo,
             codigo="01.01.02.0002",
             sigla="PMSP/SME/SME-GAB/MEMORIAL",
             nome="COORDENADORIA DOS CENTROS EDUCACIONAIS UNIFICADOS",
@@ -123,19 +127,21 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         self.assertEqual(resource.Meta.export_order, expected_order)
 
     def test_pdf_paginacao_multiplas_paginas(self):
+        uo = criar_uo(codigo="99.99.00", nome="UO 99.99.00.0000")
         for i in range(50):
-            UnidadeAdministrativa.objects.create(
+            criar_ua(
                 codigo=f"99.99.{i:02d}.{i:04d}",
                 sigla=f"UA-{i:03d}",
                 nome=f"Unidade Administrativa de Teste {i}",
                 status=UnidadeAdministrativa.ATIVA,
+                uo=uo,
             )
 
         pdf_bytes = self._gerar_pdf(self.gestor_com_rf)
 
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertIn(b"%%EOF", pdf_bytes)
-        
+
         page_count = pdf_bytes.count(b"/Page")
         self.assertGreater(page_count, 1)
 
