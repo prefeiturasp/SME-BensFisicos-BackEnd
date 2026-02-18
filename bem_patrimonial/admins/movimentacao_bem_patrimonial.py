@@ -325,6 +325,40 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "atualizado_em",
     )
 
+    search_fields = (
+        "numero_cimbpm",
+        "unidade_administrativa_origem__codigo",
+        "unidade_administrativa_origem__nome",
+        "unidade_administrativa_origem__sigla",
+        "unidade_administrativa_destino__codigo",
+        "unidade_administrativa_destino__nome",
+        "unidade_administrativa_destino__sigla",
+        "unidade_administrativa_origem__unidade_orcamentaria__codigo",
+        "unidade_administrativa_origem__unidade_orcamentaria__nome",
+        "unidade_administrativa_destino__unidade_orcamentaria__codigo",
+        "unidade_administrativa_destino__unidade_orcamentaria__nome",
+        "itens__bem__numero_patrimonial",
+        "itens__bem__nome",
+        "itens__bem__descricao",
+        "itens__bem__marca",
+        "itens__bem__modelo",
+        "itens__bem__localizacao",
+        "itens__bem__numero_processo",
+        "bem_patrimonial__numero_patrimonial",
+        "bem_patrimonial__nome",
+        "bem_patrimonial__descricao",
+        "bem_patrimonial__marca",
+        "bem_patrimonial__modelo",
+        "bem_patrimonial__localizacao",
+        "bem_patrimonial__numero_processo",
+    )
+
+    search_help_text = (
+        "Pesquise por número patrimonial, nome, descrição, marca, modelo, localização e "
+        "número de processo do bem, código/nome/sigla da UA (origem/destino), número CIMBPM e "
+        "Unidade Orçamentária."
+    )
+
     autocomplete_fields = (
         "unidade_administrativa_origem",
         "unidade_administrativa_destino",
@@ -418,7 +452,18 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         return RequestForm
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request)
+        qs = (
+            super()
+            .get_queryset(request)
+            .select_related(
+                "unidade_administrativa_origem",
+                "unidade_administrativa_destino",
+                "solicitado_por",
+                "aprovado_por",
+                "rejeitado_por",
+                "cancelado_por",
+            )
+        )
         return filtrar_queryset_movimentacao_por_escopo(request.user, qs)
 
     def save_model(self, request, obj, form, change):
