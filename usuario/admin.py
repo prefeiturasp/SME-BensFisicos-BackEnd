@@ -2,8 +2,6 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django_admin_listfilter_dropdown.filters import DropdownFilter
 from rangefilter.filters import DateRangeFilter
-from django.shortcuts import redirect
-from django.urls import reverse
 from usuario.models import Usuario
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 
@@ -20,6 +18,7 @@ class CustomUserModelAdmin(UserAdmin):
     search_fields = ("nome",)
     search_help_text = "Pesquise por nome."
     ordering = ("unidade_administrativa__codigo",)
+    filter_horizontal = ("unidades_administrativas",)
 
     list_filter = UserAdmin.list_filter + (
         ("unidade_administrativa__sigla", DropdownFilter),
@@ -37,6 +36,7 @@ class CustomUserModelAdmin(UserAdmin):
                     "email",
                     "unidade_orcamentaria",
                     "unidade_administrativa",
+                    "unidades_administrativas",
                 )
             },
         ),
@@ -55,6 +55,7 @@ class CustomUserModelAdmin(UserAdmin):
                     "email",
                     "unidade_orcamentaria",
                     "unidade_administrativa",
+                    "unidades_administrativas",
                 )
             },
         ),
@@ -70,7 +71,7 @@ class CustomUserModelAdmin(UserAdmin):
             base = self.add_fieldsets
         else:
             base = self.fieldsets
-            
+
         if request.user.is_superuser:
             base = base + (
                 (
@@ -95,6 +96,26 @@ class CustomUserModelAdmin(UserAdmin):
         if obj:
             return self.readonly_fields + ("username",)
         return self.readonly_fields
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "unidades_administrativas":
+            qs = UnidadeAdministrativa.objects.filter(
+                status=UnidadeAdministrativa.ATIVA
+            )
+            uo_id = None
+            if request.method == "POST":
+                uo_id = request.POST.get("unidade_orcamentaria") or None
+            if (
+                not uo_id
+                and hasattr(request, "_obj_usuario_admin")
+                and request._obj_usuario_admin
+            ):
+                uo_id = request._obj_usuario_admin.unidade_orcamentaria_id
+            if uo_id:
+                kwargs["queryset"] = qs.filter(unidade_orcamentaria_id=uo_id)
+            else:
+                kwargs["queryset"] = UnidadeAdministrativa.objects.none()
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "unidade_orcamentaria":
@@ -205,7 +226,7 @@ class CustomUserModelAdmin(UserAdmin):
             if ua and not uo:
                 raise ValidationError(
                     {
-                        "unidade_orcamentaria": "Selecione a Unidade Orçamentária antes de escolher a Unidade Administrativa."
+                        "unidade_orcamentaria": "Selecione a Unidade Orçamentária antes de escolher a Unidade Administrativa."  # noqa: E501
                     }
                 )
 
@@ -214,7 +235,7 @@ class CustomUserModelAdmin(UserAdmin):
                 cleaned_data["unidade_administrativa"] = None
                 raise ValidationError(
                     {
-                        "unidade_administrativa": "A Unidade Administrativa não pertence à Unidade Orçamentária selecionada. Selecione novamente."
+                        "unidade_administrativa": "A Unidade Administrativa não pertence à Unidade Orçamentária selecionada. Selecione novamente."  # noqa: E501
                     }
                 )
 
@@ -225,14 +246,49 @@ class CustomUserModelAdmin(UserAdmin):
             ):
                 raise ValidationError(
                     {
-                        "unidade_administrativa": "Operador de Inventário deve ter uma Unidade Administrativa vinculada."
+                        "unidade_administrativa": "Operador de Inventário deve ter uma Unidade Administrativa vinculada."  # noqa: E501
                     }
                 )
+
+            uas_m2m_ids = cleaned_data.get("unidades_administrativas", [])
+
+            if is_operador and not is_gestor:
+                if not uas_m2m_ids:
+                    raise ValidationError(
+                        {
+                            "unidades_administrativas": "Operador deve ter pelo menos uma UA."
+                        }
+                    )
+                if uo:
+                    uas_invalidas = [
+                        u for u in uas_m2m_ids if u.unidade_orcamentaria_id != uo.id
+                    ]
+                    if uas_invalidas:
+                        raise ValidationError(
+                            {
+                                "unidades_administrativas": "Todas as UAs devem pertencer à UO selecionada."
+                            }
+                        )
+                if ua and ua not in uas_m2m_ids:
+                    raise ValidationError(
+                        {
+                            "unidade_administrativa": "A UA ativa deve estar entre as UAs selecionadas."
+                        }
+                    )
 
             return cleaned_data
 
         form.clean = custom_clean
         return form
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        obj = form.instance
+        if obj.is_operador_inventario and not obj.unidade_administrativa_id:
+            primeira = obj.unidades_administrativas.first()
+            if primeira:
+                obj.unidade_administrativa = primeira
+                obj.save(update_fields=["unidade_administrativa"])
 
     @admin.display(description="Grupo")
     def get_grupo(self, obj):
