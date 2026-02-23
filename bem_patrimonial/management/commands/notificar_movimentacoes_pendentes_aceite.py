@@ -103,7 +103,7 @@ class Command(BaseCommand):
             usuarios = (
                 Usuario.objects.filter(
                     is_active=True,
-                    unidade_administrativa=ua,
+                    unidades_administrativas=ua,
                 )
                 .filter(
                     Q(groups__name=GRUPO_GESTOR_PATRIMONIO)
@@ -152,7 +152,7 @@ class Command(BaseCommand):
             uas_com_destinatarios = sum(
                 1
                 for ua, _ in movimentacoes_por_ua.items()
-                if Usuario.objects.filter(is_active=True, unidade_administrativa=ua)
+                if Usuario.objects.filter(is_active=True, unidades_administrativas=ua)
                 .filter(
                     Q(groups__name=GRUPO_GESTOR_PATRIMONIO)
                     | Q(groups__name=GRUPO_OPERADOR_INVENTARIO)

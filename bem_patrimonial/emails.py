@@ -263,10 +263,14 @@ def envia_email_baixa_fisica_solicitada(baixa_fisica):
     Destinatários: todos da unidade associada à baixa (unidade_administrativa_origem).
     """
     # gestores da UA de origem
-    gestores = Usuario.objects.filter(
-        is_active=True,
-        unidade_administrativa=baixa_fisica.unidade_administrativa_origem,
-    ).only("email")
+    gestores = (
+        Usuario.objects.filter(
+            is_active=True,
+            unidades_administrativas=baixa_fisica.unidade_administrativa_origem,
+        )
+        .distinct()
+        .only("email")
+    )
 
     emails = [u.email for u in gestores if u.email]
     if not emails:
