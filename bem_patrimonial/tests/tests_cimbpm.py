@@ -18,7 +18,7 @@ from bem_patrimonial.cimbpm import (
 )
 from bem_patrimonial import constants
 from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -35,14 +35,14 @@ class CIMBPMTestBase(TestCase):
             codigo="01.16.10.379",
             sigla="COSERV",
             nome="Coordenadoria de Contratos",
-            status=UnidadeAdministrativa.ATIVA
+            status=UnidadeAdministrativa.ATIVA,
         )
         self.ua_destino = criar_ua(
             codigo="01.16.10.408",
             sigla="ALMOXZE",
             nome="Almoxarifado Zeladoria",
             status=UnidadeAdministrativa.ATIVA,
-            uo=self.ua_origem.unidade_orcamentaria
+            uo=self.ua_origem.unidade_orcamentaria,
         )
 
         self.operador = Usuario.objects.create_user(
@@ -55,6 +55,7 @@ class CIMBPMTestBase(TestCase):
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
+        self.operador.unidades_administrativas.add(self.ua_origem)
 
         self.gestor = Usuario.objects.create_user(
             username="gestor",
@@ -301,6 +302,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
             unidade_orcamentaria=self.ua_terceira.unidade_orcamentaria,
         )
         self.operador_terceiro.groups.add(self.grupo_operador)
+        self.operador_terceiro.unidades_administrativas.add(self.ua_terceira)
 
         self.operador_destino = Usuario.objects.create_user(
             username="operador_destino",
@@ -311,6 +313,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         self.operador_destino.groups.add(self.grupo_operador)
+        self.operador_destino.unidades_administrativas.add(self.ua_destino)
 
         bem = self.criar_bem()
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
@@ -457,7 +460,8 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             sigla="LONGA",
             nome="Unidade com Nome Extremamente Longo Para Testar Quebra de Linha no PDF "
             * 3,
-            status=UnidadeAdministrativa.ATIVA, uo=self.ua_origem.unidade_orcamentaria
+            status=UnidadeAdministrativa.ATIVA,
+            uo=self.ua_origem.unidade_orcamentaria,
         )
 
         bem = self.criar_bem(
@@ -504,6 +508,7 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         operador_sem_rf.groups.add(self.grupo_operador)
+        operador_sem_rf.unidades_administrativas.add(self.ua_origem)
 
         bem_sem_num = self.criar_bem(numero_patrimonial="")
 

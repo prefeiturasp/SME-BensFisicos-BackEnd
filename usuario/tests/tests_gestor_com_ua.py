@@ -1,7 +1,6 @@
 from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
-from django.core.exceptions import ValidationError
 
 from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
@@ -63,6 +62,7 @@ class GestorComUATestCase(TestCase):
             unidade_orcamentaria=self.ua2.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
+        self.operador.unidades_administrativas.add(self.ua2)
 
         self.bem_ua1 = BemPatrimonial.objects.create(
             nome="Bem UA1",
@@ -130,7 +130,7 @@ class GestorComUATestCase(TestCase):
 
         request_operador = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request_operador.user = self.operador
-        self.assertNotIn(
+        self.assertIn(
             "unidade_administrativa", self.admin.get_list_display(request_operador)
         )
 

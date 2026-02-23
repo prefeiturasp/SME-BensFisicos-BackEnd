@@ -6,7 +6,6 @@ from django.core.exceptions import ValidationError
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.admin import CustomUserModelAdmin
-from dados_comuns.models import UnidadeAdministrativa
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 
 from django.contrib.auth import get_user_model
@@ -31,6 +30,7 @@ class SetupData:
         }
         usuario = Usuario.objects.create(**obj)
         self.add_group(usuario)
+        usuario.unidades_administrativas.add(ua)
 
         return usuario
 
@@ -156,6 +156,7 @@ class CustomUserModelAdminTestCase(TestCase):
             unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
         usuario.groups.add(self.group_operador)
+        usuario.unidades_administrativas.add(self.unidade1)
 
         result = self.admin.get_grupo(usuario)
         self.assertEqual(result, "OPERADOR_INVENTARIO")

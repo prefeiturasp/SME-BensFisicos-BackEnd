@@ -27,11 +27,11 @@ class BaseAprovacaoTestCase(TestCase):
         self.grupo_gestor = Group.objects.create(name=GRUPO_GESTOR_PATRIMONIO)
         self.grupo_operador = Group.objects.create(name=GRUPO_OPERADOR_INVENTARIO)
         self.uo = criar_uo(codigo="100", nome="UO 100")
-        self.ua =criar_ua(
+        self.ua = criar_ua(
             nome="UA Teste",
             codigo="001",
             sigla="UAT",
-            status=UnidadeAdministrativa.ATIVA
+            status=UnidadeAdministrativa.ATIVA,
         )
 
         self.gestor = Usuario.objects.create_user(
@@ -39,7 +39,7 @@ class BaseAprovacaoTestCase(TestCase):
             email="gestor@test.com",
             password="senha123",
             unidade_administrativa=self.ua,
-            unidade_orcamentaria=self.ua.unidade_orcamentaria
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
         self.gestor.groups.add(self.grupo_gestor)
 
@@ -48,9 +48,10 @@ class BaseAprovacaoTestCase(TestCase):
             email="operador@test.com",
             password="senha123",
             unidade_administrativa=self.ua,
-            unidade_orcamentaria=self.ua.unidade_orcamentaria
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
+        self.operador.unidades_administrativas.add(self.ua)
 
         self.factory = RequestFactory()
         self.admin = BemPatrimonialAdmin(BemPatrimonial, AdminSite())
@@ -70,7 +71,6 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
             sem_numeracao=True,
             criado_por=self.operador,
             unidade_administrativa=self.ua,
-            
             status=AGUARDANDO_APROVACAO,
         )
 

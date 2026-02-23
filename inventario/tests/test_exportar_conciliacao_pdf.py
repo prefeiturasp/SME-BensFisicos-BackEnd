@@ -1,6 +1,5 @@
 from io import BytesIO
 from decimal import Decimal
-from datetime import date
 from unittest.mock import patch
 
 from django.test import TestCase, Client
@@ -57,6 +56,7 @@ class ConciliacaoPDFTestBase(TestCase):
             unidade_orcamentaria=self.ua_a.unidade_orcamentaria,
         )
         self.operador_a.groups.add(self.grupo_operador)
+        self.operador_a.unidades_administrativas.add(self.ua_a)
 
         self.operador_b = Usuario.objects.create_user(
             username="operador_b",
@@ -68,6 +68,7 @@ class ConciliacaoPDFTestBase(TestCase):
             unidade_orcamentaria=self.ua_b.unidade_orcamentaria,
         )
         self.operador_b.groups.add(self.grupo_operador)
+        self.operador_b.unidades_administrativas.add(self.ua_b)
 
         self.gestor = Usuario.objects.create_user(
             username="gestor",

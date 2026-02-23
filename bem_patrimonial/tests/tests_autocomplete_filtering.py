@@ -2,12 +2,9 @@ from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 
-from bem_patrimonial.models import BemPatrimonial
-from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
-from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.admin import UnidadeAdministrativaAdmin
-from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -60,6 +57,7 @@ class UnidadeAdministrativaAutocompleteTestCase(TestCase):
             unidade_orcamentaria=self.ua1_ativa.unidade_orcamentaria,
         )
         self.operador_com_ua1.groups.add(self.grupo_operador)
+        self.operador_com_ua1.unidades_administrativas.add(self.ua1_ativa)
 
         self.factory = RequestFactory()
         self.site = AdminSite()

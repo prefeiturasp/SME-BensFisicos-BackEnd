@@ -4,12 +4,11 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.test import Client, TestCase
-from django.urls import reverse
+from django.test import TestCase
 from django.utils import timezone
 
 from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
@@ -37,7 +36,7 @@ class NBBPMTestBase(TestCase):
             codigo="01.16.10.287",
             sigla="UATEST",
             nome="Unidade Administrativa Teste",
-            status=UnidadeAdministrativa.ATIVA
+            status=UnidadeAdministrativa.ATIVA,
         )
 
         self.operador = Usuario.objects.create_user(
@@ -50,6 +49,7 @@ class NBBPMTestBase(TestCase):
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
+        self.operador.unidades_administrativas.add(self.ua_origem)
 
         self.gestor = Usuario.objects.create_user(
             username="gestor",
