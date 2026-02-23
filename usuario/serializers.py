@@ -201,15 +201,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
                     status=UnidadeAdministrativa.ATIVA,
                 )
         elif obj.is_operador_inventario:
-            if obj.unidade_administrativa_id:
-                uas_qs = UnidadeAdministrativa.objects.filter(
-                    id=obj.unidade_administrativa_id,
-                    status=UnidadeAdministrativa.ATIVA,
-                )
-                uos_qs = UnidadeOrcamentaria.objects.filter(
-                    id=obj.unidade_administrativa.unidade_orcamentaria_id,
-                    ativa=True,
-                )
+            uas_qs = obj.unidades_administrativas.filter(
+                status=UnidadeAdministrativa.ATIVA
+            )
+            uo_id = obter_unidade_orcamentaria_id_do_usuario(obj)
+            if uo_id:
+                uos_qs = UnidadeOrcamentaria.objects.filter(id=uo_id, ativa=True)
 
         uas_qs = uas_qs.select_related("unidade_orcamentaria")
         uas_por_uo = {}
@@ -309,10 +306,10 @@ class SelecionarUnidadeAdministrativaSerializer(serializers.Serializer):
             if (
                 user.is_operador_inventario
                 and ua
-                and user.unidade_administrativa_id != ua.id
+                and not user.unidades_administrativas.filter(id=ua.id).exists()
             ):
                 raise serializers.ValidationError(
-                    "Operador so pode selecionar a propria Unidade Administrativa."
+                    "Operador so pode selecionar UAs atribuidas a ele."
                 )
 
             if (
