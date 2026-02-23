@@ -727,3 +727,190 @@ class TestConciliacaoUAAdminSaveModel(AdminTestBase):
         form = MagicMock()
         form.changed_data = []
         self.admin.save_model(request, conciliacao, form, change=True)
+        messages = list(request._messages)
+        self.assertTrue(any("fechada" in str(m).lower() for m in messages))
+
+    @patch("inventario.admin.registrar_ocorrencia")
+    def test_registrar_ocorrencia_view_post(self, mock_registrar):
+        conciliacao = ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=timezone.localdate(),
+            status=constants.CONCILIACAO_EM_ABERTO,
+            criado_por=self.usuario,
+        )
+        bem = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000001-1",
+            nome="Bem",
+            valor_unitario=100,
+            status=bem_constants.APROVADO,
+            unidade_administrativa=self.ua,
+            criado_por=self.usuario,
+        )
+        item = ItemConciliacao.objects.create(
+            conciliacao=conciliacao, bem=bem, atualizado_por=self.usuario
+        )
+        admin_instance = ConciliacaoUAAdmin(ConciliacaoUA, self.site)
+        request = _request_com_mensagens(self.factory, self.usuario, "post")
+        request.POST = {
+            "situacao": constants.ENCONTRADO,
+            "observacao": "Teste",
+            "divergencia": "",
+        }
+        resp = admin_instance.registrar_ocorrencia_view(request, item.pk)
+        self.assertEqual(resp.status_code, 302)
+        mock_registrar.assert_called_once()
+
+    def test_registrar_ocorrencia_conciliacao_fechada(self):
+        conciliacao = ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=timezone.localdate(),
+            status=constants.CONCILIACAO_FECHADO,
+            criado_por=self.usuario,
+        )
+        bem = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000001-1",
+            nome="Bem",
+            valor_unitario=100,
+            status=bem_constants.APROVADO,
+            unidade_administrativa=self.ua,
+            criado_por=self.usuario,
+        )
+        item = ItemConciliacao.objects.create(
+            conciliacao=conciliacao, bem=bem, atualizado_por=self.usuario
+        )
+        admin_instance = ConciliacaoUAAdmin(ConciliacaoUA, self.site)
+        request = _request_com_mensagens(self.factory, self.usuario, "get")
+        resp = admin_instance.registrar_ocorrencia_view(request, item.pk)
+        self.assertEqual(resp.status_code, 302)
+        messages = list(request._messages)
+        self.assertTrue(any("fechada" in str(m).lower() for m in messages))
+
+    def test_registrar_ocorrencia_baixa_fisica_nao_permite(self):
+        conciliacao = ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=timezone.localdate(),
+            status=constants.CONCILIACAO_EM_ABERTO,
+            criado_por=self.usuario,
+        )
+        bem = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000001-1",
+            nome="Bem",
+            valor_unitario=100,
+            status=bem_constants.APROVADO,
+            unidade_administrativa=self.ua,
+            criado_por=self.usuario,
+        )
+        item = ItemConciliacao.objects.create(
+            conciliacao=conciliacao,
+            bem=bem,
+            situacao=constants.BAIXA_FISICA,
+            atualizado_por=self.usuario,
+        )
+        admin_instance = ConciliacaoUAAdmin(ConciliacaoUA, self.site)
+        request = _request_com_mensagens(self.factory, self.usuario, "get")
+        resp = admin_instance.registrar_ocorrencia_view(request, item.pk)
+        self.assertEqual(resp.status_code, 302)
+        messages = list(request._messages)
+        self.assertTrue(any("baixa física" in str(m).lower() for m in messages))
+
+    @patch("inventario.admin.excluir_ocorrencia")
+    def test_excluir_ocorrencia_view_post(self, mock_excluir):
+        conciliacao = ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=timezone.localdate(),
+            status=constants.CONCILIACAO_EM_ABERTO,
+            criado_por=self.usuario,
+        )
+        bem = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000001-1",
+            nome="Bem",
+            valor_unitario=100,
+            status=bem_constants.APROVADO,
+            unidade_administrativa=self.ua,
+            criado_por=self.usuario,
+        )
+        item = ItemConciliacao.objects.create(
+            conciliacao=conciliacao, bem=bem, atualizado_por=self.usuario
+        )
+        OcorrenciaConciliacao.objects.create(
+            item=item,
+            situacao=constants.DIVERGENTE,
+            divergencia="Div",
+            registrado_por=self.usuario,
+        )
+        admin_instance = ConciliacaoUAAdmin(ConciliacaoUA, self.site)
+        request = _request_com_mensagens(self.factory, self.usuario, "post")
+        resp = admin_instance.excluir_ocorrencia_view(request, item.pk)
+        self.assertEqual(resp.status_code, 302)
+        mock_excluir.assert_called_once()
+
+    def test_excluir_ocorrencia_conciliacao_fechada(self):
+        conciliacao = ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=timezone.localdate(),
+            status=constants.CONCILIACAO_FECHADO,
+            criado_por=self.usuario,
+        )
+        bem = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000001-1",
+            nome="Bem",
+            valor_unitario=100,
+            status=bem_constants.APROVADO,
+            unidade_administrativa=self.ua,
+            criado_por=self.usuario,
+        )
+        item = ItemConciliacao.objects.create(
+            conciliacao=conciliacao, bem=bem, atualizado_por=self.usuario
+        )
+        admin_instance = ConciliacaoUAAdmin(ConciliacaoUA, self.site)
+        request = _request_com_mensagens(self.factory, self.usuario, "get")
+        resp = admin_instance.excluir_ocorrencia_view(request, item.pk)
+        self.assertEqual(resp.status_code, 302)
+        messages = list(request._messages)
+        self.assertTrue(any("fechada" in str(m).lower() for m in messages))
+
+    def test_total_itens_com_detalhes_por_situacao(self):
+        conciliacao = ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=timezone.localdate(),
+            status=constants.CONCILIACAO_EM_ABERTO,
+            criado_por=self.usuario,
+        )
+        bem1 = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000001-1",
+            nome="Bem 1",
+            valor_unitario=100,
+            status=bem_constants.APROVADO,
+            unidade_administrativa=self.ua,
+            criado_por=self.usuario,
+        )
+        bem2 = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000002-2",
+            nome="Bem 2",
+            valor_unitario=200,
+            status=bem_constants.APROVADO,
+            unidade_administrativa=self.ua,
+            criado_por=self.usuario,
+        )
+        ItemConciliacao.objects.create(
+            conciliacao=conciliacao,
+            bem=bem1,
+            situacao=constants.ENCONTRADO_SEM_DIVERGENCIA,
+            atualizado_por=self.usuario,
+        )
+        ItemConciliacao.objects.create(
+            conciliacao=conciliacao,
+            bem=bem2,
+            situacao=constants.NAO_ENCONTRADO,
+            atualizado_por=self.usuario,
+        )
+        result = self.admin.total_itens(conciliacao)
+        self.assertIn("Total: 2", result)
+        self.assertIn("Encontrados: 1", result)
+        self.assertIn("Não encontrados: 1", result)

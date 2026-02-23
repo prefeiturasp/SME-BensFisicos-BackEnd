@@ -55,3 +55,31 @@ class PasswordChangeViewTests(TestCase):
         self.assertFalse(target.must_change_password)
         self.assertIsNotNone(target.last_password_change)
         self.assertTrue(self.client.login(username="alice", password="Sup3rS3nh@"))
+
+
+class LoginPasswordChangeDoneViewTests(TestCase):
+    """Testes para LoginPasswordChangeDoneView."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="alice", password="a123456")
+
+    def test_password_change_done_usa_template_correto(self):
+        self.client.login(username="alice", password="a123456")
+        url = reverse("password_change_done")
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "admin/password_change_done.html")
+
+
+class PasswordRecoveryDoneAndCompleteViewTests(TestCase):
+    """Testes para PasswordRecoveryDoneView e PasswordRecoveryCompleteView."""
+
+    def test_password_recovery_done_usa_template(self):
+        resp = self.client.get(reverse("password_recovery_done"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "admin/password_recovery_done.html")
+
+    def test_password_recovery_complete_usa_template(self):
+        resp = self.client.get(reverse("password_recovery_complete"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "admin/password_recovery_complete.html")

@@ -1,6 +1,13 @@
 from django.test import TestCase
 from django.contrib.admin.sites import AdminSite
-from dados_comuns.models import UnidadeAdministrativa
+from django.core.exceptions import ValidationError
+from django.contrib.contenttypes.models import ContentType
+
+from dados_comuns.models import (
+    UnidadeAdministrativa,
+    UnidadeOrcamentaria,
+    HistoricoGeral,
+)
 from dados_comuns.admin import UnidadeAdministrativaAdmin
 from dados_comuns.tests.factories import criar_ua, criar_uo
 
@@ -150,7 +157,64 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
 
         queryset = self.admin.get_queryset(request)
         unidades_list = list(queryset)
-        
+
         self.assertGreater(len(unidades_list), 0)
         self.assertEqual(unidades_list[0].codigo, "050")
         self.assertEqual(unidades_list[-1].codigo, "200")
+
+
+class UnidadeOrcamentariaTestCase(TestCase):
+    """Testes para UnidadeOrcamentaria."""
+
+    def test_str(self):
+        uo = criar_uo(codigo="16", nome="SME")
+        self.assertEqual(str(uo), "16 - SME")
+
+
+class UnidadeAdministrativaCleanTestCase(TestCase):
+    """Testes para UnidadeAdministrativa.clean e propriedades."""
+
+    def test_clean_exige_unidade_orcamentaria(self):
+        """UA sem unidade_orcamentaria levanta ValidationError no clean."""
+        ua = UnidadeAdministrativa(
+            codigo="001",
+            sigla="UA",
+            nome="Unidade",
+            status=UnidadeAdministrativa.ATIVA,
+            unidade_orcamentaria=None,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            ua.clean()
+        self.assertIn("unidade_orcamentaria", ctx.exception.message_dict)
+
+    def test_is_ativa(self):
+        """is_ativa True quando status ATIVA."""
+        ua = criar_ua(status=UnidadeAdministrativa.ATIVA)
+        self.assertTrue(ua.is_ativa)
+        ua.status = UnidadeAdministrativa.INATIVA
+        ua.save(update_fields=["status"])
+        ua.refresh_from_db()
+        self.assertFalse(ua.is_ativa)
+
+    def test_pode_inativar_sem_bens(self):
+        """pode_inativar True quando não há bens na UA."""
+        ua = criar_ua(codigo="901", sigla="UA9", nome="UA 9")
+        self.assertTrue(ua.pode_inativar())
+
+
+class HistoricoGeralTestCase(TestCase):
+    """Testes para HistoricoGeral."""
+
+    def test_str(self):
+        uo = criar_uo(codigo="99", nome="UO Teste")
+        ct = ContentType.objects.get_for_model(UnidadeOrcamentaria)
+        hist = HistoricoGeral.objects.create(
+            content_type=ct,
+            object_id=str(uo.pk),
+            campo="nome",
+            valor_antigo="Antigo",
+            valor_novo="Novo",
+        )
+        self.assertIn(str(ct), str(hist))
+        self.assertIn(str(uo.pk), str(hist))
+        self.assertIn("nome", str(hist))

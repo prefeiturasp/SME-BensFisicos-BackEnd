@@ -87,6 +87,55 @@ class TestConciliacaoUAAdminFormInit(ConciliacaoUAAdminFormTestBase):
         self.assertEqual(form.fields["unidade_administrativa"].initial, self.ua)
         self.assertTrue(form.fields["unidade_administrativa"].disabled)
 
+    def test_init_com_super_admin_nao_fixa_ua(self):
+        super_user = Usuario.objects.create_user(
+            username="super",
+            password="x",
+            is_superuser=True,
+            unidade_administrativa=self.ua,
+            unidade_orcamentaria=self.uo,
+        )
+        request = MagicMock()
+        request.user = super_user
+        form = ConciliacaoUAAdminForm(request=request)
+        self.assertIsNone(form.fields["unidade_administrativa"].initial)
+        self.assertFalse(form.fields["unidade_administrativa"].disabled)
+
+    def test_init_com_user_sem_ua_nao_fixa_ua(self):
+        user_sem_ua = Usuario.objects.create_user(
+            username="user_sem_ua",
+            password="x",
+            unidade_administrativa=None,
+            unidade_orcamentaria=self.uo,
+        )
+        user_sem_ua.groups.add(Group.objects.get(name=GRUPO_GESTOR_PATRIMONIO))
+        request = MagicMock()
+        request.user = user_sem_ua
+        form = ConciliacaoUAAdminForm(request=request)
+        self.assertIsNone(form.fields["unidade_administrativa"].initial)
+        self.assertFalse(form.fields["unidade_administrativa"].disabled)
+
+    def test_init_com_user_ua_inativa_nao_fixa_ua(self):
+        ua_inativa = criar_ua(
+            uo=self.uo,
+            codigo="01.16.10.999",
+            sigla="UA_INATIVA",
+            nome="Unidade Inativa",
+            status=UnidadeAdministrativa.INATIVA,
+        )
+        user_ua_inativa = Usuario.objects.create_user(
+            username="user_ua_inativa",
+            password="x",
+            unidade_administrativa=ua_inativa,
+            unidade_orcamentaria=self.uo,
+        )
+        user_ua_inativa.groups.add(Group.objects.get(name=GRUPO_GESTOR_PATRIMONIO))
+        request = MagicMock()
+        request.user = user_ua_inativa
+        form = ConciliacaoUAAdminForm(request=request)
+        self.assertIsNone(form.fields["unidade_administrativa"].initial)
+        self.assertFalse(form.fields["unidade_administrativa"].disabled)
+
     def test_init_instancia_com_pk_desabilita_todos_os_campos(self):
         conciliacao = ConciliacaoUA.objects.create(
             unidade_administrativa=self.ua,
@@ -183,6 +232,38 @@ class TestConciliacaoUAAdminFormClean(ConciliacaoUAAdminFormTestBase):
         self.assertFalse(form.is_valid())
         self.assertIn("unidade_administrativa", form.errors)
         self.assertIn("em aberto", form.errors["unidade_administrativa"][0])
+
+    def test_clean_instancia_existente_nao_valida_conciliacao_em_aberto(self):
+        """Editar instância existente não valida se há outra em aberto."""
+        periodo1 = timezone.localdate()
+        periodo2 = timezone.localdate() + timezone.timedelta(days=1)
+        conciliacao_existente = ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=periodo1,
+            status=constants.CONCILIACAO_EM_ABERTO,
+            criado_por=self.usuario_com_ua,
+        )
+        # Criar outra em aberto (com período diferente para evitar constraint de unicidade)
+        # não deve impedir edição da existente
+        ConciliacaoUA.objects.create(
+            unidade_administrativa=self.ua,
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=periodo2,
+            status=constants.CONCILIACAO_EM_ABERTO,
+            criado_por=self.usuario_com_ua,
+        )
+        form = ConciliacaoUAAdminForm(
+            instance=conciliacao_existente,
+            data={
+                "unidade_administrativa": self.ua.pk,
+                "tipo": constants.CONCILIACAO_EVENTUAL,
+                "periodo_final": periodo1,
+            },
+        )
+        form.request = None
+        # Não deve dar erro de conciliação em aberto ao editar
+        self.assertTrue(form.is_valid(), form.errors)
 
     def test_clean_tipo_eventual_sem_periodo_final_erro(self):
         form = ConciliacaoUAAdminForm(
@@ -281,3 +362,82 @@ class TestConciliacaoUAAdminFormClean(ConciliacaoUAAdminFormTestBase):
         form.fields["tipo"].disabled = False
         self.assertFalse(form.is_valid())
         self.assertIn("__all__", form.errors)
+
+    @patch("inventario.forms.timezone")
+    def test_clean_tipo_anual_sem_parametro_dentro_jan_mar_ok(self, mock_tz):
+        """Tipo anual sem parâmetro dentro do período padrão (jan-mar) deve funcionar."""
+        hoje = date(2026, 2, 15)
+        mock_tz.localdate.return_value = hoje
+        form = ConciliacaoUAAdminForm(
+            data={
+                "unidade_administrativa": self.ua.pk,
+                "tipo": constants.CONCILIACAO_ANUAL,
+                "periodo_final": "",
+            },
+        )
+        form.request = None
+        form.fields["tipo"].choices = [
+            (constants.CONCILIACAO_ANUAL, "Anual"),
+            (constants.CONCILIACAO_EVENTUAL, "Eventual"),
+        ]
+        form.fields["tipo"].initial = None
+        form.fields["tipo"].disabled = False
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["periodo_final"], date(2025, 12, 31))
+
+    @patch("inventario.forms.timezone")
+    def test_clean_tipo_anual_com_parametro_inativo_usa_periodo_padrao(self, mock_tz):
+        """Parâmetro inativo deve usar período padrão (jan-mar)."""
+        hoje = date(2026, 2, 15)
+        mock_tz.localdate.return_value = hoje
+        ParametroConciliacaoAnual.objects.create(
+            ano_referencia=2025,
+            periodo_inicial=date(2026, 1, 1),
+            periodo_final=date(2026, 3, 31),
+            ativo=False,  # inativo
+            unidade_orcamentaria=self.uo,
+        )
+        form = ConciliacaoUAAdminForm(
+            data={
+                "unidade_administrativa": self.ua.pk,
+                "tipo": constants.CONCILIACAO_ANUAL,
+                "periodo_final": "",
+            },
+        )
+        form.request = None
+        form.fields["tipo"].choices = [
+            (constants.CONCILIACAO_ANUAL, "Anual"),
+            (constants.CONCILIACAO_EVENTUAL, "Eventual"),
+        ]
+        form.fields["tipo"].initial = None
+        form.fields["tipo"].disabled = False
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["periodo_final"], date(2025, 12, 31))
+
+    def test_clean_super_admin_nao_sobrescreve_ua(self):
+        """Super admin não tem UA sobrescrita no clean."""
+        # Super admin precisa ter grupo gestor para ter acesso às UAs via filtrar_ua_origem_por_escopo
+        # (pois o filtro só retorna UAs se usuário tem UA ou é gestor com UO)
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        super_user = Usuario.objects.create_user(
+            username="super",
+            password="x",
+            is_superuser=True,
+            unidade_administrativa=None,
+            unidade_orcamentaria=self.uo,
+        )
+        super_user.groups.add(grupo_gestor)
+        request = MagicMock()
+        request.user = super_user
+        form = ConciliacaoUAAdminForm(
+            data={
+                "unidade_administrativa": self.ua.pk,
+                "tipo": constants.CONCILIACAO_EVENTUAL,
+                "periodo_final": timezone.localdate(),
+            },
+            request=request,
+        )
+        # O queryset do form deve incluir self.ua porque super_user é gestor com UO=self.uo
+        self.assertTrue(form.is_valid(), form.errors)
+        # Super admin não tem UA, então não deve sobrescrever no clean
+        self.assertEqual(form.cleaned_data["unidade_administrativa"], self.ua)
