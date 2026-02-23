@@ -1,20 +1,36 @@
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import PasswordChangeForm, SetPasswordForm
+from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.views import (
+    LoginView,
     PasswordChangeView,
     PasswordResetView,
     PasswordResetConfirmView,
 )
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.tokens import default_token_generator
-from django.shortcuts import get_object_or_404
-from django.urls import reverse_lazy
+from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse_lazy, reverse
+from urllib.parse import urlencode
 from django.utils import timezone
 from django.views.generic import TemplateView
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from dados_comuns.utils import dict_changes
 import logging
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
+class AdminLoginView(LoginView):
+    template_name = "admin/login.html"
+
+    def get_success_url(self):
+        next_url = self.request.POST.get("next") or self.request.GET.get("next")
+        if next_url:
+            return f"{reverse('selecionar_ua')}?{urlencode({'next': next_url})}"
+        return reverse("selecionar_ua")
 
 
 class LoginPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
@@ -91,7 +107,7 @@ class PasswordRecoveryRequestView(PasswordResetView):
 
 
 class PasswordRecoveryDoneView(TemplateView):
-    
+
     template_name = "admin/password_recovery_done.html"
 
 
@@ -122,3 +138,178 @@ class PasswordRecoveryConfirmView(PasswordResetConfirmView):
 class PasswordRecoveryCompleteView(TemplateView):
 
     template_name = "admin/password_recovery_complete.html"
+
+
+class SelecionarUAView(LoginRequiredMixin, TemplateView):
+    template_name = "admin/selecionar_ua.html"
+    login_url = "/admin/login/"
+    VISAO_GERAL_VALUE = "__UO__"
+
+    def _obter_uo_ativa(self, user):
+        if user.unidade_orcamentaria_id:
+            return user.unidade_orcamentaria
+        if user.unidade_administrativa_id and user.unidade_administrativa:
+            return user.unidade_administrativa.unidade_orcamentaria
+        return None
+
+    def get_uas_disponiveis(self):
+        user = self.request.user
+        if user.is_superuser:
+            return UnidadeAdministrativa.objects.filter(
+                status=UnidadeAdministrativa.ATIVA
+            ).select_related("unidade_orcamentaria")
+        if user.is_gestor_patrimonio:
+            uo_id = user.unidade_orcamentaria_id
+            if uo_id:
+                return UnidadeAdministrativa.objects.filter(
+                    unidade_orcamentaria_id=uo_id,
+                    status=UnidadeAdministrativa.ATIVA,
+                ).select_related("unidade_orcamentaria")
+        return user.unidades_administrativas.filter(
+            status=UnidadeAdministrativa.ATIVA
+        ).select_related("unidade_orcamentaria")
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        user = self.request.user
+        uo_ativa = self._obter_uo_ativa(user)
+        permite_visao_geral = bool(user.is_superuser or user.is_gestor_patrimonio)
+
+        ctx["uas_disponiveis"] = self.get_uas_disponiveis()
+        ctx["ua_ativa_id"] = user.unidade_administrativa_id
+        ctx["uo_ativa"] = uo_ativa
+        ctx["permite_visao_geral"] = permite_visao_geral and bool(uo_ativa)
+        ctx["visao_geral_value"] = self.VISAO_GERAL_VALUE
+        ctx["visao_geral_selected"] = (
+            permite_visao_geral and not user.unidade_administrativa_id
+        )
+        ctx["next"] = self.request.GET.get("next", reverse("admin:index"))
+        ctx["error"] = None
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        ua_id = request.POST.get("unidade_administrativa")
+        next_url = request.POST.get("next", reverse("admin:index"))
+        user = request.user
+
+        if ua_id == self.VISAO_GERAL_VALUE:
+            if not (user.is_superuser or user.is_gestor_patrimonio):
+                ctx = self.get_context_data()
+                ctx["error"] = (
+                    "A visão geral da UO é permitida apenas para gestor e superusuário."
+                )
+                return self.render_to_response(ctx)
+
+            uo_ativa = self._obter_uo_ativa(user)
+            if not uo_ativa:
+                ctx = self.get_context_data()
+                ctx["error"] = (
+                    "Não foi possível identificar a Unidade Orçamentária para visão geral."
+                )
+                return self.render_to_response(ctx)
+
+            if not uo_ativa.ativa:
+                ctx = self.get_context_data()
+                ctx["error"] = "A Unidade Orçamentária vinculada está inativa."
+                return self.render_to_response(ctx)
+
+            from usuario.models import Usuario
+
+            original = Usuario.objects.get(pk=user.pk)
+            update_fields = []
+            if user.unidade_administrativa_id is not None:
+                user.unidade_administrativa = None
+                update_fields.append("unidade_administrativa")
+
+            if user.unidade_orcamentaria_id != uo_ativa.id:
+                user.unidade_orcamentaria = uo_ativa
+                update_fields.append("unidade_orcamentaria")
+
+            with transaction.atomic():
+                if update_fields:
+                    user.save(update_fields=update_fields)
+                    changes = dict_changes(
+                        original,
+                        user,
+                        fields=["unidade_administrativa", "unidade_orcamentaria"],
+                    )
+                    if changes:
+                        ct = ContentType.objects.get_for_model(Usuario)
+                        HistoricoGeral.objects.bulk_create(
+                            [
+                                HistoricoGeral(
+                                    content_type=ct,
+                                    object_id=str(user.pk),
+                                    campo=field,
+                                    valor_antigo=old,
+                                    valor_novo=new,
+                                    alterado_por=user,
+                                )
+                                for field, (old, new) in changes.items()
+                            ]
+                        )
+
+            return redirect(next_url)
+
+        if not ua_id:
+            ctx = self.get_context_data()
+            ctx["error"] = "Selecione uma Unidade Administrativa."
+            return self.render_to_response(ctx)
+
+        try:
+            ua_id = int(ua_id)
+        except (ValueError, TypeError):
+            ctx = self.get_context_data()
+            ctx["error"] = "Unidade Administrativa inválida."
+            return self.render_to_response(ctx)
+
+        uas_disponiveis = self.get_uas_disponiveis()
+        if not uas_disponiveis.filter(id=ua_id).exists():
+            ctx = self.get_context_data()
+            ctx["error"] = (
+                "Você não tem permissão para acessar essa Unidade Administrativa."
+            )
+            return self.render_to_response(ctx)
+
+        from usuario.models import Usuario
+
+        original = Usuario.objects.get(pk=user.pk)
+
+        ua = UnidadeAdministrativa.objects.get(id=ua_id)
+        update_fields = []
+        if user.unidade_administrativa_id != ua.id:
+            user.unidade_administrativa = ua
+            update_fields.append("unidade_administrativa")
+
+        if (
+            ua.unidade_orcamentaria_id
+            and user.unidade_orcamentaria_id != ua.unidade_orcamentaria_id
+        ):
+            user.unidade_orcamentaria = ua.unidade_orcamentaria
+            update_fields.append("unidade_orcamentaria")
+
+        with transaction.atomic():
+            if update_fields:
+                user.save(update_fields=update_fields)
+                changes = dict_changes(
+                    original,
+                    user,
+                    fields=["unidade_administrativa", "unidade_orcamentaria"],
+                )
+                if changes:
+                    ct = ContentType.objects.get_for_model(Usuario)
+                    HistoricoGeral.objects.bulk_create(
+                        [
+                            HistoricoGeral(
+                                content_type=ct,
+                                object_id=str(user.pk),
+                                campo=field,
+                                valor_antigo=old,
+                                valor_novo=new,
+                                alterado_por=user,
+                            )
+                            for field, (old, new) in changes.items()
+                        ]
+                    )
+
+        return redirect(next_url)
