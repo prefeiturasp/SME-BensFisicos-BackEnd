@@ -83,7 +83,7 @@ def aprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -134,7 +134,7 @@ def reprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -297,11 +297,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
     def get_list_display(self, request):
-        if (
-            request.user.is_operador_inventario
-            and not request.user.is_gestor_patrimonio
-        ):
-            return ("numero_patrimonial", "nome", "status")
         return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     def get_readonly_fields(self, request, obj=None):
@@ -412,8 +407,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
                         ua_user = getattr(request.user, "unidade_administrativa", None)
 
-                        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
-                        fld.queryset = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
+                        qs_ativas = UnidadeAdministrativa.objects.filter(
+                            status=UnidadeAdministrativa.ATIVA
+                        )
+                        fld.queryset = filtrar_ua_origem_por_escopo(
+                            request.user, qs_ativas
+                        )
 
                         ua_user = getattr(request.user, "unidade_administrativa", None)
                         if ua_user and not usuario_e_super_admin(request.user):
@@ -427,17 +426,31 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     ua_form = cleaned_data.get("unidade_administrativa")
 
                     if not ua_form:
-                        raise ValidationError({"unidade_administrativa": "Selecione a Unidade Administrativa."})
+                        raise ValidationError(
+                            {
+                                "unidade_administrativa": "Selecione a Unidade Administrativa."
+                            }
+                        )
 
                     if ua_form.status != UnidadeAdministrativa.ATIVA:
-                        raise ValidationError({"unidade_administrativa": "A Unidade Administrativa selecionada está inativa."})
+                        raise ValidationError(
+                            {
+                                "unidade_administrativa": "A Unidade Administrativa selecionada está inativa."
+                            }
+                        )
 
-                    qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
-                    qs_permitidas = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
+                    qs_ativas = UnidadeAdministrativa.objects.filter(
+                        status=UnidadeAdministrativa.ATIVA
+                    )
+                    qs_permitidas = filtrar_ua_origem_por_escopo(
+                        request.user, qs_ativas
+                    )
 
                     if not qs_permitidas.filter(pk=ua_form.pk).exists():
                         raise ValidationError(
-                            {"unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."}
+                            {
+                                "unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."  # noqa E501
+                            }
                         )
 
                     ua_user = getattr(request.user, "unidade_administrativa", None)
@@ -499,7 +512,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 )
                 raise ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa E501
                     }
                 )
             raise
@@ -824,7 +837,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def thumb(self, obj):
         if getattr(obj, "foto", None) and hasattr(obj.foto, "url") and obj.foto.url:
             return format_html(
-                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',
+                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',  # noqa E501
                 obj.foto.url,
             )
         return "—"
@@ -841,7 +854,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ):
                 return format_html(
                     '<a href="{}" target="_blank" rel="noopener">'
-                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'
+                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'  # noqa E501
                     "</a>",
                     obj.foto.url,
                     obj.foto.url,
