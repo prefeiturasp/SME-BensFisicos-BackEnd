@@ -4,6 +4,7 @@ from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.models import Usuario
 from usuario.admin import CustomUserModelAdmin
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
@@ -389,6 +390,101 @@ class CustomUserModelAdminFieldsetsTestCase(TestCase):
         self.assertEqual(
             rf_index, nome_index + 1, "RF deve estar logo após o campo nome"
         )
+
+
+class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
+    def setUp(self):
+        self.site = AdminSite()
+        self.admin = CustomUserModelAdmin(Usuario, self.site)
+        self.factory = RequestFactory()
+
+        self.ua_uo1_a = criar_ua(codigo="101", sigla="U1A", nome="UA UO1 A")
+        self.ua_uo1_b = criar_ua(
+            uo=self.ua_uo1_a.unidade_orcamentaria,
+            codigo="102",
+            sigla="U1B",
+            nome="UA UO1 B",
+        )
+        self.uo2 = criar_uo(codigo="UO-999", sigla="UO2", nome="UO 2")
+        self.ua_uo2 = criar_ua(
+            uo=self.uo2,
+            codigo="201",
+            sigla="U2A",
+            nome="UA UO2",
+        )
+
+        self.admin_user = Usuario.objects.create_user(
+            username="admin_uo1",
+            password="senha123",
+            is_staff=True,
+            unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
+            must_change_password=False,
+        )
+
+        self.superuser = Usuario.objects.create_superuser(
+            username="super_admin_uo",
+            email="super@teste.com",
+            password="senha123",
+            must_change_password=False,
+        )
+
+    def test_m2m_queryset_no_add_usa_uo_do_usuario_logado(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.admin_user
+
+        field = Usuario._meta.get_field("unidades_administrativas")
+        formfield = self.admin.formfield_for_manytomany(field, request)
+
+        qs_ids = set(formfield.queryset.values_list("id", flat=True))
+
+        self.assertIn(self.ua_uo1_a.id, qs_ids)
+        self.assertIn(self.ua_uo1_b.id, qs_ids)
+        self.assertNotIn(self.ua_uo2.id, qs_ids)
+
+    def test_fk_queryset_no_add_usa_uo_do_usuario_logado(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.admin_user
+
+        field = Usuario._meta.get_field("unidade_administrativa")
+        formfield = self.admin.formfield_for_foreignkey(field, request)
+
+        qs_ids = set(formfield.queryset.values_list("id", flat=True))
+
+        self.assertIn(self.ua_uo1_a.id, qs_ids)
+        self.assertIn(self.ua_uo1_b.id, qs_ids)
+        self.assertNotIn(self.ua_uo2.id, qs_ids)
+
+    def test_superuser_add_sem_uo_param_usa_primeira_uo_no_fk_e_m2m(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.superuser
+
+        expected_first_uo_id = (
+            UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+            .order_by("unidade_orcamentaria__codigo", "codigo", "id")
+            .values_list("unidade_orcamentaria_id", flat=True)
+            .first()
+        )
+        if not expected_first_uo_id:
+            expected_first_uo = UnidadeOrcamentaria.objects.order_by(
+                "codigo", "id"
+            ).first()
+            self.assertIsNotNone(expected_first_uo)
+            expected_first_uo_id = expected_first_uo.id
+
+        fk_field = Usuario._meta.get_field("unidade_administrativa")
+        fk_formfield = self.admin.formfield_for_foreignkey(fk_field, request)
+        fk_uo_ids = set(
+            fk_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True)
+        )
+
+        m2m_field = Usuario._meta.get_field("unidades_administrativas")
+        m2m_formfield = self.admin.formfield_for_manytomany(m2m_field, request)
+        m2m_uo_ids = set(
+            m2m_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True)
+        )
+
+        self.assertEqual(fk_uo_ids, {expected_first_uo_id})
+        self.assertEqual(m2m_uo_ids, {expected_first_uo_id})
 
     def test_rf_field_position_in_add_fieldsets(self):
         informacoes_pessoais_fields = None
