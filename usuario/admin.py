@@ -97,20 +97,49 @@ class CustomUserModelAdmin(UserAdmin):
             return self.readonly_fields + ("username",)
         return self.readonly_fields
 
+    def _resolver_uo_id_contexto_admin(self, request):
+        uo_id = None
+
+        if request.method == "POST":
+            uo_id = request.POST.get("unidade_orcamentaria") or None
+
+        if not uo_id:
+            uo_id = request.GET.get("unidade_orcamentaria") or None
+
+        if (
+            not uo_id
+            and hasattr(request, "_obj_usuario_admin")
+            and request._obj_usuario_admin
+        ):
+            uo_id = request._obj_usuario_admin.unidade_orcamentaria_id or None
+
+        if not uo_id and not request.user.is_superuser:
+            uo_id = request.user.unidade_orcamentaria_id or None
+
+        if not uo_id and request.user.is_superuser:
+            uo_id = (
+                UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+                .order_by("unidade_orcamentaria__codigo", "codigo", "id")
+                .values_list("unidade_orcamentaria_id", flat=True)
+                .first()
+            )
+
+            if not uo_id:
+                uo_id = (
+                    UnidadeOrcamentaria.objects.order_by("codigo", "id")
+                    .values_list("id", flat=True)
+                    .first()
+                )
+
+        return uo_id
+
     def formfield_for_manytomany(self, db_field, request, **kwargs):
         if db_field.name == "unidades_administrativas":
             qs = UnidadeAdministrativa.objects.filter(
                 status=UnidadeAdministrativa.ATIVA
             )
-            uo_id = None
-            if request.method == "POST":
-                uo_id = request.POST.get("unidade_orcamentaria") or None
-            if (
-                not uo_id
-                and hasattr(request, "_obj_usuario_admin")
-                and request._obj_usuario_admin
-            ):
-                uo_id = request._obj_usuario_admin.unidade_orcamentaria_id
+            uo_id = self._resolver_uo_id_contexto_admin(request)
+
             if uo_id:
                 kwargs["queryset"] = qs.filter(unidade_orcamentaria_id=uo_id)
             else:
@@ -134,22 +163,7 @@ class CustomUserModelAdmin(UserAdmin):
             qs = UnidadeAdministrativa.objects.filter(
                 status=UnidadeAdministrativa.ATIVA
             )
-
-            uo_id = None
-
-            if request.method == "POST":
-                uo_id = request.POST.get("unidade_orcamentaria") or None
-
-            if not uo_id:
-                uo_id = request.GET.get("unidade_orcamentaria") or None
-
-            if (
-                not uo_id
-                and hasattr(request, "_obj_usuario_admin")
-                and request._obj_usuario_admin
-            ):
-                obj = request._obj_usuario_admin
-                uo_id = obj.unidade_orcamentaria_id or None
+            uo_id = self._resolver_uo_id_contexto_admin(request)
 
             if not uo_id:
                 kwargs["queryset"] = UnidadeAdministrativa.objects.none()
@@ -171,10 +185,9 @@ class CustomUserModelAdmin(UserAdmin):
             and hasattr(form, "base_fields")
             and "unidade_orcamentaria" in form.base_fields
         ):
-            if request.user.unidade_orcamentaria_id:
-                form.base_fields["unidade_orcamentaria"].initial = (
-                    request.user.unidade_orcamentaria_id
-                )
+            initial_uo_id = self._resolver_uo_id_contexto_admin(request)
+            if initial_uo_id:
+                form.base_fields["unidade_orcamentaria"].initial = initial_uo_id
 
         if not request.user.is_superuser and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].disabled = True
