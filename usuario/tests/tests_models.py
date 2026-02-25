@@ -486,6 +486,36 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         self.assertEqual(fk_uo_ids, {expected_first_uo_id})
         self.assertEqual(m2m_uo_ids, {expected_first_uo_id})
 
+    def test_grupo_single_select_nao_dispara_erro_lista(self):
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+
+        request = self.factory.post(
+            "/admin/usuario/usuario/add/",
+            data={
+                "unidade_orcamentaria": str(self.ua_uo1_a.unidade_orcamentaria_id),
+                "groups": str(grupo_gestor.id),
+            },
+        )
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request, obj=None)
+        form = form_class(
+            data={
+                "username": "usuario_select_unico",
+                "password1": "Teste@12345!x",
+                "password2": "Teste@12345!x",
+                "nome": "Usuario Select",
+                "email": "select@teste.com",
+                "is_staff": True,
+                "unidade_orcamentaria": str(self.ua_uo1_a.unidade_orcamentaria_id),
+                "unidade_administrativa": str(self.ua_uo1_a.id),
+                "unidades_administrativas": [str(self.ua_uo1_a.id)],
+                "groups": str(grupo_gestor.id),
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
     def test_rf_field_position_in_add_fieldsets(self):
         informacoes_pessoais_fields = None
         for fieldset in self.admin.add_fieldsets:

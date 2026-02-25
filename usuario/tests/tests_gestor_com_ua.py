@@ -150,7 +150,7 @@ class GestorComUATestCase(TestCase):
                 "nome": "Novo Operador",
                 "email": "novo@test.com",
                 "is_staff": True,
-                "groups": [self.grupo_operador.id],
+                "groups": str(self.grupo_operador.id),
                 "unidade_orcamentaria": self.ua1.unidade_orcamentaria_id,
             }
         )
