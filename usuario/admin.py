@@ -1,9 +1,19 @@
 from django.contrib import admin
+from django import forms
 from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import Group
 from django_admin_listfilter_dropdown.filters import DropdownFilter
 from rangefilter.filters import DateRangeFilter
 from usuario.models import Usuario
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
+
+
+class GroupSingleSelectWidget(forms.Select):
+
+    def value_from_datadict(self, data, files, name):
+        value = super().value_from_datadict(data, files, name)
+        return [value] if value else []
 
 
 # TODO ajusta retorno de usuarios conforme GRUPO
@@ -133,7 +143,41 @@ class CustomUserModelAdmin(UserAdmin):
 
         return uo_id
 
+    def _get_grupo_queryset(self):
+        return Group.objects.filter(
+            name__in=[GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO]
+        ).order_by("name")
+
+    def _grupo_preferencial(self, user):
+        nomes = set(user.groups.values_list("name", flat=True))
+        if GRUPO_GESTOR_PATRIMONIO in nomes:
+            return (
+                self._get_grupo_queryset().filter(name=GRUPO_GESTOR_PATRIMONIO).first()
+            )
+        if GRUPO_OPERADOR_INVENTARIO in nomes:
+            return (
+                self._get_grupo_queryset()
+                .filter(name=GRUPO_OPERADOR_INVENTARIO)
+                .first()
+            )
+        return None
+
+    def _selecionar_grupo_unico(self, groups_qs):
+        if not groups_qs:
+            return None
+
+        nomes = set(groups_qs.values_list("name", flat=True))
+        if GRUPO_GESTOR_PATRIMONIO in nomes:
+            return groups_qs.filter(name=GRUPO_GESTOR_PATRIMONIO).first()
+        if GRUPO_OPERADOR_INVENTARIO in nomes:
+            return groups_qs.filter(name=GRUPO_OPERADOR_INVENTARIO).first()
+        return groups_qs.first()
+
     def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "groups":
+            kwargs["queryset"] = self._get_grupo_queryset()
+            kwargs["widget"] = forms.Select
+
         if db_field.name == "unidades_administrativas":
             qs = UnidadeAdministrativa.objects.filter(
                 status=UnidadeAdministrativa.ATIVA
@@ -177,6 +221,17 @@ class CustomUserModelAdmin(UserAdmin):
         request._obj_usuario_admin = obj
 
         form = super().get_form(request, obj, **kwargs)
+
+        if hasattr(form, "base_fields"):
+            if "groups" in form.base_fields:
+                form.base_fields["groups"].queryset = self._get_grupo_queryset()
+                form.base_fields["groups"].label = "Grupo"
+                form.base_fields["groups"].required = False
+                form.base_fields["groups"].widget = GroupSingleSelectWidget()
+                if obj and obj.pk:
+                    grupo_inicial = self._grupo_preferencial(obj)
+                    if grupo_inicial:
+                        form.base_fields["groups"].initial = [grupo_inicial.pk]
         if hasattr(form, "base_fields") and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].required = True
 
@@ -202,14 +257,10 @@ class CustomUserModelAdmin(UserAdmin):
         def custom_clean(form_self):
             cleaned_data = original_clean(form_self)
 
-            groups = cleaned_data.get("groups") or []
+            groups_qs = cleaned_data.get("groups")
+            grupo = self._selecionar_grupo_unico(groups_qs)
             uo = cleaned_data.get("unidade_orcamentaria")
             ua = cleaned_data.get("unidade_administrativa")
-
-            from usuario.constants import (
-                GRUPO_OPERADOR_INVENTARIO,
-                GRUPO_GESTOR_PATRIMONIO,
-            )
             from django.core.exceptions import ValidationError
 
             if not request.user.is_superuser and cleaned_data.get("is_superuser"):
@@ -217,8 +268,8 @@ class CustomUserModelAdmin(UserAdmin):
                     {"is_superuser": "Você não tem permissão para definir super-admin."}
                 )
 
-            is_operador = any(g.name == GRUPO_OPERADOR_INVENTARIO for g in groups)
-            is_gestor = any(g.name == GRUPO_GESTOR_PATRIMONIO for g in groups)
+            is_operador = bool(grupo and grupo.name == GRUPO_OPERADOR_INVENTARIO)
+            is_gestor = bool(grupo and grupo.name == GRUPO_GESTOR_PATRIMONIO)
 
             if not uo:
                 raise ValidationError(
@@ -297,6 +348,13 @@ class CustomUserModelAdmin(UserAdmin):
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         obj = form.instance
+
+        grupo = self._selecionar_grupo_unico(form.cleaned_data.get("groups"))
+        if grupo:
+            obj.groups.set([grupo])
+        else:
+            obj.groups.clear()
+
         if obj.is_operador_inventario and not obj.unidade_administrativa_id:
             primeira = obj.unidades_administrativas.first()
             if primeira:
