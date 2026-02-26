@@ -2,6 +2,8 @@ from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
+from unittest.mock import patch
+from types import SimpleNamespace
 
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
@@ -515,6 +517,74 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         )
 
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_grupo_single_select_exibe_opcao_vazia(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request, obj=None)
+        form = form_class()
+        html = form["groups"].as_widget()
+        self.assertIn('<option value="" selected>---------</option>', html)
+
+    def test_grupo_single_select_renderiza_opcao_vazia_no_html(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request, obj=None)
+        form = form_class()
+        html = form["groups"].as_widget()
+
+        self.assertIn('<option value="" selected>---------</option>', html)
+
+    def test_change_form_usuario_com_grupo_inicia_com_grupo_atual(self):
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        usuario = Usuario.objects.create_user(
+            username="usuario_com_grupo_initial",
+            password="senha123",
+            unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
+            unidade_administrativa=self.ua_uo1_a,
+            is_staff=True,
+            must_change_password=False,
+        )
+        usuario.groups.set([grupo_gestor])
+
+        request = self.factory.get(f"/admin/usuario/usuario/{usuario.pk}/change/")
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request, obj=usuario)
+        form = form_class(instance=usuario)
+
+        valor = form["groups"].value()
+        self.assertTrue(valor)
+        self.assertIn(str(grupo_gestor.pk), [str(v) for v in valor])
+
+    def test_save_related_nao_limpa_grupo_se_groups_nao_veio_no_post(self):
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        usuario = Usuario.objects.create_user(
+            username="usuario_sem_groups_post",
+            password="senha123",
+            unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
+            unidade_administrativa=self.ua_uo1_a,
+            is_staff=True,
+            must_change_password=False,
+        )
+        usuario.groups.set([grupo_gestor])
+
+        request = self.factory.post(
+            f"/admin/usuario/usuario/{usuario.pk}/change/",
+            data={"nome": "Sem groups no post"},
+        )
+        request.user = self.superuser
+        form = SimpleNamespace(instance=usuario, cleaned_data={})
+
+        with patch(
+            "django.contrib.auth.admin.UserAdmin.save_related", return_value=None
+        ):
+            self.admin.save_related(request, form, [], change=True)
+
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.groups.filter(name=GRUPO_GESTOR_PATRIMONIO).exists())
 
     def test_rf_field_position_in_add_fieldsets(self):
         informacoes_pessoais_fields = None

@@ -15,6 +15,29 @@ class GroupSingleSelectWidget(forms.Select):
         value = super().value_from_datadict(data, files, name)
         return [value] if value else []
 
+    def optgroups(self, name, value, attrs=None):
+        groups = super().optgroups(name, value, attrs)
+        value = value or []
+
+        has_blank = any(
+            option["value"] in ("", None)
+            for _, subgroup, _ in groups
+            for option in subgroup
+        )
+        if not has_blank:
+            empty_option = self.create_option(
+                name,
+                "",
+                "---------",
+                selected=not bool(value),
+                index=0,
+                subindex=None,
+                attrs=attrs,
+            )
+            groups = [(None, [empty_option], 0)] + groups
+
+        return groups
+
 
 # TODO ajusta retorno de usuarios conforme GRUPO
 class CustomUserModelAdmin(UserAdmin):
@@ -163,6 +186,9 @@ class CustomUserModelAdmin(UserAdmin):
         return None
 
     def _selecionar_grupo_unico(self, groups_qs):
+        if isinstance(groups_qs, Group):
+            return groups_qs
+
         if not groups_qs:
             return None
 
@@ -224,14 +250,20 @@ class CustomUserModelAdmin(UserAdmin):
 
         if hasattr(form, "base_fields"):
             if "groups" in form.base_fields:
-                form.base_fields["groups"].queryset = self._get_grupo_queryset()
-                form.base_fields["groups"].label = "Grupo"
-                form.base_fields["groups"].required = False
-                form.base_fields["groups"].widget = GroupSingleSelectWidget()
+                form.base_fields["groups"] = forms.ModelMultipleChoiceField(
+                    queryset=self._get_grupo_queryset(),
+                    required=False,
+                    label="Grupo",
+                    widget=GroupSingleSelectWidget,
+                )
                 if obj and obj.pk:
                     grupo_inicial = self._grupo_preferencial(obj)
                     if grupo_inicial:
                         form.base_fields["groups"].initial = [grupo_inicial.pk]
+                    else:
+                        form.base_fields["groups"].initial = []
+                else:
+                    form.base_fields["groups"].initial = []
         if hasattr(form, "base_fields") and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].required = True
 
@@ -349,11 +381,12 @@ class CustomUserModelAdmin(UserAdmin):
         super().save_related(request, form, formsets, change)
         obj = form.instance
 
-        grupo = self._selecionar_grupo_unico(form.cleaned_data.get("groups"))
-        if grupo:
-            obj.groups.set([grupo])
-        else:
-            obj.groups.clear()
+        if request.method == "POST" and "groups" in request.POST:
+            grupo = self._selecionar_grupo_unico(form.cleaned_data.get("groups"))
+            if grupo:
+                obj.groups.set([grupo])
+            else:
+                obj.groups.clear()
 
         if obj.is_operador_inventario and not obj.unidade_administrativa_id:
             primeira = obj.unidades_administrativas.first()
