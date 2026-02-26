@@ -10,8 +10,8 @@ from dados_comuns.tests.factories import criar_ua, criar_uo
 
 class BemPatrimonialAdminTest(TestCase):
     def setUp(self):
-        User = get_user_model()
-        self.admin_user = User.objects.create_superuser(
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_superuser(
             username="admin", email="admin@example.com", password="admin123"
         )
         self.uo = criar_uo(codigo="100", nome="UO 100")
@@ -24,18 +24,18 @@ class BemPatrimonialAdminTest(TestCase):
         self.model_admin = BemPatrimonialAdmin(BemPatrimonial, admin.site)
 
     def _mk_bem(self, **kwargs):
-        data = dict(
-            nome="Item Teste",
-            descricao="Desc",
-            valor_unitario=1.00,
-            marca="M",
-            modelo="X",
-            numero_processo="PROC-1",
-            numero_patrimonial="000.000000001-0",
-            numero_formato_antigo=False,
-            sem_numeracao=False,
-            criado_por=self.admin_user,
-        )
+        data = {
+            "nome": "Item Teste",
+            "descricao": "Desc",
+            "valor_unitario": 1.00,
+            "marca": "M",
+            "modelo": "X",
+            "numero_processo": "PROC-1",
+            "numero_patrimonial": "000.000000001-0",
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+            "criado_por": self.admin_user,
+        }
         data.update(kwargs)
         return BemPatrimonial.objects.create(**data)
 

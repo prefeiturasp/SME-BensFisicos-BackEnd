@@ -10,13 +10,12 @@ def deduplicate_numero_patrimonial(apps, schema_editor):
     Se o campo ainda for numérico, evitamos qualquer comparação com ''.
     Mantém o primeiro ID e zera (NULL) os demais duplicados.
     """
-    BemPatrimonial = apps.get_model("bem_patrimonial", "BemPatrimonial")
+    bem_patrimonial_model = apps.get_model("bem_patrimonial", "BemPatrimonial")
 
-    field = BemPatrimonial._meta.get_field("numero_patrimonial")
+    field = bem_patrimonial_model._meta.get_field("numero_patrimonial")
 
-    qs_base = BemPatrimonial.objects.exclude(numero_patrimonial__isnull=True)
+    qs_base = bem_patrimonial_model.objects.exclude(numero_patrimonial__isnull=True)
     if isinstance(field, CharField):
-
         qs_base = qs_base.exclude(numero_patrimonial="")
 
     dups = (
@@ -26,13 +25,13 @@ def deduplicate_numero_patrimonial(apps, schema_editor):
     for row in dups:
         valor = row["numero_patrimonial"]
         ids = list(
-            BemPatrimonial.objects.filter(numero_patrimonial=valor)
+            bem_patrimonial_model.objects.filter(numero_patrimonial=valor)
             .order_by("id")
             .values_list("id", flat=True)
         )
         drop_ids = ids[1:]
         if drop_ids:
-            BemPatrimonial.objects.filter(id__in=drop_ids).update(
+            bem_patrimonial_model.objects.filter(id__in=drop_ids).update(
                 numero_patrimonial=None
             )
 

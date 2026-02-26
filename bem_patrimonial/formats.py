@@ -38,7 +38,7 @@ class PDFFormat(Format):
 
         valor_total = sum(bem.valor_unitario or Decimal("0.00") for bem in bens_list)
         localizacoes_unicas = len(
-            set(bem.localizacao for bem in bens_list if bem.localizacao)
+            {bem.localizacao for bem in bens_list if bem.localizacao}
         )
 
         buffer = BytesIO()
@@ -93,7 +93,7 @@ class PDFFormat(Format):
                 if os.path.exists(logo_path):
                     try:
                         return Image(logo_path, width=3 * cm, height=1.5 * cm)
-                    except:
+                    except Exception:
                         pass
             return Paragraph(fallback_text, styles["Heading1"])
 
@@ -142,32 +142,30 @@ class PDFFormat(Format):
 
         return elements
 
+    def _obter_usuario_geracao(self, request):
+        if not request or not getattr(request, "user", None):
+            return "Sistema"
+        user = request.user
+        if not user.is_authenticated:
+            return "Sistema"
+        if hasattr(user, "nome") and user.nome:
+            return user.nome
+        full_name = (
+            user.get_full_name() if hasattr(user, "get_full_name") else ""
+        )
+        return (
+            full_name.strip()
+            if full_name and full_name.strip()
+            else user.username
+        )
+
     def _criar_info_relatorio(self, request, total_registros):
         elements = []
 
         from django.utils.timezone import localtime
 
         data_geracao = localtime(timezone.now()).strftime("%d/%m/%Y às %H:%M")
-        usuario = "Sistema"
-        if (
-            request
-            and hasattr(request, "user")
-            and request.user
-            and request.user.is_authenticated
-        ):
-            user = request.user
-
-            if hasattr(user, "nome") and user.nome:
-                usuario = user.nome
-            else:
-                full_name = (
-                    user.get_full_name() if hasattr(user, "get_full_name") else ""
-                )
-                usuario = (
-                    full_name.strip()
-                    if full_name and full_name.strip()
-                    else user.username
-                )
+        usuario = self._obter_usuario_geracao(request)
 
         info_data = [
             [

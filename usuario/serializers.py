@@ -5,6 +5,8 @@ from usuario.models import Usuario
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.escopo import obter_unidade_orcamentaria_id_do_usuario
 
+MSG_SENHAS_NAO_CONFEREM = "As senhas não conferem."
+
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
@@ -54,7 +56,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
 
         attrs["user"] = user
@@ -88,7 +90,7 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
         return attrs
 
@@ -117,7 +119,7 @@ class FirstAccessPasswordChangeSerializer(serializers.Serializer):
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
 
         return attrs
@@ -200,16 +202,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
                     unidade_orcamentaria_id=uo_id,
                     status=UnidadeAdministrativa.ATIVA,
                 )
-        elif obj.is_operador_inventario:
-            if obj.unidade_administrativa_id:
-                uas_qs = UnidadeAdministrativa.objects.filter(
-                    id=obj.unidade_administrativa_id,
-                    status=UnidadeAdministrativa.ATIVA,
-                )
-                uos_qs = UnidadeOrcamentaria.objects.filter(
-                    id=obj.unidade_administrativa.unidade_orcamentaria_id,
-                    ativa=True,
-                )
+        elif obj.is_operador_inventario and obj.unidade_administrativa_id:
+            uas_qs = UnidadeAdministrativa.objects.filter(
+                id=obj.unidade_administrativa_id,
+                status=UnidadeAdministrativa.ATIVA,
+            )
+            uos_qs = UnidadeOrcamentaria.objects.filter(
+                id=obj.unidade_administrativa.unidade_orcamentaria_id,
+                ativa=True,
+            )
 
         uas_qs = uas_qs.select_related("unidade_orcamentaria")
         uas_por_uo = {}

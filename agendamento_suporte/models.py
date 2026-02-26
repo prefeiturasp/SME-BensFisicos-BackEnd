@@ -76,7 +76,7 @@ class AgendamentoSuporte(models.Model):
     data_agendada = models.DateField("Data", null=False, blank=False)
     hora_agendada = models.TimeField("Hora", null=False, blank=False)
     # opcional
-    observacao = models.TextField("Observacao", null=True, blank=True)
+    observacao = models.TextField("Observacao", blank=True, default="")
     # controle
     created_at = models.DateTimeField("Criado em", auto_now=True)
     updated_at = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)

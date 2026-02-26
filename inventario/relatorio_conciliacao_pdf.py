@@ -65,14 +65,17 @@ def obter_nome_usuario(usuario):
     return usuario.nome if getattr(usuario, "nome", None) else usuario.username
 
 
+STATUS_NAO_CONCILIADO = "Não Conciliado"
+
+
 def formatar_status_para_header(conciliacao):
     """
     Retorna o texto de STATUS adequado para o cabeçalho do PDF.
     """
     status_display = conciliacao.get_status_display()
 
-    if "Não Conciliado" in status_display:
-        return "Não Conciliado"
+    if STATUS_NAO_CONCILIADO in status_display:
+        return STATUS_NAO_CONCILIADO
 
     return status_display
 
@@ -325,7 +328,7 @@ def _criar_rodape_conciliacao(conciliacao, usuario_gerador=None):
 
     status_display = conciliacao.get_status_display()
 
-    if "Não Conciliado" in status_display:
+    if STATUS_NAO_CONCILIADO in status_display:
         nome_fechamento = status_display
     elif fechado_por:
         nome = obter_nome_usuario(fechado_por).upper()
@@ -504,7 +507,7 @@ def _criar_blocos_itens_conciliacao(conciliacao):
     font = 6
     leading = 7
 
-    label = criar_estilo_base(
+    _ = criar_estilo_base(
         "ItemLabel",
         styles,
         fontName="Helvetica-Bold",

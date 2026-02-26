@@ -28,7 +28,7 @@ def verificar_movimentacoes_duplicadas(modeladmin, request, queryset):
         )
         return None
 
-    Model = modeladmin.model
+    model = modeladmin.model
 
     changelist = modeladmin.get_changelist_instance(request)
     base_qs = changelist.get_queryset(request).select_related(
@@ -77,7 +77,7 @@ def verificar_movimentacoes_duplicadas(modeladmin, request, queryset):
     context.update(
         {
             "title": "(137771) Movimentações potencialmente duplicadas",
-            "opts": Model._meta,
+            "opts": model._meta,
             "grupos_duplicados": grupos_duplicados,
             "total_movimentacoes_analisadas": base_qs.count(),
             "total_grupos_duplicados": len(grupos_duplicados),

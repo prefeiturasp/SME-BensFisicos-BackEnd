@@ -8,7 +8,6 @@ from usuario.models import Usuario
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 
 
-# TODO ajusta retorno de usuarios conforme GRUPO
 class CustomUserModelAdmin(UserAdmin):
     model = Usuario
     list_display = (
@@ -149,11 +148,11 @@ class CustomUserModelAdmin(UserAdmin):
             obj is None
             and hasattr(form, "base_fields")
             and "unidade_orcamentaria" in form.base_fields
+            and request.user.unidade_orcamentaria_id
         ):
-            if request.user.unidade_orcamentaria_id:
-                form.base_fields["unidade_orcamentaria"].initial = (
-                    request.user.unidade_orcamentaria_id
-                )
+            form.base_fields["unidade_orcamentaria"].initial = (
+                request.user.unidade_orcamentaria_id
+            )
 
         if not request.user.is_superuser and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].disabled = True

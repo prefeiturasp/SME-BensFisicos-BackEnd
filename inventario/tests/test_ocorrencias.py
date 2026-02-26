@@ -49,11 +49,6 @@ class OcorrenciaBaseTest(TestCase):
         )
 
     def criar_conciliacao(self, fechado=False, ano=None):
-        status = (
-            constants.CONCILIACAO_FECHADO
-            if fechado
-            else constants.CONCILIACAO_EM_ABERTO
-        )
         if ano:
             periodo_final = datetime.date(ano, 12, 31)
         else:
@@ -190,7 +185,7 @@ class RegistrarOcorrenciaTest(OcorrenciaBaseTest):
         self.assertFalse(bem.pode_solicitar_movimentacao)
 
     def test_editar_ocorrencia_atualiza_ao_inves_de_criar_nova(self):
-        _, bem, item = self.criar_cenario_basico()
+        _, _, item = self.criar_cenario_basico()
 
         # Registra primeira ocorrência
         registrar_ocorrencia(

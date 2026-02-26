@@ -15,7 +15,7 @@ window.onload = function(){
 
     let select = document.createElement('select');
     select.name= "select_hora_agendada"
-    select.id = id="id_select_hora_agendada"
+    select.id = "id_select_hora_agendada"
     select.required = true
     select.onchange = onChangeSelect
 
@@ -59,12 +59,12 @@ function appendOptionSelected(value) {
 }
 
 function appendOptions(list) {
-    let select = document.getElementById('id_select_hora_agendada');
+    const select = document.getElementById('id_select_hora_agendada');
 
-    for(let i = 0; i < list.length; i++){
-        let opt = document.createElement('option');
-        opt.value = list[i]
-        opt.innerHTML = list[i]
+    for (const item of list) {
+        const opt = document.createElement('option');
+        opt.value = item;
+        opt.innerHTML = item;
         select.appendChild(opt);
     }
     // Reset select caso não tenha nenhum horário disponível
@@ -75,7 +75,7 @@ function appendOptions(list) {
 };
 
 function appendDefaultOption(select) {
-    var default_option = document.createElement('option');
+    const default_option = document.createElement('option');
     default_option.value = ""
     default_option.selected
     default_option.innerHTML = "---------"
@@ -89,8 +89,8 @@ function removeAllChildNodes(parent) {
 }
 
 function onChangeDate(){
-    inputDate = document.getElementById("id_data_agendada");
-    apiUrl = document.getElementById('id_url').value;
+    const inputDate = document.getElementById("id_data_agendada");
+    const apiUrl = document.getElementById('id_url').value;
 
     fetch(`${apiUrl}/agenda/horarios_disponiveis/?data=${inputDate.value}`)
     .then(function(response) {
@@ -99,5 +99,7 @@ function onChangeDate(){
     .then(function(data) {
         appendOptions(data);
     })
-    .catch()
+    .catch(function() {
+        appendOptions([]);
+    });
 };

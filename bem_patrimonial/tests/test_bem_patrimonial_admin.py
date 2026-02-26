@@ -87,8 +87,8 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
             unidade_orcamentaria=cls.uo,
             is_staff=True,
         )
-        User = get_user_model()
-        cls.superuser = User.objects.create_superuser(
+        user_model = get_user_model()
+        cls.superuser = user_model.objects.create_superuser(
             username="super_cob",
             email="super@test.com",
             password="x",
