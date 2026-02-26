@@ -219,8 +219,31 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         self.assertEqual(
             sorted(args[2]), sorted(["operador@test.com", "gestor@test.com"])
         )
+        self.assertEqual(len(args[2]), len(set(args[2])))
         self.assertEqual(kwargs.get("dias_minimo"), 7)
         self.assertEqual(kwargs.get("dias_urgente"), 30)
+
+    @patch(COMMAND_ENVIA_PATH)
+    def test_comando_fallback_gestor_sem_m2m_usa_ua_ativa(self, mock_envia):
+        self.gestor.unidades_administrativas.clear()
+        self._cria_movimentacao(self.ua_destino)
+
+        call_command("notificar_movimentacoes_pendentes_aceite")
+
+        self.assertEqual(mock_envia.call_count, 1)
+        args = mock_envia.call_args[0]
+        self.assertEqual(args[0], self.ua_destino)
+        self.assertIn("gestor@test.com", args[2])
+
+    @patch(COMMAND_ENVIA_PATH)
+    def test_comando_nao_duplica_gestor_quando_tem_m2m_e_ua_ativa(self, mock_envia):
+        self._cria_movimentacao(self.ua_destino)
+
+        call_command("notificar_movimentacoes_pendentes_aceite")
+
+        self.assertEqual(mock_envia.call_count, 1)
+        args = mock_envia.call_args[0]
+        self.assertEqual(args[2].count("gestor@test.com"), 1)
 
     @patch(COMMAND_ENVIA_PATH)
     def test_comando_filtra_por_ua_codigo(self, mock_envia):

@@ -54,6 +54,32 @@ class Command(BaseCommand):
             help="Caminho do arquivo de log para salvar o resumo.",
         )
 
+    def _usuarios_destinatarios_da_ua(self, ua):
+        return (
+            Usuario.objects.filter(is_active=True)
+            .filter(
+                Q(
+                    groups__name=GRUPO_OPERADOR_INVENTARIO,
+                    unidades_administrativas=ua,
+                )
+                | Q(
+                    groups__name=GRUPO_GESTOR_PATRIMONIO,
+                    unidades_administrativas=ua,
+                )
+                | Q(
+                    groups__name=GRUPO_GESTOR_PATRIMONIO,
+                    unidade_administrativa=ua,
+                    unidades_administrativas__isnull=True,
+                )
+            )
+            .distinct()
+            .only("email")
+        )
+
+    def _emails_destinatarios_da_ua(self, ua):
+        usuarios = self._usuarios_destinatarios_da_ua(ua)
+        return list(dict.fromkeys([u.email for u in usuarios if u.email]))
+
     def handle(self, *args, **options):
         dias_minimo = options["dias_minimo"]
         dias_urgente = options["dias_urgente"]
@@ -100,20 +126,7 @@ class Command(BaseCommand):
         total_sem_email = 0
         linhas_log = []
         for ua, movs in movimentacoes_por_ua.items():
-            usuarios = (
-                Usuario.objects.filter(
-                    is_active=True,
-                    unidades_administrativas=ua,
-                )
-                .filter(
-                    Q(groups__name=GRUPO_GESTOR_PATRIMONIO)
-                    | Q(groups__name=GRUPO_OPERADOR_INVENTARIO)
-                )
-                .distinct()
-                .only("email")
-            )
-
-            emails = [u.email for u in usuarios if u.email]
+            emails = self._emails_destinatarios_da_ua(ua)
             ua_label = f"{getattr(ua, 'codigo', '')} - {ua.nome}".strip(" -")
             if not emails:
                 total_sem_email += 1
@@ -152,13 +165,7 @@ class Command(BaseCommand):
             uas_com_destinatarios = sum(
                 1
                 for ua, _ in movimentacoes_por_ua.items()
-                if Usuario.objects.filter(is_active=True, unidades_administrativas=ua)
-                .filter(
-                    Q(groups__name=GRUPO_GESTOR_PATRIMONIO)
-                    | Q(groups__name=GRUPO_OPERADOR_INVENTARIO)
-                )
-                .exclude(email="")
-                .exists()
+                if self._usuarios_destinatarios_da_ua(ua).exclude(email="").exists()
             )
             self.stdout.write(
                 self.style.SUCCESS(
