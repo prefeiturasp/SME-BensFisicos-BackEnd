@@ -4,7 +4,7 @@ from config.utils import email_utils
 
 def envia_email_alerta_novo_agendamento():
     subject = '[Bens físicos] Novo agendamento'
-    dict = {
+    email_context = {
         'subject': subject,
         'title': 'Olá!',
         'subtitle': ''' Foi agendada uma nova reunião de suporte ao cadastro de Bem Patrimonial.
@@ -13,7 +13,7 @@ def envia_email_alerta_novo_agendamento():
     }
     email_utils.send_email_ctrl(
         subject,
-        dict,
+        email_context,
         'simple_message.html',
         settings.DEFAULT_TO_EMAIL
     )

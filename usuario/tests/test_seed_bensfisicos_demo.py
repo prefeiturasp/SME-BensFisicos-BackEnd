@@ -49,8 +49,8 @@ class FirstFkToTest(TestCase):
 
     def test_first_fk_to_encontra_fk(self):
         UA = get_model("dados_comuns.UnidadeAdministrativa")
-        Bem = get_model("bem_patrimonial.BemPatrimonial")
-        fk = first_fk_to(Bem, UA)
+        bem_model = get_model("bem_patrimonial.BemPatrimonial")
+        fk = first_fk_to(bem_model, UA)
         self.assertIsNotNone(fk)
         self.assertIsInstance(fk, models.ForeignKey)
         self.assertEqual(fk.name, "unidade_administrativa")
@@ -115,8 +115,8 @@ class SeedBensfisicosDemoCommandTest(TestCase):
             delattr(bem_models, "cria_registro_unidade_administrativa_bem_patrimonial")
             try:
                 self._patch_handle_through_none()
-                Bem = apps.get_model("bem_patrimonial.BemPatrimonial")
-                with patch.object(Bem.objects, "create", return_value=MagicMock()):
+                bem_model = apps.get_model("bem_patrimonial.BemPatrimonial")
+                with patch.object(bem_model.objects, "create", return_value=MagicMock()):
                     call_command("seed_bensfisicos_demo")
                 UA = apps.get_model("dados_comuns.UnidadeAdministrativa")
                 self.assertEqual(UA.objects.count(), 2)
@@ -129,16 +129,16 @@ class SeedBensfisicosDemoCommandTest(TestCase):
 
     def test_handle_executa_com_sucesso(self):
         self._patch_handle_through_none()
-        Bem = apps.get_model("bem_patrimonial.BemPatrimonial")
-        with patch.object(Bem.objects, "create", return_value=MagicMock()):
+        bem_model = apps.get_model("bem_patrimonial.BemPatrimonial")
+        with patch.object(bem_model.objects, "create", return_value=MagicMock()):
             call_command("seed_bensfisicos_demo")
         UA = apps.get_model("dados_comuns.UnidadeAdministrativa")
         self.assertEqual(UA.objects.count(), 2)
 
     def test_handle_disconnect_raise_continua(self):
         self._patch_handle_through_none()
-        Bem = apps.get_model("bem_patrimonial.BemPatrimonial")
-        with patch.object(Bem.objects, "create", return_value=MagicMock()):
+        bem_model = apps.get_model("bem_patrimonial.BemPatrimonial")
+        with patch.object(bem_model.objects, "create", return_value=MagicMock()):
             with patch(
                 "usuario.management.commands.seed_bensfisicos_demo.post_save.disconnect",
                 side_effect=Exception("disconnect falhou"),
@@ -149,8 +149,8 @@ class SeedBensfisicosDemoCommandTest(TestCase):
 
     def test_handle_connect_raise_continua(self):
         self._patch_handle_through_none()
-        Bem = apps.get_model("bem_patrimonial.BemPatrimonial")
-        with patch.object(Bem.objects, "create", return_value=MagicMock()):
+        bem_model = apps.get_model("bem_patrimonial.BemPatrimonial")
+        with patch.object(bem_model.objects, "create", return_value=MagicMock()):
             with patch(
                 "usuario.management.commands.seed_bensfisicos_demo.post_save.connect",
                 side_effect=Exception("connect falhou"),

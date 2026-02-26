@@ -172,7 +172,7 @@ class ExtracaoNumerosTest(TestCase):
 
     # --- _extract ---
     def test_extract_nome_comeca_com_letra_acha_no_fim_nome(self):
-        numero, cls, nome_sug, fonte, pos, raw, aplicar = _extract(
+        _, cls, _, fonte, _, _, aplicar = _extract(
             "ARMÁRIO METÁLICO 001.050761830-0", ""
         )
         self.assertEqual(cls, "PADRAO_ATUAL")
@@ -180,7 +180,7 @@ class ExtracaoNumerosTest(TestCase):
         self.assertTrue(aplicar)
 
     def test_extract_nome_comeca_com_letra_acha_na_descricao(self):
-        numero, cls, nome_sug, fonte, _, _, aplicar = _extract(
+        _, _, nome_sug, fonte, _, _, aplicar = _extract(
             "Só letras", "Texto 002.111222333-4"
         )
         self.assertEqual(fonte, "descricao_fim")
@@ -188,13 +188,13 @@ class ExtracaoNumerosTest(TestCase):
         self.assertTrue(aplicar)
 
     def test_extract_nome_comeca_com_letra_nao_acha_sem_numero(self):
-        numero, cls, nome_sug, fonte, pos, raw, aplicar = _extract("Só letras aqui", "")
+        numero, cls, _, _, _, _, aplicar = _extract("Só letras aqui", "")
         self.assertIsNone(numero)
         self.assertEqual(cls, "SEM_NUMERO")
         self.assertFalse(aplicar)
 
     def test_extract_primeiro_token_no_nome(self):
-        numero, cls, nome_sug, fonte, pos, raw, aplicar = _extract(
+        _, cls, _, fonte, _, _, aplicar = _extract(
             "001.050761830-0 resto do nome", ""
         )
         self.assertEqual(fonte, "nome")
@@ -203,14 +203,14 @@ class ExtracaoNumerosTest(TestCase):
 
     def test_extract_primeiro_token_na_descricao(self):
         # Nome começa com dígito mas primeiro token tem letra (0x); número vem da descrição
-        numero, cls, nome_sug, fonte, _, _, aplicar = _extract(
+        _, _, _, fonte, _, _, aplicar = _extract(
             "0x z", "001.111222333-4 desc"
         )
         self.assertEqual(fonte, "descricao")
         self.assertTrue(aplicar)
 
     def test_extract_nenhum_token_sem_numero(self):
-        numero, cls, nome_sug, fonte, pos, raw, aplicar = _extract("", "")
+        numero, cls, _, _, _, _, aplicar = _extract("", "")
         self.assertIsNone(numero)
         self.assertEqual(cls, "SEM_NUMERO")
         self.assertFalse(aplicar)

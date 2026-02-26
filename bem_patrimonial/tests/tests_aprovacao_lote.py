@@ -308,7 +308,7 @@ class InlineStatusTestCase(BaseAprovacaoTestCase):
             StatusBemPatrimonialInline,
         )
 
-        inline_classes = [inline for inline in self.admin.inlines]
+        inline_classes = list(self.admin.inlines)
 
         self.assertEqual(len(inline_classes), 1)
 

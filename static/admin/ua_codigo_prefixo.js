@@ -5,12 +5,12 @@
     }
 
     function ensurePrefixEl(afterEl) {
-        var id = 'uo-prefixo-codigo'
-        var existing = document.getElementById(id)
-        if (existing) return existing
+        const prefixId = 'uo-prefixo-codigo';
+        const existing = document.getElementById(prefixId);
+        if (existing) return existing;
 
-        var el = document.createElement('span')
-        el.id = id
+        const el = document.createElement('span');
+        el.id = prefixId;
         el.style.display = 'inline-block'
         el.style.padding = '6px 10px'
         el.style.marginRight = '8px'
@@ -27,24 +27,22 @@
     }
 
     ready(function () {
-        var uo = document.getElementById('id_unidade_orcamentaria')
-        var sufixo = document.getElementById('id_codigo_sufixo')
+        const uo = document.getElementById('id_unidade_orcamentaria');
+        const sufixo = document.getElementById('id_codigo_sufixo');
 
-        if (!uo || !sufixo) return
+        if (!uo || !sufixo) return;
 
-        var prefixEl = ensurePrefixEl(sufixo)
+        const prefixEl = ensurePrefixEl(sufixo);
 
         function setPrefix() {
-            var selected = uo.options[uo.selectedIndex]
-            if (!selected || !selected.value) {
-                prefixEl.textContent = '—'
-                return
+            const selected = uo.options[uo.selectedIndex];
+            if (!selected?.value) {
+                prefixEl.textContent = '—';
+                return;
             }
-
-            
-            var txt = (selected.textContent || '').trim()
-            var codigo = txt.split(' - ')[0].trim()
-            prefixEl.textContent = codigo ? (codigo + '.') : '—'
+            const txt = (selected.textContent || '').trim();
+            const codigo = txt.split(' - ')[0].trim();
+            prefixEl.textContent = codigo ? (codigo + '.') : '—';
         }
 
         setPrefix()

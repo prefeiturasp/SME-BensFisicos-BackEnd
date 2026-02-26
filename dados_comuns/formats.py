@@ -201,15 +201,12 @@ class UnidadeAdministrativaPDFFormat(Format):
 
         if request and hasattr(request, "user") and request.user.is_authenticated:
             user = request.user
-            usuario = (
-                user.nome
-                if (hasattr(user, "nome") and user.nome)
-                else (
-                    user.get_full_name().strip()
-                    if user.get_full_name()
-                    else user.username
-                )
-            )
+            if hasattr(user, "nome") and user.nome:
+                usuario = user.nome
+            elif user.get_full_name():
+                usuario = user.get_full_name().strip()
+            else:
+                usuario = user.username
             if hasattr(user, "rf") and user.rf:
                 rf_text = f" - RF: {user.rf}"
 

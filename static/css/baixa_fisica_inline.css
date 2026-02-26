@@ -22,6 +22,7 @@
 #itens-group td.field-bem .related-widget-wrapper {
     width: 100% !important;
     max-width: 100% !important;
+    flex: 1 1 auto;
 }
 
 #itens-group td.field-bem .select2-container,
@@ -35,10 +36,6 @@
 #itens-group td.field-bem {
     display: flex;
     align-items: center;
-}
-
-#itens-group td.field-bem .related-widget-wrapper {
-    flex: 1 1 auto;
 }
 
 #itens-group td.field-bem .inline-deletelink {

@@ -6,13 +6,16 @@ from usuario.models import Usuario
 
 local_timezone = pytz.timezone(settings.TIME_ZONE)
 
+EMAIL_TEMPLATE_SIMPLE_MESSAGE = "simple_message.html"
+URL_BAIXA_FISICA_CHANGE = "{}/bem_patrimonial/baixafisicabempatrimonial/{}/change/"
+
 
 def envia_email_cadastro_nao_aprovado(status):
     object_url = "{}/bem_patrimonial/bempatrimonial/{}/change/".format(
         settings.ADMIN_URL, status.bem_patrimonial.id
     )
     subject = "[Bens Físicos] Cadastro não aprovado"
-    dict = {
+    email_context = {
         "subject": subject,
         "title": "Olá!",
         "subtitle": """O cadastro do Bem Patrimonial "{}" foi reprovado.
@@ -24,7 +27,8 @@ def envia_email_cadastro_nao_aprovado(status):
         "body": status.observacao,
     }
     email_utils.send_email_ctrl(
-        subject, dict, "simple_message.html", status.bem_patrimonial.criado_por.email
+        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE,
+        status.bem_patrimonial.criado_por.email
     )
 
 
@@ -85,14 +89,14 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
     email_utils.send_email_ctrl(
         subject,
         dict_params,
-        "simple_message.html",
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
         emails,
     )
 
 
 def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
     subject = "[Bens físicos] Sua solicitação de movimentação foi aceita."
-    dict = {
+    email_context = {
         "subject": subject,
         "title": "Olá!",
         "subtitle": """A solicitação de movimentação do bem patrimonial {} foi aceita.
@@ -101,12 +105,12 @@ def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(subject, dict, "simple_message.html", emails)
+    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
 
 
 def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
     subject = "[Bens físicos] Sua solicitação de movimentação foi rejeitada."
-    dict = {
+    email_context = {
         "subject": subject,
         "title": "Olá!",
         "subtitle": """A solicitação de movimentação do bem patrimonial {} foi rejeitada.
@@ -115,14 +119,14 @@ def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(subject, dict, "simple_message.html", emails)
+    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
 
 
 def envia_email_solicitacao_movimentacao_cancelada(
     bem_patrimonial, cancelado_por, emails=[]
 ):
     subject = "[Bens físicos] Sua solicitação de movimentação foi cancelada."
-    dict = {
+    email_context = {
         "subject": subject,
         "title": "Olá!",
         "subtitle": """A solicitação de movimentação do bem patrimonial {} foi cancelada por {}.
@@ -133,7 +137,35 @@ def envia_email_solicitacao_movimentacao_cancelada(
             settings.ADMIN_URL,
         ),
     }
-    email_utils.send_email_ctrl(subject, dict, "simple_message.html", emails)
+    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
+
+
+def _bens_info_de_movimentacao(mov, max_bens_por_mov):
+    """Retorna lista de identificadores dos bens e total de itens."""
+    itens_qs = mov.itens.select_related("bem").all()
+    total_itens = itens_qs.count()
+    itens = itens_qs[:max_bens_por_mov]
+    bens_info = []
+    for item in itens:
+        bem = item.bem
+        if not bem:
+            continue
+        identificador = (
+            f"{bem.numero_patrimonial} – {bem.nome}"
+            if bem.numero_patrimonial
+            else bem.nome
+        )
+        bens_info.append(identificador)
+    if not bens_info and mov.bem_patrimonial:
+        bem = mov.bem_patrimonial
+        identificador = (
+            f"{bem.numero_patrimonial} – {bem.nome}"
+            if bem.numero_patrimonial
+            else bem.nome
+        )
+        bens_info.append(identificador)
+    bens_excedentes = max(0, total_itens - max_bens_por_mov)
+    return bens_info, total_itens
 
 
 def envia_email_movimentacoes_pendentes_aceite(
@@ -155,42 +187,13 @@ def envia_email_movimentacoes_pendentes_aceite(
     )
 
     hoje = timezone.localdate()
-    movimentacoes_info = []
     total_movimentacoes = len(movimentacoes)
-    exibidas = movimentacoes[:max_movimentacoes]
-
-    for mov in exibidas:
+    movimentacoes_info = []
+    for mov in movimentacoes[:max_movimentacoes]:
         data_envio = timezone.localdate(mov.criado_em)
         dias_pendentes = (hoje - data_envio).days
-        itens_qs = mov.itens.select_related("bem").all()
-        total_itens = itens_qs.count()
-        itens = itens_qs[:max_bens_por_mov]
-
-        bens_info = []
-        for item in itens:
-            bem = item.bem
-            if not bem:
-                continue
-            identificador = (
-                f"{bem.numero_patrimonial} – {bem.nome}"
-                if bem.numero_patrimonial
-                else bem.nome
-            )
-            bens_info.append(identificador)
-
-        if not bens_info and mov.bem_patrimonial:
-            bem = mov.bem_patrimonial
-            identificador = (
-                f"{bem.numero_patrimonial} – {bem.nome}"
-                if bem.numero_patrimonial
-                else bem.nome
-            )
-            bens_info.append(identificador)
-
-        bens_excedentes = 0
-        if total_itens > max_bens_por_mov:
-            bens_excedentes = total_itens - max_bens_por_mov
-
+        bens_info, total_itens = _bens_info_de_movimentacao(mov, max_bens_por_mov)
+        bens_excedentes = max(0, total_itens - max_bens_por_mov)
         movimentacoes_info.append(
             {
                 "id": mov.pk,
@@ -203,11 +206,10 @@ def envia_email_movimentacoes_pendentes_aceite(
             }
         )
 
-    total_urgentes = sum(1 for mov in movimentacoes_info if mov["urgente"])
+    total_urgentes = sum(1 for m in movimentacoes_info if m["urgente"])
     pendentes_url = (
         f"{settings.ADMIN_URL}/bem_patrimonial/movimentacaobempatrimonial/?atrasada=1"
     )
-
     subject = "[Bens Físicos] Movimentações pendentes de aceite"
     dict_params = {
         "subject": subject,
@@ -222,7 +224,6 @@ def envia_email_movimentacoes_pendentes_aceite(
         "movimentacoes": movimentacoes_info,
         "pendentes_url": pendentes_url,
     }
-
     email_utils.send_email_ctrl(
         subject,
         dict_params,
@@ -272,7 +273,7 @@ def envia_email_baixa_fisica_solicitada(baixa_fisica):
     if not emails:
         return
 
-    object_url = "{}/bem_patrimonial/baixafisicabempatrimonial/{}/change/".format(
+    object_url = URL_BAIXA_FISICA_CHANGE.format(
         settings.ADMIN_URL, baixa_fisica.id
     )
 
@@ -296,7 +297,7 @@ def envia_email_baixa_fisica_solicitada(baixa_fisica):
     email_utils.send_email_ctrl(
         subject,
         dict_params,
-        "simple_message.html",
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
         emails,
     )
 
@@ -309,7 +310,7 @@ def envia_email_baixa_fisica_aprovada(baixa_fisica):
     if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
         return
 
-    object_url = "{}/bem_patrimonial/baixafisicabempatrimonial/{}/change/".format(
+    object_url = URL_BAIXA_FISICA_CHANGE.format(
         settings.ADMIN_URL, baixa_fisica.id
     )
 
@@ -330,7 +331,7 @@ def envia_email_baixa_fisica_aprovada(baixa_fisica):
     email_utils.send_email_ctrl(
         subject,
         dict_params,
-        "simple_message.html",
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
         baixa_fisica.criado_por.email,
     )
 
@@ -343,7 +344,7 @@ def envia_email_baixa_fisica_cancelada(baixa_fisica, usuario_cancelador):
     if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
         return
 
-    object_url = "{}/bem_patrimonial/baixafisicabempatrimonial/{}/change/".format(
+    object_url = URL_BAIXA_FISICA_CHANGE.format(
         settings.ADMIN_URL, baixa_fisica.id
     )
 
@@ -370,6 +371,6 @@ def envia_email_baixa_fisica_cancelada(baixa_fisica, usuario_cancelador):
     email_utils.send_email_ctrl(
         subject,
         dict_params,
-        "simple_message.html",
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
         baixa_fisica.criado_por.email,
     )

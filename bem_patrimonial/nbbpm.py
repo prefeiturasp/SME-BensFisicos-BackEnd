@@ -30,6 +30,8 @@ from reportlab.platypus import (
 import pytz
 
 from bem_patrimonial.models import BaixaFisicaBemPatrimonial
+
+DATE_FMT_BR = "%d/%m/%Y"
 from bem_patrimonial import constants
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
@@ -215,9 +217,9 @@ def _criar_cabecalho_e_registro_nbbpm(baixa):
         leading=10,
     )
 
-    data_baixa = baixa.data_baixa.strftime("%d/%m/%Y") if baixa.data_baixa else ""
+    data_baixa = baixa.data_baixa.strftime(DATE_FMT_BR) if baixa.data_baixa else ""
     data_aprov = (
-        baixa.data_aprovacao.strftime("%d/%m/%Y") if baixa.data_aprovacao else ""
+        baixa.data_aprovacao.strftime(DATE_FMT_BR) if baixa.data_aprovacao else ""
     )
 
     header_data = [
@@ -378,7 +380,7 @@ def _criar_informacoes_gerais(baixa):
                 Paragraph(str(baixa.numero_processo_baixa or "-").upper(), value_style),
                 Paragraph(
                     (
-                        baixa.data_baixa.strftime("%d/%m/%Y")
+                        baixa.data_baixa.strftime(DATE_FMT_BR)
                         if baixa.data_baixa
                         else "-"
                     ),

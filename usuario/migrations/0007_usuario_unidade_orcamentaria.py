@@ -3,9 +3,9 @@ import django.db.models.deletion
 
 
 def preencher_uo_no_usuario_a_partir_da_ua(apps, schema_editor):
-    Usuario = apps.get_model("usuario", "Usuario")
+    usuario_model = apps.get_model("usuario", "Usuario")
 
-    for usuario in Usuario.objects.select_related(
+    for usuario in usuario_model.objects.select_related(
         "unidade_administrativa__unidade_orcamentaria"
     ).all():
         if usuario.unidade_orcamentaria_id:
@@ -21,7 +21,7 @@ def preencher_uo_no_usuario_a_partir_da_ua(apps, schema_editor):
 
 
 def reverter(apps, schema_editor):
-
+    # Não desfaz preenchimento de unidade_orcamentaria nos usuários.
     pass
 
 

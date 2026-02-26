@@ -82,18 +82,18 @@ class ConciliacaoPDFTestBase(TestCase):
     def criar_bem(self, ua=None, **kwargs):
         ua = ua or self.ua_a
 
-        defaults = dict(
-            numero_patrimonial="001.000000001-1",
-            nome="Bem Teste",
-            descricao="Descrição do bem",
-            valor_unitario=Decimal("100.00"),
-            marca="Marca X",
-            modelo="Modelo Y",
-            numero_processo="2025/0001",
-            status="APROVADO",
-            unidade_administrativa=ua,
-            criado_por=self.operador_a,
-        )
+        defaults = {
+            "numero_patrimonial": "001.000000001-1",
+            "nome": "Bem Teste",
+            "descricao": "Descrição do bem",
+            "valor_unitario": Decimal("100.00"),
+            "marca": "Marca X",
+            "modelo": "Modelo Y",
+            "numero_processo": "2025/0001",
+            "status": "APROVADO",
+            "unidade_administrativa": ua,
+            "criado_por": self.operador_a,
+        }
         defaults.update(kwargs)
         return BemPatrimonial.objects.create(**defaults)
 
@@ -111,13 +111,13 @@ class ConciliacaoPDFTestBase(TestCase):
 
     def criar_conciliacao_eventual(self, ua=None, **kwargs):
         ua = ua or self.ua_a
-        defaults = dict(
-            unidade_administrativa=ua,
-            tipo=constants.CONCILIACAO_EVENTUAL,
-            periodo_final=timezone.localdate(),
-            status=constants.CONCILIACAO_EM_ABERTO,
-            criado_por=self.operador_a,
-        )
+        defaults = {
+            "unidade_administrativa": ua,
+            "tipo": constants.CONCILIACAO_EVENTUAL,
+            "periodo_final": timezone.localdate(),
+            "status": constants.CONCILIACAO_EM_ABERTO,
+            "criado_por": self.operador_a,
+        }
         defaults.update(kwargs)
         return ConciliacaoUA.objects.create(**defaults)
 
@@ -127,12 +127,12 @@ class ConciliacaoPDFTestBase(TestCase):
         ano_ref = timezone.localdate().year - 1
         self.criar_parametro_anual_vigente(ano_ref)
 
-        defaults = dict(
-            unidade_administrativa=ua,
-            tipo=constants.CONCILIACAO_ANUAL,
-            status=constants.CONCILIACAO_EM_ABERTO,
-            criado_por=self.operador_a,
-        )
+        defaults = {
+            "unidade_administrativa": ua,
+            "tipo": constants.CONCILIACAO_ANUAL,
+            "status": constants.CONCILIACAO_EM_ABERTO,
+            "criado_por": self.operador_a,
+        }
         defaults.update(kwargs)
         return ConciliacaoUA.objects.create(**defaults)
 

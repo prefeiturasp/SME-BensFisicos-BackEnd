@@ -5,9 +5,9 @@ import re
 
 
 def preencher_periodo_final_anuais(apps, schema_editor):
-    ConciliacaoUA = apps.get_model("inventario", "ConciliacaoUA")
+    conciliacao_ua_model = apps.get_model("inventario", "ConciliacaoUA")
 
-    anuais = ConciliacaoUA.objects.filter(
+    anuais = conciliacao_ua_model.objects.filter(
         tipo="anual",
         periodo_final__isnull=True,
     )
@@ -28,9 +28,9 @@ def preencher_periodo_final_anuais(apps, schema_editor):
 
 
 def reverter_periodo_final_anuais(apps, schema_editor):
-    ConciliacaoUA = apps.get_model("inventario", "ConciliacaoUA")
+    conciliacao_ua_model = apps.get_model("inventario", "ConciliacaoUA")
 
-    ConciliacaoUA.objects.filter(
+    conciliacao_ua_model.objects.filter(
         tipo="anual",
     ).update(periodo_final=None)
 

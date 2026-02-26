@@ -19,7 +19,21 @@ class BemPatrimonialAdminForm(forms.ModelForm):
 
     class Meta:
         model = BemPatrimonial
-        fields = "__all__"
+        fields = (
+            "status",
+            "unidade_administrativa",
+            "numero_patrimonial",
+            "numero_formato_antigo",
+            "sem_numeracao",
+            "nome",
+            "descricao",
+            "valor_unitario",
+            "marca",
+            "modelo",
+            "localizacao",
+            "numero_processo",
+            "foto",
+        )
         widgets = {
             "valor_unitario": forms.TextInput(
                 attrs={
@@ -106,76 +120,58 @@ class BemPatrimonialAdminForm(forms.ModelForm):
         except Exception:
             raise ValidationError("Valor inválido. Use o formato 0,00 ou 0.000,00.")
 
-    def clean(self):
+    NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
+    SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
 
-        cleaned = super().clean()
-
-        if not (self.instance and self.instance.pk):
-            cleaned.setdefault("status", constants.AGUARDANDO_APROVACAO)
-
-        if "numero_patrimonial" not in self.fields:
-            return cleaned
-
-        sem = bool(cleaned.get("sem_numeracao"))
-        antigo = bool(cleaned.get("numero_formato_antigo"))
-        numero = (cleaned.get("numero_patrimonial") or "").strip()
-        tem_pk = bool(getattr(self.instance, "pk", None))
-
-        NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
-        SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
-
-        if tem_pk:
-            if numero:
-
-                if sem and re.fullmatch(SEM_NUM_RE, numero):
-                    cleaned["sem_numeracao"] = True
-                    cleaned["numero_formato_antigo"] = False
-                    return cleaned
-
-                if not antigo and not re.fullmatch(NEW_FMT_RE, numero):
-                    raise ValidationError(
-                        {
-                            "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                        }
-                    )
-            else:
-
-                if not sem:
-                    raise ValidationError(
-                        {
-                            "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                        }
-                    )
-
+    def _validate_numero_patrimonial_edit(self, cleaned, sem, antigo, numero):
+        if numero:
+            if sem and re.fullmatch(self.SEM_NUM_RE, numero):
+                cleaned["sem_numeracao"] = True
                 cleaned["numero_formato_antigo"] = False
+                return
+            if not antigo and not re.fullmatch(self.NEW_FMT_RE, numero):
+                raise ValidationError(
+                    {"numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."}
+                )
+        else:
+            if not sem:
+                raise ValidationError(
+                    {"numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."}
+                )
+            cleaned["numero_formato_antigo"] = False
 
-            return cleaned
-
+    def _validate_numero_patrimonial_new(self, cleaned, sem, antigo, numero):
         if sem and antigo:
             raise ValidationError(
                 "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             )
-
         if sem:
-
             cleaned["numero_patrimonial"] = None
             cleaned["numero_formato_antigo"] = False
-            return cleaned
-
+            return
         if not numero:
             raise ValidationError(
-                {
-                    "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                }
+                {"numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."}
             )
-
-        if not antigo and not re.fullmatch(NEW_FMT_RE, numero):
+        if not antigo and not re.fullmatch(self.NEW_FMT_RE, numero):
             raise ValidationError(
-                {
-                    "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                }
+                {"numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."}
             )
 
+    def clean(self):
+        cleaned = super().clean()
+        if not (self.instance and self.instance.pk):
+            cleaned.setdefault("status", constants.AGUARDANDO_APROVACAO)
+        if "numero_patrimonial" not in self.fields:
+            return cleaned
+        sem = bool(cleaned.get("sem_numeracao"))
+        antigo = bool(cleaned.get("numero_formato_antigo"))
+        numero = (cleaned.get("numero_patrimonial") or "").strip()
+        tem_pk = bool(getattr(self.instance, "pk", None))
+        if tem_pk:
+            self._validate_numero_patrimonial_edit(cleaned, sem, antigo, numero)
+        else:
+            self._validate_numero_patrimonial_new(cleaned, sem, antigo, numero)
         return cleaned
 
     def validate_unique(self):

@@ -297,9 +297,9 @@ def _criar_linha_ua(
 ):
     return [
         [
-            Paragraph(f"<b>PREFIXO</b>", label_style),
+            Paragraph("<b>PREFIXO</b>", label_style),
             Paragraph(f"<b>{label}</b>", label_style),
-            Paragraph(f"<b>CÓDIGO</b>", label_style),
+            Paragraph("<b>CÓDIGO</b>", label_style),
         ],
         [
             Paragraph(sigla.upper(), value_style),

@@ -75,8 +75,6 @@ class AgendamentoSuporteAdmin(admin.ModelAdmin):
         return time_date
 
     def save_model(self, request, obj, form, change):
-        # TODO trabalhar cenário em que usuário tenta agendar uma segunda reunião, sendo que ainda existe uma futura.
-        # possibilidades: Pedir permissão para substituir | Bloquear usuário de marcar
         time_date = self.get_value_of_custom_field(request)
         obj.hora_agendada = time_date
         if obj.id is None:
