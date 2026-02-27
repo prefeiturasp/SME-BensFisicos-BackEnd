@@ -439,7 +439,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
             )
 
-    def _validate_edit_form_ua(self, cleaned, instance):
+    def _validate_edit_form_ua(self, cleaned, instance, user):
         if not instance or not instance.pk:
             return
         ua_original = instance.unidade_administrativa
@@ -451,33 +451,34 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         if not ua_post:
             raise ValidationError({"unidade_administrativa": "Unidade Administrativa é obrigatória."})
 
-        nome_original = instance.nome
-        nome_post = cleaned.get("nome")
+        if not user.is_operador_inventario:
+            nome_original = instance.nome
+            nome_post = cleaned.get("nome")
 
-        numero_original = instance.numero_patrimonial
-        numero_post = cleaned.get("numero_patrimonial")
+            numero_original = instance.numero_patrimonial
+            numero_post = cleaned.get("numero_patrimonial")
 
-        justificativa = cleaned.get("justificativa")
+            justificativa = cleaned.get("justificativa")
 
-        nome_alterado = nome_post != nome_original
-        numero_alterado = numero_post != numero_original
+            nome_alterado = nome_post != nome_original
+            numero_alterado = numero_post != numero_original
 
-        if nome_alterado or numero_alterado:
-            if not justificativa:
-                raise ValidationError({
-                    "justificativa": (
-                        "A justificativa é obrigatória quando o Nome ou "
-                        "o Número Patrimonial forem alterados."
-                    ),
-                    "nome": (
-                        "A justificativa é obrigatória quando o Nome ou "
-                        "o Número Patrimonial forem alterados."
-                    ),
-                    "numero_patrimonial": (
-                        "A justificativa é obrigatória quando o Nome ou "
-                        "o Número Patrimonial forem alterados."
-                    ),
-                })
+            if nome_alterado or numero_alterado:
+                if not justificativa:
+                    raise ValidationError({
+                        "justificativa": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                        "nome": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                        "numero_patrimonial": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                    })
 
     def get_form(self, request, obj=None, **kwargs):
         base_form = super().get_form(request, obj, **kwargs)
@@ -506,11 +507,15 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 if "unidade_administrativa" in self_inner.fields:
                     self_inner.fields["unidade_administrativa"].disabled = True
                     self_inner.fields["unidade_administrativa"].required = True
+
+                if not request.user.is_operador_inventario:
                     self_inner.fields["justificativa"].required = False
 
             def clean(self_inner):
                 cleaned = super().clean()
-                admin_ref._validate_edit_form_ua(cleaned, getattr(self_inner, "instance", None))
+                admin_ref._validate_edit_form_ua(
+                    cleaned, getattr(self_inner, "instance", None), request.user
+                )
                 return cleaned
 
         return EditForm
