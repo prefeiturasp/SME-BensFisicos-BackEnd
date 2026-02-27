@@ -270,7 +270,6 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
     def post(self, request, *args, **kwargs):
         ua_id = request.POST.get("unidade_administrativa")
         next_url = request.POST.get("next", reverse("admin:index"))
-        user = request.user
 
         if ua_id == self.VISAO_GERAL_VALUE:
             return self._post_visao_geral(request, next_url)

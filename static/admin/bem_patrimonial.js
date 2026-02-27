@@ -28,7 +28,7 @@
     if (!el || el.dataset.boundMask === "1") return;
     el.dataset.boundMask = "1";
     (function init(){
-      const raw = (el.value || "").trim();
+      const raw = (el.value?.trim() || "");
       if (raw && !/^\d{1,3}(\.\d{3})*,\d{2}$/.test(raw)){
         const digits = raw.replace(/[^\d]/g, "");
         el.value = formatBRMoneyFromDigits(digits);

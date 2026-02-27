@@ -54,9 +54,34 @@ def _build_ua_payload(ua_model, i):
     return payload
 
 
-def _build_bem_kwargs(bem_model, ua_model, ua, idx_ua, i, today, now, fk_bem_ua, author_field_in_bem, system_user):
+def _build_bem_kwargs(
+    bem_model,
+    ua_model,
+    ua,
+    idx_ua,
+    i,
+    today,
+    now,
+    fk_bem_ua,
+    author_field_in_bem,
+    system_user,
+):
     seq = 100000 + idx_ua * 100 + i
     bem_kwargs = {}
+    _fill_bem_campos_simples(bem_model, bem_kwargs, idx_ua, i, seq, today, now)
+    _fill_bem_relacoes(
+        bem_model,
+        ua_model,
+        ua,
+        fk_bem_ua,
+        author_field_in_bem,
+        system_user,
+        bem_kwargs,
+    )
+    return bem_kwargs
+
+
+def _fill_bem_campos_simples(bem_model, bem_kwargs, idx_ua, i, seq, today, now):
     if has_field(bem_model, "descricao"):
         bem_kwargs["descricao"] = f"Bem UA{idx_ua:02d} #{i:02d}"
     if has_field(bem_model, "titulo"):
@@ -92,6 +117,17 @@ def _build_bem_kwargs(bem_model, ua_model, ua, idx_ua, i, today, now, fk_bem_ua,
     for alt in ("status_atual", "situacao", "situacao_atual", "status"):
         if has_field(bem_model, alt) and alt not in bem_kwargs:
             bem_kwargs[alt] = "aguardando_aprovacao"
+
+
+def _fill_bem_relacoes(
+    bem_model,
+    ua_model,
+    ua,
+    fk_bem_ua,
+    author_field_in_bem,
+    system_user,
+    bem_kwargs,
+):
     if isinstance(fk_bem_ua, models.ForeignKey):
         bem_kwargs[fk_bem_ua.name] = ua
     elif fk_bem_ua == "unidade_administrativa":
@@ -102,7 +138,6 @@ def _build_bem_kwargs(bem_model, ua_model, ua, idx_ua, i, today, now, fk_bem_ua,
             bem_kwargs[any_fk.name] = ua
     if author_field_in_bem:
         bem_kwargs[author_field_in_bem] = system_user
-    return bem_kwargs
 
 
 def _create_through_if_needed(through_model, bem, ua, idx_ua, i, now, fk_through_bem, fk_through_ua):
@@ -118,15 +153,24 @@ def _create_through_if_needed(through_model, bem, ua, idx_ua, i, now, fk_through
     through_model.objects.create(**t_kwargs)
 
 
+def _get_author_field_in_bem(bem_model):
+    author_field_in_bem = None
+    for name in ("criado_por", "created_by", "usuario"):
+        if has_field(bem_model, name):
+            author_field_in_bem = name
+            break
+    return author_field_in_bem
+
+
 class Command(BaseCommand):
     help = "Cria 2 UnidadesAdministrativas e 2 BemPatrimonial por UA (mínimo, tipos corretos), desativando signals."
 
     def handle(self, *args, **options):
-        UA = get_model("dados_comuns.UnidadeAdministrativa")
+        ua_model = get_model("dados_comuns.UnidadeAdministrativa")
         bem_model = get_model("bem_patrimonial.BemPatrimonial")
         through_model = None
 
-        if not UA or not bem_model:
+        if not ua_model or not bem_model:
             raise CommandError(
                 "Model não encontrado: dados_comuns.UnidadeAdministrativa e/ou bem_patrimonial.BemPatrimonial."
             )
@@ -134,7 +178,11 @@ class Command(BaseCommand):
         user_model = get_user_model()
         system_user, _ = user_model.objects.get_or_create(
             username="sistema_seed",
-            defaults={"email": "seed@example.com", "is_staff": True, "is_superuser": True},
+            defaults={
+                "email": "seed@example.com",
+                "is_staff": True,
+                "is_superuser": True,
+            },
         )
 
         receiver_func = _get_receiver_func()
@@ -150,35 +198,33 @@ class Command(BaseCommand):
         if through_model:
             through_model.objects.all().delete()
         bem_model.objects.all().delete()
-        UA.objects.all().delete()
+        ua_model.objects.all().delete()
 
-        uas = self._create_uas(UA)
+        uas = self._create_uas(ua_model)
         self.stdout.write(self.style.SUCCESS("✔ Criadas 2 UnidadesAdministrativas"))
 
-        fk_bem_ua = first_fk_to(bem_model, UA) or (
-            has_field(bem_model, "unidade_administrativa") and "unidade_administrativa"
+        fk_bem_ua = first_fk_to(bem_model, ua_model) or (
+            has_field(bem_model, "unidade_administrativa")
+            and "unidade_administrativa"
         )
         fk_through_bem = first_fk_to(through_model, bem_model) if through_model else None
-        fk_through_ua = first_fk_to(through_model, UA) if through_model else None
+        fk_through_ua = first_fk_to(through_model, ua_model) if through_model else None
 
-        author_field_in_bem = None
-        for name in ("criado_por", "created_by", "usuario"):
-            if has_field(bem_model, name):
-                author_field_in_bem = name
-                break
+        author_field_in_bem = _get_author_field_in_bem(bem_model)
 
-        for idx_ua, ua in enumerate(uas, start=1):
-            for i in range(1, 3):
-                bem_kwargs = _build_bem_kwargs(
-                    bem_model, UA, ua, idx_ua, i, today, now,
-                    fk_bem_ua, author_field_in_bem, system_user,
-                )
-                with transaction.atomic():
-                    bem = bem_model.objects.create(**bem_kwargs)
-                _create_through_if_needed(
-                    through_model, bem, ua, idx_ua, i, now,
-                    fk_through_bem, fk_through_ua,
-                )
+        self._criar_bens_para_uas(
+            uas=uas,
+            ua_model=ua_model,
+            bem_model=bem_model,
+            through_model=through_model,
+            today=today,
+            now=now,
+            fk_bem_ua=fk_bem_ua,
+            fk_through_bem=fk_through_bem,
+            fk_through_ua=fk_through_ua,
+            author_field_in_bem=author_field_in_bem,
+            system_user=system_user,
+        )
 
         self.stdout.write(self.style.SUCCESS("✔ Criados 4 BemPatrimonial (2 por UA)"))
         self.stdout.write(self.style.SUCCESS("🏁 Seed mínimo concluído."))
@@ -189,11 +235,53 @@ class Command(BaseCommand):
             except Exception:
                 pass
 
-    def _create_uas(self, UA):
+    def _criar_bens_para_uas(
+        self,
+        *,
+        uas,
+        ua_model,
+        bem_model,
+        through_model,
+        today,
+        now,
+        fk_bem_ua,
+        fk_through_bem,
+        fk_through_ua,
+        author_field_in_bem,
+        system_user,
+    ):
+        for idx_ua, ua in enumerate(uas, start=1):
+            for i in range(1, 3):
+                bem_kwargs = _build_bem_kwargs(
+                    bem_model,
+                    ua_model,
+                    ua,
+                    idx_ua,
+                    i,
+                    today,
+                    now,
+                    fk_bem_ua,
+                    author_field_in_bem,
+                    system_user,
+                )
+                with transaction.atomic():
+                    bem = bem_model.objects.create(**bem_kwargs)
+                _create_through_if_needed(
+                    through_model,
+                    bem,
+                    ua,
+                    idx_ua,
+                    i,
+                    now,
+                    fk_through_bem,
+                    fk_through_ua,
+                )
+
+    def _create_uas(self, ua_model):
         uas = []
         with transaction.atomic():
             for i in range(1, 3):
-                ua_payload = _build_ua_payload(UA, i)
-                ua = UA.objects.create(**ua_payload)
+                ua_payload = _build_ua_payload(ua_model, i)
+                ua = ua_model.objects.create(**ua_payload)
                 uas.append(ua)
         return uas
