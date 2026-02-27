@@ -21,7 +21,7 @@ class UnidadeOrcamentaria(models.Model):
     )
 
     sigla = models.CharField("sigla", max_length=255, blank=True, default="")
-    
+
     ativa = models.BooleanField(
         "Ativa",
         default=True,
@@ -120,6 +120,8 @@ class HistoricoGeral(models.Model):
     alterado_em = models.DateTimeField(
         "Alterado em", default=timezone.now, db_index=True
     )
+
+    justificativa = models.TextField("Justificativa", null=True, blank=True)
 
     class Meta:
         verbose_name = "histórico geral"

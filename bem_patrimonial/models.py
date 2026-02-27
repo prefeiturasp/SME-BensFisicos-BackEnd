@@ -88,6 +88,7 @@ class BemPatrimonial(BaseModel):
     # obrigatórios
     nome = models.CharField("Nome do bem", max_length=255, null=False, blank=False)
     descricao = models.TextField("Descrição", null=False, blank=False)
+    observacao = models.TextField("Observação", null=True, blank=True)
     numero_processo = models.CharField(
         "Número do processo de incorporação", max_length=64, null=True, blank=True
     )
@@ -164,6 +165,7 @@ class BemPatrimonial(BaseModel):
         "unidade_administrativa",
         "status",
         "bloqueado_conciliacao",
+        "observacao"
     )
     AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
@@ -255,6 +257,7 @@ class BemPatrimonial(BaseModel):
                     valor_antigo=old,
                     valor_novo=new,
                     alterado_por=user,
+                    justificativa="Teste"
                 )
                 for field, (old, new) in changes.items()
             ]

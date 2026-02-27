@@ -164,7 +164,7 @@ class HistoricoGeralInline(GenericTabularInline):
         "alterado_por",
         "alterado_em",
     )
-    fields = ("campo", "valor_antigo", "valor_novo", "alterado_por", "alterado_em")
+    fields = ("campo", "valor_antigo", "valor_novo", "justificativa", "alterado_por", "alterado_em")
     ordering = ("-alterado_em",)
     template = "admin/bem_patrimonial/edit_inline/tabular-historico.html"
 
@@ -329,6 +329,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 "modelo",
                 "numero_processo",
                 "foto",
+                "justificativa"
             )
 
         return base + (
@@ -354,9 +355,18 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ("valor_unitario", "marca", "modelo"),
             ("localizacao"),
             "numero_processo",
+            "observacao",
+            "justificativa"
         ]
+
+        if request.user.is_operador_inventario:
+            base = [f for f in base if f != "justificativa"]
+
         if obj:
             base = [f for f in base if f != "cadastro_modo"]
+        else:
+            base = [f for f in base if f != "justificativa"]
+
         return base
 
     autocomplete_fields = ("unidade_administrativa",)
@@ -395,6 +405,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def _setup_create_form_ua_field(self, self_inner, request):
         if "unidade_administrativa" not in self_inner.fields:
             return
+        self_inner.fields["justificativa"].required = False
         modo = (getattr(self_inner, "data", None) or {}).get("cadastro_modo") or (
             getattr(self_inner, "initial", {}) or {}
         ).get("cadastro_modo")
@@ -439,6 +450,34 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             )
         if not ua_post:
             raise ValidationError({"unidade_administrativa": "Unidade Administrativa é obrigatória."})
+
+        nome_original = instance.nome
+        nome_post = cleaned.get("nome")
+
+        numero_original = instance.numero_patrimonial
+        numero_post = cleaned.get("numero_patrimonial")
+
+        justificativa = cleaned.get("justificativa")
+
+        nome_alterado = nome_post != nome_original
+        numero_alterado = numero_post != numero_original
+
+        if nome_alterado or numero_alterado:
+            if not justificativa:
+                raise ValidationError({
+                    "justificativa": (
+                        "A justificativa é obrigatória quando o Nome ou "
+                        "o Número Patrimonial forem alterados."
+                    ),
+                    "nome": (
+                        "A justificativa é obrigatória quando o Nome ou "
+                        "o Número Patrimonial forem alterados."
+                    ),
+                    "numero_patrimonial": (
+                        "A justificativa é obrigatória quando o Nome ou "
+                        "o Número Patrimonial forem alterados."
+                    ),
+                })
 
     def get_form(self, request, obj=None, **kwargs):
         base_form = super().get_form(request, obj, **kwargs)
