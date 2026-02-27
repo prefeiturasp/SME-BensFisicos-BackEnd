@@ -112,9 +112,21 @@ def _bloqueio_se_algum(request, mov, checks):
 
 def _nao_pode_aprovar(mov, request):
     checks = [
-        (mov.aceita, "Movimentação #{mov.pk} já foi aprovada anteriormente.", messages.WARNING),
-        (mov.rejeitada, "Movimentação #{mov.pk} já foi rejeitada anteriormente.", messages.WARNING),
-        (mov.cancelada, "Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.", messages.ERROR),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
+            messages.ERROR,
+        ),
     ]
     if _bloqueio_se_algum(request, mov, checks):
         return True
@@ -132,7 +144,8 @@ def aprovar_solicitacao(modeladmin, request, queryset):
         bens_itens = _bens_da_movimentacao(mov)
         if not bens_itens.exists():
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
@@ -150,7 +163,8 @@ def aprovar_solicitacao(modeladmin, request, queryset):
             mov.aprovado_por = request.user
             mov.save()
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} aprovada com sucesso. Bens desbloqueados.",
         )
 
@@ -160,9 +174,21 @@ aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
 
 def _nao_pode_rejeitar(mov, request):
     checks = [
-        (mov.rejeitada, "Movimentação #{mov.pk} já foi rejeitada anteriormente.", messages.WARNING),
-        (mov.aceita, "Movimentação #{mov.pk} já foi aprovada anteriormente.", messages.WARNING),
-        (mov.cancelada, "Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.", messages.ERROR),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
+            messages.ERROR,
+        ),
     ]
     if _bloqueio_se_algum(request, mov, checks):
         return True
@@ -180,7 +206,8 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
         bens_itens = _bens_da_movimentacao(mov)
         if not bens_itens.exists():
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
@@ -197,7 +224,8 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                         bem, mov.solicitado_por.email
                     )
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} rejeitada com sucesso. Bens desbloqueados.",
         )
 
@@ -207,10 +235,26 @@ rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
 
 def _nao_pode_cancelar(mov, request):
     checks = [
-        (mov.cancelada, "Movimentação #{mov.pk} já foi cancelada anteriormente.", messages.WARNING),
-        (mov.aceita, "Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.", messages.WARNING),
-        (mov.rejeitada, "Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.", messages.WARNING),
-        (mov.status != constants.ENVIADA, "Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.", messages.ERROR),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} já foi cancelada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.status != constants.ENVIADA,
+            "Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
+            messages.ERROR,
+        ),
         (
             request.user.is_operador_inventario
             and not request.user.is_gestor_patrimonio
@@ -240,7 +284,8 @@ def cancelar_solicitacao(modeladmin, request, queryset):
                         bem, request.user, mov.solicitado_por.email
                     )
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} cancelada com sucesso. Bens desbloqueados.",
         )
 
@@ -375,7 +420,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                         ua_user
                         and ua_user.is_ativa
                         and hasattr(self_inner, "base_fields")
-                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in self_inner.base_fields
+                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                        in self_inner.base_fields
                     ):
                         self_inner.base_fields[
                             UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE

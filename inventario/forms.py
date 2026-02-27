@@ -30,10 +30,10 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
 
         if "unidade_administrativa" in self.fields:
             self.fields["unidade_administrativa"].required = True
-            
+
         if "tipo" in self.fields:
             self.fields["tipo"].required = True
-            
+
         if "periodo_final" in self.fields:
             self.fields["periodo_final"].required = False
 

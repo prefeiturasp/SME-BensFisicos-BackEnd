@@ -1,11 +1,12 @@
 from django.contrib import admin, messages
 from django.db import transaction
 from django.http import HttpResponse
-import re, csv
+import csv
+import re
 from django.template.response import TemplateResponse
 from django.contrib.admin import helpers
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.db.models import Q
 from collections import Counter
 
@@ -104,7 +105,9 @@ def _extract_when_starts_with_alpha(nome: str, descricao: str):
     return None
 
 
-def _extract_from_first_token(text: str, nome: str, fonte: str, use_resto_as_nome: bool):
+def _extract_from_first_token(
+    text: str, nome: str, fonte: str, use_resto_as_nome: bool
+):
     """Tenta extrair do primeiro token de text. Retorna tupla ou None."""
     tok, _, b = _first_token(text)
     if not tok or ALPHA_RE.search(tok):
@@ -135,7 +138,9 @@ def _extract(nome: str, descricao: str):
     result = _extract_from_first_token(nome, nome, "nome", use_resto_as_nome=True)
     if result:
         return result
-    result = _extract_from_first_token(descricao, nome, "descricao", use_resto_as_nome=False)
+    result = _extract_from_first_token(
+        descricao, nome, "descricao", use_resto_as_nome=False
+    )
     if result:
         return result
     return None, "SEM_NUMERO", nome, None, None, None, False
@@ -209,9 +214,9 @@ def _build_propostos(model, selected_ids):
     propostos = {}
     numeros_todos = []
     for pk in selected_ids:
-        bem = model.objects.only(
-            "id", "nome", "descricao", "numero_patrimonial"
-        ).get(pk=pk)
+        bem = model.objects.only("id", "nome", "descricao", "numero_patrimonial").get(
+            pk=pk
+        )
         numero, cls, _, fonte, _, _, aplicar_auto = _extract(
             bem.nome, getattr(bem, "descricao", "")
         )
@@ -287,7 +292,9 @@ def _sort_preview(preview):
     return sorted(preview, key=key)
 
 
-def _show_confirm_page(modeladmin, request, model, selected_ids, propostos, duplicados_ids):
+def _show_confirm_page(
+    modeladmin, request, model, selected_ids, propostos, duplicados_ids
+):
     amostra_ids = sorted(
         selected_ids, key=lambda _pk: (0 if _pk in duplicados_ids else 1, _pk)
     )
@@ -433,6 +440,11 @@ def aplicar_extracao_numero(modeladmin, request, queryset):
     )
     messages.info(
         request,
-        f"Extração aplicada. Atualizados: {atualizados}. Erros: {erros}. Ignorados (duplicados): {ignorados_duplicados}.",
+        (
+            "Extração aplicada. "
+            f"Atualizados: {atualizados}. "
+            f"Erros: {erros}. "
+            f"Ignorados (duplicados): {ignorados_duplicados}."
+        ),
     )
     return None

@@ -68,7 +68,9 @@ class SetupDuplicacaoData:
 class ValidacaoMovimentacaoPendenteTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         self.operador = self.test_data.create_usuario(self.ua_origem)
         self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
@@ -104,7 +106,7 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
         self.assertEqual(MovimentacaoBemPatrimonial.objects.count(), 1)
 
     def test_bloquear_segunda_movimentacao_quando_existe_pendente(self):
-        self.test_data.create_movimentacao_com_item(
+        mov1 = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
             ua_origem=self.ua_origem,
             ua_destino=self.ua_destino,
@@ -216,7 +218,9 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
 class LockTransacionalTestCase(TransactionTestCase):
     def setUp(self):
         self.test_data = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         self.operador = self.test_data.create_usuario(self.ua_origem)
         self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
@@ -258,7 +262,9 @@ class LockTransacionalTestCase(TransactionTestCase):
 class EdicaoMovimentacaoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         self.operador = self.test_data.create_usuario(self.ua_origem)
         self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 

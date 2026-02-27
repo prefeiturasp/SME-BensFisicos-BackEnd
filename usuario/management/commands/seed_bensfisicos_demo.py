@@ -59,7 +59,9 @@ class Command(BaseCommand):
         # ===== Tentar importar o receiver do signal para desconectar com segurança =====
         receiver_func = None
         try:
-            from bem_patrimonial.models import cria_registro_unidade_administrativa_bem_patrimonial as receiver_func  # type: ignore
+            from bem_patrimonial.models import (
+                cria_registro_unidade_administrativa_bem_patrimonial as receiver_func,
+            )  # noqa: F401
         except Exception:
             receiver_func = (
                 None  # se não existir, seguimos sem desconectar nominalmente
@@ -106,7 +108,9 @@ class Command(BaseCommand):
         fk_bem_ua = first_fk_to(bem_model, UA) or (
             has_field(bem_model, "unidade_administrativa") and "unidade_administrativa"
         )
-        fk_through_bem = first_fk_to(through_model, bem_model) if through_model else None
+        fk_through_bem = (
+            first_fk_to(through_model, bem_model) if through_model else None
+        )
         fk_through_ua = first_fk_to(through_model, UA) if through_model else None
 
         # Campos de autor em Bem (se existirem com esses nomes comuns)

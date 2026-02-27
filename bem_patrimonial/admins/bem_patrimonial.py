@@ -397,7 +397,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             self_inner.fields["localizacao"].required = False
         fld = self_inner.fields["unidade_administrativa"]
         fld.required = True
-        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+        qs_ativas = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
         fld.queryset = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
         ua_user = getattr(request.user, "unidade_administrativa", None)
         if ua_user and not usuario_e_super_admin(request.user):
@@ -407,14 +409,24 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def _validate_create_form_ua(self, cleaned_data, request):
         ua_form = cleaned_data.get("unidade_administrativa")
         if not ua_form:
-            raise ValidationError({"unidade_administrativa": "Selecione a Unidade Administrativa."})
+            raise ValidationError(
+                {"unidade_administrativa": "Selecione a Unidade Administrativa."}
+            )
         if ua_form.status != UnidadeAdministrativa.ATIVA:
-            raise ValidationError({"unidade_administrativa": "A Unidade Administrativa selecionada está inativa."})
-        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+            raise ValidationError(
+                {
+                    "unidade_administrativa": "A Unidade Administrativa selecionada está inativa."
+                }
+            )
+        qs_ativas = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
         qs_permitidas = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
         if not qs_permitidas.filter(pk=ua_form.pk).exists():
             raise ValidationError(
-                {"unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."}
+                {
+                    "unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."
+                }
             )
         ua_user = getattr(request.user, "unidade_administrativa", None)
         if ua_user and not ua_user.is_ativa:
@@ -430,10 +442,14 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         ua_post = cleaned.get("unidade_administrativa") or ua_original
         if ua_post != ua_original:
             raise ValidationError(
-                {"unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."}
+                {
+                    "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
+                }
             )
         if not ua_post:
-            raise ValidationError({"unidade_administrativa": "Unidade Administrativa é obrigatória."})
+            raise ValidationError(
+                {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
+            )
 
     def get_form(self, request, obj=None, **kwargs):
         base_form = super().get_form(request, obj, **kwargs)
@@ -465,7 +481,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
             def clean(self_inner):
                 cleaned = super().clean()
-                admin_ref._validate_edit_form_ua(cleaned, getattr(self_inner, "instance", None))
+                admin_ref._validate_edit_form_ua(
+                    cleaned, getattr(self_inner, "instance", None)
+                )
                 return cleaned
 
         return EditForm
@@ -621,6 +639,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def _add_view_multi_parse_payload(self, request):
         import json
+
         raw = request.POST.get("multi_payload") or "[]"
         try:
             return json.loads(raw)
@@ -662,9 +681,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             row.get("numero_formato_antigo")
         )
         sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
-        numero_patrimonial = (
-            None if sem_numeracao else (numero_patrimonial_raw or None)
-        )
+        numero_patrimonial = None if sem_numeracao else (numero_patrimonial_raw or None)
         bem = BemPatrimonial(
             criado_por=request.user,
             numero_patrimonial=numero_patrimonial,
@@ -776,7 +793,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             return "—"
         user_model = get_user_model()
         try:
-            u = user_model.objects.only("first_name", "last_name", "username").get(id=user_id)
+            u = user_model.objects.only("first_name", "last_name", "username").get(
+                id=user_id
+            )
             return u.get_full_name() or u.username
         except user_model.DoesNotExist:
             return "—"

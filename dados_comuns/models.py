@@ -4,7 +4,6 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils import timezone
 from django.conf import settings
-import re
 from django.core.exceptions import ValidationError
 
 
@@ -21,7 +20,7 @@ class UnidadeOrcamentaria(models.Model):
     )
 
     sigla = models.CharField("sigla", max_length=255, blank=True, default="")
-    
+
     ativa = models.BooleanField(
         "Ativa",
         default=True,

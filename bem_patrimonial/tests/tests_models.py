@@ -1,5 +1,3 @@
-import re
-import datetime
 from django.test import TestCase
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError

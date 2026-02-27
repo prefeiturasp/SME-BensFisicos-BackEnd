@@ -4,7 +4,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib import messages
 from django.contrib.auth.models import Group
 
-from bem_patrimonial.models import BemPatrimonial, StatusBemPatrimonial
+from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.constants import (
     AGUARDANDO_APROVACAO,
     APROVADO,
@@ -120,8 +120,6 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         self.assertEqual(self.bem1.status, APROVADO)
         self.assertEqual(self.bem2.status, APROVADO)
 
-       
-
     def test_gestor_pode_reprovar_bens_em_lote(self):
         queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem2.pk])
         request = self._create_request_with_messages(self.gestor)
@@ -133,8 +131,6 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
 
         self.assertEqual(self.bem1.status, NAO_APROVADO)
         self.assertEqual(self.bem2.status, NAO_APROVADO)
-
-
 
     def test_operador_nao_pode_aprovar_bens(self):
         queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem2.pk])

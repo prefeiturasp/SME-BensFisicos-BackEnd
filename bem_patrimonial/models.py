@@ -225,7 +225,11 @@ class BemPatrimonial(BaseModel):
         base_id = self.pk
         while True:
             numero_formatado = f"SEM-NUMERO-{base_id}"
-            if not type(self).objects.filter(numero_patrimonial=numero_formatado).exists():
+            if (
+                not type(self)
+                .objects.filter(numero_patrimonial=numero_formatado)
+                .exists()
+            ):
                 break
             base_id += 1
         self.numero_patrimonial = numero_formatado

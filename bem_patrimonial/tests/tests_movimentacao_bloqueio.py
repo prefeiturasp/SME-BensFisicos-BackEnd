@@ -6,7 +6,6 @@ from django.contrib import messages
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
-    StatusBemPatrimonial,
     MovimentacaoBensItem,
 )
 from bem_patrimonial.constants import (
@@ -135,13 +134,17 @@ class SetupMovimentacaoData:
 class BloqueioAutomaticoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(
+            self.operador_origem, self.ua_origem
+        )
 
     def test_bem_bloqueado_ao_criar_movimentacao(self):
         self.assertEqual(self.bem.status, APROVADO)
@@ -156,8 +159,6 @@ class BloqueioAutomaticoTestCase(TestCase):
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.status, BLOQUEADO)
         self.assertEqual(movimentacao.status, ENVIADA)
-
-    
 
     def test_property_tem_movimentacao_pendente(self):
         self.assertFalse(self.bem.tem_movimentacao_pendente)
@@ -184,13 +185,17 @@ class BloqueioAutomaticoTestCase(TestCase):
 class AprovacaoMovimentacaoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(
+            self.operador_origem, self.ua_origem
+        )
 
         self.movimentacao = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
@@ -235,13 +240,17 @@ class AprovacaoMovimentacaoTestCase(TestCase):
 class RejeicaoMovimentacaoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(
+            self.operador_origem, self.ua_origem
+        )
 
         self.movimentacao = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
@@ -288,13 +297,17 @@ class RejeicaoMovimentacaoTestCase(TestCase):
 class PermissoesAdminActionsTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(
+            self.operador_origem, self.ua_origem
+        )
 
         self.movimentacao = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
@@ -422,13 +435,17 @@ class PermissoesAdminActionsTestCase(TestCase):
 class IntegracaoCompletaTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(
+            self.operador_origem, self.ua_origem
+        )
 
     def test_fluxo_completo_aprovacao(self):
         self.assertEqual(self.bem.status, APROVADO)

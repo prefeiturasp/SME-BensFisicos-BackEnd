@@ -27,8 +27,10 @@ def envia_email_cadastro_nao_aprovado(status):
         "body": status.observacao,
     }
     email_utils.send_email_ctrl(
-        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE,
-        status.bem_patrimonial.criado_por.email
+        subject,
+        email_context,
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
+        status.bem_patrimonial.criado_por.email,
     )
 
 
@@ -105,7 +107,9 @@ def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
+    email_utils.send_email_ctrl(
+        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
+    )
 
 
 def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
@@ -119,7 +123,9 @@ def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
+    email_utils.send_email_ctrl(
+        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
+    )
 
 
 def envia_email_solicitacao_movimentacao_cancelada(
@@ -137,7 +143,9 @@ def envia_email_solicitacao_movimentacao_cancelada(
             settings.ADMIN_URL,
         ),
     }
-    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
+    email_utils.send_email_ctrl(
+        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
+    )
 
 
 def _bens_info_de_movimentacao(mov, max_bens_por_mov):
@@ -275,9 +283,7 @@ def envia_email_baixa_fisica_solicitada(baixa_fisica):
     if not emails:
         return
 
-    object_url = URL_BAIXA_FISICA_CHANGE.format(
-        settings.ADMIN_URL, baixa_fisica.id
-    )
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     ua = baixa_fisica.unidade_administrativa_origem
     ua_info = f"{ua.codigo} – {ua.nome}" if getattr(ua, "codigo", None) else ua.nome
@@ -312,9 +318,7 @@ def envia_email_baixa_fisica_aprovada(baixa_fisica):
     if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
         return
 
-    object_url = URL_BAIXA_FISICA_CHANGE.format(
-        settings.ADMIN_URL, baixa_fisica.id
-    )
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     lista_bens_formatada = _formata_lista_bens_baixa(baixa_fisica) or ""
 
@@ -346,9 +350,7 @@ def envia_email_baixa_fisica_cancelada(baixa_fisica, usuario_cancelador):
     if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
         return
 
-    object_url = URL_BAIXA_FISICA_CHANGE.format(
-        settings.ADMIN_URL, baixa_fisica.id
-    )
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     cancelador_nome = (
         usuario_cancelador.nome or usuario_cancelador.username

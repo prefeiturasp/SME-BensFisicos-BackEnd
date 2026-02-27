@@ -4,7 +4,6 @@ from django.contrib.auth import get_user_model
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
-from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua, criar_uo
 
 
@@ -16,7 +15,7 @@ class BemPatrimonialAdminTest(TestCase):
         )
         self.uo = criar_uo(codigo="100", nome="UO 100")
 
-        self.ua = criar_ua(nome="UA Teste",  unidade_orcamentaria=self.uo)
+        self.ua = criar_ua(nome="UA Teste", unidade_orcamentaria=self.uo)
         self.admin_user.unidade_administrativa = self.ua
         self.admin_user.save()
 
@@ -62,7 +61,6 @@ class BemPatrimonialAdminTest(TestCase):
             getattr(form.fields["numero_formato_antigo"], "disabled", False)
         )
         self.assertFalse(getattr(form.fields["numero_patrimonial"], "disabled", False))
-
 
     def test_edicao_trava_flags_mas_numero_editavel_quando_nao_sem_numeracao(self):
 
