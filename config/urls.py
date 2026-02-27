@@ -1,14 +1,15 @@
 from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
-from django.contrib.auth import views as auth_views
 from usuario.views import (
+    AdminLoginView,
     LoginPasswordChangeView,
     LoginPasswordChangeDoneView,
     PasswordRecoveryRequestView,
     PasswordRecoveryDoneView,
     PasswordRecoveryConfirmView,
     PasswordRecoveryCompleteView,
+    SelecionarUAView,
 )
 from bem_patrimonial.views import download_documento_cimbpm
 from django.shortcuts import redirect
@@ -37,9 +38,9 @@ def redirect_admin_password(request, user_id: int):
 
 
 urlpatterns = [
-    path(
-        "", auth_views.LoginView.as_view(template_name="admin/login.html"), name="login"
-    ),
+    path("", AdminLoginView.as_view(), name="login"),
+    path("admin/login/", AdminLoginView.as_view(), name="admin_login"),
+
     path("api/bens/", include("bem_patrimonial.urls")),
     # API de Autenticação
     path("api/auth/", include(auth_api_urls)),
@@ -57,7 +58,7 @@ urlpatterns = [
         download_documento_cimbpm,
         name="download_documento_cimbpm",
     ),
-    path('', include('inventario.urls')),
+    path("", include("inventario.urls")),
     # Módulo de Suporte desabilitado temporariamente
     # path('api/agenda/', include(agenda_urls.urlpatterns)),
     # Recuperação de senha
@@ -96,6 +97,11 @@ urlpatterns = [
         "admin/password-change/done/",
         LoginPasswordChangeDoneView.as_view(),
         name="password_change_done",
+    ),
+    path(
+        "admin/selecionar-ua/",
+        SelecionarUAView.as_view(),
+        name="selecionar_ua",
     ),
     path("admin/", admin.site.urls),
 ]

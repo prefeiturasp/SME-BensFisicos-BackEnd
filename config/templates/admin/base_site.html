@@ -374,6 +374,7 @@ hr {
 {% endblock %}
 
 {% block userlinks %}
+<a href="{% url 'selecionar_ua' %}">Trocar UA</a> /
 {{ block.super }}
 {% include "admin/color_theme_toggle.html" %}
 {% endblock %}

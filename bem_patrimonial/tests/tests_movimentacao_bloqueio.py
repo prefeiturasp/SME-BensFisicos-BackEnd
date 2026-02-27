@@ -21,8 +21,7 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     aprovar_solicitacao,
     rejeitar_solicitacao,
 )
-from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 from django.contrib.auth.models import Group
@@ -48,6 +47,7 @@ class SetupMovimentacaoData:
             unidade_administrativa=ua_origem,
         )
         operador_origem.groups.add(grupo_operador)
+        operador_origem.unidades_administrativas.add(ua_origem)
 
         operador_destino = Usuario.objects.create_user(
             username="operador_destino",
@@ -55,9 +55,9 @@ class SetupMovimentacaoData:
             password="test123",
             unidade_administrativa=ua_destino,
             unidade_orcamentaria=ua_destino.unidade_orcamentaria,
-
         )
         operador_destino.groups.add(grupo_operador)
+        operador_destino.unidades_administrativas.add(ua_destino)
 
         gestor = Usuario.objects.create_user(
             username="gestor",

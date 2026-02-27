@@ -4,8 +4,6 @@ from django.contrib import admin, messages
 from django.db.models import Q
 from django.template.response import TemplateResponse
 
-from dados_comuns.libs.unidade_administrativa import uas_do_usuario
-
 
 @admin.action(description="Verificar Movimentações Duplicadas")
 def verificar_movimentacoes_duplicadas(modeladmin, request, queryset):

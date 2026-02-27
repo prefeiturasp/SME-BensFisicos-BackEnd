@@ -36,24 +36,35 @@ class Usuario(AbstractUser):
         null=True,
         blank=True,
     )
+    unidades_administrativas = models.ManyToManyField(
+        UnidadeAdministrativa,
+        related_name="operadores",
+        blank=True,
+        verbose_name="Unidades Administrativas permitidas",
+    )
     must_change_password = models.BooleanField(default=True)
     last_password_change = models.DateTimeField(null=True, blank=True)
-    
+
     def clean(self):
         super().clean()
 
         if self.unidade_administrativa and not self.unidade_orcamentaria:
             raise ValidationError(
-                {"unidade_orcamentaria": "Informe a Unidade Orçamentária antes de definir a Unidade Administrativa."}
+                {
+                    "unidade_orcamentaria": "Informe a Unidade Orçamentária antes de definir a Unidade Administrativa."
+                }
             )
 
         if (
             self.unidade_orcamentaria
             and self.unidade_administrativa
-            and self.unidade_administrativa.unidade_orcamentaria_id != self.unidade_orcamentaria_id
+            and self.unidade_administrativa.unidade_orcamentaria_id
+            != self.unidade_orcamentaria_id
         ):
             raise ValidationError(
-                {"unidade_administrativa": "A Unidade Administrativa deve pertencer à Unidade Orçamentária selecionada."}
+                {
+                    "unidade_administrativa": "A Unidade Administrativa deve pertencer à Unidade Orçamentária selecionada."  # noqa: E501
+                }
             )
 
     @property
@@ -63,3 +74,17 @@ class Usuario(AbstractUser):
     @property
     def is_operador_inventario(self):
         return self.groups.filter(name=GRUPO_OPERADOR_INVENTARIO).exists()
+
+    @property
+    def uas_permitidas(self):
+        if self.is_superuser:
+            return UnidadeAdministrativa.objects.filter(
+                status=UnidadeAdministrativa.ATIVA
+            )
+        if self.is_gestor_patrimonio:
+            uo_id = self.unidade_orcamentaria_id
+            if uo_id:
+                return UnidadeAdministrativa.objects.filter(
+                    unidade_orcamentaria_id=uo_id, status=UnidadeAdministrativa.ATIVA
+                )
+        return self.unidades_administrativas.all()

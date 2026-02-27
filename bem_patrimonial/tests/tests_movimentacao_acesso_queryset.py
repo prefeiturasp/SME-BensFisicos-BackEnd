@@ -69,6 +69,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.operador_ua1.groups.add(self.grupo_operador)
+        self.operador_ua1.unidades_administrativas.add(self.ua1)
 
         self.operador_ua2 = Usuario.objects.create_user(
             username="operador_ua2",
@@ -79,6 +80,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
             unidade_orcamentaria=self.ua2.unidade_orcamentaria,
         )
         self.operador_ua2.groups.add(self.grupo_operador)
+        self.operador_ua2.unidades_administrativas.add(self.ua2)
 
         self.bem_ua1 = BemPatrimonial.objects.create(
             nome="Bem UA1",

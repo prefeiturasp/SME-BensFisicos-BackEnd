@@ -19,8 +19,6 @@ from bem_patrimonial.emails import (
 )
 from bem_patrimonial import constants
 
-from inventario.services.conciliacao_sync import sync_bem_pos_save
-
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
@@ -586,10 +584,14 @@ def bloquear_bem_quando_item_criado(sender, instance, created, **kwargs):
 def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
     if created:
         emails = []
-        usuarios = Usuario.objects.filter(
-            is_active=True,
-            unidade_administrativa=instance.unidade_administrativa_destino,
-        ).only("email")
+        usuarios = (
+            Usuario.objects.filter(
+                is_active=True,
+                unidades_administrativas=instance.unidade_administrativa_destino,
+            )
+            .distinct()
+            .only("email")
+        )
         for usuario in usuarios:
             if usuario.email:
                 emails.append(usuario.email)

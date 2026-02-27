@@ -1,7 +1,6 @@
 from django.test import TestCase
 from unittest.mock import patch
 from django.contrib.auth.models import Group
-import datetime
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -9,8 +8,7 @@ from bem_patrimonial.models import (
     MovimentacaoBensItem,
 )
 from bem_patrimonial.constants import APROVADO
-from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO
 
@@ -39,6 +37,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         self.operador_origem.groups.add(grupo_operador)
+        self.operador_origem.unidades_administrativas.add(self.ua_origem)
 
         self.operador_destino_1 = Usuario.objects.create_user(
             username="operador_destino_1",
@@ -50,6 +49,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             is_active=True,
         )
         self.operador_destino_1.groups.add(grupo_operador)
+        self.operador_destino_1.unidades_administrativas.add(self.ua_destino)
 
         self.operador_destino_2 = Usuario.objects.create_user(
             username="operador_destino_2",
@@ -61,6 +61,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             is_active=True,
         )
         self.operador_destino_2.groups.add(grupo_operador)
+        self.operador_destino_2.unidades_administrativas.add(self.ua_destino)
 
         self.bem = BemPatrimonial.objects.create(
             nome="POLTRONA GIRATÓRIA",

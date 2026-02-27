@@ -86,7 +86,7 @@ def aprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -137,7 +137,7 @@ def reprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -300,11 +300,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
     def get_list_display(self, request):
-        if (
-            request.user.is_operador_inventario
-            and not request.user.is_gestor_patrimonio
-        ):
-            return ("numero_patrimonial", "nome", "status")
         return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     def get_readonly_fields(self, request, obj=None):
@@ -496,7 +491,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 )
                 raise ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa E501
                     }
                 )
             raise
@@ -782,7 +777,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def thumb(self, obj):
         if getattr(obj, "foto", None) and hasattr(obj.foto, "url") and obj.foto.url:
             return format_html(
-                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',
+                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',  # noqa E501
                 obj.foto.url,
             )
         return "—"
@@ -799,7 +794,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ):
                 return format_html(
                     '<a href="{}" target="_blank" rel="noopener">'
-                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'
+                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'  # noqa E501
                     "</a>",
                     obj.foto.url,
                     obj.foto.url,
