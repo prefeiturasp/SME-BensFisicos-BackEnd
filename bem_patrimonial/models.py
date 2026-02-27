@@ -88,7 +88,11 @@ class BemPatrimonial(BaseModel):
     descricao = models.TextField("Descrição", null=False, blank=False)
     observacao = models.TextField("Observação", null=True, blank=True)
     numero_processo = models.CharField(
-        "Número do processo de incorporação", max_length=64, blank=True, default=""
+        "Número do processo de incorporação",
+        max_length=64,
+        null=True,
+        blank=True,
+        default="",
     )
     valor_unitario = models.DecimalField(
         "Valor unitário", max_digits=16, decimal_places=2, blank=False, null=False
@@ -97,11 +101,12 @@ class BemPatrimonial(BaseModel):
     modelo = models.CharField("Modelo", max_length=255, null=False, blank=False)
 
     localizacao = models.CharField(
-        "Localização", max_length=255, blank=True, default=""
+        "Localização", max_length=255, null=True, blank=True, default=""
     )
     numero_patrimonial = models.CharField(
         "Número Patrimonial",
         max_length=20,
+        null=True,
         blank=True,
         default="",
         help_text="Formato padrão: 000.000000000-0",
@@ -182,7 +187,7 @@ class BemPatrimonial(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["numero_patrimonial"],
-                condition=Q(excluido=False),
+                condition=Q(excluido=False) & ~Q(numero_patrimonial=""),
                 name="uniq_numero_patrimonial_ativo",
             )
         ]

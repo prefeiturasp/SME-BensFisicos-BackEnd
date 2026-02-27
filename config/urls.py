@@ -22,10 +22,6 @@ from drf_spectacular.views import (
 )
 from usuario import api_urls as auth_api_urls
 
-
-# Módulo de Suporte desabilitado temporariamente
-# from agendamento_suporte import urls as agenda_urls
-
 admin.site.site_title = settings.ADMIN_SITE_TITLE
 admin.site.site_header = settings.ADMIN_SITE_HEADER
 admin.site.index_title = settings.ADMIN_INDEX_TITLE
@@ -58,8 +54,6 @@ urlpatterns = [
         name="download_documento_cimbpm",
     ),
     path("", include("inventario.urls")),
-    # Módulo de Suporte desabilitado temporariamente
-    # path('api/agenda/', include(agenda_urls.urlpatterns)),
     # Recuperação de senha
     path(
         "admin/password-recovery/",
