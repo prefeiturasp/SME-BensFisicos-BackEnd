@@ -681,9 +681,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             row.get("numero_formato_antigo")
         )
         sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
-        numero_patrimonial = (
-            None if sem_numeracao else (numero_patrimonial_raw or None)
-        )
+        numero_patrimonial = None if sem_numeracao else (numero_patrimonial_raw or None)
         bem = BemPatrimonial(
             criado_por=request.user,
             numero_patrimonial=numero_patrimonial,

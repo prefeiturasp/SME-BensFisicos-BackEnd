@@ -112,9 +112,21 @@ def _bloqueio_se_algum(request, mov, checks):
 
 def _nao_pode_aprovar(mov, request):
     checks = [
-        (mov.aceita, "Movimentação #{mov.pk} já foi aprovada anteriormente.", messages.WARNING),
-        (mov.rejeitada, "Movimentação #{mov.pk} já foi rejeitada anteriormente.", messages.WARNING),
-        (mov.cancelada, "Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.", messages.ERROR),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
+            messages.ERROR,
+        ),
     ]
     if _bloqueio_se_algum(request, mov, checks):
         return True
@@ -162,9 +174,21 @@ aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
 
 def _nao_pode_rejeitar(mov, request):
     checks = [
-        (mov.rejeitada, "Movimentação #{mov.pk} já foi rejeitada anteriormente.", messages.WARNING),
-        (mov.aceita, "Movimentação #{mov.pk} já foi aprovada anteriormente.", messages.WARNING),
-        (mov.cancelada, "Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.", messages.ERROR),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
+            messages.ERROR,
+        ),
     ]
     if _bloqueio_se_algum(request, mov, checks):
         return True
@@ -211,10 +235,26 @@ rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
 
 def _nao_pode_cancelar(mov, request):
     checks = [
-        (mov.cancelada, "Movimentação #{mov.pk} já foi cancelada anteriormente.", messages.WARNING),
-        (mov.aceita, "Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.", messages.WARNING),
-        (mov.rejeitada, "Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.", messages.WARNING),
-        (mov.status != constants.ENVIADA, "Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.", messages.ERROR),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} já foi cancelada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.status != constants.ENVIADA,
+            "Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
+            messages.ERROR,
+        ),
         (
             request.user.is_operador_inventario
             and not request.user.is_gestor_patrimonio

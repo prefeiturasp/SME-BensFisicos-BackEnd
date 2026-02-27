@@ -214,9 +214,9 @@ def _build_propostos(model, selected_ids):
     propostos = {}
     numeros_todos = []
     for pk in selected_ids:
-        bem = model.objects.only(
-            "id", "nome", "descricao", "numero_patrimonial"
-        ).get(pk=pk)
+        bem = model.objects.only("id", "nome", "descricao", "numero_patrimonial").get(
+            pk=pk
+        )
         numero, cls, _, fonte, _, _, aplicar_auto = _extract(
             bem.nome, getattr(bem, "descricao", "")
         )
