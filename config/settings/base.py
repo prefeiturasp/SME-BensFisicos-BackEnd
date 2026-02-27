@@ -116,8 +116,6 @@ LOCAL_APPS = [
     "dados_comuns",
     "bem_patrimonial",
     "inventario",
-    # Módulo de Suporte desabilitado temporariamente
-    # 'agendamento_suporte'
 ]
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
