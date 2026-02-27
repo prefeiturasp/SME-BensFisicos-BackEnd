@@ -528,14 +528,8 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         self.assertIn('<option value="" selected>---------</option>', html)
 
     def test_grupo_single_select_renderiza_opcao_vazia_no_html(self):
-        request = self.factory.get("/admin/usuario/usuario/add/")
-        request.user = self.superuser
-
-        form_class = self.admin.get_form(request, obj=None)
-        form = form_class()
-        html = form["groups"].as_widget()
-
-        self.assertIn('<option value="" selected>---------</option>', html)
+        """Garante que o HTML do widget renderiza a opção vazia (mesmo cenário do exibe_opcao_vazia)."""
+        self.test_grupo_single_select_exibe_opcao_vazia()
 
     def test_change_form_usuario_com_grupo_inicia_com_grupo_atual(self):
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)

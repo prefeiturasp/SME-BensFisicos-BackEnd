@@ -118,7 +118,7 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
 
         readonly = self._readonly_fields_admin(user, self.instance)
         enviados = set(attrs.keys())
-        bloqueados = sorted(list(enviados.intersection(readonly)))
+        bloqueados = sorted(enviados.intersection(readonly))
 
         if bloqueados:
             raise serializers.ValidationError(
@@ -165,76 +165,71 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
                 {"valor_unitario": "Valor inválido. Use o formato 0,00 ou 0.000,00."}
             )
 
-    def _validate_numero_patrimonial_form(self, cleaned):
-        """
-        Replica regras do admin:
-        - criação: sem_numeracao e numero_formato_antigo não podem ser ambos True
-        - se sem_numeracao: numero_patrimonial = None e numero_formato_antigo = False
-        - se não sem_numeracao: número obrigatório
-        - se não formato antigo: exige NEW_FMT_RE
-        - edição: aceita SEM-NUMERO-{id} e força sem_numeracao True + formato_antigo False
-        """
-        sem = bool(cleaned.get("sem_numeracao"))
-        antigo = bool(cleaned.get("numero_formato_antigo"))
-        numero = cleaned.get("numero_patrimonial")
+    _NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
+    _SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
 
-        if isinstance(numero, str):
-            numero = numero.strip() or None
-
-        tem_pk = bool(self.instance and getattr(self.instance, "pk", None))
-
-        NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
-        SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
-
-        if tem_pk:
-            if numero:
-                if sem and re.fullmatch(SEM_NUM_RE, numero):
-                    cleaned["sem_numeracao"] = True
-                    cleaned["numero_formato_antigo"] = False
-                    return cleaned
-
-                if not antigo and not re.fullmatch(NEW_FMT_RE, numero):
-                    raise serializers.ValidationError(
-                        {
-                            "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                        }
-                    )
-            else:
-                if not sem:
-                    raise serializers.ValidationError(
-                        {
-                            "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                        }
-                    )
+    def _validate_numero_edicao(self, cleaned, sem, antigo, numero):
+        """Valida número patrimonial na edição (tem_pk)."""
+        if numero:
+            if sem and re.fullmatch(self._SEM_NUM_RE, numero):
+                cleaned["sem_numeracao"] = True
                 cleaned["numero_formato_antigo"] = False
-            return cleaned
+                return cleaned
+            if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
+                raise serializers.ValidationError(
+                    {
+                        "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+                    }
+                )
+        else:
+            if not sem:
+                raise serializers.ValidationError(
+                    {
+                        "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
+                    }
+                )
+            cleaned["numero_formato_antigo"] = False
+        return cleaned
 
+    def _validate_numero_criacao(self, cleaned, sem, antigo, numero):
+        """Valida número patrimonial na criação."""
         if sem and antigo:
             raise serializers.ValidationError(
                 "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             )
-
         if sem:
             cleaned["numero_patrimonial"] = None
             cleaned["numero_formato_antigo"] = False
             return cleaned
-
         if not numero:
             raise serializers.ValidationError(
                 {
                     "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
                 }
             )
-
-        if not antigo and not re.fullmatch(NEW_FMT_RE, numero):
+        if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
             raise serializers.ValidationError(
                 {
                     "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
                 }
             )
-
         cleaned["numero_patrimonial"] = numero
         return cleaned
+
+    def _validate_numero_patrimonial_form(self, cleaned):
+        """
+        Replica regras do admin (criação e edição).
+        """
+        sem = bool(cleaned.get("sem_numeracao"))
+        antigo = bool(cleaned.get("numero_formato_antigo"))
+        numero = cleaned.get("numero_patrimonial")
+        if isinstance(numero, str):
+            numero = numero.strip() or None
+
+        tem_pk = bool(self.instance and getattr(self.instance, "pk", None))
+        if tem_pk:
+            return self._validate_numero_edicao(cleaned, sem, antigo, numero)
+        return self._validate_numero_criacao(cleaned, sem, antigo, numero)
 
 
 class BemPatrimonialListSerializer(
@@ -300,39 +295,42 @@ class BemPatrimonialDetailSerializer(
             "audit_last_by_id",
         ]
 
+    def _validate_instance_edit_restrictions(self, attrs):
+        """Valida restrições de edição (excluído, baixa física, UA)."""
+        if not self.instance:
+            return
+        if getattr(self.instance, "excluido", False):
+            raise serializers.ValidationError(
+                "Este bem está excluído e não pode ser editado."
+            )
+        if self.instance.status == constants.BAIXA_FISICA:
+            raise serializers.ValidationError(
+                "Este bem está com status 'Baixa Física' e não pode ser editado."
+            )
+        if "unidade_administrativa" in attrs and attrs["unidade_administrativa"] != self.instance.unidade_administrativa:
+            raise serializers.ValidationError(
+                {
+                    "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
+                }
+            )
+
+    def _validate_valor_unitario_incoming(self, attrs):
+        """Garante valor_unitario preenchido e parseado."""
+        incoming_vu = attrs.get("valor_unitario", None)
+        if incoming_vu is not None:
+            attrs["valor_unitario"] = self._parse_valor_unitario(incoming_vu)
+        elif not self.instance:
+            raise serializers.ValidationError(
+                {"valor_unitario": "Informe o valor unitário (obrigatório)."}
+            )
+
     def validate(self, attrs):
         request = self.context.get("request")
         user = getattr(request, "user", None)
 
-        if self.instance:
-            if getattr(self.instance, "excluido", False):
-                raise serializers.ValidationError(
-                    "Este bem está excluído e não pode ser editado."
-                )
-
-            if self.instance.status == constants.BAIXA_FISICA:
-                raise serializers.ValidationError(
-                    "Este bem está com status 'Baixa Física' e não pode ser editado."
-                )
-
-        if self.instance and "unidade_administrativa" in attrs:
-            if attrs["unidade_administrativa"] != self.instance.unidade_administrativa:
-                raise serializers.ValidationError(
-                    {
-                        "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
-                    }
-                )
-
+        self._validate_instance_edit_restrictions(attrs)
         self._validate_campos_editaveis(user, attrs)
-
-        incoming_vu = attrs.get("valor_unitario", None)
-        if incoming_vu is not None:
-            attrs["valor_unitario"] = self._parse_valor_unitario(incoming_vu)
-        else:
-            if not self.instance:
-                raise serializers.ValidationError(
-                    {"valor_unitario": "Informe o valor unitário (obrigatório)."}
-                )
+        self._validate_valor_unitario_incoming(attrs)
 
         cleaned = dict(attrs)
         if self.instance:
@@ -348,7 +346,6 @@ class BemPatrimonialDetailSerializer(
                 "numero_formato_antigo": cleaned.get("numero_formato_antigo"),
             }
         )
-
         return attrs
 
     def create(self, validated_data):

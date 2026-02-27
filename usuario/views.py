@@ -187,107 +187,10 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
         ctx["error"] = None
         return ctx
 
-    def post(self, request, *args, **kwargs):
-        ua_id = request.POST.get("unidade_administrativa")
-        next_url = request.POST.get("next", reverse("admin:index"))
-        user = request.user
-
-        if ua_id == self.VISAO_GERAL_VALUE:
-            if not (user.is_superuser or user.is_gestor_patrimonio):
-                ctx = self.get_context_data()
-                ctx["error"] = (
-                    "A visão geral da UO é permitida apenas para gestor e superusuário."
-                )
-                return self.render_to_response(ctx)
-
-            uo_ativa = self._obter_uo_ativa(user)
-            if not uo_ativa:
-                ctx = self.get_context_data()
-                ctx["error"] = (
-                    "Não foi possível identificar a Unidade Orçamentária para visão geral."
-                )
-                return self.render_to_response(ctx)
-
-            if not uo_ativa.ativa:
-                ctx = self.get_context_data()
-                ctx["error"] = "A Unidade Orçamentária vinculada está inativa."
-                return self.render_to_response(ctx)
-
-            from usuario.models import Usuario
-
-            original = Usuario.objects.get(pk=user.pk)
-            update_fields = []
-            if user.unidade_administrativa_id is not None:
-                user.unidade_administrativa = None
-                update_fields.append("unidade_administrativa")
-
-            if user.unidade_orcamentaria_id != uo_ativa.id:
-                user.unidade_orcamentaria = uo_ativa
-                update_fields.append("unidade_orcamentaria")
-
-            with transaction.atomic():
-                if update_fields:
-                    user.save(update_fields=update_fields)
-                    changes = dict_changes(
-                        original,
-                        user,
-                        fields=["unidade_administrativa", "unidade_orcamentaria"],
-                    )
-                    if changes:
-                        ct = ContentType.objects.get_for_model(Usuario)
-                        HistoricoGeral.objects.bulk_create(
-                            [
-                                HistoricoGeral(
-                                    content_type=ct,
-                                    object_id=str(user.pk),
-                                    campo=field,
-                                    valor_antigo=old,
-                                    valor_novo=new,
-                                    alterado_por=user,
-                                )
-                                for field, (old, new) in changes.items()
-                            ]
-                        )
-
-            return redirect(next_url)
-
-        if not ua_id:
-            ctx = self.get_context_data()
-            ctx["error"] = "Selecione uma Unidade Administrativa."
-            return self.render_to_response(ctx)
-
-        try:
-            ua_id = int(ua_id)
-        except (ValueError, TypeError):
-            ctx = self.get_context_data()
-            ctx["error"] = "Unidade Administrativa inválida."
-            return self.render_to_response(ctx)
-
-        uas_disponiveis = self.get_uas_disponiveis()
-        if not uas_disponiveis.filter(id=ua_id).exists():
-            ctx = self.get_context_data()
-            ctx["error"] = (
-                "Você não tem permissão para acessar essa Unidade Administrativa."
-            )
-            return self.render_to_response(ctx)
-
+    def _save_user_ua_uo_historico(self, user, update_fields):
         from usuario.models import Usuario
 
         original = Usuario.objects.get(pk=user.pk)
-
-        ua = UnidadeAdministrativa.objects.get(id=ua_id)
-        update_fields = []
-        if user.unidade_administrativa_id != ua.id:
-            user.unidade_administrativa = ua
-            update_fields.append("unidade_administrativa")
-
-        if (
-            ua.unidade_orcamentaria_id
-            and user.unidade_orcamentaria_id != ua.unidade_orcamentaria_id
-        ):
-            user.unidade_orcamentaria = ua.unidade_orcamentaria
-            update_fields.append("unidade_orcamentaria")
-
         with transaction.atomic():
             if update_fields:
                 user.save(update_fields=update_fields)
@@ -312,4 +215,76 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
                         ]
                     )
 
+    def _post_visao_geral(self, request, next_url):
+        user = request.user
+        if not (user.is_superuser or user.is_gestor_patrimonio):
+            ctx = self.get_context_data()
+            ctx["error"] = (
+                "A visão geral da UO é permitida apenas para gestor e superusuário."
+            )
+            return self.render_to_response(ctx)
+        uo_ativa = self._obter_uo_ativa(user)
+        if not uo_ativa:
+            ctx = self.get_context_data()
+            ctx["error"] = (
+                "Não foi possível identificar a Unidade Orçamentária para visão geral."
+            )
+            return self.render_to_response(ctx)
+        if not uo_ativa.ativa:
+            ctx = self.get_context_data()
+            ctx["error"] = "A Unidade Orçamentária vinculada está inativa."
+            return self.render_to_response(ctx)
+        update_fields = []
+        if user.unidade_administrativa_id is not None:
+            user.unidade_administrativa = None
+            update_fields.append("unidade_administrativa")
+        if user.unidade_orcamentaria_id != uo_ativa.id:
+            user.unidade_orcamentaria = uo_ativa
+            update_fields.append("unidade_orcamentaria")
+        self._save_user_ua_uo_historico(user, update_fields)
         return redirect(next_url)
+
+    def _post_ua_especifica(self, request, ua_id, next_url):
+        user = request.user
+        uas_disponiveis = self.get_uas_disponiveis()
+        if not uas_disponiveis.filter(id=ua_id).exists():
+            ctx = self.get_context_data()
+            ctx["error"] = (
+                "Você não tem permissão para acessar essa Unidade Administrativa."
+            )
+            return self.render_to_response(ctx)
+        ua = UnidadeAdministrativa.objects.get(id=ua_id)
+        update_fields = []
+        if user.unidade_administrativa_id != ua.id:
+            user.unidade_administrativa = ua
+            update_fields.append("unidade_administrativa")
+        if (
+            ua.unidade_orcamentaria_id
+            and user.unidade_orcamentaria_id != ua.unidade_orcamentaria_id
+        ):
+            user.unidade_orcamentaria = ua.unidade_orcamentaria
+            update_fields.append("unidade_orcamentaria")
+        self._save_user_ua_uo_historico(user, update_fields)
+        return redirect(next_url)
+
+    def post(self, request, *args, **kwargs):
+        ua_id = request.POST.get("unidade_administrativa")
+        next_url = request.POST.get("next", reverse("admin:index"))
+        user = request.user
+
+        if ua_id == self.VISAO_GERAL_VALUE:
+            return self._post_visao_geral(request, next_url)
+
+        if not ua_id:
+            ctx = self.get_context_data()
+            ctx["error"] = "Selecione uma Unidade Administrativa."
+            return self.render_to_response(ctx)
+
+        try:
+            ua_id = int(ua_id)
+        except (ValueError, TypeError):
+            ctx = self.get_context_data()
+            ctx["error"] = "Unidade Administrativa inválida."
+            return self.render_to_response(ctx)
+
+        return self._post_ua_especifica(request, ua_id, next_url)

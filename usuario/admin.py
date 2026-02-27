@@ -6,7 +6,95 @@ from django_admin_listfilter_dropdown.filters import DropdownFilter
 from rangefilter.filters import DateRangeFilter
 from usuario.models import Usuario
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from django.core.exceptions import ValidationError
+
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
+
+
+def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
+    """Aplica as validações de clean do formulário de usuário (extraído para reduzir complexidade)."""
+    groups_qs = cleaned_data.get("groups")
+    grupo = admin._selecionar_grupo_unico(groups_qs)
+    uo = cleaned_data.get("unidade_orcamentaria")
+    ua = cleaned_data.get("unidade_administrativa")
+
+    if not form_ref.user.is_superuser and cleaned_data.get("is_superuser"):
+        raise ValidationError(
+            {"is_superuser": "Você não tem permissão para definir super-admin."}
+        )
+
+    is_operador = bool(grupo and grupo.name == GRUPO_OPERADOR_INVENTARIO)
+    is_gestor = bool(grupo and grupo.name == GRUPO_GESTOR_PATRIMONIO)
+
+    if not uo:
+        raise ValidationError(
+            {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
+        )
+
+    if not form_ref.user.is_superuser:
+        uo_criador = form_ref.user.unidade_orcamentaria
+        if not uo_criador:
+            raise ValidationError(
+                {
+                    "unidade_orcamentaria": "Seu usuário não possui Unidade Orçamentária vinculada."
+                }
+            )
+        cleaned_data["unidade_orcamentaria"] = uo_criador
+        uo = uo_criador
+
+    if ua and not uo:
+        raise ValidationError(
+            {
+                "unidade_orcamentaria": "Selecione a Unidade Orçamentária antes de escolher a Unidade Administrativa."  # noqa: E501
+            }
+        )
+
+    if uo and ua and ua.unidade_orcamentaria_id != uo.id:
+        cleaned_data["unidade_administrativa"] = None
+        raise ValidationError(
+            {
+                "unidade_administrativa": "A Unidade Administrativa não pertence à Unidade Orçamentária selecionada. Selecione novamente."  # noqa: E501
+            }
+        )
+
+    if (
+        is_operador
+        and not is_gestor
+        and not cleaned_data.get("unidade_administrativa")
+    ):
+        raise ValidationError(
+            {
+                "unidade_administrativa": "Operador de Inventário deve ter uma Unidade Administrativa vinculada."  # noqa: E501
+            }
+        )
+
+    uas_m2m_ids = cleaned_data.get("unidades_administrativas", [])
+    if is_operador and not is_gestor:
+        _validate_operador_uas(cleaned_data, uo, ua, uas_m2m_ids)
+
+
+def _validate_operador_uas(cleaned_data, uo, ua, uas_m2m_ids):
+    """Valida regras de UAs para operador de inventário."""
+    if not uas_m2m_ids:
+        raise ValidationError(
+            {"unidades_administrativas": "Operador deve ter pelo menos uma UA."}
+        )
+    if uo:
+        uas_invalidas = [
+            u for u in uas_m2m_ids if u.unidade_orcamentaria_id != uo.id
+        ]
+        if uas_invalidas:
+            raise ValidationError(
+                {
+                    "unidades_administrativas": "Todas as UAs devem pertencer à UO selecionada."
+                }
+            )
+    if ua and ua not in uas_m2m_ids:
+        raise ValidationError(
+            {
+                "unidade_administrativa": "A UA ativa deve estar entre as UAs selecionadas."
+            }
+        )
 
 
 class GroupSingleSelectWidget(forms.Select):
@@ -247,22 +335,20 @@ class CustomUserModelAdmin(UserAdmin):
 
         form = super().get_form(request, obj, **kwargs)
 
-        if hasattr(form, "base_fields"):
-            if "groups" in form.base_fields:
-                form.base_fields["groups"] = forms.ModelMultipleChoiceField(
-                    queryset=self._get_grupo_queryset(),
-                    required=False,
-                    label="Grupo",
-                    widget=GroupSingleSelectWidget,
+        if hasattr(form, "base_fields") and "groups" in form.base_fields:
+            form.base_fields["groups"] = forms.ModelMultipleChoiceField(
+                queryset=self._get_grupo_queryset(),
+                required=False,
+                label="Grupo",
+                widget=GroupSingleSelectWidget,
+            )
+            if obj and obj.pk:
+                grupo_inicial = self._grupo_preferencial(obj)
+                form.base_fields["groups"].initial = (
+                    [grupo_inicial.pk] if grupo_inicial else []
                 )
-                if obj and obj.pk:
-                    grupo_inicial = self._grupo_preferencial(obj)
-                    if grupo_inicial:
-                        form.base_fields["groups"].initial = [grupo_inicial.pk]
-                    else:
-                        form.base_fields["groups"].initial = []
-                else:
-                    form.base_fields["groups"].initial = []
+            else:
+                form.base_fields["groups"].initial = []
         if hasattr(form, "base_fields") and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].required = True
 
@@ -278,100 +364,17 @@ class CustomUserModelAdmin(UserAdmin):
 
         if not request.user.is_superuser and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].disabled = True
-
             if request.user.unidade_orcamentaria_id:
                 form.base_fields["unidade_orcamentaria"].initial = (
                     request.user.unidade_orcamentaria_id
                 )
 
         original_clean = form.clean
+        request_ref = request
 
         def custom_clean(form_self):
             cleaned_data = original_clean(form_self)
-
-            groups_qs = cleaned_data.get("groups")
-            grupo = self._selecionar_grupo_unico(groups_qs)
-            uo = cleaned_data.get("unidade_orcamentaria")
-            ua = cleaned_data.get("unidade_administrativa")
-            from django.core.exceptions import ValidationError
-
-            if not request.user.is_superuser and cleaned_data.get("is_superuser"):
-                raise ValidationError(
-                    {"is_superuser": "Você não tem permissão para definir super-admin."}
-                )
-
-            is_operador = bool(grupo and grupo.name == GRUPO_OPERADOR_INVENTARIO)
-            is_gestor = bool(grupo and grupo.name == GRUPO_GESTOR_PATRIMONIO)
-
-            if not uo:
-                raise ValidationError(
-                    {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-                )
-
-            if not request.user.is_superuser:
-                uo_criador = request.user.unidade_orcamentaria
-                if not uo_criador:
-                    raise ValidationError(
-                        {
-                            "unidade_orcamentaria": "Seu usuário não possui Unidade Orçamentária vinculada."
-                        }
-                    )
-                cleaned_data["unidade_orcamentaria"] = uo_criador
-                uo = uo_criador
-
-            if ua and not uo:
-                raise ValidationError(
-                    {
-                        "unidade_orcamentaria": "Selecione a Unidade Orçamentária antes de escolher a Unidade Administrativa."  # noqa: E501
-                    }
-                )
-
-            if uo and ua and ua.unidade_orcamentaria_id != uo.id:
-
-                cleaned_data["unidade_administrativa"] = None
-                raise ValidationError(
-                    {
-                        "unidade_administrativa": "A Unidade Administrativa não pertence à Unidade Orçamentária selecionada. Selecione novamente."  # noqa: E501
-                    }
-                )
-
-            if (
-                is_operador
-                and not is_gestor
-                and not cleaned_data.get("unidade_administrativa")
-            ):
-                raise ValidationError(
-                    {
-                        "unidade_administrativa": "Operador de Inventário deve ter uma Unidade Administrativa vinculada."  # noqa: E501
-                    }
-                )
-
-            uas_m2m_ids = cleaned_data.get("unidades_administrativas", [])
-
-            if is_operador and not is_gestor:
-                if not uas_m2m_ids:
-                    raise ValidationError(
-                        {
-                            "unidades_administrativas": "Operador deve ter pelo menos uma UA."
-                        }
-                    )
-                if uo:
-                    uas_invalidas = [
-                        u for u in uas_m2m_ids if u.unidade_orcamentaria_id != uo.id
-                    ]
-                    if uas_invalidas:
-                        raise ValidationError(
-                            {
-                                "unidades_administrativas": "Todas as UAs devem pertencer à UO selecionada."
-                            }
-                        )
-                if ua and ua not in uas_m2m_ids:
-                    raise ValidationError(
-                        {
-                            "unidade_administrativa": "A UA ativa deve estar entre as UAs selecionadas."
-                        }
-                    )
-
+            _apply_usuario_clean_validation(form_ref=request_ref, admin=self, cleaned_data=cleaned_data)
             return cleaned_data
 
         form.clean = custom_clean

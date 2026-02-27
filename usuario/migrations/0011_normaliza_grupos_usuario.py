@@ -6,16 +6,16 @@ GRUPO_OPERADOR_INVENTARIO = "OPERADOR_INVENTARIO"
 
 
 def normaliza_grupos_usuario(apps, schema_editor):
-    Usuario = apps.get_model("usuario", "Usuario")
-    Group = apps.get_model("auth", "Group")
+    usuario_model = apps.get_model("usuario", "Usuario")
+    group_model = apps.get_model("auth", "Group")
 
-    gestor = Group.objects.filter(name=GRUPO_GESTOR_PATRIMONIO).first()
-    operador = Group.objects.filter(name=GRUPO_OPERADOR_INVENTARIO).first()
+    gestor = group_model.objects.filter(name=GRUPO_GESTOR_PATRIMONIO).first()
+    operador = group_model.objects.filter(name=GRUPO_OPERADOR_INVENTARIO).first()
 
     if not gestor and not operador:
         return
 
-    for usuario in Usuario.objects.prefetch_related("groups").all().iterator():
+    for usuario in usuario_model.objects.prefetch_related("groups").all().iterator():
         nomes_grupos = {g.name for g in usuario.groups.all()}
 
         if not nomes_grupos:
@@ -38,6 +38,7 @@ def normaliza_grupos_usuario(apps, schema_editor):
 
 
 def reverse_noop(apps, schema_editor):
+    # Reversão intencionalmente vazia: normalização de grupos não é reversível.
     pass
 
 
