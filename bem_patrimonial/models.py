@@ -581,13 +581,6 @@ def bloquear_bem_quando_item_criado(sender, instance, created, **kwargs):
     bem.status = constants.BLOQUEADO
     bem.save(update_fields=["status"])
 
-    StatusBemPatrimonial.objects.create(
-        bem_patrimonial=bem,
-        status=constants.BLOQUEADO,
-        atualizado_por=movimentacao.solicitado_por,
-        observacao=f"Bem bloqueado para movimentação #{movimentacao.pk}",
-    )
-
 
 @receiver(post_save, sender=MovimentacaoBemPatrimonial)
 def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):

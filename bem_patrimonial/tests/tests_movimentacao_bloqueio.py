@@ -157,40 +157,7 @@ class BloqueioAutomaticoTestCase(TestCase):
         self.assertEqual(self.bem.status, BLOQUEADO)
         self.assertEqual(movimentacao.status, ENVIADA)
 
-    def test_historico_status_criado_ao_bloquear(self):
-        """
-        No fluxo novo, o histórico pode ou não ser criado automaticamente.
-        Aqui garantimos o bloqueio do bem e, se houver histórico,
-        verificamos se o último registro está consistente.
-        """
-        count_antes = StatusBemPatrimonial.objects.filter(
-            bem_patrimonial=self.bem
-        ).count()
-
-        movimentacao = self.test_data.create_movimentacao_com_item(
-            bem=self.bem,
-            ua_origem=self.ua_origem,
-            ua_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
-
-        self.bem.refresh_from_db()
-        self.assertEqual(self.bem.status, BLOQUEADO)
-
-        count_depois = StatusBemPatrimonial.objects.filter(
-            bem_patrimonial=self.bem
-        ).count()
-
-        if count_depois > count_antes:
-            ultimo_status = StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem
-            ).last()
-            self.assertEqual(ultimo_status.status, BLOQUEADO)
-            self.assertEqual(ultimo_status.atualizado_por, self.operador_origem)
-            self.assertIn(str(movimentacao.pk), ultimo_status.observacao)
-        else:
-            # Mantém a sanidade: nada foi criado, mas pelo menos não diminuiu.
-            self.assertGreaterEqual(count_depois, count_antes)
+    
 
     def test_property_tem_movimentacao_pendente(self):
         self.assertFalse(self.bem.tem_movimentacao_pendente)
