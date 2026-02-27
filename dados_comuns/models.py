@@ -120,6 +120,8 @@ class HistoricoGeral(models.Model):
         "Alterado em", default=timezone.now, db_index=True
     )
 
+    justificativa = models.TextField("Justificativa", null=True, blank=True)
+
     class Meta:
         verbose_name = "histórico geral"
         verbose_name_plural = "histórico geral"

@@ -17,6 +17,17 @@ class BemPatrimonialAdminForm(forms.ModelForm):
         help_text="Selecione o modo de cadastro antes de preencher os campos.",
     )
 
+    justificativa = forms.CharField(
+        widget=forms.Textarea(
+            attrs={
+                "placeholder": "",
+                "autocomplete": "off",
+                "rows": 11,
+                "style": "width: 40.5%;",
+            }
+        ),
+    )
+
     class Meta:
         model = BemPatrimonial
         fields = (
