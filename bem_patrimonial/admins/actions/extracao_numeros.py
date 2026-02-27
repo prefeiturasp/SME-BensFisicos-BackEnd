@@ -91,7 +91,7 @@ def _classify_token(token: str):
 def _extract_when_starts_with_alpha(nome: str, descricao: str):
     """Procura token numérico no final do nome ou da descrição. Retorna tupla ou None."""
     for field, text in (("nome_fim", nome), ("descricao_fim", descricao)):
-        tok, a, b = _last_numericish_token(text)
+        tok, a, _ = _last_numericish_token(text)
         if not tok:
             continue
         cls, normalized = _classify_token(tok)
@@ -106,7 +106,7 @@ def _extract_when_starts_with_alpha(nome: str, descricao: str):
 
 def _extract_from_first_token(text: str, nome: str, fonte: str, use_resto_as_nome: bool):
     """Tenta extrair do primeiro token de text. Retorna tupla ou None."""
-    tok, a, b = _first_token(text)
+    tok, _, b = _first_token(text)
     if not tok or ALPHA_RE.search(tok):
         return None
     cls, normalized = _classify_token(tok)
@@ -212,7 +212,7 @@ def _build_propostos(model, selected_ids):
         bem = model.objects.only(
             "id", "nome", "descricao", "numero_patrimonial"
         ).get(pk=pk)
-        numero, cls, nome_sug, fonte, _, _, aplicar_auto = _extract(
+        numero, cls, _, fonte, _, _, aplicar_auto = _extract(
             bem.nome, getattr(bem, "descricao", "")
         )
         if cls in ("PADRAO_ATUAL", "PADRAO_ANTERIOR") and numero:

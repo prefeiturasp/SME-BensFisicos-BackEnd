@@ -639,41 +639,56 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             return False
         return str(v).strip().lower() in ("1", "true", "on", "yes", "y", "t")
 
+    def _add_view_multi_process_row_validate_save(self, bem, idx):
+        """Valida e salva o bem; retorna (bem, None) ou (None, mensagem_erro)."""
+        try:
+            bem.full_clean()
+            bem.save()
+            return bem, None
+        except ValidationError as ve:
+            err_msgs = (
+                "; ".join(f"{k}: {', '.join(v)}" for k, v in ve.message_dict.items())
+                if hasattr(ve, "message_dict")
+                else str(ve)
+            )
+            return None, f"Linha {idx}: {err_msgs}"
+        except IntegrityError as ie:
+            return None, f"Linha {idx}: {str(ie)}"
+        except Exception as ex:
+            return None, f"Linha {idx}: Erro inesperado: {str(ex)}"
+
+    def _add_view_multi_process_row(self, request, idx, row, base):
+        localizacao = (row.get("localizacao") or "").strip() or None
+        if not localizacao:
+            return None, f"Linha {idx}: Informe a Localização (obrigatória)."
+
+        numero_patrimonial_raw = (row.get("numero_patrimonial") or "").strip()
+        numero_formato_antigo = self._add_view_multi_to_bool(
+            row.get("numero_formato_antigo")
+        )
+        sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
+        numero_patrimonial = (
+            None if sem_numeracao else (numero_patrimonial_raw or None)
+        )
+        bem = BemPatrimonial(
+            criado_por=request.user,
+            numero_patrimonial=numero_patrimonial,
+            numero_formato_antigo=numero_formato_antigo,
+            sem_numeracao=sem_numeracao,
+            localizacao=localizacao,
+            **base,
+        )
+        return self._add_view_multi_process_row_validate_save(bem, idx)
+
     def _add_view_multi_process_linhas(self, request, linhas, base):
         criados, errors = [], []
         with transaction.atomic():
             for idx, row in enumerate(linhas, start=1):
-                localizacao = (row.get("localizacao") or "").strip() or None
-                if not localizacao:
-                    errors.append(f"Linha {idx}: Informe a Localização (obrigatória).")
-                    continue
-                numero_patrimonial_raw = (row.get("numero_patrimonial") or "").strip()
-                numero_formato_antigo = self._add_view_multi_to_bool(row.get("numero_formato_antigo"))
-                sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
-                numero_patrimonial = None if sem_numeracao else (numero_patrimonial_raw or None)
-                bem = BemPatrimonial(
-                    criado_por=request.user,
-                    numero_patrimonial=numero_patrimonial,
-                    numero_formato_antigo=numero_formato_antigo,
-                    sem_numeracao=sem_numeracao,
-                    localizacao=localizacao,
-                    **base,
-                )
-                try:
-                    bem.full_clean()
-                    bem.save()
+                bem, erro = self._add_view_multi_process_row(request, idx, row, base)
+                if erro:
+                    errors.append(erro)
+                elif bem:
                     criados.append(bem)
-                except ValidationError as ve:
-                    err_msgs = (
-                        "; ".join(f"{k}: {', '.join(v)}" for k, v in ve.message_dict.items())
-                        if hasattr(ve, "message_dict")
-                        else str(ve)
-                    )
-                    errors.append(f"Linha {idx}: {err_msgs}")
-                except IntegrityError as ie:
-                    errors.append(f"Linha {idx}: {str(ie)}")
-                except Exception as ex:
-                    errors.append(f"Linha {idx}: Erro inesperado: {str(ex)}")
             if errors:
                 transaction.set_rollback(True)
         return criados, errors

@@ -205,6 +205,30 @@ class PDFFormat(Format):
 
         return elements
 
+    def _cell_paragraph(self, value, cell_style):
+        """Retorna Paragraph com valor ou '-' se vazio."""
+        return Paragraph(str(value) if value else "-", cell_style)
+
+    def _criar_linha_bem_para_tabela(self, bem, cell_style):
+        valor = f"{bem.valor_unitario:.2f}" if bem.valor_unitario else "-"
+        unidade_adm_text = (
+            str(bem.unidade_administrativa.nome)
+            if bem.unidade_administrativa
+            else "-"
+        )
+        return [
+            self._cell_paragraph(bem.numero_patrimonial, cell_style),
+            self._cell_paragraph(bem.nome, cell_style),
+            Paragraph(bem.get_status_display(), cell_style),
+            self._cell_paragraph(bem.descricao, cell_style),
+            self._cell_paragraph(bem.marca, cell_style),
+            self._cell_paragraph(bem.modelo, cell_style),
+            self._cell_paragraph(bem.localizacao, cell_style),
+            valor,
+            self._cell_paragraph(bem.numero_processo, cell_style),
+            Paragraph(unidade_adm_text, cell_style),
+        ]
+
     def _criar_tabela_bens(self, bens_list):
         elements = []
         styles = getSampleStyleSheet()
@@ -241,42 +265,7 @@ class PDFFormat(Format):
         data = [headers]
 
         for bem in bens_list:
-            valor = f"{bem.valor_unitario:.2f}" if bem.valor_unitario else "-"
-            numero_patrimonial = Paragraph(
-                str(bem.numero_patrimonial) if bem.numero_patrimonial else "-",
-                cell_style,
-            )
-            nome = Paragraph(str(bem.nome) if bem.nome else "-", cell_style)
-            descricao = Paragraph(
-                str(bem.descricao) if bem.descricao else "-", cell_style
-            )
-            marca = Paragraph(str(bem.marca) if bem.marca else "-", cell_style)
-            modelo = Paragraph(str(bem.modelo) if bem.modelo else "-", cell_style)
-            localizacao = Paragraph(
-                str(bem.localizacao) if bem.localizacao else "-", cell_style
-            )
-            processo = Paragraph(
-                str(bem.numero_processo) if bem.numero_processo else "-", cell_style
-            )
-
-            unidade_adm_text = "-"
-            if bem.unidade_administrativa:
-                unidade_adm_text = str(bem.unidade_administrativa.nome)
-            unidade_administrativa = Paragraph(unidade_adm_text, cell_style)
-            status_formatado = Paragraph(bem.get_status_display(), cell_style)
-            row = [
-                numero_patrimonial,
-                nome,
-                status_formatado,
-                descricao,
-                marca,
-                modelo,
-                localizacao,
-                valor,
-                processo,
-                unidade_administrativa,
-            ]
-
+            row = self._criar_linha_bem_para_tabela(bem, cell_style)
             data.append(row)
 
         col_widths = [
