@@ -235,7 +235,7 @@ class UnidadeAdministrativaAdmin(ImportExportModelAdmin):
             if uo != request.user.unidade_orcamentaria:
                 raise ValidationError(
                     {
-                        "unidade_orcamentaria": "Você não pode cadastrar Unidade Administrativa em outra Unidade Orçamentária."
+                        "unidade_orcamentaria": "Você não pode cadastrar Unidade Administrativa em outra Unidade Orçamentária."  # noqa: E501
                     }
                 )
 

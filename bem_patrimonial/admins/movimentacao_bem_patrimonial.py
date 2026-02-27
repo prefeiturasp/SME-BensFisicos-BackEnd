@@ -105,13 +105,15 @@ def aprovar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
         if mov.aceita:
             messages.add_message(
-                request, messages.WARNING,
+                request,
+                messages.WARNING,
                 f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
             )
             continue
         if mov.rejeitada:
             messages.add_message(
-                request, messages.WARNING,
+                request,
+                messages.WARNING,
                 f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
             )
             continue
@@ -119,7 +121,8 @@ def aprovar_solicitacao(modeladmin, request, queryset):
             continue
         if mov.cancelada:
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
             )
             continue
@@ -128,7 +131,8 @@ def aprovar_solicitacao(modeladmin, request, queryset):
         bens_itens = _bens_da_movimentacao(mov)
         if not bens_itens.exists():
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
@@ -146,7 +150,8 @@ def aprovar_solicitacao(modeladmin, request, queryset):
             mov.aprovado_por = request.user
             mov.save()
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} aprovada com sucesso. Bens desbloqueados.",
         )
 
@@ -158,13 +163,15 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
         if mov.rejeitada:
             messages.add_message(
-                request, messages.WARNING,
+                request,
+                messages.WARNING,
                 f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
             )
             continue
         if mov.aceita:
             messages.add_message(
-                request, messages.WARNING,
+                request,
+                messages.WARNING,
                 f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
             )
             continue
@@ -172,7 +179,8 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
             continue
         if mov.cancelada:
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
             )
             continue
@@ -181,7 +189,8 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
         bens_itens = _bens_da_movimentacao(mov)
         if not bens_itens.exists():
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
@@ -198,7 +207,8 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                         bem, mov.solicitado_por.email
                     )
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} rejeitada com sucesso. Bens desbloqueados.",
         )
 
@@ -210,25 +220,29 @@ def cancelar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
         if mov.cancelada:
             messages.add_message(
-                request, messages.WARNING,
+                request,
+                messages.WARNING,
                 f"Movimentação #{mov.pk} já foi cancelada anteriormente.",
             )
             continue
         if mov.aceita:
             messages.add_message(
-                request, messages.WARNING,
+                request,
+                messages.WARNING,
                 f"Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
             )
             continue
         if mov.rejeitada:
             messages.add_message(
-                request, messages.WARNING,
+                request,
+                messages.WARNING,
                 f"Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
             )
             continue
         if mov.status != constants.ENVIADA:
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
             )
             continue
@@ -238,7 +252,8 @@ def cancelar_solicitacao(modeladmin, request, queryset):
             and mov.solicitado_por_id != request.user.pk
         ):
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk}: Você só pode cancelar movimentações criadas por você.",
             )
             continue
@@ -256,7 +271,8 @@ def cancelar_solicitacao(modeladmin, request, queryset):
                         bem, request.user, mov.solicitado_por.email
                     )
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} cancelada com sucesso. Bens desbloqueados.",
         )
 
@@ -391,7 +407,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                         ua_user
                         and ua_user.is_ativa
                         and hasattr(self_inner, "base_fields")
-                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in self_inner.base_fields
+                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                        in self_inner.base_fields
                     ):
                         self_inner.base_fields[
                             UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE

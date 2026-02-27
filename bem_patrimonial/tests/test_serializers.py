@@ -147,7 +147,10 @@ class BemPatrimonialSerializerTest(TestCase):
 
         serializer = BemPatrimonialDetailSerializer(
             instance=bem2,
-            data={"numero_patrimonial": bem1.numero_patrimonial, "numero_formato_antigo": False},
+            data={
+                "numero_patrimonial": bem1.numero_patrimonial,
+                "numero_formato_antigo": False,
+            },
             context={"request": self._get_request()},
             partial=True,
         )

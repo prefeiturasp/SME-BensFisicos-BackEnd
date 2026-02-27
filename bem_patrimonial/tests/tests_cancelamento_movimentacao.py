@@ -7,7 +7,6 @@ from django.contrib.auth.models import Group
 
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
-    StatusBemPatrimonial,
     MovimentacaoBensItem,
 )
 from bem_patrimonial.constants import (
@@ -478,8 +477,7 @@ class EmailCancelamentoTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua_origem,
-            
-            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
         gestor_sem_nome.groups.add(grupo_gestor)
 

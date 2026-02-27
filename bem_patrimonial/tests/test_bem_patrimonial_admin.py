@@ -2,7 +2,6 @@
 # Complementa tests_admin.py, tests_aprovacao_lote.py, tests_admin_list_display.py,
 # test_edicao_restrita_operador.py e tests_export_pdf.py
 
-import json
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, RequestFactory, Client
@@ -12,7 +11,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
@@ -27,7 +25,6 @@ from bem_patrimonial.constants import (
     AGUARDANDO_APROVACAO,
     APROVADO,
     BAIXA_FISICA,
-    NAO_APROVADO,
 )
 from bem_patrimonial.formats import PDFFormat
 from dados_comuns.models import UnidadeAdministrativa
@@ -58,7 +55,9 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
             status=UnidadeAdministrativa.ATIVA,
         )
         cls.grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
-        cls.grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
+        cls.grupo_operador, _ = Group.objects.get_or_create(
+            name=GRUPO_OPERADOR_INVENTARIO
+        )
 
         cls.gestor = Usuario.objects.create_user(
             username="gestor_cob",
@@ -95,7 +94,9 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         )
         cls.superuser.unidade_orcamentaria = cls.uo
         cls.superuser.must_change_password = False
-        cls.superuser.save(update_fields=["unidade_orcamentaria", "must_change_password"])
+        cls.superuser.save(
+            update_fields=["unidade_orcamentaria", "must_change_password"]
+        )
         cls.superuser.groups.add(cls.grupo_gestor)
 
     def setUp(self):
@@ -338,7 +339,9 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
     # --- alterado_em_ultimo, alterado_por_ultimo ---
     def test_alterado_em_ultimo_retorna_audit_last_at(self):
         bem = self._criar_bem()
-        self.assertEqual(self.admin.alterado_em_ultimo(bem), getattr(bem, "audit_last_at", None))
+        self.assertEqual(
+            self.admin.alterado_em_ultimo(bem), getattr(bem, "audit_last_at", None)
+        )
 
     def test_alterado_por_ultimo_retorna_traco_se_sem_user_id(self):
         bem = self._criar_bem()
@@ -362,7 +365,11 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
     def test_get_search_results_autocomplete_sem_ua_origem_retorna_none(self):
         request = self.factory.get(
             "/admin/",
-            {"app_label": "bem_patrimonial", "model_name": "baixafisicabensitem", "field_name": "bem"},
+            {
+                "app_label": "bem_patrimonial",
+                "model_name": "baixafisicabensitem",
+                "field_name": "bem",
+            },
         )
         request.path = "/admin/bem_patrimonial/bempatrimonial/autocomplete/"
         request.user = self.gestor
@@ -448,10 +455,16 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
             "import_export.admin.ImportExportModelAdmin.render_change_form",
             return_value=mock_super_response,
         ):
-            resp = self.admin.render_change_form(request, context, add=True, change=False)
+            resp = self.admin.render_change_form(
+                request, context, add=True, change=False
+            )
         self.assertIsNotNone(resp)
         # O admin injeta o anchor em response.content, não em rendered_content
-        content = resp.content if hasattr(resp.content, "decode") else getattr(resp, "rendered_content", b"")
+        content = (
+            resp.content
+            if hasattr(resp.content, "decode")
+            else getattr(resp, "rendered_content", b"")
+        )
         if isinstance(content, str):
             content = content.encode("utf-8")
         self.assertIn(b"multi-inline-root", content)
@@ -460,7 +473,9 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
     def test_aprovar_bens_exception_mensagem_erro(self):
         bem = self._criar_bem(status=AGUARDANDO_APROVACAO)
         request = _request_with_messages(self.factory, self.gestor, method="POST")
-        with patch.object(BemPatrimonial, "save", side_effect=RuntimeError("erro teste")):
+        with patch.object(
+            BemPatrimonial, "save", side_effect=RuntimeError("erro teste")
+        ):
             aprovar_bens(self.admin, request, BemPatrimonial.objects.filter(pk=bem.pk))
         msgs = [str(m) for m in request._messages]
         self.assertTrue(any("Erro ao aprovar" in m for m in msgs))
@@ -468,7 +483,9 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
     def test_reprovar_bens_exception_mensagem_erro(self):
         bem = self._criar_bem(status=AGUARDANDO_APROVACAO)
         request = _request_with_messages(self.factory, self.gestor, method="POST")
-        with patch.object(BemPatrimonial, "save", side_effect=RuntimeError("erro teste")):
+        with patch.object(
+            BemPatrimonial, "save", side_effect=RuntimeError("erro teste")
+        ):
             reprovar_bens(self.admin, request, BemPatrimonial.objects.filter(pk=bem.pk))
         msgs = [str(m) for m in request._messages]
         self.assertTrue(any("Erro ao reprovar" in m for m in msgs))

@@ -3,14 +3,13 @@
 import csv
 from io import StringIO
 from urllib.parse import urlencode
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.admin import helpers
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
@@ -194,18 +193,14 @@ class ExtracaoNumerosTest(TestCase):
         self.assertFalse(aplicar)
 
     def test_extract_primeiro_token_no_nome(self):
-        _, cls, _, fonte, _, _, aplicar = _extract(
-            "001.050761830-0 resto do nome", ""
-        )
+        _, cls, _, fonte, _, _, aplicar = _extract("001.050761830-0 resto do nome", "")
         self.assertEqual(fonte, "nome")
         self.assertEqual(cls, "PADRAO_ATUAL")
         self.assertTrue(aplicar)
 
     def test_extract_primeiro_token_na_descricao(self):
         # Nome começa com dígito mas primeiro token tem letra (0x); número vem da descrição
-        _, _, _, fonte, _, _, aplicar = _extract(
-            "0x z", "001.111222333-4 desc"
-        )
+        _, _, _, fonte, _, _, aplicar = _extract("0x z", "001.111222333-4 desc")
         self.assertEqual(fonte, "descricao")
         self.assertTrue(aplicar)
 
@@ -249,7 +244,9 @@ class ExtracaoNumerosTest(TestCase):
         request = _request_with_messages(self.factory, self.gestor)
         request.POST = request.POST.copy()
         resp = aplicar_extracao_numero(
-            self.model_admin, request, BemPatrimonial.objects.filter(numero_patrimonial__isnull=True)
+            self.model_admin,
+            request,
+            BemPatrimonial.objects.filter(numero_patrimonial__isnull=True),
         )
         self.assertIsNotNone(resp)
         self.assertEqual(resp.status_code, 200)
@@ -315,10 +312,14 @@ class ExtracaoNumerosTest(TestCase):
             numero_patrimonial=None,
             sem_numeracao=False,
         )
-        request = _request_with_messages(self.factory, self.gestor, post_data={
-            "confirm": "yes",
-            helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
-        })
+        request = _request_with_messages(
+            self.factory,
+            self.gestor,
+            post_data={
+                "confirm": "yes",
+                helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
+            },
+        )
         aplicar_extracao_numero(
             self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk)
         )
@@ -331,11 +332,17 @@ class ExtracaoNumerosTest(TestCase):
             numero_patrimonial=None,
             sem_numeracao=True,
         )
-        request = _request_with_messages(self.factory, self.gestor, post_data={
-            "confirm": "yes",
-            helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
-        })
-        with patch.object(BemPatrimonial, "full_clean", side_effect=ValidationError("erro")):
+        request = _request_with_messages(
+            self.factory,
+            self.gestor,
+            post_data={
+                "confirm": "yes",
+                helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
+            },
+        )
+        with patch.object(
+            BemPatrimonial, "full_clean", side_effect=ValidationError("erro")
+        ):
             aplicar_extracao_numero(
                 self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk)
             )
@@ -348,10 +355,14 @@ class ExtracaoNumerosTest(TestCase):
             numero_patrimonial=None,
             sem_numeracao=True,
         )
-        request = _request_with_messages(self.factory, self.gestor, post_data={
-            "confirm": "yes",
-            helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
-        })
+        request = _request_with_messages(
+            self.factory,
+            self.gestor,
+            post_data={
+                "confirm": "yes",
+                helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
+            },
+        )
         with patch.object(BemPatrimonial, "save", side_effect=RuntimeError("erro")):
             aplicar_extracao_numero(
                 self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk)

@@ -150,14 +150,8 @@ class PDFFormat(Format):
             return "Sistema"
         if hasattr(user, "nome") and user.nome:
             return user.nome
-        full_name = (
-            user.get_full_name() if hasattr(user, "get_full_name") else ""
-        )
-        return (
-            full_name.strip()
-            if full_name and full_name.strip()
-            else user.username
-        )
+        full_name = user.get_full_name() if hasattr(user, "get_full_name") else ""
+        return full_name.strip() if full_name and full_name.strip() else user.username
 
     def _criar_info_relatorio(self, request, total_registros):
         elements = []

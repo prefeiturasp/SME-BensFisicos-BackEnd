@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import threading
 
 _local = threading.local()
@@ -9,9 +10,6 @@ def set_user(user):
 
 def get_user():
     return getattr(_local, "user", None)
-
-
-from contextlib import contextmanager
 
 
 @contextmanager

@@ -5,14 +5,12 @@ from django.contrib import messages
 
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
-    BemPatrimonial,
     MovimentacaoBensItem,
 )
 from bem_patrimonial.constants import ENVIADA, ACEITA
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
     aprovar_solicitacao,
-    rejeitar_solicitacao,
 )
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,

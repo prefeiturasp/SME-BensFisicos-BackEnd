@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
-from bem_patrimonial.models import BemPatrimonial, StatusBemPatrimonial
+from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants
 from dados_comuns.tests.factories import criar_ua, criar_uo
 
@@ -95,7 +95,9 @@ class BemPatrimonialViewSetTest(TestCase):
         bem_ign = self._mk_bem(status=constants.APROVADO)
 
         url = reverse("bens-aprovar-bens")
-        response = self.client.post(url, {"ids": [bem_ok.id, bem_ign.id]}, format="json")
+        response = self.client.post(
+            url, {"ids": [bem_ok.id, bem_ign.id]}, format="json"
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["aprovados"], 1)
@@ -113,7 +115,6 @@ class BemPatrimonialViewSetTest(TestCase):
 
         bem1.refresh_from_db()
         self.assertEqual(bem1.status, constants.NAO_APROVADO)
-
 
     def test_reprovar_bens_sem_ids_retorna_400(self):
         url = reverse("bens-reprovar-bens")

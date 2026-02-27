@@ -46,9 +46,7 @@ class Command(BaseCommand):
         if numero and numero in descricao_trabalhada:
             descricao_trabalhada = descricao_trabalhada.replace(numero, "").strip()
             alterou = True
-        descricao_limpa = re.sub(
-            r"^[^A-Za-z0-9]+", "", descricao_trabalhada
-        ).strip()
+        descricao_limpa = re.sub(r"^[^A-Za-z0-9]+", "", descricao_trabalhada).strip()
         if descricao_limpa != descricao_original:
             alterou = True
         return descricao_limpa, alterou

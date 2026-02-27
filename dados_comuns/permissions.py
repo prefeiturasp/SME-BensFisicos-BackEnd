@@ -33,7 +33,10 @@ class BemPatrimonialPermission(BasePermission):
             return True
 
         if getattr(view, "action", None) == "destroy":
-            return bool(getattr(request.user, "is_gestor_patrimonio", False) or getattr(request.user, "is_superuser", False))
+            return bool(
+                getattr(request.user, "is_gestor_patrimonio", False)
+                or getattr(request.user, "is_superuser", False)
+            )
 
         return True
 
@@ -43,12 +46,18 @@ class BemPatrimonialPermission(BasePermission):
         if getattr(obj, "excluido", False):
             return False
 
-        if getattr(obj, "status", None) == getattr(__import__("bem_patrimonial.constants", fromlist=["BAIXA_FISICA"]), "BAIXA_FISICA"):
+        if getattr(obj, "status", None) == getattr(
+            __import__("bem_patrimonial.constants", fromlist=["BAIXA_FISICA"]),
+            "BAIXA_FISICA",
+        ):
             if getattr(view, "action", None) in ("retrieve", "list"):
                 return True
             return False
 
         if getattr(view, "action", None) == "destroy":
-            return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False))
+            return bool(
+                getattr(user, "is_gestor_patrimonio", False)
+                or getattr(user, "is_superuser", False)
+            )
 
         return True

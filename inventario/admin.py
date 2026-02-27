@@ -5,7 +5,6 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.contrib.admin import SimpleListFilter
-from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 
 from django import forms
 
@@ -22,6 +21,7 @@ from inventario.utils_conciliacao.conciliacao_automatica import (
     processar_conciliacao_anual_automatica,
 )
 
+from . import constants
 from .models import ParametroConciliacaoAnual, ConciliacaoUA, ItemConciliacao
 from .forms import ConciliacaoUAAdminForm
 
@@ -30,7 +30,6 @@ from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
 
 URL_NAME_CONCILIACAOUA_CHANGE = "admin:inventario_conciliacaoua_change"
 URL_NAME_CONCILIACAOUA_CHANGELIST = "admin:inventario_conciliacaoua_changelist"
-from . import constants
 
 
 class AnoVigenciaSelectFilter(SimpleListFilter):
@@ -582,9 +581,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         if not item.conciliacao.esta_aberto:
             messages.error(request, "Conciliação fechada não permite edições")
-            return redirect(
-                URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         if not item.permite_registrar_ocorrencia:
             messages.error(
@@ -592,9 +589,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
                 "Este status é definitivo.",
             )
-            return redirect(
-                URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         if request.method == "POST":
             situacao = request.POST.get("situacao")
@@ -610,9 +605,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                     usuario=request.user,
                 )
                 messages.success(request, "Ocorrência registrada com sucesso")
-                return redirect(
-                    URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk
-                )
+                return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
             except ValidationError as e:
                 messages.error(request, str(e))
 
@@ -666,9 +659,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         if not item.conciliacao.esta_aberto:
             messages.error(request, "Conciliação fechada não permite edições")
-            return redirect(
-                URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         if request.method == "POST":
             try:
@@ -677,9 +668,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             except ValidationError as e:
                 messages.error(request, str(e))
 
-            return redirect(
-                URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         context = {
             "item": item,

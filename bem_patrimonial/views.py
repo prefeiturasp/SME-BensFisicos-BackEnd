@@ -31,7 +31,6 @@ from bem_patrimonial.models import (
     BaixaFisicaBensItem,
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
-    StatusBemPatrimonial,
 )
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.context import audit_as
@@ -271,7 +270,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             with audit_as(request.user):
-                bem = BemPatrimonial.objects.filter(
+                BemPatrimonial.objects.filter(
                     id__in=bens_aguardando.values_list("id", flat=True)
                 ).update(status=constants.NAO_APROVADO)
 

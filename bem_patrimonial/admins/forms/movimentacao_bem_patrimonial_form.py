@@ -52,11 +52,15 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         ua_destino = cleaned_data.get("unidade_administrativa_destino")
         if not ua_origem:
             raise ValidationError(
-                {"unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."}
+                {
+                    "unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."
+                }
             )
         if not ua_destino:
             raise ValidationError(
-                {"unidade_administrativa_destino": "Unidade administrativa de destino é obrigatória."}
+                {
+                    "unidade_administrativa_destino": "Unidade administrativa de destino é obrigatória."
+                }
             )
         if not ua_origem.is_ativa:
             raise ValidationError(
@@ -77,20 +81,28 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                 }
             )
         if ua_destino == ua_origem:
-            raise ValidationError("Operação não permitida: origem e destino são iguais.")
+            raise ValidationError(
+                "Operação não permitida: origem e destino são iguais."
+            )
         if not user:
             return
-        qs_origem = filtrar_ua_origem_por_escopo(user, UnidadeAdministrativa.objects.all())
+        qs_origem = filtrar_ua_origem_por_escopo(
+            user, UnidadeAdministrativa.objects.all()
+        )
         if not qs_origem.filter(pk=ua_origem.pk).exists():
             raise ValidationError(
-                {"unidade_administrativa_origem": "UA de origem fora do seu escopo de acesso."}
+                {
+                    "unidade_administrativa_origem": "UA de origem fora do seu escopo de acesso."
+                }
             )
         qs_destino = filtrar_ua_destino_por_uo_do_usuario(
             user, UnidadeAdministrativa.objects.all()
         )
         if not qs_destino.filter(pk=ua_destino.pk).exists():
             raise ValidationError(
-                {"unidade_administrativa_destino": "UA de destino fora das UAs permitidas para sua UO."}
+                {
+                    "unidade_administrativa_destino": "UA de destino fora das UAs permitidas para sua UO."
+                }
             )
 
     def clean(self):
