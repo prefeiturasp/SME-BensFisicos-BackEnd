@@ -164,7 +164,7 @@ class HistoricoGeralInline(GenericTabularInline):
         "alterado_por",
         "alterado_em",
     )
-    fields = ("campo", "valor_antigo", "valor_novo", "alterado_por", "alterado_em")
+    fields = ("campo", "valor_antigo", "valor_novo", "justificativa", "alterado_por", "alterado_em")
     ordering = ("-alterado_em",)
     template = "admin/bem_patrimonial/edit_inline/tabular-historico.html"
 
@@ -324,6 +324,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 "modelo",
                 "numero_processo",
                 "foto",
+                "justificativa"
             )
 
         return base + (
@@ -349,9 +350,18 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ("valor_unitario", "marca", "modelo"),
             ("localizacao"),
             "numero_processo",
+            "observacao",
+            "justificativa"
         ]
+
+        if request.user.is_operador_inventario:
+            base = [f for f in base if f != "justificativa"]
+
         if obj:
             base = [f for f in base if f != "cadastro_modo"]
+        else:
+            base = [f for f in base if f != "justificativa"]
+
         return base
 
     autocomplete_fields = ("unidade_administrativa",)
@@ -390,6 +400,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def _setup_create_form_ua_field(self, self_inner, request):
         if "unidade_administrativa" not in self_inner.fields:
             return
+        self_inner.fields["justificativa"].required = False
         modo = (getattr(self_inner, "data", None) or {}).get("cadastro_modo") or (
             getattr(self_inner, "initial", {}) or {}
         ).get("cadastro_modo")
@@ -435,7 +446,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
             )
 
-    def _validate_edit_form_ua(self, cleaned, instance):
+    def _validate_edit_form_ua(self, cleaned, instance, user):
         if not instance or not instance.pk:
             return
         ua_original = instance.unidade_administrativa
@@ -450,6 +461,35 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             raise ValidationError(
                 {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
             )
+
+        if not user.is_operador_inventario:
+            nome_original = instance.nome
+            nome_post = cleaned.get("nome")
+
+            numero_original = instance.numero_patrimonial
+            numero_post = cleaned.get("numero_patrimonial")
+
+            justificativa = cleaned.get("justificativa")
+
+            nome_alterado = nome_post != nome_original
+            numero_alterado = numero_post != numero_original
+
+            if nome_alterado or numero_alterado:
+                if not justificativa:
+                    raise ValidationError({
+                        "justificativa": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                        "nome": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                        "numero_patrimonial": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                    })
 
     def get_form(self, request, obj=None, **kwargs):
         base_form = super().get_form(request, obj, **kwargs)
@@ -479,10 +519,13 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     self_inner.fields["unidade_administrativa"].disabled = True
                     self_inner.fields["unidade_administrativa"].required = True
 
+                if not request.user.is_operador_inventario:
+                    self_inner.fields["justificativa"].required = False
+
             def clean(self_inner):
                 cleaned = super().clean()
                 admin_ref._validate_edit_form_ua(
-                    cleaned, getattr(self_inner, "instance", None)
+                    cleaned, getattr(self_inner, "instance", None), request.user
                 )
                 return cleaned
 
@@ -500,6 +543,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             if not obj.status:
                 obj.status = constants.AGUARDANDO_APROVACAO
         try:
+            obj._justificativa = request.POST.get("justificativa") or None
             super().save_model(request, obj, form, change)
         except IntegrityError as e:
             if "numero_patrimonial" in str(e).lower():
