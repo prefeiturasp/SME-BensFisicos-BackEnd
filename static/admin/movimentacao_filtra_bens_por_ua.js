@@ -1,6 +1,4 @@
 (function() {
-    const $ = window.django?.jQuery;
-
     function wrapAjaxWithUaFilter(jq, oldAjax, $ua) {
         return function(options) {
             const isStringUrl = typeof options === 'string';

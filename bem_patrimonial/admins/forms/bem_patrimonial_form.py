@@ -142,12 +142,16 @@ class BemPatrimonialAdminForm(forms.ModelForm):
                 return
             if not antigo and not re.fullmatch(self.NEW_FMT_RE, numero):
                 raise ValidationError(
-                    {"numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."}
+                    {
+                        "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+                    }
                 )
         else:
             if not sem:
                 raise ValidationError(
-                    {"numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."}
+                    {
+                        "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
+                    }
                 )
             cleaned["numero_formato_antigo"] = False
 
@@ -162,11 +166,15 @@ class BemPatrimonialAdminForm(forms.ModelForm):
             return
         if not numero:
             raise ValidationError(
-                {"numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."}
+                {
+                    "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
+                }
             )
         if not antigo and not re.fullmatch(self.NEW_FMT_RE, numero):
             raise ValidationError(
-                {"numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."}
+                {
+                    "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+                }
             )
 
     def clean(self):

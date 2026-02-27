@@ -1,4 +1,3 @@
-import datetime
 from django.test import TestCase
 
 from bem_patrimonial.models import BemPatrimonial
@@ -47,6 +46,7 @@ class SetupUnidadeAdministrativaStatusData(TestCase):
             unidade_administrativa=ua_ativa_1,
         )
         operador_1.groups.add(grupo_operador)
+        operador_1.unidades_administrativas.add(ua_ativa_1)
 
         operador_2 = Usuario.objects.create_user(
             username="operador2",
@@ -55,6 +55,7 @@ class SetupUnidadeAdministrativaStatusData(TestCase):
             unidade_administrativa=ua_ativa_2,
         )
         operador_2.groups.add(grupo_operador)
+        operador_2.unidades_administrativas.add(ua_ativa_2)
 
         gestor = Usuario.objects.create_user(
             username="gestor",

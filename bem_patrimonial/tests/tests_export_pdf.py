@@ -1,4 +1,3 @@
-import datetime
 from decimal import Decimal
 import re
 from django.test import TestCase, RequestFactory
@@ -12,7 +11,6 @@ from bem_patrimonial.constants import APROVADO, NAO_APROVADO, AGUARDANDO_APROVAC
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-from dados_comuns.models import UnidadeAdministrativa
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
@@ -43,6 +41,8 @@ class SetupExportData:
 
         group, _ = Group.objects.get_or_create(name=grupo)
         usuario.groups.add(group)
+        if unidade:
+            usuario.unidades_administrativas.add(unidade)
 
         return usuario
 

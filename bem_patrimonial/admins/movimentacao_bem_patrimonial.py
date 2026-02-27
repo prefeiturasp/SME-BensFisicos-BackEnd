@@ -101,34 +101,51 @@ def _check_operador_destino_rejeicao(mov, request):
     return False
 
 
+def _bloqueio_se_algum(request, mov, checks):
+    """Retorna True se algum check (condição, nível) retornar True e adicionar mensagem."""
+    for condicao, msg, nivel in checks:
+        if condicao:
+            messages.add_message(request, nivel, msg.format(mov=mov))
+            return True
+    return False
+
+
+def _nao_pode_aprovar(mov, request):
+    checks = [
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
+            messages.ERROR,
+        ),
+    ]
+    if _bloqueio_se_algum(request, mov, checks):
+        return True
+    if _mensagem_mov_origem_destino_inativas(mov, request, "aprovar"):
+        return True
+    if _check_operador_destino_aprovacao(mov, request):
+        return True
+    return False
+
+
 def aprovar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
-        if mov.aceita:
-            messages.add_message(
-                request, messages.WARNING,
-                f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
-            )
-            continue
-        if mov.rejeitada:
-            messages.add_message(
-                request, messages.WARNING,
-                f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
-            )
-            continue
-        if _mensagem_mov_origem_destino_inativas(mov, request, "aprovar"):
-            continue
-        if mov.cancelada:
-            messages.add_message(
-                request, messages.ERROR,
-                f"Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
-            )
-            continue
-        if _check_operador_destino_aprovacao(mov, request):
+        if _nao_pode_aprovar(mov, request):
             continue
         bens_itens = _bens_da_movimentacao(mov)
         if not bens_itens.exists():
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
@@ -146,7 +163,8 @@ def aprovar_solicitacao(modeladmin, request, queryset):
             mov.aprovado_por = request.user
             mov.save()
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} aprovada com sucesso. Bens desbloqueados.",
         )
 
@@ -154,34 +172,42 @@ def aprovar_solicitacao(modeladmin, request, queryset):
 aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
 
 
+def _nao_pode_rejeitar(mov, request):
+    checks = [
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
+            messages.ERROR,
+        ),
+    ]
+    if _bloqueio_se_algum(request, mov, checks):
+        return True
+    if _mensagem_mov_origem_destino_inativas(mov, request, "rejeitar"):
+        return True
+    if _check_operador_destino_rejeicao(mov, request):
+        return True
+    return False
+
+
 def rejeitar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
-        if mov.rejeitada:
-            messages.add_message(
-                request, messages.WARNING,
-                f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
-            )
-            continue
-        if mov.aceita:
-            messages.add_message(
-                request, messages.WARNING,
-                f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
-            )
-            continue
-        if _mensagem_mov_origem_destino_inativas(mov, request, "rejeitar"):
-            continue
-        if mov.cancelada:
-            messages.add_message(
-                request, messages.ERROR,
-                f"Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
-            )
-            continue
-        if _check_operador_destino_rejeicao(mov, request):
+        if _nao_pode_rejeitar(mov, request):
             continue
         bens_itens = _bens_da_movimentacao(mov)
         if not bens_itens.exists():
             messages.add_message(
-                request, messages.ERROR,
+                request,
+                messages.ERROR,
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
@@ -198,7 +224,8 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                         bem, mov.solicitado_por.email
                     )
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} rejeitada com sucesso. Bens desbloqueados.",
         )
 
@@ -206,41 +233,42 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
 rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
 
 
-def cancelar_solicitacao(modeladmin, request, queryset):
-    for mov in queryset:
-        if mov.cancelada:
-            messages.add_message(
-                request, messages.WARNING,
-                f"Movimentação #{mov.pk} já foi cancelada anteriormente.",
-            )
-            continue
-        if mov.aceita:
-            messages.add_message(
-                request, messages.WARNING,
-                f"Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
-            )
-            continue
-        if mov.rejeitada:
-            messages.add_message(
-                request, messages.WARNING,
-                f"Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
-            )
-            continue
-        if mov.status != constants.ENVIADA:
-            messages.add_message(
-                request, messages.ERROR,
-                f"Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
-            )
-            continue
-        if (
+def _nao_pode_cancelar(mov, request):
+    checks = [
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} já foi cancelada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.status != constants.ENVIADA,
+            "Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
+            messages.ERROR,
+        ),
+        (
             request.user.is_operador_inventario
             and not request.user.is_gestor_patrimonio
-            and mov.solicitado_por_id != request.user.pk
-        ):
-            messages.add_message(
-                request, messages.ERROR,
-                f"Movimentação #{mov.pk}: Você só pode cancelar movimentações criadas por você.",
-            )
+            and mov.solicitado_por_id != request.user.pk,
+            "Movimentação #{mov.pk}: Você só pode cancelar movimentações criadas por você.",
+            messages.ERROR,
+        ),
+    ]
+    return _bloqueio_se_algum(request, mov, checks)
+
+
+def cancelar_solicitacao(modeladmin, request, queryset):
+    for mov in queryset:
+        if _nao_pode_cancelar(mov, request):
             continue
         bens_itens = _bens_da_movimentacao(mov)
         with transaction.atomic():
@@ -256,7 +284,8 @@ def cancelar_solicitacao(modeladmin, request, queryset):
                         bem, request.user, mov.solicitado_por.email
                     )
         messages.add_message(
-            request, messages.SUCCESS,
+            request,
+            messages.SUCCESS,
             f"Movimentação #{mov.pk} cancelada com sucesso. Bens desbloqueados.",
         )
 
@@ -391,7 +420,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                         ua_user
                         and ua_user.is_ativa
                         and hasattr(self_inner, "base_fields")
-                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE in self_inner.base_fields
+                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                        in self_inner.base_fields
                     ):
                         self_inner.base_fields[
                             UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE

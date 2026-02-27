@@ -86,7 +86,7 @@ def aprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -137,7 +137,7 @@ def reprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -300,11 +300,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
     def get_list_display(self, request):
-        if (
-            request.user.is_operador_inventario
-            and not request.user.is_gestor_patrimonio
-        ):
-            return ("numero_patrimonial", "nome", "status")
         return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     def get_readonly_fields(self, request, obj=None):
@@ -413,7 +408,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             self_inner.fields["localizacao"].required = False
         fld = self_inner.fields["unidade_administrativa"]
         fld.required = True
-        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+        qs_ativas = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
         fld.queryset = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
         ua_user = getattr(request.user, "unidade_administrativa", None)
         if ua_user and not usuario_e_super_admin(request.user):
@@ -423,14 +420,24 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def _validate_create_form_ua(self, cleaned_data, request):
         ua_form = cleaned_data.get("unidade_administrativa")
         if not ua_form:
-            raise ValidationError({"unidade_administrativa": "Selecione a Unidade Administrativa."})
+            raise ValidationError(
+                {"unidade_administrativa": "Selecione a Unidade Administrativa."}
+            )
         if ua_form.status != UnidadeAdministrativa.ATIVA:
-            raise ValidationError({"unidade_administrativa": "A Unidade Administrativa selecionada está inativa."})
-        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+            raise ValidationError(
+                {
+                    "unidade_administrativa": "A Unidade Administrativa selecionada está inativa."
+                }
+            )
+        qs_ativas = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
         qs_permitidas = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
         if not qs_permitidas.filter(pk=ua_form.pk).exists():
             raise ValidationError(
-                {"unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."}
+                {
+                    "unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."
+                }
             )
         ua_user = getattr(request.user, "unidade_administrativa", None)
         if ua_user and not ua_user.is_ativa:
@@ -446,10 +453,14 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         ua_post = cleaned.get("unidade_administrativa") or ua_original
         if ua_post != ua_original:
             raise ValidationError(
-                {"unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."}
+                {
+                    "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
+                }
             )
         if not ua_post:
-            raise ValidationError({"unidade_administrativa": "Unidade Administrativa é obrigatória."})
+            raise ValidationError(
+                {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
+            )
 
         if not user.is_operador_inventario:
             nome_original = instance.nome
@@ -542,7 +553,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 )
                 raise ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa E501
                     }
                 )
             raise
@@ -672,6 +683,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def _add_view_multi_parse_payload(self, request):
         import json
+
         raw = request.POST.get("multi_payload") or "[]"
         try:
             return json.loads(raw)
@@ -685,41 +697,54 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             return False
         return str(v).strip().lower() in ("1", "true", "on", "yes", "y", "t")
 
+    def _add_view_multi_process_row_validate_save(self, bem, idx):
+        """Valida e salva o bem; retorna (bem, None) ou (None, mensagem_erro)."""
+        try:
+            bem.full_clean()
+            bem.save()
+            return bem, None
+        except ValidationError as ve:
+            err_msgs = (
+                "; ".join(f"{k}: {', '.join(v)}" for k, v in ve.message_dict.items())
+                if hasattr(ve, "message_dict")
+                else str(ve)
+            )
+            return None, f"Linha {idx}: {err_msgs}"
+        except IntegrityError as ie:
+            return None, f"Linha {idx}: {str(ie)}"
+        except Exception as ex:
+            return None, f"Linha {idx}: Erro inesperado: {str(ex)}"
+
+    def _add_view_multi_process_row(self, request, idx, row, base):
+        localizacao = (row.get("localizacao") or "").strip() or None
+        if not localizacao:
+            return None, f"Linha {idx}: Informe a Localização (obrigatória)."
+
+        numero_patrimonial_raw = (row.get("numero_patrimonial") or "").strip()
+        numero_formato_antigo = self._add_view_multi_to_bool(
+            row.get("numero_formato_antigo")
+        )
+        sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
+        numero_patrimonial = None if sem_numeracao else (numero_patrimonial_raw or None)
+        bem = BemPatrimonial(
+            criado_por=request.user,
+            numero_patrimonial=numero_patrimonial,
+            numero_formato_antigo=numero_formato_antigo,
+            sem_numeracao=sem_numeracao,
+            localizacao=localizacao,
+            **base,
+        )
+        return self._add_view_multi_process_row_validate_save(bem, idx)
+
     def _add_view_multi_process_linhas(self, request, linhas, base):
         criados, errors = [], []
         with transaction.atomic():
             for idx, row in enumerate(linhas, start=1):
-                localizacao = (row.get("localizacao") or "").strip() or None
-                if not localizacao:
-                    errors.append(f"Linha {idx}: Informe a Localização (obrigatória).")
-                    continue
-                numero_patrimonial_raw = (row.get("numero_patrimonial") or "").strip()
-                numero_formato_antigo = self._add_view_multi_to_bool(row.get("numero_formato_antigo"))
-                sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
-                numero_patrimonial = None if sem_numeracao else (numero_patrimonial_raw or None)
-                bem = BemPatrimonial(
-                    criado_por=request.user,
-                    numero_patrimonial=numero_patrimonial,
-                    numero_formato_antigo=numero_formato_antigo,
-                    sem_numeracao=sem_numeracao,
-                    localizacao=localizacao,
-                    **base,
-                )
-                try:
-                    bem.full_clean()
-                    bem.save()
+                bem, erro = self._add_view_multi_process_row(request, idx, row, base)
+                if erro:
+                    errors.append(erro)
+                elif bem:
                     criados.append(bem)
-                except ValidationError as ve:
-                    err_msgs = (
-                        "; ".join(f"{k}: {', '.join(v)}" for k, v in ve.message_dict.items())
-                        if hasattr(ve, "message_dict")
-                        else str(ve)
-                    )
-                    errors.append(f"Linha {idx}: {err_msgs}")
-                except IntegrityError as ie:
-                    errors.append(f"Linha {idx}: {str(ie)}")
-                except Exception as ex:
-                    errors.append(f"Linha {idx}: Erro inesperado: {str(ex)}")
             if errors:
                 transaction.set_rollback(True)
         return criados, errors
@@ -812,7 +837,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             return "—"
         user_model = get_user_model()
         try:
-            u = user_model.objects.only("first_name", "last_name", "username").get(id=user_id)
+            u = user_model.objects.only("first_name", "last_name", "username").get(
+                id=user_id
+            )
             return u.get_full_name() or u.username
         except user_model.DoesNotExist:
             return "—"
@@ -828,7 +855,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def thumb(self, obj):
         if getattr(obj, "foto", None) and hasattr(obj.foto, "url") and obj.foto.url:
             return format_html(
-                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',
+                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',  # noqa E501
                 obj.foto.url,
             )
         return "—"
@@ -845,7 +872,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ):
                 return format_html(
                     '<a href="{}" target="_blank" rel="noopener">'
-                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'
+                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'  # noqa E501
                     "</a>",
                     obj.foto.url,
                     obj.foto.url,

@@ -2,11 +2,13 @@ from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
+from unittest.mock import patch
+from types import SimpleNamespace
 
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.models import Usuario
 from usuario.admin import CustomUserModelAdmin
-from dados_comuns.models import UnidadeAdministrativa
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 
 from django.contrib.auth import get_user_model
@@ -31,6 +33,7 @@ class SetupData:
         }
         usuario = Usuario.objects.create(**obj)
         self.add_group(usuario)
+        usuario.unidades_administrativas.add(ua)
 
         return usuario
 
@@ -156,6 +159,7 @@ class CustomUserModelAdminTestCase(TestCase):
             unidade_orcamentaria=self.unidade1.unidade_orcamentaria,
         )
         usuario.groups.add(self.group_operador)
+        usuario.unidades_administrativas.add(self.unidade1)
 
         result = self.admin.get_grupo(usuario)
         self.assertEqual(result, "OPERADOR_INVENTARIO")
@@ -388,6 +392,193 @@ class CustomUserModelAdminFieldsetsTestCase(TestCase):
         self.assertEqual(
             rf_index, nome_index + 1, "RF deve estar logo após o campo nome"
         )
+
+
+class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
+    def setUp(self):
+        self.site = AdminSite()
+        self.admin = CustomUserModelAdmin(Usuario, self.site)
+        self.factory = RequestFactory()
+
+        self.ua_uo1_a = criar_ua(codigo="101", sigla="U1A", nome="UA UO1 A")
+        self.ua_uo1_b = criar_ua(
+            uo=self.ua_uo1_a.unidade_orcamentaria,
+            codigo="102",
+            sigla="U1B",
+            nome="UA UO1 B",
+        )
+        self.uo2 = criar_uo(codigo="UO-999", sigla="UO2", nome="UO 2")
+        self.ua_uo2 = criar_ua(
+            uo=self.uo2,
+            codigo="201",
+            sigla="U2A",
+            nome="UA UO2",
+        )
+
+        self.admin_user = Usuario.objects.create_user(
+            username="admin_uo1",
+            password="senha123",
+            is_staff=True,
+            unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
+            must_change_password=False,
+        )
+
+        self.superuser = Usuario.objects.create_superuser(
+            username="super_admin_uo",
+            email="super@teste.com",
+            password="senha123",
+            must_change_password=False,
+        )
+
+    def test_m2m_queryset_no_add_usa_uo_do_usuario_logado(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.admin_user
+
+        field = Usuario._meta.get_field("unidades_administrativas")
+        formfield = self.admin.formfield_for_manytomany(field, request)
+
+        qs_ids = set(formfield.queryset.values_list("id", flat=True))
+
+        self.assertIn(self.ua_uo1_a.id, qs_ids)
+        self.assertIn(self.ua_uo1_b.id, qs_ids)
+        self.assertNotIn(self.ua_uo2.id, qs_ids)
+
+    def test_fk_queryset_no_add_usa_uo_do_usuario_logado(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.admin_user
+
+        field = Usuario._meta.get_field("unidade_administrativa")
+        formfield = self.admin.formfield_for_foreignkey(field, request)
+
+        qs_ids = set(formfield.queryset.values_list("id", flat=True))
+
+        self.assertIn(self.ua_uo1_a.id, qs_ids)
+        self.assertIn(self.ua_uo1_b.id, qs_ids)
+        self.assertNotIn(self.ua_uo2.id, qs_ids)
+
+    def test_superuser_add_sem_uo_param_usa_primeira_uo_no_fk_e_m2m(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.superuser
+
+        expected_first_uo_id = (
+            UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+            .order_by("unidade_orcamentaria__codigo", "codigo", "id")
+            .values_list("unidade_orcamentaria_id", flat=True)
+            .first()
+        )
+        if not expected_first_uo_id:
+            expected_first_uo = UnidadeOrcamentaria.objects.order_by(
+                "codigo", "id"
+            ).first()
+            self.assertIsNotNone(expected_first_uo)
+            expected_first_uo_id = expected_first_uo.id
+
+        fk_field = Usuario._meta.get_field("unidade_administrativa")
+        fk_formfield = self.admin.formfield_for_foreignkey(fk_field, request)
+        fk_uo_ids = set(
+            fk_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True)
+        )
+
+        m2m_field = Usuario._meta.get_field("unidades_administrativas")
+        m2m_formfield = self.admin.formfield_for_manytomany(m2m_field, request)
+        m2m_uo_ids = set(
+            m2m_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True)
+        )
+
+        self.assertEqual(fk_uo_ids, {expected_first_uo_id})
+        self.assertEqual(m2m_uo_ids, {expected_first_uo_id})
+
+    def test_grupo_single_select_nao_dispara_erro_lista(self):
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+
+        request = self.factory.post(
+            "/admin/usuario/usuario/add/",
+            data={
+                "unidade_orcamentaria": str(self.ua_uo1_a.unidade_orcamentaria_id),
+                "groups": str(grupo_gestor.id),
+            },
+        )
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request, obj=None)
+        form = form_class(
+            data={
+                "username": "usuario_select_unico",
+                "password1": "Teste@12345!x",
+                "password2": "Teste@12345!x",
+                "nome": "Usuario Select",
+                "email": "select@teste.com",
+                "is_staff": True,
+                "unidade_orcamentaria": str(self.ua_uo1_a.unidade_orcamentaria_id),
+                "unidade_administrativa": str(self.ua_uo1_a.id),
+                "unidades_administrativas": [str(self.ua_uo1_a.id)],
+                "groups": str(grupo_gestor.id),
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_grupo_single_select_exibe_opcao_vazia(self):
+        request = self.factory.get("/admin/usuario/usuario/add/")
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request, obj=None)
+        form = form_class()
+        html = form["groups"].as_widget()
+        self.assertIn('<option value="" selected>---------</option>', html)
+
+    def test_grupo_single_select_renderiza_opcao_vazia_no_html(self):
+        """Garante que o HTML do widget renderiza a opção vazia (mesmo cenário do exibe_opcao_vazia)."""
+        self.test_grupo_single_select_exibe_opcao_vazia()
+
+    def test_change_form_usuario_com_grupo_inicia_com_grupo_atual(self):
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        usuario = Usuario.objects.create_user(
+            username="usuario_com_grupo_initial",
+            password="senha123",
+            unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
+            unidade_administrativa=self.ua_uo1_a,
+            is_staff=True,
+            must_change_password=False,
+        )
+        usuario.groups.set([grupo_gestor])
+
+        request = self.factory.get(f"/admin/usuario/usuario/{usuario.pk}/change/")
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request, obj=usuario)
+        form = form_class(instance=usuario)
+
+        valor = form["groups"].value()
+        self.assertTrue(valor)
+        self.assertIn(str(grupo_gestor.pk), [str(v) for v in valor])
+
+    def test_save_related_nao_limpa_grupo_se_groups_nao_veio_no_post(self):
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        usuario = Usuario.objects.create_user(
+            username="usuario_sem_groups_post",
+            password="senha123",
+            unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
+            unidade_administrativa=self.ua_uo1_a,
+            is_staff=True,
+            must_change_password=False,
+        )
+        usuario.groups.set([grupo_gestor])
+
+        request = self.factory.post(
+            f"/admin/usuario/usuario/{usuario.pk}/change/",
+            data={"nome": "Sem groups no post"},
+        )
+        request.user = self.superuser
+        form = SimpleNamespace(instance=usuario, cleaned_data={})
+
+        with patch(
+            "django.contrib.auth.admin.UserAdmin.save_related", return_value=None
+        ):
+            self.admin.save_related(request, form, [], change=True)
+
+        usuario.refresh_from_db()
+        self.assertTrue(usuario.groups.filter(name=GRUPO_GESTOR_PATRIMONIO).exists())
 
     def test_rf_field_position_in_add_fieldsets(self):
         informacoes_pessoais_fields = None

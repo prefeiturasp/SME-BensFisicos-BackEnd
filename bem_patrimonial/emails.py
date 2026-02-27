@@ -27,8 +27,10 @@ def envia_email_cadastro_nao_aprovado(status):
         "body": status.observacao,
     }
     email_utils.send_email_ctrl(
-        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE,
-        status.bem_patrimonial.criado_por.email
+        subject,
+        email_context,
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
+        status.bem_patrimonial.criado_por.email,
     )
 
 
@@ -105,7 +107,9 @@ def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
+    email_utils.send_email_ctrl(
+        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
+    )
 
 
 def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
@@ -119,7 +123,9 @@ def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
+    email_utils.send_email_ctrl(
+        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
+    )
 
 
 def envia_email_solicitacao_movimentacao_cancelada(
@@ -137,7 +143,9 @@ def envia_email_solicitacao_movimentacao_cancelada(
             settings.ADMIN_URL,
         ),
     }
-    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
+    email_utils.send_email_ctrl(
+        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
+    )
 
 
 def _bens_info_de_movimentacao(mov, max_bens_por_mov):
@@ -164,7 +172,6 @@ def _bens_info_de_movimentacao(mov, max_bens_por_mov):
             else bem.nome
         )
         bens_info.append(identificador)
-    bens_excedentes = max(0, total_itens - max_bens_por_mov)
     return bens_info, total_itens
 
 
@@ -193,7 +200,6 @@ def envia_email_movimentacoes_pendentes_aceite(
         data_envio = timezone.localdate(mov.criado_em)
         dias_pendentes = (hoje - data_envio).days
         bens_info, total_itens = _bens_info_de_movimentacao(mov, max_bens_por_mov)
-        bens_excedentes = max(0, total_itens - max_bens_por_mov)
         movimentacoes_info.append(
             {
                 "id": mov.pk,
@@ -202,7 +208,7 @@ def envia_email_movimentacoes_pendentes_aceite(
                 "dias_pendentes": dias_pendentes,
                 "urgente": dias_pendentes > dias_urgente,
                 "bens": bens_info,
-                "bens_excedentes": bens_excedentes,
+                "bens_excedentes": max(0, total_itens - max_bens_por_mov),
             }
         )
 
@@ -264,18 +270,20 @@ def envia_email_baixa_fisica_solicitada(baixa_fisica):
     Destinatários: todos da unidade associada à baixa (unidade_administrativa_origem).
     """
     # gestores da UA de origem
-    gestores = Usuario.objects.filter(
-        is_active=True,
-        unidade_administrativa=baixa_fisica.unidade_administrativa_origem,
-    ).only("email")
+    gestores = (
+        Usuario.objects.filter(
+            is_active=True,
+            unidades_administrativas=baixa_fisica.unidade_administrativa_origem,
+        )
+        .distinct()
+        .only("email")
+    )
 
     emails = [u.email for u in gestores if u.email]
     if not emails:
         return
 
-    object_url = URL_BAIXA_FISICA_CHANGE.format(
-        settings.ADMIN_URL, baixa_fisica.id
-    )
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     ua = baixa_fisica.unidade_administrativa_origem
     ua_info = f"{ua.codigo} – {ua.nome}" if getattr(ua, "codigo", None) else ua.nome
@@ -310,9 +318,7 @@ def envia_email_baixa_fisica_aprovada(baixa_fisica):
     if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
         return
 
-    object_url = URL_BAIXA_FISICA_CHANGE.format(
-        settings.ADMIN_URL, baixa_fisica.id
-    )
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     lista_bens_formatada = _formata_lista_bens_baixa(baixa_fisica) or ""
 
@@ -344,9 +350,7 @@ def envia_email_baixa_fisica_cancelada(baixa_fisica, usuario_cancelador):
     if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
         return
 
-    object_url = URL_BAIXA_FISICA_CHANGE.format(
-        settings.ADMIN_URL, baixa_fisica.id
-    )
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     cancelador_nome = (
         usuario_cancelador.nome or usuario_cancelador.username

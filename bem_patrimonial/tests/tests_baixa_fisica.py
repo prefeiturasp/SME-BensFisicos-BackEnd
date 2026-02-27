@@ -1,6 +1,5 @@
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
-from django.contrib import messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from unittest.mock import patch
@@ -18,7 +17,6 @@ from bem_patrimonial.constants import (
     AGUARDANDO_ENVIO,
     ENVIADA,
     ACEITA,
-    CANCELADA,
     SOLICITADA,
     RECUSADA,
 )
@@ -26,7 +24,6 @@ from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
     BaixaFisicaBensItemInlineFormSet,
 )
-from usuario.models import Usuario
 
 # reaproveita helpers usados nos testes de movimentação
 from bem_patrimonial.tests.tests_movimentacao_bloqueio import SetupMovimentacaoData
@@ -115,7 +112,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
         baixa = BaixaFisicaBemPatrimonial(
             unidade_administrativa_origem=self.ua_origem,
             criado_por=self.operador_origem,
-            data_baixa=timezone.localdate()
+            data_baixa=timezone.localdate(),
         )
         with self.assertRaises(ValidationError) as ctx:
             baixa.clean()
@@ -127,7 +124,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             numero_processo_baixa="PROC-123",
             status=AGUARDANDO_ENVIO,
             criado_por=self.operador_origem,
-            data_baixa=timezone.localdate()
+            data_baixa=timezone.localdate(),
         )
         with self.assertRaises(ValidationError) as ctx:
             baixa.clean()
@@ -175,7 +172,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             numero_processo_baixa="PROC-456",
             status=AGUARDANDO_ENVIO,
             criado_por=self.operador_origem,
-            data_baixa=timezone.localdate()
+            data_baixa=timezone.localdate(),
         )
         BaixaFisicaBensItem.objects.create(baixa=baixa2, bem=self.bem)
 
@@ -192,8 +189,6 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             baixa.clean()
         except ValidationError:
             self.fail("clean() não deveria falhar quando o bem está na mesma baixa.")
-    
-    
 
 
 class BaixaFisicaFluxoEnvioAprovacaoTestCase(TestCase):
@@ -536,7 +531,7 @@ class BaixaFisicaAdminQuerysetPermissionsTestCase(TestCase):
     def test_get_queryset_gestor_sem_ua_ve_todas(self):
         # remove vinculo de UA do gestor
         self.gestor.unidade_administrativa = None
-        
+
         self.gestor.save(update_fields=["unidade_administrativa"])
 
         request = self.factory.get("/admin/")

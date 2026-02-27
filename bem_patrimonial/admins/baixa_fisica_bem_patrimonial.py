@@ -118,7 +118,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
                 if not allowed.filter(pk=ua_origem.pk).exists():
                     raise ValidationError(
                         {
-                            "unidade_administrativa_origem": "Você não tem permissão para usar esta Unidade Administrativa como origem."
+                            "unidade_administrativa_origem": "Você não tem permissão para usar esta Unidade Administrativa como origem."  # noqa: E501
                         }
                     )
 

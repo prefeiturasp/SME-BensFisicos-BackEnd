@@ -174,8 +174,15 @@ class ConciliacaoSyncTest(TestCase):
         conciliacao_sync.sync_bem_pos_save(bem)
         self.assertEqual(ItemConciliacao.objects.count(), 0)
 
-    def test_sync_bem_mudou_ua_remove_da_antiga_e_inclui_na_nova_se_houver_conciliacao(self):
-        ua2 = criar_ua(uo=self.ua.unidade_orcamentaria, codigo="001.0002", sigla="UA2", nome="Unidade 2")
+    def test_sync_bem_mudou_ua_remove_da_antiga_e_inclui_na_nova_se_houver_conciliacao(
+        self,
+    ):
+        ua2 = criar_ua(
+            uo=self.ua.unidade_orcamentaria,
+            codigo="001.0002",
+            sigla="UA2",
+            nome="Unidade 2",
+        )
         conciliacao_antiga = self._criar_conciliacao_aberta()
         bem = self._criar_bem(ua=self.ua)
         ItemConciliacao.objects.create(
@@ -192,12 +199,19 @@ class ConciliacaoSyncTest(TestCase):
             ItemConciliacao.objects.filter(conciliacao=conciliacao_antiga).count(), 0
         )
         self.assertEqual(
-            ItemConciliacao.objects.filter(conciliacao=conciliacao_nova, bem=bem).count(),
+            ItemConciliacao.objects.filter(
+                conciliacao=conciliacao_nova, bem=bem
+            ).count(),
             1,
         )
 
     def test_sync_bem_mudou_ua_sem_conciliacao_na_nova_apenas_remove(self):
-        ua2 = criar_ua(uo=self.ua.unidade_orcamentaria, codigo="001.0003", sigla="UA3", nome="Unidade 3")
+        ua2 = criar_ua(
+            uo=self.ua.unidade_orcamentaria,
+            codigo="001.0003",
+            sigla="UA3",
+            nome="Unidade 3",
+        )
         conciliacao_antiga = self._criar_conciliacao_aberta()
         bem = self._criar_bem(ua=self.ua)
         ItemConciliacao.objects.create(
@@ -253,6 +267,4 @@ class ConciliacaoSyncTest(TestCase):
 
     def test_tem_em_processo_baixa_retorna_false_sem_ocorrencia(self):
         bem = self._criar_bem()
-        self.assertFalse(
-            conciliacao_sync._tem_em_processo_baixa(bem.pk, self.ua.pk)
-        )
+        self.assertFalse(conciliacao_sync._tem_em_processo_baixa(bem.pk, self.ua.pk))

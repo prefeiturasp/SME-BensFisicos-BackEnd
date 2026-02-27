@@ -7,4 +7,4 @@ class UsuarioConfig(AppConfig):
     verbose_name = "Usuário"
 
     def ready(self):
-        from . import signals
+        import usuario.signals  # noqa: F401

@@ -68,7 +68,7 @@
 
     function applyPatternAndMask(){
       
-      if (!(ant && ant.checked)){
+      if (!ant?.checked){
         np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
         np.placeholder = '000.000000000-0';
         np.value = fmt(onlyDigits(np.value));
@@ -98,7 +98,7 @@
     }
 
     function refresh(){
-      const semMarcado = !!(sem && sem.checked);
+      const semMarcado = !!sem?.checked;
 
       if (semMarcado) {
         if (isEdit) {
@@ -111,7 +111,7 @@
       setReadOnly(false);
       if (ant) ant.disabled = false;
 
-      if (ant && ant.checked) {
+      if (ant?.checked) {
         np.removeAttribute('pattern');
         np.placeholder = 'Valor livre (formato antigo)';
         return;
@@ -132,17 +132,17 @@
 
     np.addEventListener('input', function(){
       
-      if (isEdit && sem && sem.checked){
+      if (isEdit && sem?.checked){
         sem.checked = false;          
         mutuallyExclusive('sem');
       }
       
-      const semMarcado = !!(sem && sem.checked);
-      if (!(ant && ant.checked) && !semMarcado){
+      const semMarcado = !!sem?.checked;
+      if (!ant?.checked && !semMarcado){
         np.value = fmt(onlyDigits(np.value));
         np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
         np.placeholder = '000.000000000-0';
-      } else if (ant && ant.checked){
+      } else if (ant?.checked){
         np.removeAttribute('pattern');
         np.placeholder = 'Valor livre (formato antigo)';
       } else if (semMarcado){
@@ -240,7 +240,7 @@
     ant.addEventListener('change', refresh);
     sem.addEventListener('change', refresh);
     input.addEventListener('input', function(){
-      if (!ant.checked && !sem.checked){
+      if (!ant?.checked && !sem?.checked){
         input.value = fmt(onlyDigits(input.value));
       }
       toPayload();
@@ -266,7 +266,10 @@
     if (!cont) return;
     cont.innerHTML = '';
     let arr = [];
-    try { arr = JSON.parse(initialPayload || "[]") || []; } catch (_) { arr = []; }
+    try { arr = JSON.parse(initialPayload || "[]") || []; } catch (e) {
+      console.warn("bem_patrimonial: payload inválido, usando lista vazia", e);
+      arr = [];
+    }
     if (!arr.length) return;
 
     arr.forEach(function(item){
@@ -297,10 +300,10 @@
 
   function showError(containerId, msgs){
     const box = id(containerId);
-    if (!box) return;
     if (!msgs || !msgs.length){
-      box.classList.add('hide'); box.innerHTML = ''; return;
+      box?.classList.add('hide'); box?.innerHTML = ''; return;
     }
+    if (!box) return;
     box.classList.remove('hide');
     box.innerHTML = msgs.map(function(m){ return '<div>'+m+'</div>'; }).join('');
     box.scrollIntoView({behavior:'smooth', block:'center'});

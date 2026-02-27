@@ -10,7 +10,6 @@ from django.db import models
 from django.test import TestCase
 
 from usuario.management.commands.seed_bensfisicos_demo import (
-    Command,
     first_fk_to,
     get_model,
     has_field,
@@ -90,6 +89,7 @@ class SeedBensfisicosDemoCommandTest(TestCase):
     def _patch_handle_through_none(self):
         """Substitui handle por versão que usa Through = None para não quebrar em Through.objects."""
         import usuario.management.commands.seed_bensfisicos_demo as mod
+
         # Lê do arquivo para não depender de inspect.getsource (handle pode já ter sido substituído)
         path = mod.__file__
         with open(path, encoding="utf-8") as f:
@@ -116,7 +116,9 @@ class SeedBensfisicosDemoCommandTest(TestCase):
             try:
                 self._patch_handle_through_none()
                 bem_model = apps.get_model("bem_patrimonial.BemPatrimonial")
-                with patch.object(bem_model.objects, "create", return_value=MagicMock()):
+                with patch.object(
+                    bem_model.objects, "create", return_value=MagicMock()
+                ):
                     call_command("seed_bensfisicos_demo")
                 UA = apps.get_model("dados_comuns.UnidadeAdministrativa")
                 self.assertEqual(UA.objects.count(), 2)
