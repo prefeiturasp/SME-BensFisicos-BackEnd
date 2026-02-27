@@ -248,6 +248,7 @@ class BemPatrimonial(BaseModel):
             return
         ct = ContentType.objects.get_for_model(type(self))
         user = get_user()
+        justificativa = getattr(self, "_justificativa", None)
         HistoricoGeral.objects.bulk_create(
             [
                 HistoricoGeral(
@@ -257,7 +258,7 @@ class BemPatrimonial(BaseModel):
                     valor_antigo=old,
                     valor_novo=new,
                     alterado_por=user,
-                    justificativa="Teste"
+                    justificativa=justificativa
                 )
                 for field, (old, new) in changes.items()
             ]

@@ -506,6 +506,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 if "unidade_administrativa" in self_inner.fields:
                     self_inner.fields["unidade_administrativa"].disabled = True
                     self_inner.fields["unidade_administrativa"].required = True
+                    self_inner.fields["justificativa"].required = False
 
             def clean(self_inner):
                 cleaned = super().clean()
@@ -526,6 +527,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             if not obj.status:
                 obj.status = constants.AGUARDANDO_APROVACAO
         try:
+            obj._justificativa = request.POST.get("justificativa") or None
             super().save_model(request, obj, form, change)
         except IntegrityError as e:
             if "numero_patrimonial" in str(e).lower():
