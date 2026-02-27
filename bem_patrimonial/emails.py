@@ -200,7 +200,6 @@ def envia_email_movimentacoes_pendentes_aceite(
         data_envio = timezone.localdate(mov.criado_em)
         dias_pendentes = (hoje - data_envio).days
         bens_info, total_itens = _bens_info_de_movimentacao(mov, max_bens_por_mov)
-        bens_excedentes = max(0, total_itens - max_bens_por_mov)
         movimentacoes_info.append(
             {
                 "id": mov.pk,
@@ -209,7 +208,7 @@ def envia_email_movimentacoes_pendentes_aceite(
                 "dias_pendentes": dias_pendentes,
                 "urgente": dias_pendentes > dias_urgente,
                 "bens": bens_info,
-                "bens_excedentes": bens_excedentes,
+                "bens_excedentes": max(0, total_itens - max_bens_por_mov),
             }
         )
 
