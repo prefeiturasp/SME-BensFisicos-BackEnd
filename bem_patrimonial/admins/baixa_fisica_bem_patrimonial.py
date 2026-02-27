@@ -58,9 +58,9 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
     formset = BaixaFisicaBensItemInlineFormSet
 
     def get_form(self, request, obj=None, **kwargs):
-        Form = super().get_form(request, obj, **kwargs)
+        form = super().get_form(request, obj, **kwargs)
 
-        class ScopedForm(Form):
+        class ScopedForm(form):
             def __init__(self_inner, *a, **kw):
                 super().__init__(*a, **kw)
 

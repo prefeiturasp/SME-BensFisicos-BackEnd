@@ -2,6 +2,10 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.password_validation import validate_password
 from usuario.models import Usuario
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from dados_comuns.escopo import obter_unidade_orcamentaria_id_do_usuario
+
+MSG_SENHAS_NAO_CONFEREM = "As senhas não conferem."
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -18,14 +22,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             "is_gestor_patrimonio": self.user.is_gestor_patrimonio,
             "is_operador_inventario": self.user.is_operador_inventario,
             "must_change_password": self.user.must_change_password,
-            "unidade_administrativa": (
-                {
-                    "id": self.user.unidade_administrativa.id,
-                    "nome": self.user.unidade_administrativa.nome,
-                }
-                if self.user.unidade_administrativa
-                else None
-            ),
         }
 
         return data
@@ -60,7 +56,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
 
         attrs["user"] = user
@@ -94,7 +90,7 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
         return attrs
 
@@ -123,7 +119,7 @@ class FirstAccessPasswordChangeSerializer(serializers.Serializer):
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
 
         return attrs
@@ -144,7 +140,9 @@ class FirstAccessPasswordChangeSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     is_gestor_patrimonio = serializers.BooleanField(read_only=True)
     is_operador_inventario = serializers.BooleanField(read_only=True)
-    unidade_administrativa = serializers.SerializerMethodField()
+    uo_ativa = serializers.SerializerMethodField()
+    ua_ativa = serializers.SerializerMethodField()
+    opcoes_escopo = serializers.SerializerMethodField()
 
     class Meta:
         model = Usuario
@@ -157,12 +155,189 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "is_gestor_patrimonio",
             "is_operador_inventario",
             "must_change_password",
-            "unidade_administrativa",
+            "uo_ativa",
+            "ua_ativa",
+            "opcoes_escopo",
         ]
         read_only_fields = fields
 
-    def get_unidade_administrativa(self, obj):
+    def get_uo_ativa(self, obj):
+        uo = obj.unidade_orcamentaria
+        if not uo and obj.unidade_administrativa:
+            uo = obj.unidade_administrativa.unidade_orcamentaria
+        if uo:
+            return {
+                "id": uo.id,
+                "codigo": uo.codigo,
+                "nome": uo.nome,
+                "label": f"{uo.codigo} - {uo.nome}",
+            }
+        return None
+
+    def get_ua_ativa(self, obj):
         ua = obj.unidade_administrativa
         if ua:
-            return {"id": ua.id, "nome": ua.nome}
+            return {
+                "id": ua.id,
+                "codigo": ua.codigo,
+                "nome": ua.nome,
+                "label": f"{ua.codigo} - {ua.nome}",
+            }
         return None
+
+    def get_opcoes_escopo(self, obj):
+        uos_qs = UnidadeOrcamentaria.objects.none()
+        uas_qs = UnidadeAdministrativa.objects.none()
+
+        if obj.is_superuser:
+            uos_qs = UnidadeOrcamentaria.objects.filter(ativa=True)
+            uas_qs = UnidadeAdministrativa.objects.filter(
+                status=UnidadeAdministrativa.ATIVA
+            )
+        elif obj.is_gestor_patrimonio:
+            uo_id = obter_unidade_orcamentaria_id_do_usuario(obj)
+            if uo_id:
+                uos_qs = UnidadeOrcamentaria.objects.filter(id=uo_id, ativa=True)
+                uas_qs = UnidadeAdministrativa.objects.filter(
+                    unidade_orcamentaria_id=uo_id,
+                    status=UnidadeAdministrativa.ATIVA,
+                )
+        elif obj.is_operador_inventario and obj.unidade_administrativa_id:
+            uas_qs = UnidadeAdministrativa.objects.filter(
+                id=obj.unidade_administrativa_id,
+                status=UnidadeAdministrativa.ATIVA,
+            )
+            uos_qs = UnidadeOrcamentaria.objects.filter(
+                id=obj.unidade_administrativa.unidade_orcamentaria_id,
+                ativa=True,
+            )
+
+        uas_qs = uas_qs.select_related("unidade_orcamentaria")
+        uas_por_uo = {}
+        for ua in uas_qs:
+            uas_por_uo.setdefault(ua.unidade_orcamentaria_id, []).append(
+                {
+                    "id": ua.id,
+                    "codigo": ua.codigo,
+                    "nome": ua.nome,
+                    "label": f"{ua.codigo} - {ua.nome}",
+                    "unidade_administrativa_id": ua.id,
+                    "unidade_orcamentaria_id": ua.unidade_orcamentaria_id,
+                }
+            )
+
+        permite_uo = bool(obj.is_superuser or obj.is_gestor_patrimonio)
+        grupos = []
+        for uo in uos_qs:
+            grupo = {
+                "uo": {
+                    "id": uo.id,
+                    "codigo": uo.codigo,
+                    "nome": uo.nome,
+                    "label": f"{uo.codigo} - {uo.nome}",
+                    "selecionavel": permite_uo,
+                    "unidade_administrativa_id": None,
+                    "unidade_orcamentaria_id": uo.id,
+                },
+                "uas": uas_por_uo.get(uo.id, []),
+            }
+            grupos.append(grupo)
+
+        return {
+            "grupos": grupos,
+        }
+
+
+class SelecionarUnidadeAdministrativaSerializer(serializers.Serializer):
+    unidade_administrativa_id = serializers.IntegerField(allow_null=True, required=True)
+    unidade_orcamentaria_id = serializers.IntegerField(allow_null=True, required=False)
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        if not user or not user.is_authenticated:
+            raise serializers.ValidationError("Usuario nao autenticado.")
+
+        ua_id = attrs.get("unidade_administrativa_id")
+        uo_id = attrs.get("unidade_orcamentaria_id")
+
+        ua = None
+        uo = None
+
+        if ua_id is not None:
+            try:
+                ua = UnidadeAdministrativa.objects.select_related(
+                    "unidade_orcamentaria"
+                ).get(id=ua_id)
+            except UnidadeAdministrativa.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"unidade_administrativa_id": "Unidade Administrativa invalida."}
+                )
+            if ua.status != UnidadeAdministrativa.ATIVA:
+                raise serializers.ValidationError(
+                    {"unidade_administrativa_id": "Unidade Administrativa inativa."}
+                )
+            if uo_id is not None and ua.unidade_orcamentaria_id != uo_id:
+                raise serializers.ValidationError(
+                    {
+                        "unidade_orcamentaria_id": "Unidade Orcamentaria nao corresponde a Unidade Administrativa."
+                    }
+                )
+            uo = ua.unidade_orcamentaria
+            uo_id = uo.id
+        else:
+            if user.is_operador_inventario and not user.is_superuser:
+                raise serializers.ValidationError(
+                    "Operador nao pode selecionar Unidade Orcamentaria."
+                )
+
+            if uo_id is None:
+                uo_id = obter_unidade_orcamentaria_id_do_usuario(user)
+
+            if not uo_id:
+                raise serializers.ValidationError(
+                    {"unidade_orcamentaria_id": "Unidade Orcamentaria obrigatoria."}
+                )
+
+        if not user.is_superuser:
+            uo_usuario_id = obter_unidade_orcamentaria_id_do_usuario(user)
+            if uo_usuario_id and uo_id != uo_usuario_id:
+                raise serializers.ValidationError(
+                    "Usuario nao pode selecionar Unidade Orcamentaria diferente."
+                )
+
+            if (
+                user.is_operador_inventario
+                and ua
+                and user.unidade_administrativa_id != ua.id
+            ):
+                raise serializers.ValidationError(
+                    "Operador so pode selecionar a propria Unidade Administrativa."
+                )
+
+            if (
+                user.is_gestor_patrimonio
+                and ua
+                and uo_usuario_id
+                and ua.unidade_orcamentaria_id != uo_usuario_id
+            ):
+                raise serializers.ValidationError(
+                    "Gestor so pode selecionar UA da propria Unidade Orcamentaria."
+                )
+
+        if uo is None:
+            try:
+                uo = UnidadeOrcamentaria.objects.get(id=uo_id)
+            except UnidadeOrcamentaria.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"unidade_orcamentaria_id": "Unidade Orcamentaria invalida."}
+                )
+        if not uo.ativa:
+            raise serializers.ValidationError(
+                {"unidade_orcamentaria_id": "Unidade Orcamentaria inativa."}
+            )
+
+        attrs["ua_obj"] = ua
+        attrs["uo_obj"] = uo
+        return attrs

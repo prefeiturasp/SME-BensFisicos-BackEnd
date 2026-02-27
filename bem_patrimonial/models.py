@@ -25,6 +25,8 @@ from inventario.services.conciliacao_sync import sync_bem_pos_save
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
+VERBOSE_ATUALIZADO_EM = "Atualizado em"
+
 
 class SoftDeleteQuerySet(models.QuerySet):
     def delete(self):
@@ -144,7 +146,7 @@ class BemPatrimonial(BaseModel):
     )
     criado_em = models.DateTimeField("Criado em", auto_now_add=True)
     atualizado_em = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
+        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
     AUDIT_TRACK_FIELDS = (
         "numero_patrimonial",
@@ -183,12 +185,13 @@ class BemPatrimonial(BaseModel):
             )
         ]
 
-    def clean(self):
+    def _clean_valida_formato_antigo_ou_sem_numeracao(self):
         if not self.pk and self.numero_formato_antigo and self.sem_numeracao:
             raise ValidationError(
                 "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             )
 
+    def _clean_valida_numero_obrigatorio(self):
         if not self.sem_numeracao and not (
             self.numero_patrimonial and str(self.numero_patrimonial).strip()
         ):
@@ -198,68 +201,74 @@ class BemPatrimonial(BaseModel):
                 }
             )
 
+    def _clean_valida_formato_novo(self):
         if (not self.numero_formato_antigo) and (not self.sem_numeracao):
             if not re.fullmatch(NPAT_NUM_REGEX, self.numero_patrimonial or ""):
                 raise ValidationError(
                     {"numero_patrimonial": "Número Patrimonial incompleto"}
                 )
 
-    def save(self, *args, **kwargs):
-        is_create = self._state.adding or (self.pk is None)
-        original = None
-        if not is_create:
-            try:
-                original = type(self).objects.get(pk=self.pk)
-            except type(self).DoesNotExist:
-                original = None
+    def clean(self):
+        self._clean_valida_formato_antigo_ou_sem_numeracao()
+        self._clean_valida_numero_obrigatorio()
+        self._clean_valida_formato_novo()
 
+    def _obter_original_para_auditoria(self):
+        if self._state.adding or (self.pk is None):
+            return None
+        try:
+            return type(self).objects.get(pk=self.pk)
+        except type(self).DoesNotExist:
+            return None
+
+    def _aplicar_sem_numero_auto(self):
+        base_id = self.pk
+        while True:
+            numero_formatado = f"SEM-NUMERO-{base_id}"
+            if not type(self).objects.filter(numero_patrimonial=numero_formatado).exists():
+                break
+            base_id += 1
+        self.numero_patrimonial = numero_formatado
+        super(BemPatrimonial, self).save(update_fields=["numero_patrimonial"])
+
+    def _registrar_auditoria_se_alterado(self, original, **kwargs):
+        if not original:
+            return
+        only = kwargs.get("update_fields")
+        changes = dict_changes(
+            original,
+            self,
+            fields=self.AUDIT_TRACK_FIELDS,
+            only=only,
+            ignore=self.AUDIT_IGNORE_FIELDS,
+        )
+        if not changes:
+            return
+        ct = ContentType.objects.get_for_model(type(self))
+        user = get_user()
+        HistoricoGeral.objects.bulk_create(
+            [
+                HistoricoGeral(
+                    content_type=ct,
+                    object_id=str(self.pk),
+                    campo=field,
+                    valor_antigo=old,
+                    valor_novo=new,
+                    alterado_por=user,
+                )
+                for field, (old, new) in changes.items()
+            ]
+        )
+
+    def save(self, *args, **kwargs):
+        original = self._obter_original_para_auditoria()
         gerar_auto = bool(self.sem_numeracao and not self.numero_patrimonial)
 
         super(BemPatrimonial, self).save(*args, **kwargs)
 
         if gerar_auto and not self.numero_patrimonial:
-            base_id = self.pk
-
-            while True:
-                numero_formatado = f"SEM-NUMERO-{base_id}"
-
-                if (
-                    not type(self)
-                    .objects.filter(numero_patrimonial=numero_formatado)
-                    .exists()
-                ):
-                    break
-                base_id += 1
-
-            self.numero_patrimonial = numero_formatado
-            super(BemPatrimonial, self).save(update_fields=["numero_patrimonial"])
-        if not is_create and original:
-            # respeita update_fields (se veio)
-            only = kwargs.get("update_fields")
-            fields = self.AUDIT_TRACK_FIELDS
-            changes = dict_changes(
-                original,
-                self,
-                fields=fields,
-                only=only,
-                ignore=self.AUDIT_IGNORE_FIELDS,
-            )
-            if changes:
-                ct = ContentType.objects.get_for_model(type(self))
-                user = get_user()
-                HistoricoGeral.objects.bulk_create(
-                    [
-                        HistoricoGeral(
-                            content_type=ct,
-                            object_id=str(self.pk),
-                            campo=field,
-                            valor_antigo=old,
-                            valor_novo=new,
-                            alterado_por=user,
-                        )
-                        for field, (old, new) in changes.items()
-                    ]
-                )
+            self._aplicar_sem_numero_auto()
+        self._registrar_auditoria_se_alterado(original, **kwargs)
 
     @property
     def pode_solicitar_movimentacao(self):
@@ -314,7 +323,7 @@ class StatusBemPatrimonial(models.Model):
         blank=True,
     )
     atualizado_em = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
+        VERBOSE_ATUALIZADO_EM, auto_now=True, null=True, blank=True
     )
 
     def save(self, *args, **kwargs):
@@ -440,7 +449,7 @@ class MovimentacaoBemPatrimonial(models.Model):
     )
     criado_em = models.DateTimeField("Criado em", auto_now_add=True)
     atualizado_em = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
+        VERBOSE_ATUALIZADO_EM, auto_now=True, null=True, blank=True
     )
     numero_cimbpm = models.CharField(
         "Número CIMBPM",

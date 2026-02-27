@@ -130,9 +130,9 @@ class CustomUserModelAdminTestCase(TestCase):
         queryset = self.admin.get_queryset(request)
 
         usuarios_ordenados = list(queryset)
-        self.assertEqual(usuarios_ordenados[0].id, usuario2.id)  # codigo=100
-        self.assertEqual(usuarios_ordenados[1].id, usuario3.id)  # codigo=150
-        self.assertEqual(usuarios_ordenados[2].id, usuario1.id)  # codigo=200
+        self.assertEqual(usuarios_ordenados[0].id, usuario2.id)
+        self.assertEqual(usuarios_ordenados[1].id, usuario3.id)
+        self.assertEqual(usuarios_ordenados[2].id, usuario1.id)
 
     def test_get_grupo_returns_gestor_patrimonio(self):
         usuario = Usuario.objects.create(

@@ -6,30 +6,30 @@ UO_CODIGO_PADRAO = "01.16.10"
 
 
 def preencher_uo_padrao(apps, schema_editor):
-    ParametroConciliacaoAnual = apps.get_model(
+    parametro_conciliacao_anual_model = apps.get_model(
         "inventario", "ParametroConciliacaoAnual"
     )
-    UnidadeOrcamentaria = apps.get_model("dados_comuns", "UnidadeOrcamentaria")
+    unidade_orcamentaria_model = apps.get_model("dados_comuns", "UnidadeOrcamentaria")
 
     try:
-        uo = UnidadeOrcamentaria.objects.get(codigo=UO_CODIGO_PADRAO)
-    except UnidadeOrcamentaria.DoesNotExist:
+        uo = unidade_orcamentaria_model.objects.get(codigo=UO_CODIGO_PADRAO)
+    except unidade_orcamentaria_model.DoesNotExist:
         raise RuntimeError(
             f"Não foi encontrada UnidadeOrcamentaria com codigo={UO_CODIGO_PADRAO}. "
             "Crie essa UO antes de aplicar esta migration."
         )
 
-    ParametroConciliacaoAnual.objects.filter(unidade_orcamentaria__isnull=True).update(
+    parametro_conciliacao_anual_model.objects.filter(unidade_orcamentaria__isnull=True).update(
         unidade_orcamentaria=uo
     )
 
 
 def reverter_preenchimento_uo(apps, schema_editor):
 
-    ParametroConciliacaoAnual = apps.get_model(
+    parametro_conciliacao_anual_model = apps.get_model(
         "inventario", "ParametroConciliacaoAnual"
     )
-    ParametroConciliacaoAnual.objects.update(unidade_orcamentaria=None)
+    parametro_conciliacao_anual_model.objects.update(unidade_orcamentaria=None)
 
 
 class Migration(migrations.Migration):

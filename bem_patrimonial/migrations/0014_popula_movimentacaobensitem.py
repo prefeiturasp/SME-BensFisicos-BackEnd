@@ -2,17 +2,17 @@ from django.db import migrations
 
 
 def cria_itens_movimentacao(apps, schema_editor):
-    Movimentacao = apps.get_model(
+    movimentacao_model = apps.get_model(
         "bem_patrimonial", "MovimentacaoBemPatrimonial"
     )
-    MovimentacaoBensItem = apps.get_model(
+    movimentacao_bens_item_model = apps.get_model(
         "bem_patrimonial", "MovimentacaoBensItem"
     )
 
     db_alias = schema_editor.connection.alias
 
     # Só movimentações que ainda têm bem_patrimonial associado
-    movimentacoes = Movimentacao.objects.using(db_alias).filter(
+    movimentacoes = movimentacao_model.objects.using(db_alias).filter(
         bem_patrimonial__isnull=False
     )
 
@@ -23,14 +23,14 @@ def cria_itens_movimentacao(apps, schema_editor):
         mov_id = mov.id
 
         # Garante que não duplica se já existir item
-        existe = MovimentacaoBensItem.objects.using(db_alias).filter(
+        existe = movimentacao_bens_item_model.objects.using(db_alias).filter(
             movimentacao_id=mov_id,
             bem_id=bem_id,
         ).exists()
 
         if not existe:
             itens_para_criar.append(
-                MovimentacaoBensItem(
+                movimentacao_bens_item_model(
                     movimentacao_id=mov_id,
                     bem_id=bem_id,
                 )
@@ -38,7 +38,7 @@ def cria_itens_movimentacao(apps, schema_editor):
 
     if itens_para_criar:
         # bulk_create não dispara signals
-        MovimentacaoBensItem.objects.using(db_alias).bulk_create(
+        movimentacao_bens_item_model.objects.using(db_alias).bulk_create(
             itens_para_criar,
             ignore_conflicts=True,  # segurança extra se já houver algum
         )
