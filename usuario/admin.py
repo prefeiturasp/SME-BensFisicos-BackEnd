@@ -11,6 +11,13 @@ from django.core.exceptions import ValidationError
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 
 
+def _ensure_uo_obrigatoria(uo):
+    if not uo:
+        raise ValidationError(
+            {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
+        )
+
+
 def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
     """Aplica as validações de clean do formulário de usuário (extraído para reduzir complexidade)."""
     groups_qs = cleaned_data.get("groups")
@@ -26,10 +33,7 @@ def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
     is_operador = bool(grupo and grupo.name == GRUPO_OPERADOR_INVENTARIO)
     is_gestor = bool(grupo and grupo.name == GRUPO_GESTOR_PATRIMONIO)
 
-    if not uo:
-        raise ValidationError(
-            {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-        )
+    _ensure_uo_obrigatoria(uo)
 
     if not form_ref.user.is_superuser:
         uo_criador = form_ref.user.unidade_orcamentaria
@@ -70,10 +74,10 @@ def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
 
     uas_m2m_ids = cleaned_data.get("unidades_administrativas", [])
     if is_operador and not is_gestor:
-        _validate_operador_uas(cleaned_data, uo, ua, uas_m2m_ids)
+        _validate_operador_uas(uo, ua, uas_m2m_ids)
 
 
-def _validate_operador_uas(cleaned_data, uo, ua, uas_m2m_ids):
+def _validate_operador_uas(uo, ua, uas_m2m_ids):
     """Valida regras de UAs para operador de inventário."""
     if not uas_m2m_ids:
         raise ValidationError(
@@ -305,29 +309,31 @@ class CustomUserModelAdmin(UserAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "unidade_orcamentaria":
-
-            if not request.user.is_superuser:
-                if request.user.unidade_orcamentaria_id:
-                    kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(
-                        pk=request.user.unidade_orcamentaria_id
-                    )
-                else:
-                    kwargs["queryset"] = UnidadeOrcamentaria.objects.none()
-            else:
-                kwargs["queryset"] = UnidadeOrcamentaria.objects.all()
-
+            self._configure_uo_queryset(request, kwargs)
         if db_field.name == "unidade_administrativa":
-            qs = UnidadeAdministrativa.objects.filter(
-                status=UnidadeAdministrativa.ATIVA
-            )
-            uo_id = self._resolver_uo_id_contexto_admin(request)
-
-            if not uo_id:
-                kwargs["queryset"] = UnidadeAdministrativa.objects.none()
-            else:
-                kwargs["queryset"] = qs.filter(unidade_orcamentaria_id=uo_id)
-
+            self._configure_ua_queryset(request, kwargs)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def _configure_uo_queryset(self, request, kwargs):
+        if not request.user.is_superuser:
+            if request.user.unidade_orcamentaria_id:
+                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(
+                    pk=request.user.unidade_orcamentaria_id
+                )
+            else:
+                kwargs["queryset"] = UnidadeOrcamentaria.objects.none()
+        else:
+            kwargs["queryset"] = UnidadeOrcamentaria.objects.all()
+
+    def _configure_ua_queryset(self, request, kwargs):
+        qs = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
+        uo_id = self._resolver_uo_id_contexto_admin(request)
+        if not uo_id:
+            kwargs["queryset"] = UnidadeAdministrativa.objects.none()
+        else:
+            kwargs["queryset"] = qs.filter(unidade_orcamentaria_id=uo_id)
 
     def get_form(self, request, obj=None, **kwargs):
 

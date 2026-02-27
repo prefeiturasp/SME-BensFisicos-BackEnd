@@ -99,17 +99,16 @@
 
             // --- Filtro no autocomplete dos bens ---
             const oldAjax = $.ajax;
-            function collectBemIds() {
-                const ids = [];
-                $('select[name^="itens-"][name$="-bem"]').each(function() {
-                    const prefix = this.name.replace('-bem', '');
-                    const deleteFlag = $('input[name="' + prefix + '-DELETE"]').prop('checked');
-                    if (!deleteFlag) {
-                        const val = $(this).val();
-                        if (val) ids.push(val);
+
+            function appendBemIdIfNotDeleted(ids, selectEl) {
+                const prefix = selectEl.name.replace('-bem', '');
+                const deleteFlag = $('input[name="' + prefix + '-DELETE"]').prop('checked');
+                if (!deleteFlag) {
+                    const val = $(selectEl).val();
+                    if (val) {
+                        ids.push(val);
                     }
-                });
-                return ids;
+                }
             }
 
             $.ajax = function wrapAjaxWithUaFilter(options) {
@@ -125,9 +124,11 @@
                 if (!uaVal) {
                     return oldAjax.apply(this, arguments);
                 }
-
                 const params = ['ua_origem=' + encodeURIComponent(uaVal)];
-                const ids = collectBemIds();
+                const ids = [];
+                $('select[name^="itens-"][name$="-bem"]').each(function() {
+                    appendBemIdIfNotDeleted(ids, this);
+                });
                 if (ids.length > 0) {
                     params.push('exclude_bens=' + encodeURIComponent(ids.join(',')));
                 }
