@@ -8,6 +8,17 @@ from inventario.models import ConciliacaoUA
 from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
 
 
+def _operador_pode_exportar(user, conciliacao):
+    if not getattr(user, "is_operador_inventario", False) or getattr(
+        user, "is_gestor_patrimonio", False
+    ):
+        return True
+    ua_user_id = getattr(user, "unidade_administrativa_id", None)
+    if not ua_user_id or conciliacao.unidade_administrativa_id != ua_user_id:
+        return False
+    return True
+
+
 @login_required
 def download_conciliacao_pdf(request, pk):
     """
@@ -22,14 +33,10 @@ def download_conciliacao_pdf(request, pk):
     except ConciliacaoUA.DoesNotExist:
         raise Http404("Conciliação não encontrada.")
 
-    if getattr(user, "is_operador_inventario", False) and not getattr(
-        user, "is_gestor_patrimonio", False
-    ):
-        ua_user_id = getattr(user, "unidade_administrativa_id", None)
-        if not ua_user_id or conciliacao.unidade_administrativa_id != ua_user_id:
-            raise PermissionDenied(
-                "Operador só pode exportar conciliações da própria Unidade Administrativa."
-            )
+    if not _operador_pode_exportar(user, conciliacao):
+        raise PermissionDenied(
+            "Operador só pode exportar conciliações da própria Unidade Administrativa."
+        )
 
     pdf_buffer = gerar_pdf_conciliacao(conciliacao, usuario_gerador=request.user)
 

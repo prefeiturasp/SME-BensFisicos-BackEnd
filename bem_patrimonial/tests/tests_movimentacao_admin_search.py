@@ -59,6 +59,7 @@ class MovimentacaoAdminSearchTestCase(TestCase):
             unidade_orcamentaria=self.uo_a,
         )
         self.operador_ua2.groups.add(self.grupo_operador)
+        self.operador_ua2.unidades_administrativas.add(self.ua2)
 
         self.bem_ua1 = BemPatrimonial.objects.create(
             nome="Bem UA1",

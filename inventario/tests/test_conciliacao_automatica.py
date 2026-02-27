@@ -4,7 +4,6 @@ from django.test import TestCase
 from django.utils import timezone
 
 from bem_patrimonial.models import BemPatrimonial
-from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
 from inventario.utils_conciliacao.conciliacao_automatica import (
     processar_conciliacao_anual_automatica,

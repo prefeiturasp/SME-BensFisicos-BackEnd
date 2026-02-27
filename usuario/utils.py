@@ -38,11 +38,6 @@ def setup_grupos_e_permissoes():
         "_conciliacaoua": ["add", "change", "delete", "view"],
         "_itemconciliacao": ["add", "change", "delete", "view"],
         "_ocorrenciaconciliacao": ["add", "change", "delete", "view"],
-        # Módulo de Suporte desabilitado temporariamente
-        # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
-        # '_configagendasuporte': ['view', 'change'],
-        # '_diasemana': ['view'],
-        # '_intervalohoras': ['add', 'change', 'delete', 'view'],
     }
     atribuir_permissao(gestor, gestor_settings)
 
@@ -63,7 +58,5 @@ def setup_grupos_e_permissoes():
         "_conciliacaoua": ["add", "change", "view"],
         "_itemconciliacao": ["add", "change", "view"],
         "_ocorrenciaconciliacao": ["add", "view"],
-        # Módulo de Suporte desabilitado temporariamente
-        # '_agendamentosuporte': ['add', 'change', 'delete', 'view'],
     }
     atribuir_permissao(operador, operador_settings)

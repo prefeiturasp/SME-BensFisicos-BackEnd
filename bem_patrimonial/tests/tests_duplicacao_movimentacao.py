@@ -1,9 +1,7 @@
-import datetime
-import threading
 from django.test import TestCase, RequestFactory, TransactionTestCase
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
-from django.db import transaction, connection
+from django.db import transaction
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -14,7 +12,6 @@ from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
 )
-from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO
@@ -40,6 +37,7 @@ class SetupDuplicacaoData:
             unidade_administrativa=ua_origem,
         )
         operador.groups.add(grupo_operador)
+        operador.unidades_administrativas.add(ua_origem)
         return operador
 
     def create_bem_patrimonial(self, criado_por, ua_origem):
@@ -69,10 +67,12 @@ class SetupDuplicacaoData:
 
 class ValidacaoMovimentacaoPendenteTestCase(TestCase):
     def setUp(self):
-        self.setup = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = self.setup.create_unidades_administrativas()
-        self.operador = self.setup.create_usuario(self.ua_origem)
-        self.bem = self.setup.create_bem_patrimonial(self.operador, self.ua_origem)
+        self.test_data = SetupDuplicacaoData()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
+        self.operador = self.test_data.create_usuario(self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.factory = RequestFactory()
         self.site = AdminSite()
@@ -106,12 +106,13 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
         self.assertEqual(MovimentacaoBemPatrimonial.objects.count(), 1)
 
     def test_bloquear_segunda_movimentacao_quando_existe_pendente(self):
-        mov1 = self.setup.create_movimentacao_com_item(
+        mov1 = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
             ua_origem=self.ua_origem,
             ua_destino=self.ua_destino,
             solicitado_por=self.operador,
         )
+        mov1.refresh_from_db()
         self.assertTrue(self.bem.tem_movimentacao_pendente)
 
         mov2 = MovimentacaoBemPatrimonial.objects.create(
@@ -134,7 +135,7 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             "itens-0-bem": self.bem.pk,
         }
 
-        FormSet = inlineformset_factory(
+        form_set = inlineformset_factory(
             MovimentacaoBemPatrimonial,
             MovimentacaoBensItem,
             formset=MovimentacaoBensItemInlineFormSet,
@@ -143,7 +144,7 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             can_delete=False,
         )
 
-        formset = FormSet(data=data, instance=mov2, prefix="itens")
+        formset = form_set(data=data, instance=mov2, prefix="itens")
 
         self.assertFalse(formset.is_valid())
 
@@ -216,10 +217,12 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
 
 class LockTransacionalTestCase(TransactionTestCase):
     def setUp(self):
-        self.setup = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = self.setup.create_unidades_administrativas()
-        self.operador = self.setup.create_usuario(self.ua_origem)
-        self.bem = self.setup.create_bem_patrimonial(self.operador, self.ua_origem)
+        self.test_data = SetupDuplicacaoData()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
+        self.operador = self.test_data.create_usuario(self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.factory = RequestFactory()
         self.site = AdminSite()
@@ -258,10 +261,12 @@ class LockTransacionalTestCase(TransactionTestCase):
 
 class EdicaoMovimentacaoTestCase(TestCase):
     def setUp(self):
-        self.setup = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = self.setup.create_unidades_administrativas()
-        self.operador = self.setup.create_usuario(self.ua_origem)
-        self.bem = self.setup.create_bem_patrimonial(self.operador, self.ua_origem)
+        self.test_data = SetupDuplicacaoData()
+        self.ua_origem, self.ua_destino = (
+            self.test_data.create_unidades_administrativas()
+        )
+        self.operador = self.test_data.create_usuario(self.ua_origem)
+        self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=self.bem,

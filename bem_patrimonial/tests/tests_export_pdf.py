@@ -1,4 +1,3 @@
-import datetime
 from decimal import Decimal
 import re
 from django.test import TestCase, RequestFactory
@@ -12,7 +11,6 @@ from bem_patrimonial.constants import APROVADO, NAO_APROVADO, AGUARDANDO_APROVAC
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-from dados_comuns.models import UnidadeAdministrativa
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
@@ -43,6 +41,8 @@ class SetupExportData:
 
         group, _ = Group.objects.get_or_create(name=grupo)
         usuario.groups.add(group)
+        if unidade:
+            usuario.unidades_administrativas.add(unidade)
 
         return usuario
 
@@ -93,7 +93,7 @@ class SetupExportData:
 class PDFFormatTestCase(TestCase):
 
     def setUp(self):
-        self.setup = SetupExportData()
+        self.test_data = SetupExportData()
         self.pdf_format = PDFFormat()
 
     def test_get_title_returns_pdf(self):
@@ -122,10 +122,10 @@ class PDFFormatTestCase(TestCase):
 class PDFExportDataTestCase(TestCase):
 
     def setUp(self):
-        self.setup = SetupExportData()
+        self.test_data = SetupExportData()
 
-        self.unidade = self.setup.create_unidade_administrativa()
-        self.usuario = self.setup.create_usuario(unidade=self.unidade)
+        self.unidade = self.test_data.create_unidade_administrativa()
+        self.usuario = self.test_data.create_usuario(unidade=self.unidade)
         self.factory = RequestFactory()
 
     def test_export_empty_queryset(self):
@@ -141,7 +141,7 @@ class PDFExportDataTestCase(TestCase):
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_export_single_bem(self):
-        bem = self.setup.create_bem_patrimonial(self.usuario, status=APROVADO)
+        bem = self.test_data.create_bem_patrimonial(self.usuario, status=APROVADO)
 
         pdf_format = PDFFormat()
         pdf_format._export_request = self.factory.get("/admin/")
@@ -156,7 +156,7 @@ class PDFExportDataTestCase(TestCase):
 
     def test_export_multiple_bens(self):
         for i in range(5):
-            self.setup.create_bem_patrimonial(
+            self.test_data.create_bem_patrimonial(
                 self.usuario,
                 nome=f"Item {i}",
                 numero_patrimonial=str(1000 + i),
@@ -176,13 +176,13 @@ class PDFExportDataTestCase(TestCase):
 
     def test_export_with_different_status(self):
 
-        self.setup.create_bem_patrimonial(
+        self.test_data.create_bem_patrimonial(
             self.usuario, status=APROVADO, nome="Aprovado"
         )
-        self.setup.create_bem_patrimonial(
+        self.test_data.create_bem_patrimonial(
             self.usuario, status=NAO_APROVADO, nome="Rejeitado"
         )
-        self.setup.create_bem_patrimonial(
+        self.test_data.create_bem_patrimonial(
             self.usuario, status=AGUARDANDO_APROVACAO, nome="Aguardando"
         )
 
@@ -198,17 +198,17 @@ class PDFExportDataTestCase(TestCase):
 
     def test_export_calculates_statistics_correctly(self):
 
-        self.setup.create_bem_patrimonial(
+        self.test_data.create_bem_patrimonial(
             self.usuario,
             valor_unitario=Decimal("100.00"),
             localizacao="Local A",
         )
-        self.setup.create_bem_patrimonial(
+        self.test_data.create_bem_patrimonial(
             self.usuario,
             valor_unitario=Decimal("200.00"),
             localizacao="Local B",
         )
-        self.setup.create_bem_patrimonial(
+        self.test_data.create_bem_patrimonial(
             self.usuario,
             valor_unitario=Decimal("50.00"),
             localizacao="Local A",
@@ -228,22 +228,22 @@ class PDFExportDataTestCase(TestCase):
 class BemPatrimonialAdminExportTestCase(TestCase):
 
     def setUp(self):
-        self.setup = SetupExportData()
+        self.test_data = SetupExportData()
         self.site = AdminSite()
         self.admin = BemPatrimonialAdmin(BemPatrimonial, self.site)
         self.factory = RequestFactory()
 
-        self.unidade1 = self.setup.create_unidade_administrativa(
+        self.unidade1 = self.test_data.create_unidade_administrativa(
             codigo=100, nome="DRE A"
         )
-        self.unidade2 = self.setup.create_unidade_administrativa(
+        self.unidade2 = self.test_data.create_unidade_administrativa(
             codigo=202, nome="DRE B"
         )
 
-        self.gestor = self.setup.create_usuario(
+        self.gestor = self.test_data.create_usuario(
             "gestor", self.unidade1, GRUPO_GESTOR_PATRIMONIO
         )
-        self.operador = self.setup.create_usuario(
+        self.operador = self.test_data.create_usuario(
             "operador", self.unidade1, GRUPO_OPERADOR_INVENTARIO
         )
 
@@ -254,7 +254,7 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         self.assertIn("PDFFormat", format_classes)
 
     def test_get_export_data_injects_request_and_queryset(self):
-        bem = self.setup.create_bem_patrimonial(self.gestor)
+        bem = self.test_data.create_bem_patrimonial(self.gestor)
         queryset = BemPatrimonial.objects.filter(id=bem.id)
 
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
@@ -279,9 +279,9 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         group, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         gestor_sem_ua.groups.add(group)
 
-        self.setup.create_bem_patrimonial(self.gestor, nome="Bem Unidade 1")
-        usuario_unidade2 = self.setup.create_usuario("user2", self.unidade2)
-        self.setup.create_bem_patrimonial(usuario_unidade2, nome="Bem Unidade 2")
+        self.test_data.create_bem_patrimonial(self.gestor, nome="Bem Unidade 1")
+        usuario_unidade2 = self.test_data.create_usuario("user2", self.unidade2)
+        self.test_data.create_bem_patrimonial(usuario_unidade2, nome="Bem Unidade 2")
 
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
         request.user = gestor_sem_ua
@@ -291,15 +291,15 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         self.assertEqual(queryset.count(), 2)
 
     def test_get_export_queryset_operador_sees_only_own_unit(self):
-        bem_unidade1 = self.setup.create_bem_patrimonial(
+        bem_unidade1 = self.test_data.create_bem_patrimonial(
             self.gestor, nome="Bem Unidade 1", status=APROVADO
         )
         # garante vínculo na unidade1
         bem_unidade1.unidade_administrativa = self.unidade1
         bem_unidade1.save()
 
-        usuario_unidade2 = self.setup.create_usuario("user2", self.unidade2)
-        bem_unidade2 = self.setup.create_bem_patrimonial(
+        usuario_unidade2 = self.test_data.create_usuario("user2", self.unidade2)
+        bem_unidade2 = self.test_data.create_bem_patrimonial(
             usuario_unidade2, nome="Bem Unidade 2", status=APROVADO
         )
         # garante vínculo na unidade2
@@ -318,13 +318,13 @@ class BemPatrimonialAdminExportTestCase(TestCase):
 class PDFContentTestCase(TestCase):
 
     def setUp(self):
-        self.setup = SetupExportData()
-        self.unidade = self.setup.create_unidade_administrativa(nome="DRE Centro")
-        self.usuario = self.setup.create_usuario(unidade=self.unidade)
+        self.test_data = SetupExportData()
+        self.unidade = self.test_data.create_unidade_administrativa(nome="DRE Centro")
+        self.usuario = self.test_data.create_usuario(unidade=self.unidade)
         self.factory = RequestFactory()
 
     def test_pdf_contains_all_required_columns(self):
-        bem = self.setup.create_bem_patrimonial(
+        bem = self.test_data.create_bem_patrimonial(
             self.usuario,
             numero_patrimonial=123,
             nome="Notebook",
@@ -348,7 +348,7 @@ class PDFContentTestCase(TestCase):
 
     def test_pdf_handles_none_values(self):
 
-        bem = self.setup.create_bem_patrimonial(
+        bem = self.test_data.create_bem_patrimonial(
             self.usuario, numero_patrimonial=None, localizacao=None
         )
 
@@ -365,7 +365,7 @@ class PDFContentTestCase(TestCase):
 
         long_description = "A" * 500
 
-        bem = self.setup.create_bem_patrimonial(
+        bem = self.test_data.create_bem_patrimonial(
             self.usuario, nome="Nome muito longo " * 10, descricao=long_description
         )
 
@@ -382,18 +382,18 @@ class PDFContentTestCase(TestCase):
 class PDFUserContextTestCase(TestCase):
 
     def setUp(self):
-        self.setup = SetupExportData()
-        self.unidade = self.setup.create_unidade_administrativa()
+        self.test_data = SetupExportData()
+        self.unidade = self.test_data.create_unidade_administrativa()
         self.factory = RequestFactory()
 
     def test_pdf_uses_nome_field_when_available(self):
-        usuario = self.setup.create_usuario()
+        usuario = self.test_data.create_usuario()
         usuario.nome = "Maria Silva"
         usuario.first_name = "Maria"
         usuario.last_name = "Santos"
         usuario.save()
 
-        bem = self.setup.create_bem_patrimonial(usuario)
+        bem = self.test_data.create_bem_patrimonial(usuario)
 
         pdf_format = PDFFormat()
         pdf_format._export_request = self.factory.get("/admin/")
@@ -405,13 +405,13 @@ class PDFUserContextTestCase(TestCase):
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_pdf_uses_username_as_fallback(self):
-        usuario = self.setup.create_usuario()
+        usuario = self.test_data.create_usuario()
         usuario.nome = None
         usuario.first_name = ""
         usuario.last_name = ""
         usuario.save()
 
-        bem = self.setup.create_bem_patrimonial(usuario)
+        bem = self.test_data.create_bem_patrimonial(usuario)
 
         pdf_format = PDFFormat()
         pdf_format._export_request = self.factory.get("/admin/")
@@ -424,7 +424,7 @@ class PDFUserContextTestCase(TestCase):
 
     def test_pdf_without_request_uses_default_author(self):
 
-        bem = self.setup.create_bem_patrimonial(self.setup.create_usuario())
+        bem = self.test_data.create_bem_patrimonial(self.test_data.create_usuario())
 
         pdf_format = PDFFormat()
         pdf_format._export_request = None

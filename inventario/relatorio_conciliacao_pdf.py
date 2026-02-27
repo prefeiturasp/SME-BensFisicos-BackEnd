@@ -65,14 +65,17 @@ def obter_nome_usuario(usuario):
     return usuario.nome if getattr(usuario, "nome", None) else usuario.username
 
 
+STATUS_NAO_CONCILIADO = "Não Conciliado"
+
+
 def formatar_status_para_header(conciliacao):
     """
     Retorna o texto de STATUS adequado para o cabeçalho do PDF.
     """
     status_display = conciliacao.get_status_display()
 
-    if "Não Conciliado" in status_display:
-        return "Não Conciliado"
+    if STATUS_NAO_CONCILIADO in status_display:
+        return STATUS_NAO_CONCILIADO
 
     return status_display
 
@@ -325,7 +328,7 @@ def _criar_rodape_conciliacao(conciliacao, usuario_gerador=None):
 
     status_display = conciliacao.get_status_display()
 
-    if "Não Conciliado" in status_display:
+    if STATUS_NAO_CONCILIADO in status_display:
         nome_fechamento = status_display
     elif fechado_por:
         nome = obter_nome_usuario(fechado_por).upper()
@@ -492,19 +495,11 @@ def _criar_informacoes_gerais_conciliacao(conciliacao):
     return elements
 
 
-def _criar_blocos_itens_conciliacao(conciliacao):
-    """
-    Gera o corpo em blocos por item, agrupando:
-    1) Encontrados sem divergência (sem ocorrência)
-    2) Itens com ocorrência (OcorrenciaConciliacao)
-    """
-    elements = []
-    styles = getSampleStyleSheet()
-
+def _estilos_blocos_itens(styles):
+    """Cria estilos usados nos blocos de itens da conciliação."""
     font = 6
     leading = 7
-
-    label = criar_estilo_base(
+    _ = criar_estilo_base(
         "ItemLabel",
         styles,
         fontName="Helvetica-Bold",
@@ -536,6 +531,127 @@ def _criar_blocos_itens_conciliacao(conciliacao):
         leading=8,
         alignment=TA_LEFT,
     )
+    return {"txt": txt, "txt_center": txt_center, "titulo_grupo": titulo_grupo}
+
+
+def _classificar_itens_conciliacao(itens):
+    """Separa itens em: encontrados sem ocorrência e com ocorrência."""
+    encontrados_sem_ocorrencia = []
+    com_ocorrencia = []
+    for item in itens:
+        if item.tem_ocorrencia:
+            com_ocorrencia.append(item)
+        else:
+            encontrados_sem_ocorrencia.append(item)
+    return encontrados_sem_ocorrencia, com_ocorrencia
+
+
+def _linhas_tabela_item(item, txt, txt_center):
+    """Monta as linhas da tabela para um item (bem) da conciliação."""
+    bem = item.bem
+    num = (getattr(bem, "numero_patrimonial", None) or "-").strip()
+    val = formatar_moeda_brasileira(
+        getattr(bem, "valor_unitario", None) or Decimal("0.00")
+    )
+    descricao = (getattr(bem, "descricao", None) or "-").strip()
+    marca = (getattr(bem, "marca", None) or "-").strip()
+    modelo = (getattr(bem, "modelo", None) or "-").strip()
+    situacao = item.get_situacao_display()
+    linha_topo = [
+        Paragraph(f"<b>Nº PATRIMONIAL:</b> {num}", txt),
+        Paragraph("", txt),
+        Paragraph(f"<b>VALOR:</b> {val}", txt_center),
+    ]
+    linha_desc = [
+        Paragraph(f"<b>DESCRIÇÃO:</b> {descricao}", txt),
+        Paragraph(f"<b>MARCA:</b> {marca}", txt),
+        Paragraph(f"<b>MODELO:</b> {modelo}", txt),
+    ]
+    linha_situacao = [
+        Paragraph(f"<b>SITUAÇÃO:</b> {situacao}", txt),
+        Paragraph("", txt),
+        Paragraph("", txt),
+    ]
+    rows = [linha_topo, linha_desc, linha_situacao]
+    oc = item.ocorrencias.first() if item.tem_ocorrencia else None
+    if oc:
+        registrado_por = obter_nome_usuario(getattr(oc, "registrado_por", None))
+        registrado_em = _fmt_date(getattr(oc, "registrado_em", None))
+        obs = (getattr(oc, "observacao", "") or "").strip() or "-"
+        div = (getattr(oc, "divergencia", "") or "").strip() or "-"
+        rows.append(
+            [
+                Paragraph(f"<b>Observação/Divergência:</b> {obs}", txt),
+                Paragraph("", txt),
+                Paragraph("", txt),
+            ]
+        )
+        rows.append(
+            [
+                Paragraph(f"<b>Divergência:</b> {div}", txt),
+                Paragraph("", txt),
+                Paragraph("", txt),
+            ]
+        )
+        rows.append(
+            [
+                Paragraph("", txt),
+                Paragraph(f"<b>Registrado por:</b> {registrado_por}", txt),
+                Paragraph(f"<b>Registrado em:</b> {registrado_em}", txt),
+            ]
+        )
+    return rows, oc
+
+
+def _tabela_item_conciliacao(rows, oc):
+    """Cria a Table (reportlab) com estilo aplicado para um item."""
+    box = Table(rows, colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm])
+    style_cmds = [
+        ("BOX", (0, 0), (-1, -1), 1, colors.black),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_CINZA_CLARO),
+    ]
+    if oc:
+        style_cmds += [
+            ("SPAN", (0, 3), (2, 3)),
+            ("SPAN", (0, 4), (2, 4)),
+            ("BACKGROUND", (0, 3), (2, 4), PDFConfig.COR_CINZA_ZEBRA),
+        ]
+    box.setStyle(TableStyle(style_cmds))
+    return box
+
+
+def _render_grupo_itens(titulo, lista, estilos, elements):
+    """Adiciona ao elements o título do grupo e as tabelas de cada item."""
+    txt = estilos["txt"]
+    titulo_grupo = estilos["titulo_grupo"]
+    txt_center = estilos["txt_center"]
+    if not lista:
+        return
+    elements.append(Paragraph(f"<b>{titulo}</b> ({len(lista)})", titulo_grupo))
+    elements.append(Spacer(1, 0.15 * cm))
+    for item in lista:
+        rows, oc = _linhas_tabela_item(item, txt, txt_center)
+        box = _tabela_item_conciliacao(rows, oc)
+        elements.append(KeepTogether([box, Spacer(1, 0.15 * cm)]))
+    elements.append(Spacer(1, 0.25 * cm))
+
+
+def _criar_blocos_itens_conciliacao(conciliacao):
+    """
+    Gera o corpo em blocos por item, agrupando:
+    1) Encontrados sem divergência (sem ocorrência)
+    2) Itens com ocorrência (OcorrenciaConciliacao)
+    """
+    elements = []
+    styles = getSampleStyleSheet()
+    estilos = _estilos_blocos_itens(styles)
+    txt = estilos["txt"]
 
     itens = (
         conciliacao.itens.select_related("bem")
@@ -543,129 +659,14 @@ def _criar_blocos_itens_conciliacao(conciliacao):
         .all()
         .order_by("bem__numero_patrimonial")
     )
+    encontrados_sem_ocorrencia, com_ocorrencia = _classificar_itens_conciliacao(itens)
 
-    encontrados_sem_ocorrencia = []
-    com_ocorrencia = []
-
-    for item in itens:
-        if item.tem_ocorrencia:
-            com_ocorrencia.append(item)
-        else:
-
-            if item.situacao == inv_constants.ENCONTRADO_SEM_DIVERGENCIA:
-                encontrados_sem_ocorrencia.append(item)
-            else:
-
-                encontrados_sem_ocorrencia.append(item)
-
-    def render_grupo(titulo, lista):
-        if not lista:
-            return
-
-        elements.append(Paragraph(f"<b>{titulo}</b> ({len(lista)})", titulo_grupo))
-        elements.append(Spacer(1, 0.15 * cm))
-
-        for item in lista:
-            bem = item.bem
-
-            num = (getattr(bem, "numero_patrimonial", None) or "-").strip()
-            val = formatar_moeda_brasileira(
-                getattr(bem, "valor_unitario", None) or Decimal("0.00")
-            )
-
-            descricao = (getattr(bem, "descricao", None) or "-").strip()
-            marca = (getattr(bem, "marca", None) or "-").strip()
-            modelo = (getattr(bem, "modelo", None) or "-").strip()
-
-            situacao = item.get_situacao_display()
-
-            oc = item.ocorrencias.first() if item.tem_ocorrencia else None
-
-            linha_topo = [
-                Paragraph(f"<b>Nº PATRIMONIAL:</b> {num}", txt),
-                Paragraph("", txt),
-                Paragraph(f"<b>VALOR:</b> {val}", txt_center),
-            ]
-
-            linha_desc = [
-                Paragraph(f"<b>DESCRIÇÃO:</b> {descricao}", txt),
-                Paragraph(f"<b>MARCA:</b> {marca}", txt),
-                Paragraph(f"<b>MODELO:</b> {modelo}", txt),
-            ]
-
-            linha_situacao = [
-                Paragraph(f"<b>SITUAÇÃO:</b> {situacao}", txt),
-                Paragraph("", txt),
-                Paragraph("", txt),
-            ]
-
-            rows = [
-                linha_topo,
-                linha_desc,
-                linha_situacao,
-            ]
-
-            if oc:
-                registrado_por = obter_nome_usuario(getattr(oc, "registrado_por", None))
-                registrado_em = _fmt_date(getattr(oc, "registrado_em", None))
-
-                obs = (getattr(oc, "observacao", "") or "").strip() or "-"
-                div = (getattr(oc, "divergencia", "") or "").strip() or "-"
-
-                rows.append(
-                    [
-                        Paragraph(f"<b>Observação/Divergência:</b> {obs}", txt),
-                        Paragraph("", txt),
-                        Paragraph("", txt),
-                    ]
-                )
-                rows.append(
-                    [
-                        Paragraph(f"<b>Divergência:</b> {div}", txt),
-                        Paragraph("", txt),
-                        Paragraph("", txt),
-                    ]
-                )
-                rows.append(
-                    [
-                        Paragraph("", txt),
-                        Paragraph(f"<b>Registrado por:</b> {registrado_por}", txt),
-                        Paragraph(f"<b>Registrado em:</b> {registrado_em}", txt),
-                    ]
-                )
-
-            box = Table(
-                rows,
-                colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm],
-            )
-
-            style_cmds = [
-                ("BOX", (0, 0), (-1, -1), 1, colors.black),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_CINZA_CLARO),
-            ]
-
-            if oc:
-
-                style_cmds += [
-                    ("SPAN", (0, 3), (2, 3)),
-                    ("SPAN", (0, 4), (2, 4)),
-                    ("BACKGROUND", (0, 3), (2, 4), PDFConfig.COR_CINZA_ZEBRA),
-                ]
-
-            box.setStyle(TableStyle(style_cmds))
-
-            elements.append(KeepTogether([box, Spacer(1, 0.15 * cm)]))
-
-        elements.append(Spacer(1, 0.25 * cm))
-
-    render_grupo("Itens encontrados sem divergência", encontrados_sem_ocorrencia)
-    render_grupo("Itens com ocorrência / divergência", com_ocorrencia)
+    _render_grupo_itens(
+        "Itens encontrados sem divergência", encontrados_sem_ocorrencia, estilos, elements
+    )
+    _render_grupo_itens(
+        "Itens com ocorrência / divergência", com_ocorrencia, estilos, elements
+    )
 
     if not encontrados_sem_ocorrencia and not com_ocorrencia:
         elements.append(Paragraph("Nenhum item encontrado para esta conciliação.", txt))

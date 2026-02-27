@@ -37,74 +37,111 @@ def _bens_da_movimentacao(mov):
     return mov.itens.select_related("bem").all()
 
 
+def _mensagem_mov_origem_destino_inativas(mov, request, acao_verb):
+    if not mov.unidade_administrativa_origem.is_ativa:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f"Movimentação #{mov.pk}: A unidade de origem "
+            f"'{mov.unidade_administrativa_origem.nome}' está inativa. "
+            f"Não é possível {acao_verb} movimentações de unidades inativas.",
+        )
+        return True
+    if not mov.unidade_administrativa_destino.is_ativa:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f"Movimentação #{mov.pk}: A unidade de destino "
+            f"'{mov.unidade_administrativa_destino.nome}' está inativa. "
+            f"Não é possível {acao_verb} movimentações para unidades inativas.",
+        )
+        return True
+    return False
+
+
+def _check_operador_destino_aprovacao(mov, request):
+    if not request.user.is_operador_inventario:
+        return False
+    if mov.unidade_administrativa_destino != request.user.unidade_administrativa:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
+            "podem aprovar esta movimentação.",
+        )
+        return True
+    if mov.solicitado_por_id == request.user.pk:
+        messages.add_message(
+            request,
+            messages.WARNING,
+            f"Movimentação #{mov.pk}: Você não pode aprovar sua própria solicitação.",
+        )
+        return True
+    return False
+
+
+def _check_operador_destino_rejeicao(mov, request):
+    if not request.user.is_operador_inventario:
+        return False
+    if mov.unidade_administrativa_destino != request.user.unidade_administrativa:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
+            "podem rejeitar esta movimentação.",
+        )
+        return True
+    if mov.solicitado_por_id == request.user.pk:
+        messages.add_message(
+            request,
+            messages.WARNING,
+            f"Movimentação #{mov.pk}: Você não pode rejeitar sua própria solicitação.",
+        )
+        return True
+    return False
+
+
+def _bloqueio_se_algum(request, mov, checks):
+    """Retorna True se algum check (condição, nível) retornar True e adicionar mensagem."""
+    for condicao, msg, nivel in checks:
+        if condicao:
+            messages.add_message(request, nivel, msg.format(mov=mov))
+            return True
+    return False
+
+
+def _nao_pode_aprovar(mov, request):
+    checks = [
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
+            messages.ERROR,
+        ),
+    ]
+    if _bloqueio_se_algum(request, mov, checks):
+        return True
+    if _mensagem_mov_origem_destino_inativas(mov, request, "aprovar"):
+        return True
+    if _check_operador_destino_aprovacao(mov, request):
+        return True
+    return False
+
+
 def aprovar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
-        if mov.aceita:
-            messages.add_message(
-                request,
-                messages.WARNING,
-                f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
-            )
+        if _nao_pode_aprovar(mov, request):
             continue
-
-        if mov.rejeitada:
-            messages.add_message(
-                request,
-                messages.WARNING,
-                f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
-            )
-            continue
-
-        if not mov.unidade_administrativa_origem.is_ativa:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk}: A unidade de origem "
-                f"'{mov.unidade_administrativa_origem.nome}' está inativa. "
-                "Não é possível aprovar movimentações de unidades inativas.",
-            )
-            continue
-
-        if not mov.unidade_administrativa_destino.is_ativa:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk}: A unidade de destino "
-                f"'{mov.unidade_administrativa_destino.nome}' está inativa. "
-                "Não é possível aprovar movimentações para unidades inativas.",
-            )
-            continue
-
-        if mov.cancelada:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk} foi cancelada e não pode ser aprovada.",
-            )
-            continue
-
-        if request.user.is_operador_inventario:
-            if (
-                mov.unidade_administrativa_destino
-                != request.user.unidade_administrativa
-            ):
-                messages.add_message(
-                    request,
-                    messages.ERROR,
-                    f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
-                    "podem aprovar esta movimentação.",
-                )
-                continue
-            if mov.solicitado_por_id == request.user.pk:
-                messages.add_message(
-                    request,
-                    messages.WARNING,
-                    f"Movimentação #{mov.pk}: Você não pode aprovar sua própria solicitação.",
-                )
-                continue
-
         bens_itens = _bens_da_movimentacao(mov)
-
         if not bens_itens.exists():
             messages.add_message(
                 request,
@@ -112,23 +149,19 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
-
         with transaction.atomic():
             for item in bens_itens:
                 bem = item.bem
                 bem.unidade_administrativa = mov.unidade_administrativa_destino
                 bem.status = constants.APROVADO
                 bem.save()
-
                 if mov.solicitado_por and mov.solicitado_por.email:
                     envia_email_solicitacao_movimentacao_aceita(
                         bem, mov.solicitado_por.email
                     )
-
             mov.status = constants.ACEITA
             mov.aprovado_por = request.user
             mov.save()
-
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -139,74 +172,38 @@ def aprovar_solicitacao(modeladmin, request, queryset):
 aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
 
 
+def _nao_pode_rejeitar(mov, request):
+    checks = [
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
+            messages.ERROR,
+        ),
+    ]
+    if _bloqueio_se_algum(request, mov, checks):
+        return True
+    if _mensagem_mov_origem_destino_inativas(mov, request, "rejeitar"):
+        return True
+    if _check_operador_destino_rejeicao(mov, request):
+        return True
+    return False
+
+
 def rejeitar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
-        if mov.rejeitada:
-            messages.add_message(
-                request,
-                messages.WARNING,
-                f"Movimentação #{mov.pk} já foi rejeitada anteriormente.",
-            )
+        if _nao_pode_rejeitar(mov, request):
             continue
-
-        if mov.aceita:
-            messages.add_message(
-                request,
-                messages.WARNING,
-                f"Movimentação #{mov.pk} já foi aprovada anteriormente.",
-            )
-            continue
-
-        if not mov.unidade_administrativa_origem.is_ativa:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk}: A unidade de origem "
-                f"'{mov.unidade_administrativa_origem.nome}' está inativa. "
-                "Não é possível rejeitar movimentações de unidades inativas.",
-            )
-            continue
-
-        if not mov.unidade_administrativa_destino.is_ativa:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk}: A unidade de destino "
-                f"'{mov.unidade_administrativa_destino.nome}' está inativa. "
-                "Não é possível rejeitar movimentações para unidades inativas.",
-            )
-            continue
-
-        if mov.cancelada:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk} foi cancelada e não pode ser rejeitada.",
-            )
-            continue
-
-        if request.user.is_operador_inventario:
-            if (
-                mov.unidade_administrativa_destino
-                != request.user.unidade_administrativa
-            ):
-                messages.add_message(
-                    request,
-                    messages.ERROR,
-                    f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
-                    "podem rejeitar esta movimentação.",
-                )
-                continue
-            if mov.solicitado_por_id == request.user.pk:
-                messages.add_message(
-                    request,
-                    messages.WARNING,
-                    f"Movimentação #{mov.pk}: Você não pode rejeitar sua própria solicitação.",
-                )
-                continue
-
         bens_itens = _bens_da_movimentacao(mov)
-
         if not bens_itens.exists():
             messages.add_message(
                 request,
@@ -214,22 +211,18 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
-
         with transaction.atomic():
             mov.status = constants.REJEITADA
             mov.rejeitado_por = request.user
             mov.save()
-
             for item in bens_itens:
                 bem = item.bem
                 bem.status = constants.APROVADO
                 bem.save()
-
                 if mov.solicitado_por and mov.solicitado_por.email:
                     envia_email_solicitacao_movimentacao_rejeitada(
                         bem, mov.solicitado_por.email
                     )
-
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -240,69 +233,56 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
 rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
 
 
-def cancelar_solicitacao(modeladmin, request, queryset):
-    for mov in queryset:
-        if mov.cancelada:
-            messages.add_message(
-                request,
-                messages.WARNING,
-                f"Movimentação #{mov.pk} já foi cancelada anteriormente.",
-            )
-            continue
-
-        if mov.aceita:
-            messages.add_message(
-                request,
-                messages.WARNING,
-                f"Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
-            )
-            continue
-
-        if mov.rejeitada:
-            messages.add_message(
-                request,
-                messages.WARNING,
-                f"Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
-            )
-            continue
-
-        if mov.status != constants.ENVIADA:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
-            )
-            continue
-
-        if (
+def _nao_pode_cancelar(mov, request):
+    checks = [
+        (
+            mov.cancelada,
+            "Movimentação #{mov.pk} já foi cancelada anteriormente.",
+            messages.WARNING,
+        ),
+        (
+            mov.aceita,
+            "Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.rejeitada,
+            "Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.",
+            messages.WARNING,
+        ),
+        (
+            mov.status != constants.ENVIADA,
+            "Movimentação #{mov.pk}: Apenas movimentações pendentes podem ser canceladas.",
+            messages.ERROR,
+        ),
+        (
             request.user.is_operador_inventario
             and not request.user.is_gestor_patrimonio
-        ):
-            if mov.solicitado_por_id != request.user.pk:
-                messages.add_message(
-                    request,
-                    messages.ERROR,
-                    f"Movimentação #{mov.pk}: Você só pode cancelar movimentações criadas por você.",
-                )
-                continue
+            and mov.solicitado_por_id != request.user.pk,
+            "Movimentação #{mov.pk}: Você só pode cancelar movimentações criadas por você.",
+            messages.ERROR,
+        ),
+    ]
+    return _bloqueio_se_algum(request, mov, checks)
 
+
+def cancelar_solicitacao(modeladmin, request, queryset):
+    for mov in queryset:
+        if _nao_pode_cancelar(mov, request):
+            continue
         bens_itens = _bens_da_movimentacao(mov)
-
         with transaction.atomic():
             mov.status = constants.CANCELADA
             mov.cancelado_por = request.user
             mov.save()
-
             for item in bens_itens:
                 bem = item.bem
                 bem.status = constants.APROVADO
                 bem.save()
-
                 if mov.solicitado_por and mov.solicitado_por.email:
                     envia_email_solicitacao_movimentacao_cancelada(
                         bem, request.user, mov.solicitado_por.email
                     )
-
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -427,9 +407,9 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         return self.readonly_fields
 
     def get_form(self, request, obj=None, **kwargs):
-        FormClass = super().get_form(request, obj, **kwargs)
+        form_class = super().get_form(request, obj, **kwargs)
 
-        class RequestForm(FormClass):
+        class RequestForm(form_class):
             def __init__(self_inner, *a, **kw):
                 super().__init__(*a, **kw)
                 self_inner.request = request
@@ -440,14 +420,12 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                         ua_user
                         and ua_user.is_ativa
                         and hasattr(self_inner, "base_fields")
+                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
+                        in self_inner.base_fields
                     ):
-                        if (
+                        self_inner.base_fields[
                             UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                            in self_inner.base_fields
-                        ):
-                            self_inner.base_fields[
-                                UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                            ].initial = ua_user.pk
+                        ].initial = ua_user.pk
 
         return RequestForm
 

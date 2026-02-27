@@ -19,11 +19,11 @@ from bem_patrimonial.emails import (
 )
 from bem_patrimonial import constants
 
-from inventario.services.conciliacao_sync import sync_bem_pos_save
-
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
+
+VERBOSE_ATUALIZADO_EM = "Atualizado em"
 
 
 class SoftDeleteQuerySet(models.QuerySet):
@@ -86,8 +86,13 @@ class BemPatrimonial(BaseModel):
     # obrigatórios
     nome = models.CharField("Nome do bem", max_length=255, null=False, blank=False)
     descricao = models.TextField("Descrição", null=False, blank=False)
+    observacao = models.TextField("Observação", null=True, blank=True)
     numero_processo = models.CharField(
-        "Número do processo de incorporação", max_length=64, null=True, blank=True
+        "Número do processo de incorporação",
+        max_length=64,
+        null=True,
+        blank=True,
+        default="",
     )
     valor_unitario = models.DecimalField(
         "Valor unitário", max_digits=16, decimal_places=2, blank=False, null=False
@@ -95,12 +100,15 @@ class BemPatrimonial(BaseModel):
     marca = models.CharField("Marca", max_length=255, null=False, blank=False)
     modelo = models.CharField("Modelo", max_length=255, null=False, blank=False)
 
-    localizacao = models.CharField("Localização", max_length=255, null=True, blank=True)
+    localizacao = models.CharField(
+        "Localização", max_length=255, null=True, blank=True, default=""
+    )
     numero_patrimonial = models.CharField(
         "Número Patrimonial",
         max_length=20,
         null=True,
         blank=True,
+        default="",
         help_text="Formato padrão: 000.000000000-0",
         db_index=True,
     )
@@ -144,7 +152,7 @@ class BemPatrimonial(BaseModel):
     )
     criado_em = models.DateTimeField("Criado em", auto_now_add=True)
     atualizado_em = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
+        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
     AUDIT_TRACK_FIELDS = (
         "numero_patrimonial",
@@ -162,6 +170,7 @@ class BemPatrimonial(BaseModel):
         "unidade_administrativa",
         "status",
         "bloqueado_conciliacao",
+        "observacao"
     )
     AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
@@ -178,17 +187,18 @@ class BemPatrimonial(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["numero_patrimonial"],
-                condition=Q(excluido=False),
+                condition=Q(excluido=False) & ~Q(numero_patrimonial=""),
                 name="uniq_numero_patrimonial_ativo",
             )
         ]
 
-    def clean(self):
+    def _clean_valida_formato_antigo_ou_sem_numeracao(self):
         if not self.pk and self.numero_formato_antigo and self.sem_numeracao:
             raise ValidationError(
                 "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             )
 
+    def _clean_valida_numero_obrigatorio(self):
         if not self.sem_numeracao and not (
             self.numero_patrimonial and str(self.numero_patrimonial).strip()
         ):
@@ -198,68 +208,80 @@ class BemPatrimonial(BaseModel):
                 }
             )
 
+    def _clean_valida_formato_novo(self):
         if (not self.numero_formato_antigo) and (not self.sem_numeracao):
             if not re.fullmatch(NPAT_NUM_REGEX, self.numero_patrimonial or ""):
                 raise ValidationError(
                     {"numero_patrimonial": "Número Patrimonial incompleto"}
                 )
 
-    def save(self, *args, **kwargs):
-        is_create = self._state.adding or (self.pk is None)
-        original = None
-        if not is_create:
-            try:
-                original = type(self).objects.get(pk=self.pk)
-            except type(self).DoesNotExist:
-                original = None
+    def clean(self):
+        self._clean_valida_formato_antigo_ou_sem_numeracao()
+        self._clean_valida_numero_obrigatorio()
+        self._clean_valida_formato_novo()
 
+    def _obter_original_para_auditoria(self):
+        if self._state.adding or (self.pk is None):
+            return None
+        try:
+            return type(self).objects.get(pk=self.pk)
+        except type(self).DoesNotExist:
+            return None
+
+    def _aplicar_sem_numero_auto(self):
+        base_id = self.pk
+        while True:
+            numero_formatado = f"SEM-NUMERO-{base_id}"
+            if (
+                not type(self)
+                .objects.filter(numero_patrimonial=numero_formatado)
+                .exists()
+            ):
+                break
+            base_id += 1
+        self.numero_patrimonial = numero_formatado
+        super(BemPatrimonial, self).save(update_fields=["numero_patrimonial"])
+
+    def _registrar_auditoria_se_alterado(self, original, **kwargs):
+        if not original:
+            return
+        only = kwargs.get("update_fields")
+        changes = dict_changes(
+            original,
+            self,
+            fields=self.AUDIT_TRACK_FIELDS,
+            only=only,
+            ignore=self.AUDIT_IGNORE_FIELDS,
+        )
+        if not changes:
+            return
+        ct = ContentType.objects.get_for_model(type(self))
+        user = get_user()
+        justificativa = getattr(self, "_justificativa", None)
+        HistoricoGeral.objects.bulk_create(
+            [
+                HistoricoGeral(
+                    content_type=ct,
+                    object_id=str(self.pk),
+                    campo=field,
+                    valor_antigo=old,
+                    valor_novo=new,
+                    alterado_por=user,
+                    justificativa=justificativa
+                )
+                for field, (old, new) in changes.items()
+            ]
+        )
+
+    def save(self, *args, **kwargs):
+        original = self._obter_original_para_auditoria()
         gerar_auto = bool(self.sem_numeracao and not self.numero_patrimonial)
 
         super(BemPatrimonial, self).save(*args, **kwargs)
 
         if gerar_auto and not self.numero_patrimonial:
-            base_id = self.pk
-
-            while True:
-                numero_formatado = f"SEM-NUMERO-{base_id}"
-
-                if (
-                    not type(self)
-                    .objects.filter(numero_patrimonial=numero_formatado)
-                    .exists()
-                ):
-                    break
-                base_id += 1
-
-            self.numero_patrimonial = numero_formatado
-            super(BemPatrimonial, self).save(update_fields=["numero_patrimonial"])
-        if not is_create and original:
-            # respeita update_fields (se veio)
-            only = kwargs.get("update_fields")
-            fields = self.AUDIT_TRACK_FIELDS
-            changes = dict_changes(
-                original,
-                self,
-                fields=fields,
-                only=only,
-                ignore=self.AUDIT_IGNORE_FIELDS,
-            )
-            if changes:
-                ct = ContentType.objects.get_for_model(type(self))
-                user = get_user()
-                HistoricoGeral.objects.bulk_create(
-                    [
-                        HistoricoGeral(
-                            content_type=ct,
-                            object_id=str(self.pk),
-                            campo=field,
-                            valor_antigo=old,
-                            valor_novo=new,
-                            alterado_por=user,
-                        )
-                        for field, (old, new) in changes.items()
-                    ]
-                )
+            self._aplicar_sem_numero_auto()
+        self._registrar_auditoria_se_alterado(original, **kwargs)
 
     @property
     def pode_solicitar_movimentacao(self):
@@ -304,7 +326,7 @@ class StatusBemPatrimonial(models.Model):
         blank=False,
     )
     # opcional
-    observacao = models.TextField("Observação", null=True, blank=True)
+    observacao = models.TextField("Observação", blank=True)
     # controle
     atualizado_por = models.ForeignKey(
         Usuario,
@@ -314,7 +336,7 @@ class StatusBemPatrimonial(models.Model):
         blank=True,
     )
     atualizado_em = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
+        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
 
     def save(self, *args, **kwargs):
@@ -404,7 +426,7 @@ class MovimentacaoBemPatrimonial(models.Model):
         null=False,
         blank=False,
     )
-    observacao = models.TextField("Observacao", null=True, blank=True)
+    observacao = models.TextField("Observacao", blank=True)
     # controle
     solicitado_por = models.ForeignKey(
         Usuario,
@@ -440,21 +462,21 @@ class MovimentacaoBemPatrimonial(models.Model):
     )
     criado_em = models.DateTimeField("Criado em", auto_now_add=True)
     atualizado_em = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
+        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
     numero_cimbpm = models.CharField(
         "Número CIMBPM",
         max_length=30,
         unique=True,
-        null=True,
         blank=True,
+        default="",
         db_index=True,
     )
     documento_cimbpm = models.FileField(
         "Documento CIMBPM",
         upload_to="documentos_cimbpm/",
-        null=True,
         blank=True,
+        default="",
         editable=False,
         help_text="PDF gerado automaticamente ao criar movimentação",
     )
@@ -540,21 +562,6 @@ def envia_email_status_reprovado(sender, instance, created, **kwargs):
         envia_email_cadastro_nao_aprovado(instance)
 
 
-# @receiver(post_save, sender=MovimentacaoBemPatrimonial)
-# def bloquear_bem_em_movimentacao(sender, instance, created, **kwargs):
-#     if created:
-#         bem = instance.bem_patrimonial
-#         bem.status = constants.BLOQUEADO
-#         bem.save()
-
-#         StatusBemPatrimonial.objects.create(
-#             bem_patrimonial=bem,
-#             status=constants.BLOQUEADO,
-#             atualizado_por=instance.solicitado_por,
-#             observacao=f"Bem bloqueado para movimentação #{instance.pk}",
-#         )
-
-
 @receiver(post_save, sender=MovimentacaoBensItem)
 def bloquear_bem_quando_item_criado(sender, instance, created, **kwargs):
     if not created:
@@ -572,22 +579,19 @@ def bloquear_bem_quando_item_criado(sender, instance, created, **kwargs):
     bem.status = constants.BLOQUEADO
     bem.save(update_fields=["status"])
 
-    StatusBemPatrimonial.objects.create(
-        bem_patrimonial=bem,
-        status=constants.BLOQUEADO,
-        atualizado_por=movimentacao.solicitado_por,
-        observacao=f"Bem bloqueado para movimentação #{movimentacao.pk}",
-    )
-
 
 @receiver(post_save, sender=MovimentacaoBemPatrimonial)
 def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
     if created:
         emails = []
-        usuarios = Usuario.objects.filter(
-            is_active=True,
-            unidade_administrativa=instance.unidade_administrativa_destino,
-        ).only("email")
+        usuarios = (
+            Usuario.objects.filter(
+                is_active=True,
+                unidades_administrativas=instance.unidade_administrativa_destino,
+            )
+            .distinct()
+            .only("email")
+        )
         for usuario in usuarios:
             if usuario.email:
                 emails.append(usuario.email)
@@ -708,7 +712,9 @@ class BaixaFisicaBemPatrimonial(models.Model):
         blank=True,
     )
 
-    numero_nbbpm = models.CharField(max_length=32, null=True, blank=True, db_index=True)
+    numero_nbbpm = models.CharField(
+        max_length=32, blank=True, default="", db_index=True
+    )
 
     class Meta:
         verbose_name = "Baixa Física de Bem Patrimonial"
@@ -717,23 +723,45 @@ class BaixaFisicaBemPatrimonial(models.Model):
     def __str__(self):
         return f"Baixa Física #{self.pk} - UA: {self.unidade_administrativa_origem}"
 
-    def clean(self):
-        super().clean()
+    def _clean_valida_data_baixa(self):
+        if not self.data_baixa:
+            return
+        data_baixa = (
+            self.data_baixa.date()
+            if hasattr(self.data_baixa, "date")
+            else self.data_baixa
+        )
+        if data_baixa > timezone.localdate():
+            raise ValidationError(
+                {
+                    "data_baixa": "A data da Baixa Física não pode ser maior que a data atual."
+                }
+            )
 
-        if self.data_baixa:
-            if hasattr(self.data_baixa, "date"):
-                data_baixa = self.data_baixa.date()
-            else:
-                data_baixa = self.data_baixa
-
-            hoje = timezone.localdate()
-            if data_baixa > hoje:
+    def _clean_valida_itens_baixa(self, itens):
+        for item in itens:
+            bem = item.bem
+            if bem.unidade_administrativa_id != self.unidade_administrativa_origem_id:
                 raise ValidationError(
-                    {
-                        "data_baixa": "A data da Baixa Física não pode ser maior que a data atual."
-                    }
+                    f"O bem '{bem}' não pertence à Unidade Administrativa selecionada."
+                )
+            if bem.status == constants.BAIXA_FISICA:
+                raise ValidationError(f"O bem '{bem}' já foi baixado.")
+            if BaixaFisicaBensItem.objects.filter(
+                bem=bem,
+                baixa__status__in=[
+                    constants.AGUARDANDO_ENVIO,
+                    constants.SOLICITADA,
+                    constants.ACEITA,
+                ],
+            ).exclude(baixa=self).exists():
+                raise ValidationError(
+                    f"O bem '{bem}' já está em processo de Baixa Física em outro pedido."
                 )
 
+    def clean(self):
+        super().clean()
+        self._clean_valida_data_baixa()
         if not self.numero_processo_baixa:
             raise ValidationError(
                 {
@@ -743,36 +771,9 @@ class BaixaFisicaBemPatrimonial(models.Model):
         if not self.pk:
             return
         itens = list(self.itens.select_related("bem", "bem__unidade_administrativa"))
-
-        if self.pk and not itens:
+        if not itens:
             raise ValidationError("Não é possível manter uma Baixa Física sem itens.")
-
-        for item in itens:
-            bem = item.bem
-
-            if bem.unidade_administrativa_id != self.unidade_administrativa_origem_id:
-                raise ValidationError(
-                    f"O bem '{bem}' não pertence à Unidade Administrativa selecionada."
-                )
-            if bem.status == constants.BAIXA_FISICA:
-                raise ValidationError(f"O bem '{bem}' já foi baixado.")
-
-            existe_em_outra_baixa = (
-                BaixaFisicaBensItem.objects.filter(
-                    bem=bem,
-                    baixa__status__in=[
-                        constants.AGUARDANDO_ENVIO,
-                        constants.SOLICITADA,
-                        constants.ACEITA,
-                    ],
-                )
-                .exclude(baixa=self)
-                .exists()
-            )
-            if existe_em_outra_baixa:
-                raise ValidationError(
-                    f"O bem '{bem}' já está em processo de Baixa Física em outro pedido."
-                )
+        self._clean_valida_itens_baixa(itens)
 
     @transaction.atomic
     def enviar_solicitacao(self):

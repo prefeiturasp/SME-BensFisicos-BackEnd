@@ -150,7 +150,7 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
 
         queryset = self.admin.get_queryset(request)
         unidades_list = list(queryset)
-        
+
         self.assertGreater(len(unidades_list), 0)
         self.assertEqual(unidades_list[0].codigo, "050")
         self.assertEqual(unidades_list[-1].codigo, "200")

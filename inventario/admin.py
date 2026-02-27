@@ -5,7 +5,6 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.contrib.admin import SimpleListFilter
-from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 
 from django import forms
 
@@ -22,12 +21,15 @@ from inventario.utils_conciliacao.conciliacao_automatica import (
     processar_conciliacao_anual_automatica,
 )
 
+from . import constants
 from .models import ParametroConciliacaoAnual, ConciliacaoUA, ItemConciliacao
 from .forms import ConciliacaoUAAdminForm
 
 
 from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
-from . import constants
+
+URL_NAME_CONCILIACAOUA_CHANGE = "admin:inventario_conciliacaoua_change"
+URL_NAME_CONCILIACAOUA_CHANGELIST = "admin:inventario_conciliacaoua_changelist"
 
 
 class AnoVigenciaSelectFilter(SimpleListFilter):
@@ -101,15 +103,14 @@ class ParametroConciliacaoAnualAdminForm(forms.ModelForm):
             cleaned["unidade_orcamentaria"] = uo_user
 
         if user and not usuario_e_super_admin(user):
-            uo_id = (
+            _is_super, _is_gestor, _ua_id, user_uo_id = resolver_ids_escopo(user)
+
+            cleaned_uo_id = (
                 cleaned.get("unidade_orcamentaria").id
                 if cleaned.get("unidade_orcamentaria")
                 else None
             )
-
-            is_super, _is_gestor, _ua_id, uo_id = resolver_ids_escopo(user)
-
-            if not uo_id == uo_id:
+            if cleaned_uo_id != user_uo_id:
                 raise ValidationError(
                     {
                         "unidade_orcamentaria": "Você não tem permissão para usar esta UO."
@@ -160,9 +161,9 @@ class ParametroConciliacaoAnualAdmin(admin.ModelAdmin):
         return qs.none()
 
     def get_form(self, request, obj=None, **kwargs):
-        Form = super().get_form(request, obj, **kwargs)
+        form_class = super().get_form(request, obj, **kwargs)
 
-        class RequestForm(Form):
+        class RequestForm(form_class):
             def __init__(self, *args, **kw):
                 kw["request"] = request
                 super().__init__(*args, **kw)
@@ -519,7 +520,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     total_itens.short_description = "Itens"
 
     def acao_visualizar(self, obj):
-        url = reverse("admin:inventario_conciliacaoua_change", args=[obj.pk])
+        url = reverse(URL_NAME_CONCILIACAOUA_CHANGE, args=[obj.pk])
         return format_html(
             '<a class="button" href="{}" '
             'style="padding: 4px 12px; font-size: 12px; color: white;">Visualizar</a>',
@@ -554,11 +555,11 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         obj = self.get_object(request, pk)
         if not obj:
             messages.error(request, "Conciliação não encontrada.")
-            return redirect("admin:inventario_conciliacaoua_changelist")
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
 
         if not obj.esta_aberto:
             messages.warning(request, "Conciliação já está finalizada.")
-            return redirect("admin:inventario_conciliacaoua_change", obj.pk)
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, obj.pk)
 
         if request.method == "POST":
             try:
@@ -567,7 +568,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             except Exception as e:
                 messages.error(request, f"Erro ao finalizar conciliação: {e}")
 
-        return redirect("admin:inventario_conciliacaoua_change", obj.pk)
+        return redirect(URL_NAME_CONCILIACAOUA_CHANGE, obj.pk)
 
     def registrar_ocorrencia_view(self, request, item_id):
         try:
@@ -576,13 +577,11 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             )
         except ItemConciliacao.DoesNotExist:
             messages.error(request, "Item não encontrado")
-            return redirect("admin:inventario_conciliacaoua_changelist")
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
 
         if not item.conciliacao.esta_aberto:
             messages.error(request, "Conciliação fechada não permite edições")
-            return redirect(
-                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         if not item.permite_registrar_ocorrencia:
             messages.error(
@@ -590,9 +589,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
                 "Este status é definitivo.",
             )
-            return redirect(
-                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         if request.method == "POST":
             situacao = request.POST.get("situacao")
@@ -608,9 +605,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                     usuario=request.user,
                 )
                 messages.success(request, "Ocorrência registrada com sucesso")
-                return redirect(
-                    "admin:inventario_conciliacaoua_change", item.conciliacao.pk
-                )
+                return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
             except ValidationError as e:
                 messages.error(request, str(e))
 
@@ -660,13 +655,11 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             )
         except ItemConciliacao.DoesNotExist:
             messages.error(request, "Item não encontrado")
-            return redirect("admin:inventario_conciliacaoua_changelist")
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
 
         if not item.conciliacao.esta_aberto:
             messages.error(request, "Conciliação fechada não permite edições")
-            return redirect(
-                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         if request.method == "POST":
             try:
@@ -675,9 +668,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             except ValidationError as e:
                 messages.error(request, str(e))
 
-            return redirect(
-                "admin:inventario_conciliacaoua_change", item.conciliacao.pk
-            )
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         context = {
             "item": item,

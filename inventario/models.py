@@ -17,7 +17,7 @@ class ParametroConciliacaoAnual(models.Model):
         related_name="parametros_conciliacao_anual",
         verbose_name="Unidade Orçamentária",
     )
-    
+
     ano_referencia = models.PositiveSmallIntegerField(
         "Ano de Referência",
         help_text="Ano da conciliação anual ao qual este parâmetro se refere (ex.: 2025).",

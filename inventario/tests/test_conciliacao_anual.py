@@ -3,7 +3,6 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
 from usuario.models import Usuario
 from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual

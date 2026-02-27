@@ -1,14 +1,14 @@
 (function () {
   function togglePeriodoFinal() {
-    var tipo = document.getElementById("id_tipo");
-    var rowFim = document.querySelector(".form-row.field-periodo_final");
+    const tipo = document.getElementById("id_tipo");
+    const rowFim = document.querySelector(".form-row.field-periodo_final");
     if (!tipo || !rowFim) return;
 
-    var v = (tipo.value || "").toLowerCase();
+    const v = (tipo.value || "").toLowerCase();
 
     // ajuste se seus values forem diferentes
-    var isAnual = v.includes("anual");
-    var isEventual = v.includes("eventual");
+    const isAnual = v.includes("anual");
+    const isEventual = v.includes("eventual");
 
     if (isAnual) {
       rowFim.style.display = "none";
@@ -20,7 +20,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    var tipo = document.getElementById("id_tipo");
+    const tipo = document.getElementById("id_tipo");
     if (tipo) tipo.addEventListener("change", togglePeriodoFinal);
     togglePeriodoFinal();
   });

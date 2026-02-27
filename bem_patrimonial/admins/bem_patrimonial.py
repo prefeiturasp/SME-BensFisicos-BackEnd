@@ -41,6 +41,9 @@ from dados_comuns.escopo import (
     usuario_e_super_admin,
 )
 
+HTML_END_FORM_CONTAINER = "</div><!-- END form-container -->"
+HTML_END_FORM = "</form>"
+
 
 @admin.action(description="Aprovar bens selecionados")
 def aprovar_bens(_, request, queryset):
@@ -83,7 +86,7 @@ def aprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser aprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -134,7 +137,7 @@ def reprovar_bens(_, request, queryset):
         if count_outros > 0:
             messages.warning(
                 request,
-                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",
+                f"{count_outros} bem(ns) não pôde(ram) ser reprovado(s) pois não estava(m) com status 'Aguardando aprovação'.",  # noqa E501
             )
 
     except Exception as e:
@@ -161,7 +164,7 @@ class HistoricoGeralInline(GenericTabularInline):
         "alterado_por",
         "alterado_em",
     )
-    fields = ("campo", "valor_antigo", "valor_novo", "alterado_por", "alterado_em")
+    fields = ("campo", "valor_antigo", "valor_novo", "justificativa", "alterado_por", "alterado_em")
     ordering = ("-alterado_em",)
     template = "admin/bem_patrimonial/edit_inline/tabular-historico.html"
 
@@ -297,11 +300,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
     def get_list_display(self, request):
-        if (
-            request.user.is_operador_inventario
-            and not request.user.is_gestor_patrimonio
-        ):
-            return ("numero_patrimonial", "nome", "status")
         return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     def get_readonly_fields(self, request, obj=None):
@@ -326,6 +324,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 "modelo",
                 "numero_processo",
                 "foto",
+                "justificativa"
             )
 
         return base + (
@@ -351,9 +350,18 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ("valor_unitario", "marca", "modelo"),
             ("localizacao"),
             "numero_processo",
+            "observacao",
+            "justificativa"
         ]
+
+        if request.user.is_operador_inventario:
+            base = [f for f in base if f != "justificativa"]
+
         if obj:
             base = [f for f in base if f != "cadastro_modo"]
+        else:
+            base = [f for f in base if f != "justificativa"]
+
         return base
 
     autocomplete_fields = ("unidade_administrativa",)
@@ -389,91 +397,136 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
         return True
 
+    def _setup_create_form_ua_field(self, self_inner, request):
+        if "unidade_administrativa" not in self_inner.fields:
+            return
+        self_inner.fields["justificativa"].required = False
+        modo = (getattr(self_inner, "data", None) or {}).get("cadastro_modo") or (
+            getattr(self_inner, "initial", {}) or {}
+        ).get("cadastro_modo")
+        if modo == "multi" and "localizacao" in self_inner.fields:
+            self_inner.fields["localizacao"].required = False
+        fld = self_inner.fields["unidade_administrativa"]
+        fld.required = True
+        qs_ativas = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
+        fld.queryset = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
+        ua_user = getattr(request.user, "unidade_administrativa", None)
+        if ua_user and not usuario_e_super_admin(request.user):
+            fld.initial = ua_user
+            fld.disabled = True
+
+    def _validate_create_form_ua(self, cleaned_data, request):
+        ua_form = cleaned_data.get("unidade_administrativa")
+        if not ua_form:
+            raise ValidationError(
+                {"unidade_administrativa": "Selecione a Unidade Administrativa."}
+            )
+        if ua_form.status != UnidadeAdministrativa.ATIVA:
+            raise ValidationError(
+                {
+                    "unidade_administrativa": "A Unidade Administrativa selecionada está inativa."
+                }
+            )
+        qs_ativas = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
+        qs_permitidas = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
+        if not qs_permitidas.filter(pk=ua_form.pk).exists():
+            raise ValidationError(
+                {
+                    "unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."
+                }
+            )
+        ua_user = getattr(request.user, "unidade_administrativa", None)
+        if ua_user and not ua_user.is_ativa:
+            raise ValidationError(
+                f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
+                f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
+            )
+
+    def _validate_edit_form_ua(self, cleaned, instance, user):
+        if not instance or not instance.pk:
+            return
+        ua_original = instance.unidade_administrativa
+        ua_post = cleaned.get("unidade_administrativa") or ua_original
+        if ua_post != ua_original:
+            raise ValidationError(
+                {
+                    "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
+                }
+            )
+        if not ua_post:
+            raise ValidationError(
+                {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
+            )
+
+        if not user.is_operador_inventario:
+            nome_original = instance.nome
+            nome_post = cleaned.get("nome")
+
+            numero_original = instance.numero_patrimonial
+            numero_post = cleaned.get("numero_patrimonial")
+
+            justificativa = cleaned.get("justificativa")
+
+            nome_alterado = nome_post != nome_original
+            numero_alterado = numero_post != numero_original
+
+            if nome_alterado or numero_alterado:
+                if not justificativa:
+                    raise ValidationError({
+                        "justificativa": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                        "nome": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                        "numero_patrimonial": (
+                            "A justificativa é obrigatória quando o Nome ou "
+                            "o Número Patrimonial forem alterados."
+                        ),
+                    })
+
     def get_form(self, request, obj=None, **kwargs):
-        BaseForm = super().get_form(request, obj, **kwargs)
+        base_form = super().get_form(request, obj, **kwargs)
 
         if obj is None:
-            original_clean = BaseForm.clean
+            original_clean = base_form.clean
+            admin = self
 
-            class CreateForm(BaseForm):
+            class CreateForm(base_form):
                 def __init__(self_inner, *a, **kw):
                     super().__init__(*a, **kw)
-
-                    modo = (getattr(self_inner, "data", None) or {}).get(
-                        "cadastro_modo"
-                    ) or (getattr(self_inner, "initial", {}) or {}).get("cadastro_modo")
-
-                    if modo == "multi" and "localizacao" in self_inner.fields:
-                        self_inner.fields["localizacao"].required = False
-
-                    if "unidade_administrativa" in self_inner.fields:
-                        fld = self_inner.fields["unidade_administrativa"]
-                        fld.required = True
-
-                        ua_user = getattr(request.user, "unidade_administrativa", None)
-
-                        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
-                        fld.queryset = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
-
-                        ua_user = getattr(request.user, "unidade_administrativa", None)
-                        if ua_user and not usuario_e_super_admin(request.user):
-                            fld.initial = ua_user
-                            fld.disabled = True
+                    admin._setup_create_form_ua_field(self_inner, request)
 
                 def clean(self_inner):
                     cleaned_data = original_clean(self_inner)
-
-                    ua_user = getattr(request.user, "unidade_administrativa", None)
-                    ua_form = cleaned_data.get("unidade_administrativa")
-
-                    if not ua_form:
-                        raise ValidationError({"unidade_administrativa": "Selecione a Unidade Administrativa."})
-
-                    if ua_form.status != UnidadeAdministrativa.ATIVA:
-                        raise ValidationError({"unidade_administrativa": "A Unidade Administrativa selecionada está inativa."})
-
-                    qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
-                    qs_permitidas = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
-
-                    if not qs_permitidas.filter(pk=ua_form.pk).exists():
-                        raise ValidationError(
-                            {"unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."}
-                        )
-
-                    ua_user = getattr(request.user, "unidade_administrativa", None)
-                    if ua_user and not ua_user.is_ativa:
-                        raise ValidationError(
-                            f"Não é possível criar bens patrimoniais. Sua unidade administrativa "
-                            f"'{ua_user.nome}' está inativa. Entre em contato com o gestor de patrimônio."
-                        )
+                    admin._validate_create_form_ua(cleaned_data, request)
+                    return cleaned_data
 
             return CreateForm
 
-        class EditForm(BaseForm):
+        admin_ref = self
+
+        class EditForm(base_form):
             def __init__(self_inner, *a, **kw):
                 super().__init__(*a, **kw)
                 if "unidade_administrativa" in self_inner.fields:
                     self_inner.fields["unidade_administrativa"].disabled = True
                     self_inner.fields["unidade_administrativa"].required = True
 
+                if not request.user.is_operador_inventario:
+                    self_inner.fields["justificativa"].required = False
+
             def clean(self_inner):
                 cleaned = super().clean()
-                if self_inner.instance and self_inner.instance.pk:
-                    ua_original = self_inner.instance.unidade_administrativa
-                    ua_post = cleaned.get("unidade_administrativa") or ua_original
-
-                    if ua_post != ua_original:
-                        raise ValidationError(
-                            {
-                                "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
-                            }
-                        )
-                    if not ua_post:
-                        raise ValidationError(
-                            {
-                                "unidade_administrativa": "Unidade Administrativa é obrigatória."
-                            }
-                        )
+                admin_ref._validate_edit_form_ua(
+                    cleaned, getattr(self_inner, "instance", None), request.user
+                )
                 return cleaned
 
         return EditForm
@@ -490,6 +543,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             if not obj.status:
                 obj.status = constants.AGUARDANDO_APROVACAO
         try:
+            obj._justificativa = request.POST.get("justificativa") or None
             super().save_model(request, obj, form, change)
         except IntegrityError as e:
             if "numero_patrimonial" in str(e).lower():
@@ -499,7 +553,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 )
                 raise ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa E501
                     }
                 )
             raise
@@ -606,156 +660,131 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             instance.save()
         formset.save_m2m()
 
+    def _add_view_multi_base_data(self, form):
+        base = {
+            "status": form.cleaned_data.get("status") or constants.AGUARDANDO_APROVACAO,
+            "unidade_administrativa": form.cleaned_data.get("unidade_administrativa"),
+            "nome": form.cleaned_data.get("nome"),
+            "descricao": form.cleaned_data.get("descricao"),
+            "valor_unitario": form.cleaned_data.get("valor_unitario"),
+            "marca": form.cleaned_data.get("marca"),
+            "modelo": form.cleaned_data.get("modelo"),
+            "numero_processo": form.cleaned_data.get("numero_processo"),
+            "foto": form.cleaned_data.get("foto"),
+        }
+        if base["status"] in (None, ""):
+            try:
+                base["status"] = BemPatrimonial._meta.get_field("status").get_default()
+            except Exception:
+                fld = BemPatrimonial._meta.get_field("status")
+                if getattr(fld, "choices", None):
+                    base["status"] = fld.choices[0][0]
+        return base
+
+    def _add_view_multi_parse_payload(self, request):
+        import json
+
+        raw = request.POST.get("multi_payload") or "[]"
+        try:
+            return json.loads(raw)
+        except Exception:
+            return []
+
+    def _add_view_multi_to_bool(self, v):
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        return str(v).strip().lower() in ("1", "true", "on", "yes", "y", "t")
+
+    def _add_view_multi_process_row_validate_save(self, bem, idx):
+        """Valida e salva o bem; retorna (bem, None) ou (None, mensagem_erro)."""
+        try:
+            bem.full_clean()
+            bem.save()
+            return bem, None
+        except ValidationError as ve:
+            err_msgs = (
+                "; ".join(f"{k}: {', '.join(v)}" for k, v in ve.message_dict.items())
+                if hasattr(ve, "message_dict")
+                else str(ve)
+            )
+            return None, f"Linha {idx}: {err_msgs}"
+        except IntegrityError as ie:
+            return None, f"Linha {idx}: {str(ie)}"
+        except Exception as ex:
+            return None, f"Linha {idx}: Erro inesperado: {str(ex)}"
+
+    def _add_view_multi_process_row(self, request, idx, row, base):
+        localizacao = (row.get("localizacao") or "").strip() or None
+        if not localizacao:
+            return None, f"Linha {idx}: Informe a Localização (obrigatória)."
+
+        numero_patrimonial_raw = (row.get("numero_patrimonial") or "").strip()
+        numero_formato_antigo = self._add_view_multi_to_bool(
+            row.get("numero_formato_antigo")
+        )
+        sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
+        numero_patrimonial = None if sem_numeracao else (numero_patrimonial_raw or None)
+        bem = BemPatrimonial(
+            criado_por=request.user,
+            numero_patrimonial=numero_patrimonial,
+            numero_formato_antigo=numero_formato_antigo,
+            sem_numeracao=sem_numeracao,
+            localizacao=localizacao,
+            **base,
+        )
+        return self._add_view_multi_process_row_validate_save(bem, idx)
+
+    def _add_view_multi_process_linhas(self, request, linhas, base):
+        criados, errors = [], []
+        with transaction.atomic():
+            for idx, row in enumerate(linhas, start=1):
+                bem, erro = self._add_view_multi_process_row(request, idx, row, base)
+                if erro:
+                    errors.append(erro)
+                elif bem:
+                    criados.append(bem)
+            if errors:
+                transaction.set_rollback(True)
+        return criados, errors
+
+    def _add_view_handle_multi_post(self, request, form_url, extra_context):
+        post = request.POST.copy()
+        post["cadastro_modo"] = "multi"
+        post["sem_numeracao"] = "on"
+        post["numero_patrimonial"] = ""
+        post["numero_formato_antigo"] = ""
+        form_cls = self.get_form(request)
+        form = form_cls(post, request.FILES)
+        if not form.is_valid():
+            return super().add_view(request, form_url, extra_context)
+        linhas = self._add_view_multi_parse_payload(request)
+        if not linhas:
+            form.add_error(None, "Adicione ao menos uma linha no modo Múltiplos Bens.")
+            return super().add_view(request, form_url, extra_context)
+        base = self._add_view_multi_base_data(form)
+        criados, errors = self._add_view_multi_process_linhas(request, linhas, base)
+        if errors:
+            for e in errors:
+                messages.error(request, e)
+            form.add_error(
+                None,
+                "Não foi possível concluir o cadastro em lote. Corrija as linhas com erro e tente novamente.",
+            )
+            return super().add_view(request, form_url, extra_context)
+        messages.success(request, f"{len(criados)} bens criados com sucesso.")
+        changelist_url = reverse(
+            f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
+        )
+        return HttpResponseRedirect(changelist_url)
+
     def add_view(self, request, form_url="", extra_context=None):
         """
-        Intercepta o POST no modo 'multi':
-        - valida form base (campos comuns) sem esbarrar na regra do numero_patrimonial;
-        - valida payload das linhas;
-        - cria N bens.
+        Intercepta o POST no modo 'multi': valida form base, payload das linhas e cria N bens.
         """
         if request.method == "POST" and request.POST.get("cadastro_modo") == "multi":
-
-            post = request.POST.copy()
-
-            post["cadastro_modo"] = "multi"
-
-            post["sem_numeracao"] = "on"
-            post["numero_patrimonial"] = ""
-            post["numero_formato_antigo"] = ""
-
-            form_cls = self.get_form(request)
-            form = form_cls(post, request.FILES)
-
-            if not form.is_valid():
-
-                return super().add_view(request, form_url, extra_context)
-
-            import json
-
-            raw = request.POST.get("multi_payload") or "[]"
-            try:
-                linhas = json.loads(raw)
-            except Exception:
-                linhas = []
-
-            if not linhas:
-                form.add_error(
-                    None, "Adicione ao menos uma linha no modo Múltiplos Bens."
-                )
-                return super().add_view(request, form_url, extra_context)
-
-            base = {
-                "status": form.cleaned_data.get("status")
-                or constants.AGUARDANDO_APROVACAO,
-                "unidade_administrativa": form.cleaned_data.get(
-                    "unidade_administrativa"
-                ),
-                "nome": form.cleaned_data.get("nome"),
-                "descricao": form.cleaned_data.get("descricao"),
-                "valor_unitario": form.cleaned_data.get("valor_unitario"),
-                "marca": form.cleaned_data.get("marca"),
-                "modelo": form.cleaned_data.get("modelo"),
-                "numero_processo": form.cleaned_data.get("numero_processo"),
-                "foto": form.cleaned_data.get("foto"),
-            }
-
-            if base["status"] in (None, ""):
-                try:
-                    base["status"] = BemPatrimonial._meta.get_field(
-                        "status"
-                    ).get_default()
-                except Exception:
-                    fld = BemPatrimonial._meta.get_field("status")
-                    if getattr(fld, "choices", None):
-                        base["status"] = fld.choices[0][0]
-
-            criados, errors = [], []
-
-            from django.db import transaction, IntegrityError
-            from django.core.exceptions import ValidationError
-
-            with transaction.atomic():
-                for idx, row in enumerate(linhas, start=1):
-
-                    def to_bool(v):
-                        if isinstance(v, bool):
-                            return v
-                        if v is None:
-                            return False
-                        return str(v).strip().lower() in (
-                            "1",
-                            "true",
-                            "on",
-                            "yes",
-                            "y",
-                            "t",
-                        )
-
-                    numero_patrimonial_raw = (
-                        row.get("numero_patrimonial") or ""
-                    ).strip()
-                    numero_formato_antigo = to_bool(row.get("numero_formato_antigo"))
-                    sem_numeracao = to_bool(row.get("sem_numeracao"))
-                    localizacao = (row.get("localizacao") or "").strip() or None
-
-                    if not localizacao:
-                        errors.append(
-                            f"Linha {idx}: Informe a Localização (obrigatória)."
-                        )
-                        continue
-
-                    numero_patrimonial = numero_patrimonial_raw or None
-                    if sem_numeracao:
-                        numero_patrimonial = None
-
-                    bem = BemPatrimonial(
-                        criado_por=request.user,
-                        numero_patrimonial=numero_patrimonial,
-                        numero_formato_antigo=numero_formato_antigo,
-                        sem_numeracao=sem_numeracao,
-                        localizacao=localizacao,
-                        **base,
-                    )
-                    try:
-                        bem.full_clean()
-                        bem.save()
-                        criados.append(bem)
-                    except ValidationError as ve:
-                        err_msgs = (
-                            "; ".join(
-                                [
-                                    f"{k}: {', '.join(v)}"
-                                    for k, v in ve.message_dict.items()
-                                ]
-                            )
-                            if hasattr(ve, "message_dict")
-                            else str(ve)
-                        )
-                        errors.append(f"Linha {idx}: {err_msgs}")
-                    except IntegrityError as ie:
-                        errors.append(f"Linha {idx}: {str(ie)}")
-                    except Exception as ex:
-                        errors.append(f"Linha {idx}: Erro inesperado: {str(ex)}")
-
-                if errors:
-                    transaction.set_rollback(True)
-
-            if errors:
-
-                for e in errors:
-                    messages.error(request, e)
-                form.add_error(
-                    None,
-                    "Não foi possível concluir o cadastro em lote. Corrija as linhas com erro e tente novamente.",
-                )
-                return super().add_view(request, form_url, extra_context)
-
-            messages.success(request, f"{len(criados)} bens criados com sucesso.")
-            changelist_url = reverse(
-                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
-            )
-            return HttpResponseRedirect(changelist_url)
-
+            return self._add_view_handle_multi_post(request, form_url, extra_context)
         return super().add_view(request, form_url, extra_context)
 
     def render_change_form(self, request, context, *args, **kwargs):
@@ -783,13 +812,13 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
         try:
             html = response.rendered_content
-            if "</div><!-- END form-container -->" in html:
+            if HTML_END_FORM_CONTAINER in html:
                 html = html.replace(
-                    "</div><!-- END form-container -->",
-                    anchor + "</div><!-- END form-container -->",
+                    HTML_END_FORM_CONTAINER,
+                    anchor + HTML_END_FORM_CONTAINER,
                 )
-            elif "</form>" in html:
-                html = html.replace("</form>", anchor + "</form>")
+            elif HTML_END_FORM in html:
+                html = html.replace(HTML_END_FORM, anchor + HTML_END_FORM)
             response.content = html.encode(response.charset)
         except Exception:
             pass
@@ -806,11 +835,13 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         user_id = getattr(obj, "audit_last_by_id", None)
         if not user_id:
             return "—"
-        User = get_user_model()
+        user_model = get_user_model()
         try:
-            u = User.objects.only("first_name", "last_name", "username").get(id=user_id)
+            u = user_model.objects.only("first_name", "last_name", "username").get(
+                id=user_id
+            )
             return u.get_full_name() or u.username
-        except User.DoesNotExist:
+        except user_model.DoesNotExist:
             return "—"
 
     def get_inline_instances(self, request, obj=None):
@@ -824,7 +855,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def thumb(self, obj):
         if getattr(obj, "foto", None) and hasattr(obj.foto, "url") and obj.foto.url:
             return format_html(
-                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',
+                '<img src="{}" style="height:48px;width:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;" />',  # noqa E501
                 obj.foto.url,
             )
         return "—"
@@ -841,7 +872,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ):
                 return format_html(
                     '<a href="{}" target="_blank" rel="noopener">'
-                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'
+                    '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'  # noqa E501
                     "</a>",
                     obj.foto.url,
                     obj.foto.url,
