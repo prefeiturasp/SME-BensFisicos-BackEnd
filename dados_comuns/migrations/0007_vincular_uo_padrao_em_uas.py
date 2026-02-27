@@ -6,10 +6,10 @@ NOME_UO_PADRAO = "SECRETARIA MUNICIPAL DE EDUCAÇÃO"
 
 
 def criar_uo_padrao_e_vincular_uas(apps, schema_editor):
-    UnidadeOrcamentaria = apps.get_model("dados_comuns", "UnidadeOrcamentaria")
-    UnidadeAdministrativa = apps.get_model("dados_comuns", "UnidadeAdministrativa")
+    unidade_orcamentaria_model = apps.get_model("dados_comuns", "UnidadeOrcamentaria")
+    unidade_administrativa_model = apps.get_model("dados_comuns", "UnidadeAdministrativa")
 
-    uo, _ = UnidadeOrcamentaria.objects.get_or_create(
+    uo, _ = unidade_orcamentaria_model.objects.get_or_create(
         codigo=CODIGO_UO_PADRAO,
         defaults={
             "nome": NOME_UO_PADRAO,
@@ -17,12 +17,13 @@ def criar_uo_padrao_e_vincular_uas(apps, schema_editor):
         },
     )
 
-    UnidadeAdministrativa.objects.filter(unidade_orcamentaria__isnull=True).update(
+    unidade_administrativa_model.objects.filter(unidade_orcamentaria__isnull=True).update(
         unidade_orcamentaria=uo
     )
 
 
 def reverter(apps, schema_editor):
+    # Nenhuma ação necessária ao reverter: UAs continuam com a UO que tinham.
     pass
 
 

@@ -39,7 +39,6 @@ class GroupSingleSelectWidget(forms.Select):
         return groups
 
 
-# TODO ajusta retorno de usuarios conforme GRUPO
 class CustomUserModelAdmin(UserAdmin):
     model = Usuario
     list_display = (
@@ -271,6 +270,7 @@ class CustomUserModelAdmin(UserAdmin):
             obj is None
             and hasattr(form, "base_fields")
             and "unidade_orcamentaria" in form.base_fields
+            and request.user.unidade_orcamentaria_id
         ):
             initial_uo_id = self._resolver_uo_id_contexto_admin(request)
             if initial_uo_id:

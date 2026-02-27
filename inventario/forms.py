@@ -21,13 +21,12 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
 
         user = getattr(self.request, "user", None)
 
-        if not self.instance.pk:
-            if "tipo" in self.fields:
-                self.fields["tipo"].choices = [
-                    (constants.CONCILIACAO_EVENTUAL, "Eventual"),
-                ]
-                self.fields["tipo"].initial = constants.CONCILIACAO_EVENTUAL
-                self.fields["tipo"].disabled = True
+        if not self.instance.pk and "tipo" in self.fields:
+            self.fields["tipo"].choices = [
+                (constants.CONCILIACAO_EVENTUAL, "Eventual"),
+            ]
+            self.fields["tipo"].initial = constants.CONCILIACAO_EVENTUAL
+            self.fields["tipo"].disabled = True
 
         if "unidade_administrativa" in self.fields:
             self.fields["unidade_administrativa"].required = True
@@ -132,8 +131,7 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
 
             cleaned["periodo_final"] = date(ano_referencia, 12, 31)
 
-        elif tipo == constants.CONCILIACAO_EVENTUAL:
-            if not periodo_final:
-                raise ValidationError({"periodo_final": "Este campo é obrigatório."})
+        elif tipo == constants.CONCILIACAO_EVENTUAL and not periodo_final:
+            raise ValidationError({"periodo_final": "Este campo é obrigatório."})
 
         return cleaned

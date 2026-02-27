@@ -4,6 +4,11 @@ from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
 
+VERBOSE_ATUALIZADO_EM = "Atualizado em"
+APP_LABEL_UA = "dados_comuns.unidadeadministrativa"
+VERBOSE_BEM_PATRIMONIAL = "Bem patrimonial"
+APP_LABEL_BEM = "bem_patrimonial.bempatrimonial"
+
 
 class Migration(migrations.Migration):
 
@@ -11,88 +16,88 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('dados_comuns', '0001_initial'),
+        ("dados_comuns", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='BemPatrimonial',
+            name="BemPatrimonial",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('nome', models.CharField(max_length=255, verbose_name='Nome do bem')),
-                ('data_compra_entrega', models.DateField(verbose_name='Data da compra/entrega')),
-                ('origem', models.CharField(choices=[('repasse_de_verba', 'Repasse de verba'), ('aquisicao_direta', 'Aquisição direta'), ('transferencia', 'Transferência'), ('movimentacao', 'Movimentação')], max_length=30, verbose_name='Origem')),
-                ('marca', models.CharField(max_length=255, verbose_name='Marca')),
-                ('modelo', models.CharField(max_length=255, verbose_name='Modelo')),
-                ('quantidade', models.PositiveIntegerField(verbose_name='Quantidade')),
-                ('descricao', models.TextField(verbose_name='Descrição')),
-                ('valor_unitario', models.DecimalField(decimal_places=2, max_digits=16, verbose_name='Valor unitário')),
-                ('numero_processo', models.PositiveIntegerField(verbose_name='Número do processo de incorporação/transferência')),
-                ('status', models.CharField(choices=[('aguardando_aprovacao', 'Aguardando aprovação'), ('aprovado', 'Aprovado'), ('nao_aprovado', 'Não aprovado')], default='aguardando_aprovacao', max_length=30, verbose_name='Status')),
-                ('autorizacao_no_doc_em', models.DateField(blank=True, null=True, verbose_name='Autorização no DOC em')),
-                ('numero_nibpm', models.PositiveIntegerField(blank=True, null=True, verbose_name='Número NIBPM')),
-                ('numero_cimbpm', models.PositiveIntegerField(blank=True, null=True, verbose_name='Número CIMBPM')),
-                ('numero_patrimonial', models.PositiveIntegerField(blank=True, null=True, verbose_name='Número Patrimonial')),
-                ('localizacao', models.CharField(blank=True, max_length=255, null=True, verbose_name='Localização')),
-                ('numero_serie', models.PositiveIntegerField(blank=True, null=True, verbose_name='Número de série')),
-                ('criado_em', models.DateTimeField(auto_now=True, verbose_name='Criado em')),
-                ('atualizado_em', models.DateTimeField(auto_now=True, null=True, verbose_name='Atualizado em')),
-                ('criado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name='Criado por')),
-                ('unidade_administrativa', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='dados_comuns.unidadeadministrativa')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("nome", models.CharField(max_length=255, verbose_name="Nome do bem")),
+                ("data_compra_entrega", models.DateField(verbose_name="Data da compra/entrega")),
+                ("origem", models.CharField(choices=[("repasse_de_verba", "Repasse de verba"), ("aquisicao_direta", "Aquisição direta"), ("transferencia", "Transferência"), ("movimentacao", "Movimentação")], max_length=30, verbose_name="Origem")),
+                ("marca", models.CharField(max_length=255, verbose_name="Marca")),
+                ("modelo", models.CharField(max_length=255, verbose_name="Modelo")),
+                ("quantidade", models.PositiveIntegerField(verbose_name="Quantidade")),
+                ("descricao", models.TextField(verbose_name="Descrição")),
+                ("valor_unitario", models.DecimalField(decimal_places=2, max_digits=16, verbose_name="Valor unitário")),
+                ("numero_processo", models.PositiveIntegerField(verbose_name="Número do processo de incorporação/transferência")),
+                ("status", models.CharField(choices=[("aguardando_aprovacao", "Aguardando aprovação"), ("aprovado", "Aprovado"), ("nao_aprovado", "Não aprovado")], default="aguardando_aprovacao", max_length=30, verbose_name="Status")),
+                ("autorizacao_no_doc_em", models.DateField(blank=True, null=True, verbose_name="Autorização no DOC em")),
+                ("numero_nibpm", models.PositiveIntegerField(blank=True, null=True, verbose_name="Número NIBPM")),
+                ("numero_cimbpm", models.PositiveIntegerField(blank=True, null=True, verbose_name="Número CIMBPM")),
+                ("numero_patrimonial", models.PositiveIntegerField(blank=True, null=True, verbose_name="Número Patrimonial")),
+                ("localizacao", models.CharField(blank=True, max_length=255, null=True, verbose_name="Localização")),
+                ("numero_serie", models.PositiveIntegerField(blank=True, null=True, verbose_name="Número de série")),
+                ("criado_em", models.DateTimeField(auto_now=True, verbose_name="Criado em")),
+                ("atualizado_em", models.DateTimeField(auto_now=True, null=True, verbose_name=VERBOSE_ATUALIZADO_EM)),
+                ("criado_por", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name="Criado por")),
+                ("unidade_administrativa", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=APP_LABEL_UA)),
             ],
             options={
-                'verbose_name': 'bem patrimonial',
-                'verbose_name_plural': 'bens patrimoniais',
+                "verbose_name": "bem patrimonial",
+                "verbose_name_plural": "bens patrimoniais",
             },
         ),
         migrations.CreateModel(
-            name='UnidadeAdministrativaBemPatrimonial',
+            name="UnidadeAdministrativaBemPatrimonial",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('quantidade', models.PositiveIntegerField(default=1, verbose_name='Quantidade')),
-                ('atualizado_em', models.DateTimeField(auto_now=True, null=True, verbose_name='Atualizado em')),
-                ('bem_patrimonial', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='bem_patrimonial.bempatrimonial', verbose_name='Bem patrimonial')),
-                ('unidade_administrativa', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='dados_comuns.unidadeadministrativa', verbose_name='Unidade administrativa')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("quantidade", models.PositiveIntegerField(default=1, verbose_name="Quantidade")),
+                ("atualizado_em", models.DateTimeField(auto_now=True, null=True, verbose_name=VERBOSE_ATUALIZADO_EM)),
+                ("bem_patrimonial", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=APP_LABEL_BEM, verbose_name=VERBOSE_BEM_PATRIMONIAL)),
+                ("unidade_administrativa", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=APP_LABEL_UA, verbose_name="Unidade administrativa")),
             ],
             options={
-                'verbose_name': 'bem patrimonial por unidade administrativa',
-                'verbose_name_plural': 'bens patrimoniais por unidade administrativa',
+                "verbose_name": "bem patrimonial por unidade administrativa",
+                "verbose_name_plural": "bens patrimoniais por unidade administrativa",
             },
         ),
         migrations.CreateModel(
-            name='StatusBemPatrimonial',
+            name="StatusBemPatrimonial",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('status', models.CharField(choices=[('aguardando_aprovacao', 'Aguardando aprovação'), ('aprovado', 'Aprovado'), ('nao_aprovado', 'Não aprovado')], default='aguardando_aprovacao', max_length=30, verbose_name='Status')),
-                ('observacao', models.TextField(blank=True, null=True, verbose_name='Observação')),
-                ('atualizado_em', models.DateTimeField(auto_now=True, null=True, verbose_name='Atualizado em')),
-                ('atualizado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name='Atualizado por')),
-                ('bem_patrimonial', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='bem_patrimonial.bempatrimonial', verbose_name='Bem patrimonial')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("status", models.CharField(choices=[("aguardando_aprovacao", "Aguardando aprovação"), ("aprovado", "Aprovado"), ("nao_aprovado", "Não aprovado")], default="aguardando_aprovacao", max_length=30, verbose_name="Status")),
+                ("observacao", models.TextField(blank=True, null=True, verbose_name="Observação")),
+                ("atualizado_em", models.DateTimeField(auto_now=True, null=True, verbose_name=VERBOSE_ATUALIZADO_EM)),
+                ("atualizado_por", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name="Atualizado por")),
+                ("bem_patrimonial", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=APP_LABEL_BEM, verbose_name=VERBOSE_BEM_PATRIMONIAL)),
             ],
             options={
-                'verbose_name': 'status do bem patrimonial',
-                'verbose_name_plural': 'histórico status do bem patrimonial',
+                "verbose_name": "status do bem patrimonial",
+                "verbose_name_plural": "histórico status do bem patrimonial",
             },
         ),
         migrations.CreateModel(
-            name='MovimentacaoBemPatrimonial',
+            name="MovimentacaoBemPatrimonial",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('quantidade', models.PositiveIntegerField(default=1, verbose_name='Quantidade')),
-                ('status', models.CharField(choices=[('enviada', 'Enviada'), ('aceita', 'Aceita'), ('rejeitada', 'Rejeitada')], default='enviada', max_length=30, verbose_name='Status')),
-                ('observacao', models.TextField(blank=True, null=True, verbose_name='Observacao')),
-                ('criado_em', models.DateTimeField(auto_now=True, verbose_name='Criado em')),
-                ('atualizado_em', models.DateTimeField(auto_now=True, null=True, verbose_name='Atualizado em')),
-                ('aprovado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='%(class)s_aprovadopor', to=settings.AUTH_USER_MODEL, verbose_name='Aprovado por')),
-                ('bem_patrimonial', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='bem_patrimonial.bempatrimonial', verbose_name='Bem patrimonial')),
-                ('rejeitado_por', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='%(class)s_rejeitadopor', to=settings.AUTH_USER_MODEL, verbose_name='Rejeitado por')),
-                ('solicitado_por', models.ForeignKey(on_delete=django.db.models.deletion.DO_NOTHING, related_name='%(class)s_solicitadopor', to=settings.AUTH_USER_MODEL, verbose_name='Solicitado por')),
-                ('unidade_administrativa_destino', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='%(class)s_destino', to='dados_comuns.unidadeadministrativa', verbose_name='Unidade administrativa destino')),
-                ('unidade_administrativa_origem', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='%(class)s_origem', to='dados_comuns.unidadeadministrativa', verbose_name='Unidade administrativa origem')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("quantidade", models.PositiveIntegerField(default=1, verbose_name="Quantidade")),
+                ("status", models.CharField(choices=[("enviada", "Enviada"), ("aceita", "Aceita"), ("rejeitada", "Rejeitada")], default="enviada", max_length=30, verbose_name="Status")),
+                ("observacao", models.TextField(blank=True, null=True, verbose_name="Observacao")),
+                ("criado_em", models.DateTimeField(auto_now=True, verbose_name="Criado em")),
+                ("atualizado_em", models.DateTimeField(auto_now=True, null=True, verbose_name=VERBOSE_ATUALIZADO_EM)),
+                ("aprovado_por", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="%(class)s_aprovadopor", to=settings.AUTH_USER_MODEL, verbose_name="Aprovado por")),
+                ("bem_patrimonial", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to=APP_LABEL_BEM, verbose_name=VERBOSE_BEM_PATRIMONIAL)),
+                ("rejeitado_por", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="%(class)s_rejeitadopor", to=settings.AUTH_USER_MODEL, verbose_name="Rejeitado por")),
+                ("solicitado_por", models.ForeignKey(on_delete=django.db.models.deletion.DO_NOTHING, related_name="%(class)s_solicitadopor", to=settings.AUTH_USER_MODEL, verbose_name="Solicitado por")),
+                ("unidade_administrativa_destino", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="%(class)s_destino", to=APP_LABEL_UA, verbose_name="Unidade administrativa destino")),
+                ("unidade_administrativa_origem", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="%(class)s_origem", to=APP_LABEL_UA, verbose_name="Unidade administrativa origem")),
             ],
             options={
-                'verbose_name': 'movimentação de bem patrimonial',
-                'verbose_name_plural': 'movimentações de bem patrimonial',
+                "verbose_name": "movimentação de bem patrimonial",
+                "verbose_name_plural": "movimentações de bem patrimonial",
             },
         ),
     ]

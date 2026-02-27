@@ -115,13 +115,13 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         request = self.factory.post("/admin/")
         request.user = self.operador_ua1
 
-        FormClass = self.admin.get_form(request, obj=self.bem_ua1)
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
 
         form_data = {
             "localizacao": "Sala 202 - ALTERADA",
         }
 
-        form = FormClass(data=form_data, instance=self.bem_ua1)
+        form = form_class(data=form_data, instance=self.bem_ua1)
 
         is_valid = form.is_valid()
         if not is_valid:
@@ -136,13 +136,13 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         request = self.factory.post("/admin/")
         request.user = self.operador_ua1
 
-        FormClass = self.admin.get_form(request, obj=self.bem_ua1)
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
 
         form_data = {
             "localizacao": "Sala 999",
         }
 
-        form = FormClass(data=form_data, instance=self.bem_ua1)
+        form = form_class(data=form_data, instance=self.bem_ua1)
 
         self.assertNotIn("nome", form.fields)
         self.assertNotIn("valor_unitario", form.fields)
@@ -156,7 +156,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         request = self.factory.post("/admin/")
         request.user = self.gestor
 
-        FormClass = self.admin.get_form(request, obj=self.bem_ua1)
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
 
         form_data = {
             "nome": "Notebook HP",
@@ -172,7 +172,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             "sem_numeracao": False,
         }
 
-        form = FormClass(data=form_data, instance=self.bem_ua1)
+        form = form_class(data=form_data, instance=self.bem_ua1)
 
         is_valid = form.is_valid()
         if not is_valid:

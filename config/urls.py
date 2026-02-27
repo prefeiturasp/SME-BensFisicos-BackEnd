@@ -40,6 +40,8 @@ def redirect_admin_password(request, user_id: int):
 urlpatterns = [
     path("", AdminLoginView.as_view(), name="login"),
     path("admin/login/", AdminLoginView.as_view(), name="admin_login"),
+
+    path("api/bens/", include("bem_patrimonial.urls")),
     # API de Autenticação
     path("api/auth/", include(auth_api_urls)),
     # Swagger/OpenAPI Documentação

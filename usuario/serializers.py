@@ -5,6 +5,8 @@ from usuario.models import Usuario
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.escopo import obter_unidade_orcamentaria_id_do_usuario
 
+MSG_SENHAS_NAO_CONFEREM = "As senhas não conferem."
+
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
@@ -54,7 +56,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
 
         attrs["user"] = user
@@ -88,7 +90,7 @@ class PasswordChangeSerializer(serializers.Serializer):
     def validate(self, attrs):
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
         return attrs
 
@@ -117,7 +119,7 @@ class FirstAccessPasswordChangeSerializer(serializers.Serializer):
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
             raise serializers.ValidationError(
-                {"new_password_confirm": "As senhas não conferem."}
+                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
             )
 
         return attrs

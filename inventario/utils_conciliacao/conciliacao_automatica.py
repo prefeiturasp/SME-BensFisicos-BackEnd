@@ -41,20 +41,63 @@ def unidade_possui_bens(ua):
     return ua.bems_patrimonial.exists()
 
 
-def processar_conciliacao_anual_automatica(usuario):
+def _obter_unidades_para_conciliacao(usuario):
     if usuario.is_gestor_patrimonio:
         ua_usuario = getattr(usuario, "unidade_administrativa", None)
         if ua_usuario:
-            unidades = [ua_usuario]
-        else:
-            unidades = UnidadeAdministrativa.objects.filter(
-                status=UnidadeAdministrativa.ATIVA
-            )
-    else:
-        ua = getattr(usuario, "unidade_administrativa", None)
-        if not ua:
-            return
-        unidades = [ua]
+            return [ua_usuario]
+        return list(
+            UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+        )
+    ua = getattr(usuario, "unidade_administrativa", None)
+    if not ua:
+        return None
+    return [ua]
+
+
+def _obter_inicio_fim_periodo(uo_id, ano_referencia, ano_corrente):
+    parametro = ParametroConciliacaoAnual.objects.filter(
+        unidade_orcamentaria_id=uo_id,
+        ano_referencia=ano_referencia,
+        ativo=True,
+    ).first()
+    if parametro:
+        return parametro.periodo_inicial, parametro.periodo_final
+    return date(ano_corrente, 1, 1), date(ano_corrente, 3, 31)
+
+
+def _processar_ua_no_periodo(ua, hoje, inicio, fim, ano_referencia):
+    anual_existente = ConciliacaoUA.objects.filter(
+        unidade_administrativa=ua,
+        tipo=constants.CONCILIACAO_ANUAL,
+        periodo_final=date(ano_referencia, 12, 31),
+    ).first()
+
+    eventual_aberta = ConciliacaoUA.objects.filter(
+        unidade_administrativa=ua,
+        tipo=constants.CONCILIACAO_EVENTUAL,
+        status=constants.CONCILIACAO_EM_ABERTO,
+    ).first()
+
+    if inicio <= hoje <= fim:
+        if eventual_aberta and not anual_existente:
+            fechar_pelo_sistema(eventual_aberta)
+        if not anual_existente:
+            criar_conciliacao_anual(ua, ano_referencia)
+    elif hoje > fim:
+        anual_aberta = ConciliacaoUA.objects.filter(
+            unidade_administrativa=ua,
+            tipo=constants.CONCILIACAO_ANUAL,
+            status=constants.CONCILIACAO_EM_ABERTO,
+        ).first()
+        if anual_aberta:
+            fechar_pelo_sistema(anual_aberta)
+
+
+def processar_conciliacao_anual_automatica(usuario):
+    unidades = _obter_unidades_para_conciliacao(usuario)
+    if not unidades:
+        return
 
     hoje = timezone.localdate()
     ano_corrente = hoje.year
@@ -66,45 +109,6 @@ def processar_conciliacao_anual_automatica(usuario):
         por_uo[uo_id].append(ua)
 
     for uo_id, uas in por_uo.items():
-
-        parametro = ParametroConciliacaoAnual.objects.filter(
-            unidade_orcamentaria_id=uo_id,
-            ano_referencia=ano_referencia,
-            ativo=True,
-        ).first()
-
-        if parametro:
-            inicio = parametro.periodo_inicial
-            fim = parametro.periodo_final
-        else:
-            inicio = date(ano_corrente, 1, 1)
-            fim = date(ano_corrente, 3, 31)
-
+        inicio, fim = _obter_inicio_fim_periodo(uo_id, ano_referencia, ano_corrente)
         for ua in uas:
-            anual_existente = ConciliacaoUA.objects.filter(
-                unidade_administrativa=ua,
-                tipo=constants.CONCILIACAO_ANUAL,
-                periodo_final=date(ano_referencia, 12, 31),
-            ).first()
-
-            eventual_aberta = ConciliacaoUA.objects.filter(
-                unidade_administrativa=ua,
-                tipo=constants.CONCILIACAO_EVENTUAL,
-                status=constants.CONCILIACAO_EM_ABERTO,
-            ).first()
-
-            if inicio <= hoje <= fim:
-                if eventual_aberta and not anual_existente:
-                    fechar_pelo_sistema(eventual_aberta)
-
-                if not anual_existente:
-                    criar_conciliacao_anual(ua, ano_referencia)
-
-            elif hoje > fim:
-                anual_aberta = ConciliacaoUA.objects.filter(
-                    unidade_administrativa=ua,
-                    tipo=constants.CONCILIACAO_ANUAL,
-                    status=constants.CONCILIACAO_EM_ABERTO,
-                ).first()
-                if anual_aberta:
-                    fechar_pelo_sistema(anual_aberta)
+            _processar_ua_no_periodo(ua, hoje, inicio, fim, ano_referencia)

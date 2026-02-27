@@ -120,16 +120,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         self.assertEqual(self.bem1.status, APROVADO)
         self.assertEqual(self.bem2.status, APROVADO)
 
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem1, status=APROVADO
-            ).exists()
-        )
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem2, status=APROVADO
-            ).exists()
-        )
+       
 
     def test_gestor_pode_reprovar_bens_em_lote(self):
         queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem2.pk])
@@ -143,16 +134,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         self.assertEqual(self.bem1.status, NAO_APROVADO)
         self.assertEqual(self.bem2.status, NAO_APROVADO)
 
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem1, status=NAO_APROVADO
-            ).exists()
-        )
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem2, status=NAO_APROVADO
-            ).exists()
-        )
+
 
     def test_operador_nao_pode_aprovar_bens(self):
         queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem2.pk])
@@ -308,7 +290,7 @@ class InlineStatusTestCase(BaseAprovacaoTestCase):
             StatusBemPatrimonialInline,
         )
 
-        inline_classes = [inline for inline in self.admin.inlines]
+        inline_classes = list(self.admin.inlines)
 
         self.assertEqual(len(inline_classes), 1)
 

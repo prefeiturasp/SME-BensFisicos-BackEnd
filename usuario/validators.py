@@ -6,7 +6,7 @@ from django.utils.translation import gettext as _
 
 class PasswordComplexityValidator:
 
-    def validate(self, password, user=None):
+    def validate(self, password, _user=None):
         errors = []
 
         if not re.search(r"[a-zA-Z]", password):

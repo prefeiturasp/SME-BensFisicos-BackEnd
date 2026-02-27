@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 import os
 import environ
 from datetime import timedelta
+import sys
+
+TESTING = "test" in sys.argv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = environ.Path(__file__) - 3
@@ -265,6 +268,8 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": "dados_comuns.libs.pagination.SafePagination",
+    "PAGE_SIZE": 30,
 }
 
 # Simple JWT Settings
@@ -307,12 +312,21 @@ LOGGING = {
     },
     "handlers": {
         "console": {
-            "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         }
     },
-    "root": {"level": "INFO", "handlers": ["console"]},
+    "root": {
+        "level": "ERROR" if TESTING else "INFO",
+        "handlers": ["console"],
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR" if TESTING else "WARNING",
+            "propagate": False,
+        }
+    },
 }
 
 
