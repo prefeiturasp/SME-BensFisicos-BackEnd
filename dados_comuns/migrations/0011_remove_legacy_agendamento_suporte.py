@@ -4,7 +4,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dados_comuns", "0009_unidadeorcamentaria_sigla_and_more"),
+        ("dados_comuns", "0010_historicogeral_justificativa_and_more"),
     ]
 
     operations = [

@@ -182,7 +182,7 @@ class BemPatrimonial(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["numero_patrimonial"],
-                condition=Q(excluido=False),
+                condition=Q(excluido=False) & ~Q(numero_patrimonial=""),
                 name="uniq_numero_patrimonial_ativo",
             )
         ]
