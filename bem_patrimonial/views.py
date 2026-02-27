@@ -171,13 +171,16 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         return obj
 
-    def perform_create(self, serializer):
+    def _save_with_audit(self, serializer):
+        """Salva o serializer com contexto de auditoria (usado em create e update)."""
         with audit_as(self.request.user):
             serializer.save()
 
+    def perform_create(self, serializer):
+        self._save_with_audit(serializer)
+
     def perform_update(self, serializer):
-        with audit_as(self.request.user):
-            serializer.save()
+        self._save_with_audit(serializer)
 
     def perform_destroy(self, instance):
         with audit_as(self.request.user):

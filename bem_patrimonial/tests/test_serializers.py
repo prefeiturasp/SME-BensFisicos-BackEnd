@@ -12,8 +12,8 @@ from dados_comuns.tests.factories import criar_ua, criar_uo
 
 class BemPatrimonialSerializerTest(TestCase):
     def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_superuser(
+        user_model = get_user_model()
+        self.user = user_model.objects.create_superuser(
             username="admin",
             email="admin@example.com",
             password="admin123",
@@ -34,20 +34,20 @@ class BemPatrimonialSerializerTest(TestCase):
 
     def _mk_bem(self, **kwargs):
         count = BemPatrimonial.objects.count() + 1
-        data = dict(
-            nome=f"Item {count}",
-            numero_patrimonial=f"000.00000000{count:02d}-0",
-            descricao="Desc",
-            valor_unitario=1.00,
-            marca="M",
-            modelo="X",
-            numero_processo="PROC-1",
-            numero_formato_antigo=False,
-            sem_numeracao=False,
-            criado_por=self.user,
-            unidade_administrativa=self.ua,
-            status=constants.AGUARDANDO_APROVACAO,
-        )
+        data = {
+            "nome": f"Item {count}",
+            "numero_patrimonial": f"000.00000000{count:02d}-0",
+            "descricao": "Desc",
+            "valor_unitario": 1.00,
+            "marca": "M",
+            "modelo": "X",
+            "numero_processo": "PROC-1",
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+            "criado_por": self.user,
+            "unidade_administrativa": self.ua,
+            "status": constants.AGUARDANDO_APROVACAO,
+        }
         data.update(kwargs)
         return BemPatrimonial.objects.create(**data)
 

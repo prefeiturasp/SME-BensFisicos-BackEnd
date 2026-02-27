@@ -246,6 +246,85 @@ class UserProfileSerializer(serializers.ModelSerializer):
         }
 
 
+def _validate_ua_selecionada(ua_id, uo_id):
+    """Resolve e valida UA quando unidade_administrativa_id é informado. Retorna (ua, uo_id)."""
+    try:
+        ua = UnidadeAdministrativa.objects.select_related(
+            "unidade_orcamentaria"
+        ).get(id=ua_id)
+    except UnidadeAdministrativa.DoesNotExist:
+        raise serializers.ValidationError(
+            {"unidade_administrativa_id": "Unidade Administrativa invalida."}
+        )
+    if ua.status != UnidadeAdministrativa.ATIVA:
+        raise serializers.ValidationError(
+            {"unidade_administrativa_id": "Unidade Administrativa inativa."}
+        )
+    if uo_id is not None and ua.unidade_orcamentaria_id != uo_id:
+        raise serializers.ValidationError(
+            {
+                "unidade_orcamentaria_id": "Unidade Orcamentaria nao corresponde a Unidade Administrativa."
+            }
+        )
+    return ua, ua.unidade_orcamentaria.id
+
+
+def _validate_uo_sem_ua(user, uo_id):
+    """Valida e resolve uo_id quando nenhuma UA é selecionada."""
+    if user.is_operador_inventario and not user.is_superuser:
+        raise serializers.ValidationError(
+            "Operador nao pode selecionar Unidade Orcamentaria."
+        )
+    if uo_id is None:
+        uo_id = obter_unidade_orcamentaria_id_do_usuario(user)
+    if not uo_id:
+        raise serializers.ValidationError(
+            {"unidade_orcamentaria_id": "Unidade Orcamentaria obrigatoria."}
+        )
+    return uo_id
+
+
+def _validate_permissoes_uo_ua(user, uo_id, ua):
+    """Valida permissões de UO/UA para não-superusuários."""
+    uo_usuario_id = obter_unidade_orcamentaria_id_do_usuario(user)
+    if uo_usuario_id and uo_id != uo_usuario_id:
+        raise serializers.ValidationError(
+            "Usuario nao pode selecionar Unidade Orcamentaria diferente."
+        )
+    if (
+        user.is_operador_inventario
+        and ua
+        and not user.unidades_administrativas.filter(id=ua.id).exists()
+    ):
+        raise serializers.ValidationError(
+            "Operador so pode selecionar UAs atribuidas a ele."
+        )
+    if (
+        user.is_gestor_patrimonio
+        and ua
+        and uo_usuario_id
+        and ua.unidade_orcamentaria_id != uo_usuario_id
+    ):
+        raise serializers.ValidationError(
+            "Gestor so pode selecionar UA da propria Unidade Orcamentaria."
+        )
+
+
+def _resolve_uo(uo_id):
+    """Obtém UnidadeOrcamentaria por id e valida se está ativa."""
+    try:
+        uo = UnidadeOrcamentaria.objects.get(id=uo_id)
+    except UnidadeOrcamentaria.DoesNotExist:
+        raise serializers.ValidationError(
+            {"unidade_orcamentaria_id": "Unidade Orcamentaria invalida."}
+        )
+    if not uo.ativa:
+        raise serializers.ValidationError(
+            {"unidade_orcamentaria_id": "Unidade Orcamentaria inativa."}
+        )
+    return uo
+
+
 class SelecionarUnidadeAdministrativaSerializer(serializers.Serializer):
     unidade_administrativa_id = serializers.IntegerField(allow_null=True, required=True)
     unidade_orcamentaria_id = serializers.IntegerField(allow_null=True, required=False)
@@ -259,82 +338,20 @@ class SelecionarUnidadeAdministrativaSerializer(serializers.Serializer):
 
         ua_id = attrs.get("unidade_administrativa_id")
         uo_id = attrs.get("unidade_orcamentaria_id")
-
         ua = None
         uo = None
 
         if ua_id is not None:
-            try:
-                ua = UnidadeAdministrativa.objects.select_related(
-                    "unidade_orcamentaria"
-                ).get(id=ua_id)
-            except UnidadeAdministrativa.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"unidade_administrativa_id": "Unidade Administrativa invalida."}
-                )
-            if ua.status != UnidadeAdministrativa.ATIVA:
-                raise serializers.ValidationError(
-                    {"unidade_administrativa_id": "Unidade Administrativa inativa."}
-                )
-            if uo_id is not None and ua.unidade_orcamentaria_id != uo_id:
-                raise serializers.ValidationError(
-                    {
-                        "unidade_orcamentaria_id": "Unidade Orcamentaria nao corresponde a Unidade Administrativa."
-                    }
-                )
+            ua, uo_id = _validate_ua_selecionada(ua_id, uo_id)
             uo = ua.unidade_orcamentaria
-            uo_id = uo.id
         else:
-            if user.is_operador_inventario and not user.is_superuser:
-                raise serializers.ValidationError(
-                    "Operador nao pode selecionar Unidade Orcamentaria."
-                )
-
-            if uo_id is None:
-                uo_id = obter_unidade_orcamentaria_id_do_usuario(user)
-
-            if not uo_id:
-                raise serializers.ValidationError(
-                    {"unidade_orcamentaria_id": "Unidade Orcamentaria obrigatoria."}
-                )
+            uo_id = _validate_uo_sem_ua(user, uo_id)
 
         if not user.is_superuser:
-            uo_usuario_id = obter_unidade_orcamentaria_id_do_usuario(user)
-            if uo_usuario_id and uo_id != uo_usuario_id:
-                raise serializers.ValidationError(
-                    "Usuario nao pode selecionar Unidade Orcamentaria diferente."
-                )
-
-            if (
-                user.is_operador_inventario
-                and ua
-                and not user.unidades_administrativas.filter(id=ua.id).exists()
-            ):
-                raise serializers.ValidationError(
-                    "Operador so pode selecionar UAs atribuidas a ele."
-                )
-
-            if (
-                user.is_gestor_patrimonio
-                and ua
-                and uo_usuario_id
-                and ua.unidade_orcamentaria_id != uo_usuario_id
-            ):
-                raise serializers.ValidationError(
-                    "Gestor so pode selecionar UA da propria Unidade Orcamentaria."
-                )
+            _validate_permissoes_uo_ua(user, uo_id, ua)
 
         if uo is None:
-            try:
-                uo = UnidadeOrcamentaria.objects.get(id=uo_id)
-            except UnidadeOrcamentaria.DoesNotExist:
-                raise serializers.ValidationError(
-                    {"unidade_orcamentaria_id": "Unidade Orcamentaria invalida."}
-                )
-        if not uo.ativa:
-            raise serializers.ValidationError(
-                {"unidade_orcamentaria_id": "Unidade Orcamentaria inativa."}
-            )
+            uo = _resolve_uo(uo_id)
 
         attrs["ua_obj"] = ua
         attrs["uo_obj"] = uo

@@ -2,12 +2,13 @@ from django.db import migrations
 
 
 def populate_m2m(apps, schema_editor):
-    Usuario = apps.get_model("usuario", "Usuario")
-    for user in Usuario.objects.filter(unidade_administrativa__isnull=False):
+    usuario_model = apps.get_model("usuario", "Usuario")
+    for user in usuario_model.objects.filter(unidade_administrativa__isnull=False):
         user.unidades_administrativas.add(user.unidade_administrativa)
 
 
 def reverse_populate(apps, schema_editor):
+    # Reversão intencionalmente vazia: desfazer o populate exigiria limpar M2M por usuário.
     pass
 
 

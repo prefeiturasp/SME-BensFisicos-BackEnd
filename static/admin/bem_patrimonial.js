@@ -300,10 +300,10 @@
 
   function showError(containerId, msgs){
     const box = id(containerId);
-    if (!box) return;
     if (!msgs || !msgs.length){
-      box.classList.add('hide'); box.innerHTML = ''; return;
+      box?.classList.add('hide'); box?.innerHTML = ''; return;
     }
+    if (!box) return;
     box.classList.remove('hide');
     box.innerHTML = msgs.map(function(m){ return '<div>'+m+'</div>'; }).join('');
     box.scrollIntoView({behavior:'smooth', block:'center'});

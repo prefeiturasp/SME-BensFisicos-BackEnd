@@ -99,6 +99,19 @@
 
             // --- Filtro no autocomplete dos bens ---
             const oldAjax = $.ajax;
+            function collectBemIds() {
+                const ids = [];
+                $('select[name^="itens-"][name$="-bem"]').each(function() {
+                    const prefix = this.name.replace('-bem', '');
+                    const deleteFlag = $('input[name="' + prefix + '-DELETE"]').prop('checked');
+                    if (!deleteFlag) {
+                        const val = $(this).val();
+                        if (val) ids.push(val);
+                    }
+                });
+                return ids;
+            }
+
             $.ajax = function wrapAjaxWithUaFilter(options) {
                 const isStringUrl = typeof options === 'string';
                 const opts = isStringUrl ? options : { ...options };
@@ -114,16 +127,7 @@
                 }
 
                 const params = ['ua_origem=' + encodeURIComponent(uaVal)];
-                const ids = [];
-                $('select[name^="itens-"][name$="-bem"]').each(function() {
-                    const prefix = this.name.replace('-bem', '');
-                    const deleteFlag = $('input[name="' + prefix + '-DELETE"]').prop('checked');
-                    if (!deleteFlag) {
-                        const val = $(this).val();
-                        if (val) ids.push(val);
-                    }
-                });
-
+                const ids = collectBemIds();
                 if (ids.length > 0) {
                     params.push('exclude_bens=' + encodeURIComponent(ids.join(',')));
                 }
