@@ -49,7 +49,7 @@
     const np   = id('id_numero_patrimonial');
     const ant  = id('id_numero_formato_antigo');
     const sem  = id('id_sem_numeracao');
-    const isEdit = !id('id_cadastro_modo');
+    const isEdit = qsa('input[name="cadastro_modo"]').length === 0;
     if (!np || !ant) return;
 
     function setReadOnly(on){
@@ -301,7 +301,11 @@
   function showError(containerId, msgs){
     const box = id(containerId);
     if (!msgs || !msgs.length){
-      box?.classList.add('hide'); box?.innerHTML = ''; return;
+      if (box){
+        box.classList.add('hide');
+        box.innerHTML = '';
+      }
+      return;
     }
     if (!box) return;
     box.classList.remove('hide');
