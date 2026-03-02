@@ -50,7 +50,7 @@ class BemPatrimonialPermission(BasePermission):
             __import__("bem_patrimonial.constants", fromlist=["BAIXA_FISICA"]),
             "BAIXA_FISICA",
         ):
-            if getattr(view, "action", None) in ("retrieve", "list"):
+            if getattr(view, "action", None) in ("retrieve", "list", "historico"):
                 return True
             return False
 

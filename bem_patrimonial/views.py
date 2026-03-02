@@ -108,7 +108,14 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         "unidade_administrativa__nome",
     ]
 
-    ordering_fields = ["criado_em", "atualizado_em", "nome", "numero_patrimonial"]
+    ordering_fields = [
+        "criado_em",
+        "atualizado_em",
+        "nome",
+        "numero_patrimonial",
+        "unidade_administrativa__nome",
+        "status",
+    ]
     ordering = ["-criado_em"]
 
     def get_serializer_class(self):
