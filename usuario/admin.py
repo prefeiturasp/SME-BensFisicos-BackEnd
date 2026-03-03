@@ -336,55 +336,57 @@ class CustomUserModelAdmin(UserAdmin):
             kwargs["queryset"] = qs.filter(unidade_orcamentaria_id=uo_id)
 
     def get_form(self, request, obj=None, **kwargs):
-
         request._obj_usuario_admin = obj
-
         form = super().get_form(request, obj, **kwargs)
+        self._configure_groups_field(form, obj)
+        self._configure_uo_field(form, request, obj)
+        self._wrap_form_clean_with_validation(form, request)
+        return form
 
-        if hasattr(form, "base_fields") and "groups" in form.base_fields:
-            form.base_fields["groups"] = forms.ModelMultipleChoiceField(
-                queryset=self._get_grupo_queryset(),
-                required=False,
-                label="Grupo",
-                widget=GroupSingleSelectWidget,
+    def _configure_groups_field(self, form, obj):
+        if not (hasattr(form, "base_fields") and "groups" in form.base_fields):
+            return
+        form.base_fields["groups"] = forms.ModelMultipleChoiceField(
+            queryset=self._get_grupo_queryset(),
+            required=False,
+            label="Grupo",
+            widget=GroupSingleSelectWidget,
+        )
+        if obj and obj.pk:
+            grupo_inicial = self._grupo_preferencial(obj)
+            form.base_fields["groups"].initial = (
+                [grupo_inicial.pk] if grupo_inicial else []
             )
-            if obj and obj.pk:
-                grupo_inicial = self._grupo_preferencial(obj)
-                form.base_fields["groups"].initial = (
-                    [grupo_inicial.pk] if grupo_inicial else []
-                )
-            else:
-                form.base_fields["groups"].initial = []
-        if hasattr(form, "base_fields") and "unidade_orcamentaria" in form.base_fields:
-            form.base_fields["unidade_orcamentaria"].required = True
+        else:
+            form.base_fields["groups"].initial = []
 
-        if (
-            obj is None
-            and hasattr(form, "base_fields")
-            and "unidade_orcamentaria" in form.base_fields
-            and request.user.unidade_orcamentaria_id
-        ):
+    def _configure_uo_field(self, form, request, obj):
+        if not (hasattr(form, "base_fields") and "unidade_orcamentaria" in form.base_fields):
+            return
+        form.base_fields["unidade_orcamentaria"].required = True
+        if obj is None and request.user.unidade_orcamentaria_id:
             initial_uo_id = self._resolver_uo_id_contexto_admin(request)
             if initial_uo_id:
                 form.base_fields["unidade_orcamentaria"].initial = initial_uo_id
-
-        if not request.user.is_superuser and "unidade_orcamentaria" in form.base_fields:
+        if not request.user.is_superuser:
             form.base_fields["unidade_orcamentaria"].disabled = True
             if request.user.unidade_orcamentaria_id:
                 form.base_fields["unidade_orcamentaria"].initial = (
                     request.user.unidade_orcamentaria_id
                 )
 
+    def _wrap_form_clean_with_validation(self, form, request):
         original_clean = form.clean
         request_ref = request
 
         def custom_clean(form_self):
             cleaned_data = original_clean(form_self)
-            _apply_usuario_clean_validation(form_ref=request_ref, admin=self, cleaned_data=cleaned_data)
+            _apply_usuario_clean_validation(
+                form_ref=request_ref, admin=self, cleaned_data=cleaned_data
+            )
             return cleaned_data
 
         form.clean = custom_clean
-        return form
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
