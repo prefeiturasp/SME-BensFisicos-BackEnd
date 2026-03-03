@@ -126,9 +126,10 @@
                 }
                 const params = ['ua_origem=' + encodeURIComponent(uaVal)];
                 const ids = [];
-                $('select[name^="itens-"][name$="-bem"]').each(function() {
-                    appendBemIdIfNotDeleted(ids, this);
-                });
+                const selects = document.querySelectorAll('select[name^="itens-"][name$="-bem"]');
+                for (const selectEl of selects) {
+                    appendBemIdIfNotDeleted(ids, selectEl);
+                }
                 if (ids.length > 0) {
                     params.push('exclude_bens=' + encodeURIComponent(ids.join(',')));
                 }
