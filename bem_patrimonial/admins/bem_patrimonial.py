@@ -161,6 +161,7 @@ class HistoricoGeralInline(GenericTabularInline):
         "campo",
         "valor_antigo",
         "valor_novo",
+        "justificativa",
         "alterado_por",
         "alterado_em",
     )
@@ -474,22 +475,18 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             nome_alterado = nome_post != nome_original
             numero_alterado = numero_post != numero_original
 
-            if nome_alterado or numero_alterado:
-                if not justificativa:
-                    raise ValidationError({
-                        "justificativa": (
-                            "A justificativa é obrigatória quando o Nome ou "
-                            "o Número Patrimonial forem alterados."
-                        ),
-                        "nome": (
-                            "A justificativa é obrigatória quando o Nome ou "
-                            "o Número Patrimonial forem alterados."
-                        ),
-                        "numero_patrimonial": (
-                            "A justificativa é obrigatória quando o Nome ou "
-                            "o Número Patrimonial forem alterados."
-                        ),
-                    })
+            if (nome_alterado or numero_alterado) and not justificativa:
+                msg = (
+                    "A justificativa é obrigatória quando o Nome ou "
+                    "o Número Patrimonial forem alterados."
+                )
+                raise ValidationError(
+                    {
+                        "justificativa": msg,
+                        "nome": msg,
+                        "numero_patrimonial": msg,
+                    }
+                )
 
     def get_form(self, request, obj=None, **kwargs):
         base_form = super().get_form(request, obj, **kwargs)

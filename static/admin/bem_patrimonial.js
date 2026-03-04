@@ -301,8 +301,8 @@
   function showError(containerId, msgs){
     const box = id(containerId);
     if (!msgs || !msgs.length){
+      box?.classList.add('hide');
       if (box){
-        box.classList.add('hide');
         box.innerHTML = '';
       }
       return;
