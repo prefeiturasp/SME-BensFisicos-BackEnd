@@ -161,6 +161,7 @@ class HistoricoGeralInline(GenericTabularInline):
         "campo",
         "valor_antigo",
         "valor_novo",
+        "justificativa",
         "alterado_por",
         "alterado_em",
     )
