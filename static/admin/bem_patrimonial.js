@@ -6,7 +6,7 @@
   function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
   function fmt(d){
     d = (d||'').slice(0,13);
-    var p1=d.slice(0,3), p2=d.slice(3,12), p3=d.slice(12,13);
+    const p1=d.slice(0,3), p2=d.slice(3,12), p3=d.slice(12,13);
     if (d.length <= 3) return p1;
     if (d.length <= 12) return p1 + '.' + p2;
     return p1 + '.' + p2 + '-' + p3;
@@ -17,56 +17,47 @@
     digits = digits.replace(/^0+/, "") || "0";
     if (digits.length === 1) digits = "0" + digits;
     if (digits.length === 2) digits = "0" + digits;
-    var cents = digits.slice(-2);
-    var ints  = digits.slice(0, -2);
-    var withThousand = ints.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const cents = digits.slice(-2);
+    const ints  = digits.slice(0, -2);
+    const withThousand = ints.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     return withThousand + "," + cents;
   }
 
   function bindCurrencyMask(){
-    var el = id("id_valor_unitario");
+    const el = id("id_valor_unitario");
     if (!el || el.dataset.boundMask === "1") return;
     el.dataset.boundMask = "1";
     (function init(){
-      var raw = (el.value || "").trim();
+      const raw = (el.value?.trim() || "");
       if (raw && !/^\d{1,3}(\.\d{3})*,\d{2}$/.test(raw)){
-        var digits = raw.replace(/[^\d]/g, "");
+        const digits = raw.replace(/[^\d]/g, "");
         el.value = formatBRMoneyFromDigits(digits);
       }
     })();
     el.addEventListener("input", function(){
-      var digits = (el.value || "").replace(/[^\d]/g, "");
+      const digits = (el.value || "").replace(/[^\d]/g, "");
       el.value = formatBRMoneyFromDigits(digits);
     });
     el.addEventListener("blur", function(){
-      var digits = (el.value || "").replace(/[^\d]/g, "");
+      const digits = (el.value || "").replace(/[^\d]/g, "");
       el.value = formatBRMoneyFromDigits(digits);
     });
     el.setAttribute("required", "required");
   }
 
   function bindSingleNumeroPatrimonialMask(){
-    var np   = id('id_numero_patrimonial');
-    var ant  = id('id_numero_formato_antigo');
-    var sem  = id('id_sem_numeracao');
-    var isEdit = !id('id_cadastro_modo'); 
+    const np   = id('id_numero_patrimonial');
+    const ant  = id('id_numero_formato_antigo');
+    const sem  = id('id_sem_numeracao');
+    const isEdit = qsa('input[name="cadastro_modo"]').length === 0;
     if (!np || !ant) return;
 
-    function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
-    function fmt(d){
-      d = (d||'').slice(0,13);
-      var p1=d.slice(0,3), p2=d.slice(3,12), p3=d.slice(12,13);
-      if (d.length <= 3) return p1;
-      if (d.length <= 12) return p1 + '.' + p2;
-      return p1 + '.' + p2 + '-' + p3;
-    }
     function setReadOnly(on){
       if (on){ np.setAttribute('readonly','readonly'); np.setAttribute('aria-readonly','true'); }
       else { np.removeAttribute('readonly'); np.removeAttribute('aria-readonly'); }
     }
 
-    
-    var didInitialShow = false;
+    let didInitialShow = false;
 
     function mutuallyExclusive(changed){
       
@@ -77,7 +68,7 @@
 
     function applyPatternAndMask(){
       
-      if (!(ant && ant.checked)){
+      if (!ant?.checked){
         np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
         np.placeholder = '000.000000000-0';
         np.value = fmt(onlyDigits(np.value));
@@ -87,48 +78,44 @@
       }
     }
 
-    function refresh(opts){
-      opts = opts || {};
-      var semMarcado = !!(sem && sem.checked);
+    function handleSemMarcadoEdit() {
+      setReadOnly(false);
+      np.removeAttribute('pattern');
+      np.placeholder = 'Sem numeração';
+      if (!didInitialShow) {
+        didInitialShow = true;
+        return true;
+      }
+      return false;
+    }
 
-      
-      if (semMarcado){
-        if (isEdit){
-          
-          setReadOnly(false);
-          np.removeAttribute('pattern');
-          np.placeholder = 'Sem numeração';
+    function handleSemMarcadoCreate() {
+      setReadOnly(true);
+      np.removeAttribute('pattern');
+      np.placeholder = 'Gerado automaticamente';
+      np.value = '';
+      if (ant) { ant.disabled = true; ant.checked = false; }
+    }
 
-          
-          if (!didInitialShow) {
-            didInitialShow = true;
-            return; 
-          }
-          
-          return;
-        } else {
-          
-          setReadOnly(true);
-          np.removeAttribute('pattern');
-          np.placeholder = 'Gerado automaticamente';
-          np.value = '';
-          if (ant){ ant.disabled = true; ant.checked = false; }
+    function refresh(){
+      const semMarcado = !!sem?.checked;
+
+      if (semMarcado) {
+        if (isEdit) {
+          handleSemMarcadoEdit();
           return;
         }
-      } else {
-        setReadOnly(false);
-        if (ant) ant.disabled = false;
-      }
-
-      
-      if (ant && ant.checked){
-        np.removeAttribute('pattern');
-        np.placeholder = 'Valor livre (formato antigo)';
-        
+        handleSemMarcadoCreate();
         return;
       }
+      setReadOnly(false);
+      if (ant) ant.disabled = false;
 
-      
+      if (ant?.checked) {
+        np.removeAttribute('pattern');
+        np.placeholder = 'Valor livre (formato antigo)';
+        return;
+      }
       applyPatternAndMask();
     }
 
@@ -145,17 +132,17 @@
 
     np.addEventListener('input', function(){
       
-      if (isEdit && sem && sem.checked){
+      if (isEdit && sem?.checked){
         sem.checked = false;          
         mutuallyExclusive('sem');
       }
       
-      var semMarcado = !!(sem && sem.checked);
-      if (!(ant && ant.checked) && !semMarcado){
+      const semMarcado = !!sem?.checked;
+      if (!ant?.checked && !semMarcado){
         np.value = fmt(onlyDigits(np.value));
         np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
         np.placeholder = '000.000000000-0';
-      } else if (ant && ant.checked){
+      } else if (ant?.checked){
         np.removeAttribute('pattern');
         np.placeholder = 'Valor livre (formato antigo)';
       } else if (semMarcado){
@@ -208,24 +195,24 @@
   }
 
   function toPayload(){
-    var rows = qsa('#multi-rows .multi-row');
-    var out = [];
+    const rows = qsa('#multi-rows .multi-row');
+    const out = [];
     rows.forEach(function(r){
       out.push({
-        numero_patrimonial: (qs('.fld-npat', r).value || '').trim(),
-        numero_formato_antigo: !!qs('.fld-ant', r).checked,
-        sem_numeracao: !!qs('.fld-sem', r).checked,
-        localizacao: (qs('.fld-loc', r).value || '').trim()
+        numero_patrimonial: (qs('.fld-npat', r)?.value || '').trim(),
+        numero_formato_antigo: !!qs('.fld-ant', r)?.checked,
+        sem_numeracao: !!qs('.fld-sem', r)?.checked,
+        localizacao: (qs('.fld-loc', r)?.value || '').trim()
       });
     });
-    var hidden = id('id_multi_payload');
+    const hidden = id('id_multi_payload');
     if (hidden) hidden.value = JSON.stringify(out);
   }
 
   function applyMask(row){
-    var input = qs('.fld-npat', row);
-    var ant = qs('.fld-ant', row);
-    var sem = qs('.fld-sem', row);
+    const input = qs('.fld-npat', row);
+    const ant = qs('.fld-ant', row);
+    const sem = qs('.fld-sem', row);
 
     function refresh(){
       if (sem.checked){
@@ -253,7 +240,7 @@
     ant.addEventListener('change', refresh);
     sem.addEventListener('change', refresh);
     input.addEventListener('input', function(){
-      if (!ant.checked && !sem.checked){
+      if (!ant?.checked && !sem?.checked){
         input.value = fmt(onlyDigits(input.value));
       }
       toPayload();
@@ -262,10 +249,10 @@
   }
 
   function addRow(){
-    var cont = id('multi-rows');
-    var idx = (cont.querySelectorAll('.multi-row').length || 0) + 1;
+    const cont = id('multi-rows');
+    const idx = (cont.querySelectorAll('.multi-row').length || 0) + 1;
     cont.insertAdjacentHTML('beforeend', rowTemplate(idx));
-    var row = cont.lastElementChild;
+    const row = cont.lastElementChild;
     applyMask(row);
     qs('.rm', row).addEventListener('click', function(){
       row.remove(); toPayload();
@@ -275,19 +262,22 @@
   }
 
   function hydrateFromPayload(initialPayload){
-    var cont = id('multi-rows');
+    const cont = id('multi-rows');
     if (!cont) return;
     cont.innerHTML = '';
-    var arr = [];
-    try { arr = JSON.parse(initialPayload || "[]") || []; } catch(e){ arr = []; }
+    let arr = [];
+    try { arr = JSON.parse(initialPayload || "[]") || []; } catch (e) {
+      console.warn("bem_patrimonial: payload inválido, usando lista vazia", e);
+      arr = [];
+    }
     if (!arr.length) return;
 
     arr.forEach(function(item){
-      var row = addRow();
-      var np = qs('.fld-npat', row);
-      var ant = qs('.fld-ant', row);
-      var sem = qs('.fld-sem', row);
-      var loc = qs('.fld-loc', row);
+      const row = addRow();
+      const np = qs('.fld-npat', row);
+      const ant = qs('.fld-ant', row);
+      const sem = qs('.fld-sem', row);
+      const loc = qs('.fld-loc', row);
 
       if (typeof item.numero_patrimonial !== 'undefined' && np){
         np.value = item.numero_patrimonial || '';
@@ -301,19 +291,23 @@
       if (typeof item.localizacao !== 'undefined' && loc){
         loc.value = item.localizacao || '';
       }
-      ant && ant.dispatchEvent(new Event('change'));
-      sem && sem.dispatchEvent(new Event('change'));
-      np && np.dispatchEvent(new Event('input'));
+      ant?.dispatchEvent(new Event('change'));
+      sem?.dispatchEvent(new Event('change'));
+      np?.dispatchEvent(new Event('input'));
     });
     toPayload();
   }
 
   function showError(containerId, msgs){
-    var box = id(containerId);
-    if (!box) return;
+    const box = id(containerId);
     if (!msgs || !msgs.length){
-      box.classList.add('hide'); box.innerHTML = ''; return;
+      box?.classList.add('hide');
+      if (box){
+        box.innerHTML = '';
+      }
+      return;
     }
+    if (!box) return;
     box.classList.remove('hide');
     box.innerHTML = msgs.map(function(m){ return '<div>'+m+'</div>'; }).join('');
     box.scrollIntoView({behavior:'smooth', block:'center'});
@@ -321,8 +315,8 @@
 
   function validateMultiRows(){
     toPayload();
-    var rows = qsa('#multi-rows .multi-row');
-    var errors = [];
+    const rows = qsa('#multi-rows .multi-row');
+    const errors = [];
 
     if (!rows.length){
         errors.push('Adicione ao menos uma linha no modo Múltiplos Bens.');
@@ -342,14 +336,14 @@
     }
 
     rows.forEach(function(r, i){
-        var idx = i + 1;
-        var np  = qs('.fld-npat', r);
-        var sem = qs('.fld-sem', r);
-        var loc = qs('.fld-loc', r);
+        const idx = i + 1;
+        const np  = qs('.fld-npat', r);
+        const sem = qs('.fld-sem', r);
+        const loc = qs('.fld-loc', r);
 
-        var npVal  = (np.value || '').trim();
-        var semVal = !!sem.checked;
-        var locVal = (loc.value || '').trim();
+        const npVal  = (np?.value || '').trim();
+        const semVal = !!sem?.checked;
+        const locVal = (loc?.value || '').trim();
 
         r.classList.remove('invalid');
 
@@ -375,10 +369,10 @@
     }
 
   function labelFor(field){
-    var wrap = field.closest('.form-row') || field.parentNode;
+    const wrap = field.closest('.form-row') || field.parentNode;
     if (!wrap) return field.name || field.id || 'Campo obrigatório';
-    var lbl = wrap.querySelector('label');
-    if (lbl && lbl.textContent) return lbl.textContent.replace(':','').trim();
+    const lbl = wrap.querySelector('label');
+    if (lbl?.textContent) return lbl.textContent.replace(':','').trim();
     return field.name || field.id || 'Campo obrigatório';
   }
 
@@ -388,18 +382,18 @@
   }
 
   function markErrorField(field){
-    var wrap = field.closest('.form-row') || field.parentNode;
+    const wrap = field.closest('.form-row') || field.parentNode;
     if (wrap) wrap.classList.add('error');
     field.style.borderColor = '#ba2121';
   }
 
   function isEmptyField(field){
     if (field.disabled) return false;
-    var type = (field.type || '').toLowerCase();
+    const type = (field.type || '').toLowerCase();
     if (type === 'checkbox' || type === 'radio'){
-      var group = qsa('[name="'+field.name+'"]', field.ownerDocument);
+      const group = qsa('[name="'+field.name+'"]', field.ownerDocument);
       if (group && group.length > 1){
-        for (var i=0;i<group.length;i++) if (group[i].checked) return false;
+        for (const item of group) { if (item.checked) return false; }
         return true;
       }
       return !field.checked;
@@ -415,8 +409,8 @@
       });
     });
     qsa('.admin-autocomplete', form).forEach(function(wrap){
-      var visible = qs('input.select2-search__field, input[type="search"], input[type="text"]', wrap);
-      var hidden = qs('select, input[type="hidden"]', wrap);
+      const visible = qs('input.select2-search__field, input[type="search"], input[type="text"]', wrap);
+      const hidden = qs('select, input[type="hidden"]', wrap);
       if (hidden && (hidden.required || hidden.closest('.form-row')?.classList.contains('required'))){
         if (visible) visible.setAttribute('required', 'required');
       }
@@ -424,7 +418,7 @@
   }
 
   function collectRequiredFields(form){
-    var req = qsa('input[required], select[required], textarea[required]', form);
+    let req = qsa('input[required], select[required], textarea[required]', form);
     qsa('.form-row.required input, .form-row.required select, .form-row.required textarea', form).forEach(function(el){
       if (req.indexOf(el) === -1) req.push(el);
     });
@@ -435,8 +429,8 @@
   function validateBaseRequired(form){
     cleanBaseHighlights(form);
     applyRequiredFromDjango(form);
-    var errors = [];
-    var req = collectRequiredFields(form);
+    const errors = [];
+    const req = collectRequiredFields(form);
     req.forEach(function(field){
       if (isEmptyField(field)){
         errors.push('Preencha o campo obrigatório: <strong>'+labelFor(field)+'</strong>.');
@@ -448,24 +442,23 @@
   }
 
   function initMulti(){
-    var root = id('multi-inline-root');
+    const root = id('multi-inline-root');
     if (!root) return;
 
-    var form = qs('form');
+    const form = qs('form');
     if (!form) return;
 
-    var anchor = qs('.form-row.field-numero_processo');
-    var wrapper = document.createElement('div');
+    const anchor = qs('.form-row.field-numero_processo');
+    const wrapper = document.createElement('div');
     wrapper.innerHTML = multiHTML();
-    if (anchor && anchor.parentNode){ anchor.parentNode.insertBefore(wrapper, anchor.nextSibling); }
+    if (anchor?.parentNode){ anchor.parentNode.insertBefore(wrapper, anchor.nextSibling); }
     else { form.appendChild(wrapper); }
 
-    var locSingle = id('id_localizacao');
+    const locSingle = id('id_localizacao');
     if (locSingle) locSingle.setAttribute('required', 'required');
 
-    var multi = id('multi-container');
-    var errorBase = id('base-required-errors');
-    var addBtn = id('multi-add');
+    const multi = id('multi-container');
+    const addBtn = id('multi-add');
 
     if (addBtn && !addBtn.dataset.bound){
         addBtn.dataset.bound = "1";
@@ -474,20 +467,20 @@
     form.addEventListener('input', toPayload);
     form.addEventListener('change', toPayload);
 
-    var hiddenModo = document.createElement('input');
+    const hiddenModo = document.createElement('input');
     hiddenModo.type = 'hidden';
     hiddenModo.name = 'cadastro_modo';
     form.appendChild(hiddenModo);
 
     function setMode(force){
-        var checked = qs('input[name="cadastro_modo"]:checked');
-        var val = (checked && checked.value) || 'unico';
+        const checked = qs('input[name="cadastro_modo"]:checked');
+        let val = (checked?.value) || 'unico';
         if (force === 'multi'){
-        var radioMulti = qs('input[name="cadastro_modo"][value="multi"]');
+        const radioMulti = qs('input[name="cadastro_modo"][value="multi"]');
         if (radioMulti){ radioMulti.checked = true; val = 'multi'; }
         }
-        var singleWraps = ['numero_patrimonial', 'numero_formato_antigo', 'sem_numeracao', 'localizacao'].map(function(f){
-        var row = qs('.form-row.field-' + f) || (id('id_'+f) && id('id_'+f).closest('.form-row'));
+        const singleWraps = ['numero_patrimonial', 'numero_formato_antigo', 'sem_numeracao', 'localizacao'].map(function(f){
+        const row = qs('.form-row.field-' + f) || id('id_'+f)?.closest('.form-row');
         return row || null;
         }).filter(Boolean);
 
@@ -503,40 +496,40 @@
 
     qsa('input[name="cadastro_modo"]').forEach(function(r){ r.addEventListener('change', function(){ setMode(); }); });
 
-    var initialPayload = (function(){
-        var tag = id('multi-inline-data');
-        return (tag && tag.textContent) ? tag.textContent : "[]";
+    const initialPayload = (function(){
+        const tag = id('multi-inline-data');
+        return (tag?.textContent) ? tag.textContent : "[]";
     })();
 
     hydrateFromPayload(initialPayload);
-    var forceMultiFlag = root.getAttribute('data-force-multi') === '1';
+    const forceMultiFlag = root.getAttribute('data-force-multi') === '1';
     setMode(forceMultiFlag ? 'multi' : null);
 
     function guardSubmit(ev){
         toPayload();
-        var okBase = validateBaseRequired(form);
+        const okBase = validateBaseRequired(form);
         if (!okBase){ ev.preventDefault(); ev.stopPropagation(); return; }
 
-        var isMulti = !multi.classList.contains('hide');
-        var hasRows = qsa('#multi-rows .multi-row').length > 0;
-        var radioMultiChecked = !!qs('input[name="cadastro_modo"][value="multi"]:checked');
+        const isMulti = !multi.classList.contains('hide');
+        const hasRows = qsa('#multi-rows .multi-row').length > 0;
+        const radioMultiChecked = !!qs('input[name="cadastro_modo"][value="multi"]:checked');
         if (isMulti){
-        var okMulti = validateMultiRows();
+        const okMulti = validateMultiRows();
         if (!okMulti){ ev.preventDefault(); ev.stopPropagation(); return; }
         }
         if (hasRows || radioMultiChecked){
         hiddenModo.value = 'multi';
-        var radioMulti = qs('input[name="cadastro_modo"][value="multi"]');
+        const radioMulti = qs('input[name="cadastro_modo"][value="multi"]');
         if (radioMulti) radioMulti.checked = true;
         } else {
-        var checked = qs('input[name="cadastro_modo"]:checked');
-        hiddenModo.value = checked ? checked.value : 'unico';
+        const checked = qs('input[name="cadastro_modo"]:checked');
+        hiddenModo.value = checked?.value ?? 'unico';
         }
     }
 
     form.addEventListener('submit', guardSubmit);
     ['_save','_addanother','_continue'].forEach(function(name){
-        var btn = qs('input[name="'+name+'"]');
+        const btn = qs('input[name="'+name+'"]');
         if (btn && !btn.dataset.bound){
         btn.dataset.bound = "1";
         btn.addEventListener('click', guardSubmit);

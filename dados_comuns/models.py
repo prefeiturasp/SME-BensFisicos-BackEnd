@@ -4,7 +4,6 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils import timezone
 from django.conf import settings
-import re
 from django.core.exceptions import ValidationError
 
 
@@ -20,8 +19,8 @@ class UnidadeOrcamentaria(models.Model):
         max_length=255,
     )
 
-    sigla = models.CharField("sigla", max_length=255, null=True, blank=True)
-    
+    sigla = models.CharField("sigla", max_length=255, blank=True, default="")
+
     ativa = models.BooleanField(
         "Ativa",
         default=True,
@@ -107,8 +106,8 @@ class HistoricoGeral(models.Model):
     content_object = GenericForeignKey("content_type", "object_id")
 
     campo = models.CharField("Campo alterado", max_length=128)
-    valor_antigo = models.TextField("Valor antigo", null=True, blank=True)
-    valor_novo = models.TextField("Valor novo", null=True, blank=True)
+    valor_antigo = models.TextField("Valor antigo", blank=True, default="")
+    valor_novo = models.TextField("Valor novo", blank=True, default="")
 
     alterado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -120,6 +119,8 @@ class HistoricoGeral(models.Model):
     alterado_em = models.DateTimeField(
         "Alterado em", default=timezone.now, db_index=True
     )
+
+    justificativa = models.TextField("Justificativa", null=True, blank=True)
 
     class Meta:
         verbose_name = "histórico geral"

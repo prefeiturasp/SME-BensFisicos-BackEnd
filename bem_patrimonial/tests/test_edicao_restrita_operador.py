@@ -17,20 +17,20 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         self.grupo_gestor = Group.objects.create(name=GRUPO_GESTOR_PATRIMONIO)
         self.grupo_operador = Group.objects.create(name=GRUPO_OPERADOR_INVENTARIO)
         self.uo = criar_uo(codigo="100", nome="UO 100")
-        
+
         self.ua1 = criar_ua(
             codigo="UA001",
             nome="Unidade 1",
             sigla="U1",
             status=UnidadeAdministrativa.ATIVA,
-            uo=self.uo
+            uo=self.uo,
         )
         self.ua2 = criar_ua(
             codigo="UA002",
             nome="Unidade 2",
             sigla="U2",
             status=UnidadeAdministrativa.ATIVA,
-            uo=self.uo
+            uo=self.uo,
         )
 
         self.gestor = Usuario.objects.create_user(
@@ -38,7 +38,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             email="gestor@test.com",
             password="test123",
             is_staff=True,
-            unidade_orcamentaria=self.ua1.unidade_orcamentaria
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.gestor.groups.add(self.grupo_gestor)
 
@@ -48,9 +48,10 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua1,
-            unidade_orcamentaria=self.ua1.unidade_orcamentaria
+            unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.operador_ua1.groups.add(self.grupo_operador)
+        self.operador_ua1.unidades_administrativas.add(self.ua1)
 
         self.bem_ua1 = BemPatrimonial.objects.create(
             nome="Computador",
@@ -114,13 +115,13 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         request = self.factory.post("/admin/")
         request.user = self.operador_ua1
 
-        FormClass = self.admin.get_form(request, obj=self.bem_ua1)
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
 
         form_data = {
             "localizacao": "Sala 202 - ALTERADA",
         }
 
-        form = FormClass(data=form_data, instance=self.bem_ua1)
+        form = form_class(data=form_data, instance=self.bem_ua1)
 
         is_valid = form.is_valid()
         if not is_valid:
@@ -135,13 +136,13 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         request = self.factory.post("/admin/")
         request.user = self.operador_ua1
 
-        FormClass = self.admin.get_form(request, obj=self.bem_ua1)
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
 
         form_data = {
             "localizacao": "Sala 999",
         }
 
-        form = FormClass(data=form_data, instance=self.bem_ua1)
+        form = form_class(data=form_data, instance=self.bem_ua1)
 
         self.assertNotIn("nome", form.fields)
         self.assertNotIn("valor_unitario", form.fields)
@@ -155,7 +156,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         request = self.factory.post("/admin/")
         request.user = self.gestor
 
-        FormClass = self.admin.get_form(request, obj=self.bem_ua1)
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
 
         form_data = {
             "nome": "Notebook HP",
@@ -169,9 +170,10 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             "unidade_administrativa": self.ua1.pk,
             "numero_formato_antigo": False,
             "sem_numeracao": False,
+            "justificativa": "Teste"
         }
 
-        form = FormClass(data=form_data, instance=self.bem_ua1)
+        form = form_class(data=form_data, instance=self.bem_ua1)
 
         is_valid = form.is_valid()
         if not is_valid:
@@ -211,7 +213,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             password="test123",
             is_staff=True,
             unidade_administrativa=self.ua2,
-            unidade_orcamentaria=self.ua2.unidade_orcamentaria
+            unidade_orcamentaria=self.ua2.unidade_orcamentaria,
         )
         operador_ua2.groups.add(self.grupo_operador)
 
@@ -229,3 +231,133 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         qs = self.admin.get_queryset(request)
 
         self.assertIn(self.bem_ua1, qs)
+
+    def test_alterar_nome_sem_justificativa_deve_falhar(self):
+        request = self.factory.post("/admin/")
+        request.user = self.gestor
+
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
+
+        form_data = {
+            "nome": "Nome Alterado",
+            "descricao": self.bem_ua1.descricao,
+            "valor_unitario": "2000,00",
+            "marca": self.bem_ua1.marca,
+            "modelo": self.bem_ua1.modelo,
+            "localizacao": self.bem_ua1.localizacao,
+            "numero_processo": self.bem_ua1.numero_processo,
+            "numero_patrimonial": self.bem_ua1.numero_patrimonial,
+            "unidade_administrativa": self.ua1.pk,
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+            # sem justificativa
+        }
+
+        form = form_class(data=form_data, instance=self.bem_ua1)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("justificativa", form.errors)
+
+    def test_alterar_numero_patrimonial_sem_justificativa_deve_falhar(self):
+        request = self.factory.post("/admin/")
+        request.user = self.gestor
+
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
+
+        form_data = {
+            "nome": self.bem_ua1.nome,
+            "descricao": self.bem_ua1.descricao,
+            "valor_unitario": "2000,00",
+            "marca": self.bem_ua1.marca,
+            "modelo": self.bem_ua1.modelo,
+            "localizacao": self.bem_ua1.localizacao,
+            "numero_processo": self.bem_ua1.numero_processo,
+            "numero_patrimonial": "999.999999999-9",
+            "unidade_administrativa": self.ua1.pk,
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+        }
+
+        form = form_class(data=form_data, instance=self.bem_ua1)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("justificativa", form.errors)
+
+    def test_alterar_apenas_localizacao_sem_justificativa_deve_passar(self):
+        request = self.factory.post("/admin/")
+        request.user = self.gestor
+
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
+
+        form_data = {
+            "nome": self.bem_ua1.nome,
+            "descricao": self.bem_ua1.descricao,
+            "valor_unitario": "2000,00",
+            "marca": self.bem_ua1.marca,
+            "modelo": self.bem_ua1.modelo,
+            "localizacao": "Nova sala 404",
+            "numero_processo": self.bem_ua1.numero_processo,
+            "numero_patrimonial": self.bem_ua1.numero_patrimonial,
+            "unidade_administrativa": self.ua1.pk,
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+            # sem justificativa
+        }
+
+        form = form_class(data=form_data, instance=self.bem_ua1)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_observacao_nao_obrigatoria_na_criacao(self):
+        request = self.factory.post("/admin/")
+        request.user = self.operador_ua1
+
+        form_class = self.admin.get_form(request, obj=None)
+
+        form_data = {
+            "nome": "Novo Bem",
+            "descricao": "Descrição",
+            "valor_unitario": "1500,00",
+            "marca": "Lenovo",
+            "modelo": "ThinkCentre",
+            "localizacao": "Sala 505",
+            "numero_processo": "PROC-NEW",
+            "numero_patrimonial": "123.123123123-1",
+            "unidade_administrativa": self.ua1.pk,
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+            # observacao ausente
+        }
+
+        form = form_class(data=form_data)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_save_model_recebe_justificativa(self):
+        request = self.factory.post("/admin/", data={"justificativa": "Teste auditoria"})
+        request.user = self.gestor
+
+        form_class = self.admin.get_form(request, obj=self.bem_ua1)
+
+        form_data = {
+            "nome": self.bem_ua1.nome,
+            "descricao": self.bem_ua1.descricao,
+            "valor_unitario": "2000,00",
+            "marca": self.bem_ua1.marca,
+            "modelo": self.bem_ua1.modelo,
+            "localizacao": "Sala alterada",
+            "numero_processo": self.bem_ua1.numero_processo,
+            "numero_patrimonial": self.bem_ua1.numero_patrimonial,
+            "unidade_administrativa": self.ua1.pk,
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+            "justificativa": "Teste auditoria",
+        }
+
+        form = form_class(data=form_data, instance=self.bem_ua1)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        obj = form.save(commit=False)
+        self.admin.save_model(request, obj, form, change=True)
+
+        self.assertEqual(getattr(obj, "_justificativa", None), "Teste auditoria")

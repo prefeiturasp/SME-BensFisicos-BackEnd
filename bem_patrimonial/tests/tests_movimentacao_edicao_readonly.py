@@ -1,7 +1,6 @@
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
-from django.core.exceptions import ValidationError
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -61,6 +60,7 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
         self.operador_ua1.groups.add(self.grupo_operador)
+        self.operador_ua1.unidades_administrativas.add(self.ua1)
 
         self.bem = BemPatrimonial.objects.create(
             nome="Bem Teste",

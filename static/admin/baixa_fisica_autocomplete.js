@@ -4,15 +4,15 @@
             return setTimeout(startWhenReady, 100);
         }
 
-        var $ = django.jQuery;
+        const $ = django.jQuery;
 
         $(function() {
-            var $uaSelect = $('#id_unidade_administrativa_origem'); // criação
-            var $uaReadonlyLink = $('.form-row.field-unidade_administrativa_origem .readonly a'); // edição
+            const $uaSelect = $('#id_unidade_administrativa_origem'); // criação
+            const $uaReadonlyLink = $('.form-row.field-unidade_administrativa_origem .readonly a'); // edição
 
             // status em modo readonly na edição
-            var $statusReadonly = $('.form-row.field-status .readonly');
-            var isEdicao = $statusReadonly.length > 0;
+            const $statusReadonly = $('.form-row.field-status .readonly');
+            const isEdicao = $statusReadonly.length > 0;
 
             function getUaVal() {
                 // criação: usa o select normalmente
@@ -22,10 +22,10 @@
 
                 // edição: extrai o ID do href
                 if ($uaReadonlyLink.length) {
-                    var href = $uaReadonlyLink.attr('href') || '';
+                    const href = $uaReadonlyLink.attr('href') || '';
                     // ex: /admin/dados_comuns/unidadeadministrativa/109/change/
-                    var match = href.match(/unidadeadministrativa\/(\d+)\/change\/?/);
-                    if (match && match[1]) {
+                    const match = href.match(/unidadeadministrativa\/(\d+)\/change\/?/);
+                    if (match?.[1]) {
                         return match[1];
                     }
                 }
@@ -33,7 +33,7 @@
             }
 
             function getAddButton() {
-                var $btn = $('#baixafisicabensitem_set-group .add-row a, #baixafisicabensitem_set-group .add-row');
+                let $btn = $('#baixafisicabensitem_set-group .add-row a, #baixafisicabensitem_set-group .add-row');
                 if (!$btn.length) {
                     $btn = $('.inline-group .add-row a, .inline-group .add-row');
                 }
@@ -42,7 +42,7 @@
 
             function isStatusAguardandoEnvio() {
                 if (!isEdicao) return false;
-                var txt = ($statusReadonly.text() || '').trim().toLowerCase();
+                const txt = ($statusReadonly.text() || '').trim().toLowerCase();
                 return txt === 'aguardando envio';
             }
 
@@ -65,7 +65,7 @@
             }
 
             function toggleAddButton() {
-                var $addButton = getAddButton();
+                const $addButton = getAddButton();
 
                 if (!$addButton.length) {
                     // backend não renderizou botão (status != aguardando_envio)
@@ -83,7 +83,7 @@
                 }
 
                 // CRIAÇÃO
-                var uaVal = getUaVal();
+                const uaVal = getUaVal();
                 if (uaVal) {
                     enableAdd($addButton);
                 } else {
@@ -98,48 +98,47 @@
             $uaSelect.on('change', toggleAddButton);
 
             // --- Filtro no autocomplete dos bens ---
-            var oldAjax = $.ajax;
-            $.ajax = function(options) {
-                var opts = options;
-                var url = (typeof opts === 'string') ? opts : opts.url;
+            const oldAjax = $.ajax;
+
+            function appendBemIdIfNotDeleted(ids, selectEl) {
+                const prefix = selectEl.name.replace('-bem', '');
+                const deleteFlag = $('input[name="' + prefix + '-DELETE"]').prop('checked');
+                if (!deleteFlag) {
+                    const val = $(selectEl).val();
+                    if (val) {
+                        ids.push(val);
+                    }
+                }
+            }
+
+            $.ajax = function wrapAjaxWithUaFilter(options) {
+                const isStringUrl = typeof options === 'string';
+                const opts = isStringUrl ? options : { ...options };
+                const url = isStringUrl ? opts : opts.url;
 
                 if (!url || url.indexOf('/admin/autocomplete/') === -1) {
                     return oldAjax.apply(this, arguments);
                 }
 
-                var params = [];
-                var uaVal = getUaVal();
-
+                const uaVal = getUaVal();
                 if (!uaVal) {
                     return oldAjax.apply(this, arguments);
                 }
-
-                params.push('ua_origem=' + encodeURIComponent(uaVal));
-
-                var ids = [];
-                $('select[name^="itens-"][name$="-bem"]').each(function() {
-                    var prefix = this.name.replace('-bem','');
-                    var deleteFlag = $('input[name="' + prefix + '-DELETE"]').prop('checked');
-                    if (!deleteFlag) {
-                        var val = $(this).val();
-                        if (val) ids.push(val);
-                    }
-                });
-
+                const params = ['ua_origem=' + encodeURIComponent(uaVal)];
+                const ids = [];
+                const selects = document.querySelectorAll('select[name^="itens-"][name$="-bem"]');
+                for (const selectEl of selects) {
+                    appendBemIdIfNotDeleted(ids, selectEl);
+                }
                 if (ids.length > 0) {
                     params.push('exclude_bens=' + encodeURIComponent(ids.join(',')));
                 }
 
                 if (params.length) {
-                    var sep = url.indexOf('?') === -1 ? '?' : '&';
-                    url = url + sep + params.join('&');
-                    if (typeof opts === 'string') {
-                        opts = url;
-                    } else {
-                        opts.url = url;
-                    }
+                    const sep = url.indexOf('?') === -1 ? '?' : '&';
+                    const newUrl = url + sep + params.join('&');
+                    return oldAjax.apply(this, [isStringUrl ? newUrl : { ...opts, url: newUrl }]);
                 }
-
                 return oldAjax.apply(this, [opts]);
             };
         });

@@ -1,9 +1,6 @@
-import os
-import re
 from io import BytesIO
 from decimal import Decimal
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, IntegerField, Value
@@ -14,22 +11,20 @@ from django.http import HttpResponse
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import (
     Table,
     TableStyle,
     Paragraph,
     Spacer,
-    Image,
     BaseDocTemplate,
     Frame,
     PageTemplate,
 )
 
-import pytz
-
 from bem_patrimonial.models import BaixaFisicaBemPatrimonial
+
 from bem_patrimonial import constants
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
@@ -40,6 +35,8 @@ from bem_patrimonial.pdf_utils import (
     carregar_logo,
     criar_info_geracao_paragraph,
 )
+
+DATE_FMT_BR = "%d/%m/%Y"
 
 
 def obter_bens_baixa(baixa):
@@ -215,9 +212,9 @@ def _criar_cabecalho_e_registro_nbbpm(baixa):
         leading=10,
     )
 
-    data_baixa = baixa.data_baixa.strftime("%d/%m/%Y") if baixa.data_baixa else ""
+    data_baixa = baixa.data_baixa.strftime(DATE_FMT_BR) if baixa.data_baixa else ""
     data_aprov = (
-        baixa.data_aprovacao.strftime("%d/%m/%Y") if baixa.data_aprovacao else ""
+        baixa.data_aprovacao.strftime(DATE_FMT_BR) if baixa.data_aprovacao else ""
     )
 
     header_data = [
@@ -316,7 +313,9 @@ def _criar_cabecalho_e_registro_nbbpm(baixa):
     return [main_table]
 
 
-def _criar_linha_ua(unidade_ocrcamentaria, label, sigla, nome, codigo, label_style, value_style):
+def _criar_linha_ua(
+    unidade_ocrcamentaria, label, sigla, nome, codigo, label_style, value_style
+):
 
     return [
         [
@@ -378,7 +377,7 @@ def _criar_informacoes_gerais(baixa):
                 Paragraph(str(baixa.numero_processo_baixa or "-").upper(), value_style),
                 Paragraph(
                     (
-                        baixa.data_baixa.strftime("%d/%m/%Y")
+                        baixa.data_baixa.strftime(DATE_FMT_BR)
                         if baixa.data_baixa
                         else "-"
                     ),

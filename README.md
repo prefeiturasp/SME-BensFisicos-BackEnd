@@ -1,94 +1,138 @@
 # Projeto de Gestão de Bens Patrimoniais
 
-## Descrição
+Backend Django do sistema de gestão patrimonial da Secretaria Municipal de Educação de São Paulo.
 
-O projeto foi desenvolvido para o setor de Bens Patrimoniais da Secretaria Municipal de São Paulo. Possui dois tipos de usuários: Gestor de Patrimônio e Operador de Inventário.
+## Visão geral
 
-### Funcionalidades
+O sistema é centrado no Django Admin e cobre o ciclo de vida de bens patrimoniais: cadastro, aprovação, movimentação entre unidades, baixa física e conciliação de inventário.
 
-- Cadastro de Bem Patrimonial
-- Aprovação de Cadastro de Bem Patrimonial
-- Movimentação de Bem Patrimonial
-- Configuração de Agenda do Setor de Bem Patrimonial
-- Agendamento de Reunião de Suporte
-- Cadastro de Unidade Administrativa
-- Cadastro de Usuário
-- Login
+## Módulos ativos
 
-### Modelos
+- `usuario`: autenticação, perfis, recuperação/troca de senha, seleção de UA.
+- `dados_comuns`: base compartilhada, contexto/auditoria, permissões e utilitários.
+- `bem_patrimonial`: cadastro e gestão dos bens, movimentações, documentos (CIMBPM/NBBPM), baixa física.
+- `inventario`: conciliação por UA e gestão de ocorrências.
 
-- BemPatrimonial
-- MovimentacaoBemPatrimonial
-- StatusBemPatrimonial
-- UnidadeAdministrativa
-- Usuario
-- ConfigAgendaSuporte
-- DiaSemana
-- IntervaloHoras
-- AgendamentoSuporte
+## Perfis e permissões
 
-### Permissões
+- `GESTOR_PATRIMONIO`: acesso completo.
+- `OPERADOR_INVENTARIO`: escopo restrito da sua unidade administrativa.
 
-- O Gestor de Patrimônio tem acesso a todas as funcionalidades.
-- O Operador de Inventário só tem acesso a cadastrar patrimônio, agendar reunião de suporte e solicitar movimentação de um bem patrimonial.
+O provisionamento de grupos/permissões é feito por comando de gestão.
 
-## Movimentação de bens patrimoniais
+## Funcionalidades principais
 
-- Para realizar a movimentação de um bem patrimonial entre unidades administrativas, é necessário criar uma instância do modelo MovimentacaoBemPatrimonial com os dados da movimentação, incluindo o bem patrimonial, as unidades administrativas de origem e destino .
-- É necessário que haja a aprovação por parte do operador da unidade destino para confirmação do envio.
+- Cadastro e aprovação/reprovação de bens patrimoniais.
+- Movimentação de bens com regras de bloqueio e aceite.
+- Geração/consulta de documentos patrimoniais (CIMBPM e NBBPM).
+- Fluxo de baixa física de bens.
+- Conciliação de inventário por unidade administrativa.
+- API REST para bens e autenticação, com documentação OpenAPI.
 
-## Tecnologias
+## Stack
 
+- Python 3.11
 - Django 4.1.3
 - Django Admin
-- Python 3.11
+- Django REST Framework + drf-spectacular
 - PostgreSQL
+- Docker / Docker Compose
 
-## Instalação
+## Setup rápido (Docker)
 
-1. Faça o clone do repositório.
+1. Copie o arquivo de ambiente:
 
-2. Crie um ambiente virtual:
-
+   ```bash
+   cp env.sample .env
    ```
+
+2. Suba o ambiente de desenvolvimento:
+
+   ```bash
+   docker compose -f docker-compose-dev.yml up -d
+   ```
+
+3. Rode migrações e crie usuário admin inicial:
+
+   ```bash
+   make init-db
+   ```
+
+4. Provisione grupos e permissões:
+
+   ```bash
+   make setup-grupos-permissoes
+   ```
+
+## Setup local (sem Docker)
+
+1. Crie e ative o ambiente virtual:
+
+   ```bash
    python -m venv venv
-   ```
-
-3. Ative o ambiente virtual:
-
-   ```
    source venv/bin/activate
    ```
 
-4. Instale as dependências:
+2. Instale dependências:
 
-   ```
+   ```bash
    pip install -r requirements.txt
    ```
 
-5. Crie um banco de dados PostgreSQL e configure as variáveis de ambiente para a conexão com o banco de dados.
+3. Configure `.env` e execute migrações:
 
-6. Execute as migrações:
-
-   ```
+   ```bash
    python manage.py migrate
    ```
 
-7. Crie um superusuário:
+4. Provisione grupos/permissões:
 
-   ```
-   python manage.py createsuperuser
-   ```
-
-8. Execute scripts de configuração para funcionamento correto:
-
-   ```
+   ```bash
    python manage.py setup_grupos_e_permissoes
-   python manage.py setup_agenda
    ```
 
-9. Execute o servidor:
+5. Crie superusuário e suba servidor:
 
-   ```
+   ```bash
+   python manage.py createsuperuser
    python manage.py runserver
    ```
+
+## Comandos úteis
+
+- Rodar testes:
+
+  ```bash
+  docker compose -f docker-compose-ok.yml exec web python manage.py test
+  ```
+
+- Testes de um app:
+
+  ```bash
+  docker compose -f docker-compose-ok.yml exec web python manage.py test bem_patrimonial.tests
+  ```
+
+- Criar migrações:
+
+  ```bash
+  docker compose -f docker-compose-ok.yml exec web python manage.py makemigrations
+  ```
+
+- Aplicar migrações:
+
+  ```bash
+  docker compose -f docker-compose-ok.yml exec web python manage.py migrate
+  ```
+
+## Endpoints principais
+
+- `GET /api/docs/` - Swagger UI
+- `GET /api/redoc/` - ReDoc
+- `GET /api/schema/` - OpenAPI schema
+- `GET|POST /api/bens/...` - endpoints do módulo de bens
+- `POST /api/auth/...` - autenticação
+- `GET /documento-cimbpm/<pk>/download/` - download protegido de CIMBPM
+
+## Módulo removido: agendamento de suporte
+
+O módulo `agendamento_suporte` foi descontinuado e removido do código-fonte.

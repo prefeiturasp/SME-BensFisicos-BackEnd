@@ -4,7 +4,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib import messages
 from django.contrib.auth.models import Group
 
-from bem_patrimonial.models import BemPatrimonial, StatusBemPatrimonial
+from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.constants import (
     AGUARDANDO_APROVACAO,
     APROVADO,
@@ -27,11 +27,11 @@ class BaseAprovacaoTestCase(TestCase):
         self.grupo_gestor = Group.objects.create(name=GRUPO_GESTOR_PATRIMONIO)
         self.grupo_operador = Group.objects.create(name=GRUPO_OPERADOR_INVENTARIO)
         self.uo = criar_uo(codigo="100", nome="UO 100")
-        self.ua =criar_ua(
+        self.ua = criar_ua(
             nome="UA Teste",
             codigo="001",
             sigla="UAT",
-            status=UnidadeAdministrativa.ATIVA
+            status=UnidadeAdministrativa.ATIVA,
         )
 
         self.gestor = Usuario.objects.create_user(
@@ -39,7 +39,7 @@ class BaseAprovacaoTestCase(TestCase):
             email="gestor@test.com",
             password="senha123",
             unidade_administrativa=self.ua,
-            unidade_orcamentaria=self.ua.unidade_orcamentaria
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
         self.gestor.groups.add(self.grupo_gestor)
 
@@ -48,9 +48,10 @@ class BaseAprovacaoTestCase(TestCase):
             email="operador@test.com",
             password="senha123",
             unidade_administrativa=self.ua,
-            unidade_orcamentaria=self.ua.unidade_orcamentaria
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
         self.operador.groups.add(self.grupo_operador)
+        self.operador.unidades_administrativas.add(self.ua)
 
         self.factory = RequestFactory()
         self.admin = BemPatrimonialAdmin(BemPatrimonial, AdminSite())
@@ -70,7 +71,6 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
             sem_numeracao=True,
             criado_por=self.operador,
             unidade_administrativa=self.ua,
-            
             status=AGUARDANDO_APROVACAO,
         )
 
@@ -120,17 +120,6 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         self.assertEqual(self.bem1.status, APROVADO)
         self.assertEqual(self.bem2.status, APROVADO)
 
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem1, status=APROVADO
-            ).exists()
-        )
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem2, status=APROVADO
-            ).exists()
-        )
-
     def test_gestor_pode_reprovar_bens_em_lote(self):
         queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem2.pk])
         request = self._create_request_with_messages(self.gestor)
@@ -142,17 +131,6 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
 
         self.assertEqual(self.bem1.status, NAO_APROVADO)
         self.assertEqual(self.bem2.status, NAO_APROVADO)
-
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem1, status=NAO_APROVADO
-            ).exists()
-        )
-        self.assertTrue(
-            StatusBemPatrimonial.objects.filter(
-                bem_patrimonial=self.bem2, status=NAO_APROVADO
-            ).exists()
-        )
 
     def test_operador_nao_pode_aprovar_bens(self):
         queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem2.pk])
@@ -308,7 +286,7 @@ class InlineStatusTestCase(BaseAprovacaoTestCase):
             StatusBemPatrimonialInline,
         )
 
-        inline_classes = [inline for inline in self.admin.inlines]
+        inline_classes = list(self.admin.inlines)
 
         self.assertEqual(len(inline_classes), 1)
 

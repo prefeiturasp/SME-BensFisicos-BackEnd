@@ -10,7 +10,7 @@ CONCILIACAO_FECHADO_ADMIN = "fechado_admin"
 STATUS_CONCILIACAO = (
     (CONCILIACAO_EM_ABERTO, "Aberta"),
     (CONCILIACAO_FECHADO, "Fechada"),
-    (CONCILIACAO_FECHADO_ADMIN, "Fechado pelo Administrador - Não Conciliado")
+    (CONCILIACAO_FECHADO_ADMIN, "Fechado pelo Administrador - Não Conciliado"),
 )
 
 # Situações de Item no Inventário
@@ -27,5 +27,4 @@ SITUACOES_ITEM_CONCILIACAO = (
     (DIVERGENTE, "Divergente"),
     (EM_PROCESSO_BAIXA_FISICA, "Em processo de baixa"),
     (BAIXA_FISICA, "Baixa Física"),
-
 )

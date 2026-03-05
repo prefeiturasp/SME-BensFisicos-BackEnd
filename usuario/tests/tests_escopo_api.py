@@ -53,6 +53,7 @@ class EscopoEndpointsTestCase(APITestCase):
             unidade_administrativa=self.ua1,
         )
         self.operador.groups.add(self.grupo_operador)
+        self.operador.unidades_administrativas.add(self.ua1)
 
         self.superuser = Usuario.objects.create_user(
             username="super",

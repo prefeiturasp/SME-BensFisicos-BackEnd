@@ -1,27 +1,21 @@
-import os
-import re
 from io import BytesIO
 from decimal import Decimal
-from django.conf import settings
 from django.db import transaction
-from django.db.models import Max
-from django.utils import timezone
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import (
     Table,
     TableStyle,
     Paragraph,
     Spacer,
-    Image,
+    Image as ReportLabImage,
     BaseDocTemplate,
     Frame,
     PageTemplate,
 )
-import pytz
 
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
@@ -32,6 +26,8 @@ from bem_patrimonial.pdf_utils import (
     carregar_logo,
     criar_info_geracao_paragraph,
 )
+
+Image = ReportLabImage
 
 
 def obter_bens_movimentacao(movimentacao):
@@ -297,9 +293,9 @@ def _criar_linha_ua(
 ):
     return [
         [
-            Paragraph(f"<b>PREFIXO</b>", label_style),
+            Paragraph("<b>PREFIXO</b>", label_style),
             Paragraph(f"<b>{label}</b>", label_style),
-            Paragraph(f"<b>CÓDIGO</b>", label_style),
+            Paragraph("<b>CÓDIGO</b>", label_style),
         ],
         [
             Paragraph(sigla.upper(), value_style),

@@ -58,9 +58,9 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
     formset = BaixaFisicaBensItemInlineFormSet
 
     def get_form(self, request, obj=None, **kwargs):
-        Form = super().get_form(request, obj, **kwargs)
+        form = super().get_form(request, obj, **kwargs)
 
-        class ScopedForm(Form):
+        class ScopedForm(form):
             def __init__(self_inner, *a, **kw):
                 super().__init__(*a, **kw)
 
@@ -118,7 +118,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
                 if not allowed.filter(pk=ua_origem.pk).exists():
                     raise ValidationError(
                         {
-                            "unidade_administrativa_origem": "Você não tem permissão para usar esta Unidade Administrativa como origem."
+                            "unidade_administrativa_origem": "Você não tem permissão para usar esta Unidade Administrativa como origem."  # noqa: E501
                         }
                     )
 

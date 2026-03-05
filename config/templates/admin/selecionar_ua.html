@@ -1,0 +1,135 @@
+{% extends "admin/base_auth.html" %}
+
+{% block title %}Selecionar Unidade Administrativa - Bens Físicos SME{% endblock %}
+
+{% block brand_title %}Selecionar Unidade{% endblock %}
+{% block brand_subtitle %}Escolha a Unidade Administrativa para atuar{% endblock %}
+
+{% block extra_css %}
+<style>
+  .auth-form-wrap {
+    justify-content: flex-start;
+    padding-top: 56px;
+    overflow-y: auto;
+  }
+
+  .auth-card {
+    max-width: 520px;
+    width: 100%;
+  }
+
+  .ua-info {
+    background: #e8f5e9;
+    border-left: 4px solid #149f67;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #333;
+  }
+  .ua-info strong {
+    color: #0f7d51;
+  }
+  .ua-select {
+    display: block;
+    width: 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 10px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+  }
+  .ua-select:focus {
+    outline: none;
+    border-color: #149f67;
+    box-shadow: 0 0 0 3px rgba(20, 159, 103, 0.1);
+  }
+  .ua-select option {
+    padding: 8px;
+  }
+
+  .ua-help {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+  }
+  .back-link {
+    display: block;
+    text-align: center;
+    margin-top: 1.5rem;
+    color: #149f67;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+</style>
+{% endblock %}
+
+{% block form_action %}{% url 'selecionar_ua' %}{% endblock %}
+
+{% block form_errors %}
+  {% if error %}
+    <div class="error-message">{{ error }}</div>
+  {% endif %}
+{% endblock %}
+
+{% block pre_form %}
+  {% if ua_ativa_id %}
+    {% for ua in uas_disponiveis %}
+      {% if ua.id == ua_ativa_id %}
+        <div class="ua-info">
+          Unidade atual: <strong>{{ ua.codigo }} - {{ ua.nome }}</strong>
+        </div>
+      {% endif %}
+    {% endfor %}
+  {% elif visao_geral_selected and uo_ativa %}
+    <div class="ua-info">
+      Visão atual: <strong>{{ uo_ativa.codigo }} - {{ uo_ativa.nome }} (geral da UO)</strong>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block form_fields %}
+  <div class="form-group">
+    <label for="id_unidade_administrativa">Unidade Administrativa</label>
+    <select name="unidade_administrativa" id="id_unidade_administrativa" class="ua-select" required>
+      {% if permite_visao_geral and uo_ativa %}
+        <option value="{{ visao_geral_value }}" {% if visao_geral_selected %}selected{% endif %}>
+          {{ uo_ativa.codigo }} - {{ uo_ativa.nome }} (visão geral)
+        </option>
+      {% endif %}
+      {% for ua in uas_disponiveis %}
+        <option value="{{ ua.id }}" {% if ua.id == ua_ativa_id %}selected{% endif %}>
+          {{ ua.codigo }} - {{ ua.nome }}
+        </option>
+      {% empty %}
+        <option value="" disabled selected>Nenhuma UA disponível</option>
+      {% endfor %}
+    </select>
+    <p class="ua-help">Selecione uma unidade para atuação. Gestores podem optar pela visão geral da UO.</p>
+  </div>
+{% endblock %}
+
+{% block hidden_next %}
+  <input type="hidden" name="next" value="{{ next }}" />
+{% endblock %}
+
+{% block submit_label %}Confirmar{% endblock %}
+
+{% block post_form %}
+  <a href="{{ next }}" class="back-link">Voltar ao sistema</a>
+{% endblock %}

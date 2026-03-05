@@ -30,13 +30,13 @@ def _recalcular_bloqueio_bem_por_inventario(bem: BemPatrimonial):
 def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=None):
     if not item.conciliacao.esta_aberto:
         raise ValidationError("Inventário fechado não permite edições")
-    
+
     if situacao == inv_constants.BAIXA_FISICA:
         raise ValidationError(
             "Situação 'Baixa Física' é definitiva e não pode ser registrada manualmente. "
             "Use 'Em processo de baixa'."
         )
-    
+
     if situacao == inv_constants.DIVERGENTE and not divergencia:
         raise ValidationError(
             "Campo divergência é obrigatório quando situação é Divergente"
@@ -79,7 +79,7 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
 def excluir_ocorrencia(item, usuario):
     if not item.conciliacao.esta_aberto:
         raise ValidationError("Inventário fechado não permite edições")
-    
+
     ultima_ocorrencia = item.ocorrencias.order_by("-registrado_em").first()
     if not ultima_ocorrencia:
         raise ValidationError("Item não tem ocorrência para excluir")

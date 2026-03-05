@@ -44,7 +44,7 @@ def filtrar_queryset_por_escopo(usuario, queryset, campo_ua="unidade_administrat
         2.1) Super admin e Gestor -> retorna UAs da UO dele (via relação em campo_ua)
         2.2) Outros -> vazio
     """
-    is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(usuario)
+    _is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(usuario)
 
     # 1) UA vence sempre
     if ua_id:
@@ -62,7 +62,7 @@ def validar_objeto_no_escopo(usuario, objeto, campo_ua="unidade_administrativa")
     """
     Mesma lógica do filtro, mas para validar um objeto específico.
     """
-    is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(usuario)
+    _is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(usuario)
 
     # 1) UA vence sempre
     if ua_id:
@@ -90,7 +90,7 @@ def filtrar_ua_origem_por_escopo(usuario, queryset_ua=None):
     if queryset_ua is None:
         queryset_ua = UnidadeAdministrativa.objects.all()
 
-    is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(usuario)
+    _is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(usuario)
 
     if ua_id:
         return queryset_ua.filter(id=ua_id)
@@ -111,7 +111,7 @@ def filtrar_ua_destino_por_uo_do_usuario(usuario, queryset_ua=None):
     if queryset_ua is None:
         queryset_ua = UnidadeAdministrativa.objects.all()
 
-    is_super, _is_gestor, _ua_id, uo_id = resolver_ids_escopo(usuario)
+    _is_super, _is_gestor, _ua_id, uo_id = resolver_ids_escopo(usuario)
 
     if not uo_id:
         return queryset_ua.none()

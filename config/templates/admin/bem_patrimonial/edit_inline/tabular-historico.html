@@ -27,6 +27,9 @@
           <tbody>
             {% for inline_admin_form in inline_admin_formset %}
               <tr class="{% cycle "row1" "row2" %}">
+                {% for hidden in inline_admin_form.form.hidden_fields %}
+                  {{ hidden }}
+                {% endfor %}
                 {% for fieldset in inline_admin_form %}
                   {% for line in fieldset %}
                     {% for field in line %}

@@ -15,7 +15,6 @@ from bem_patrimonial.models import MovimentacaoBemPatrimonial
 from bem_patrimonial.templatetags.movimentacoes_pendentes_tags import (
     alerta_movimentacoes_pendentes,
 )
-from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -39,6 +38,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
         self.usuario.groups.add(grupo_operador)
+        self.usuario.unidades_administrativas.add(self.ua_destino)
 
     def _cria_movimentacao(self, dias_atraso=8):
         mov = MovimentacaoBemPatrimonial.objects.create(
