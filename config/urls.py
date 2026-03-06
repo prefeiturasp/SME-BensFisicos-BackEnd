@@ -21,6 +21,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 from usuario import api_urls as auth_api_urls
+from dados_comuns import api_urls as dados_comuns_api_urls
 
 admin.site.site_title = settings.ADMIN_SITE_TITLE
 admin.site.site_header = settings.ADMIN_SITE_HEADER
@@ -37,6 +38,7 @@ urlpatterns = [
     path("", AdminLoginView.as_view(), name="login"),
     path("admin/login/", AdminLoginView.as_view(), name="admin_login"),
     path("api/bens/", include("bem_patrimonial.urls")),
+    path("api/", include(dados_comuns_api_urls)),
     # API de Autenticação
     path("api/auth/", include(auth_api_urls)),
     # Swagger/OpenAPI Documentação
