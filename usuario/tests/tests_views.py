@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from rest_framework.test import APIClient, APITestCase
 
 User = get_user_model()
 
@@ -174,3 +175,132 @@ class SelecionarUAViewTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, "__UO__")
+
+
+class UsuarioViewSetTests(TestCase):
+
+    def setUp(self):
+
+        self.client = APIClient()
+
+        self.admin = User.objects.create_user(
+            username="admin",
+            password="admin123",
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        self.user = User.objects.create_user(
+            username="user1",
+            email="user@test.com",
+            password="123456",
+        )
+
+        self.client.login(username="admin", password="admin123")
+        self.client.force_authenticate(user=self.admin)
+
+        self.list_url = reverse("usuario-list")
+        self.detail_url = reverse("usuario-detail", args=[self.user.id])
+        self.restore_url = reverse("usuario-restore", args=[self.user.id])
+
+    def test_list_users(self):
+
+        resp = self.client.get(self.list_url)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("results", resp.data)
+
+    def test_retrieve_user(self):
+
+        resp = self.client.get(self.detail_url)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["username"], "user1")
+
+    def test_create_user(self):
+
+        resp = self.client.post(
+            self.list_url,
+            {
+                "username": "novo",
+                "email": "novo@test.com",
+                "password": "Senha123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 201)
+
+        user = User.objects.get(username="novo")
+
+        self.assertTrue(user.must_change_password)
+        self.assertIsNotNone(user.last_password_change)
+
+    def test_update_user(self):
+
+        resp = self.client.put(
+            self.detail_url,
+            {
+                "username": "user1",
+                "email": "novo@email.com",
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+
+        self.user.refresh_from_db()
+
+        self.assertEqual(self.user.email, "novo@email.com")
+
+    def test_partial_update_user(self):
+
+        resp = self.client.patch(
+            self.detail_url,
+            {
+                "email": "patch@email.com",
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+
+        self.user.refresh_from_db()
+
+        self.assertEqual(self.user.email, "patch@email.com")
+
+    def test_soft_delete_user(self):
+
+        resp = self.client.delete(self.detail_url)
+
+        self.assertEqual(resp.status_code, 204)
+
+        self.user.refresh_from_db()
+
+        self.assertFalse(self.user.is_active)
+
+    def test_restore_user(self):
+
+        self.user.is_active = False
+        self.user.save()
+
+        resp = self.client.get(self.restore_url)
+
+        self.assertEqual(resp.status_code, 200)
+
+        self.user.refresh_from_db()
+
+        self.assertTrue(self.user.is_active)
+
+    def test_filter_active_users(self):
+
+        self.user.is_active = False
+        self.user.save()
+
+        resp = self.client.get(self.list_url, {"is_active": False})
+
+        self.assertEqual(resp.status_code, 200)
+
+        usernames = [u["username"] for u in resp.data["results"]]
+
+        self.assertIn("user1", usernames)

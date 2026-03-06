@@ -131,6 +131,7 @@ O provisionamento de grupos/permissões é feito por comando de gestão.
 - `GET /api/schema/` - OpenAPI schema
 - `GET|POST /api/bens/...` - endpoints do módulo de bens
 - `POST /api/auth/...` - autenticação
+- `POST /api/user/...` - gerenciamento de usuários
 - `GET /documento-cimbpm/<pk>/download/` - download protegido de CIMBPM
 
 ## Módulo removido: agendamento de suporte

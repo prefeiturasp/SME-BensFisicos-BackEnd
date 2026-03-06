@@ -39,6 +39,8 @@ urlpatterns = [
     path("api/bens/", include("bem_patrimonial.urls")),
     # API de Autenticação
     path("api/auth/", include(auth_api_urls)),
+    # API de Usuários
+    path("api/user/", include("usuario.urls")),
     # Swagger/OpenAPI Documentação
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(
