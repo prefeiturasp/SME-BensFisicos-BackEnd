@@ -13,9 +13,14 @@ User = get_user_model()
 
 class PasswordChangeViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="alice", **auth_kwargs("a123456"))
+        self.user = User.objects.create_user(
+            username="alice", **auth_kwargs("a123456"), must_change_password=False
+        )
         self.staff = User.objects.create_user(
-            username="admin1", **auth_kwargs("a123456"), is_staff=True
+            username="admin1",
+            **auth_kwargs("a123456"),
+            is_staff=True,
+            must_change_password=False,
         )
 
     def test_get_own_password_change_page(self):
@@ -71,6 +76,37 @@ class PasswordChangeViewTests(TestCase):
         self.assertFalse(target.must_change_password)
         self.assertIsNotNone(target.last_password_change)
         self.assertTrue(self.client.login(username="alice", **auth_kwargs("Sup3rS3nh@")))
+
+    def test_redirecionamento_admin_senha_exige_autenticacao(self):
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/admin/login/", resp["Location"])
+        self.assertIn("next=", resp["Location"])
+
+    def test_redirecionamento_admin_senha_nega_usuario_nao_staff(self):
+        self.client.login(username="alice", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 403)
+
+    def test_redirecionamento_admin_senha_permite_staff_via_get(self):
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("password_change"), resp["Location"])
+        self.assertIn(f"user_id={self.user.pk}", resp["Location"])
+
+    def test_redirecionamento_admin_senha_rejeita_post(self):
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.post(url)
+
+        self.assertEqual(resp.status_code, 405)
 
 
 class AdminLoginViewTests(TestCase):
