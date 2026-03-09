@@ -323,7 +323,7 @@ class TemplateMovimentacoesPendentesAceiteTestCase(TestCase):
                     "bens_excedentes": 2,
                 }
             ],
-            "pendentes_url": "http://example.com",
+            "pendentes_url": "https://example.com",
         }
 
         from django.template.loader import render_to_string
@@ -338,4 +338,4 @@ class TemplateMovimentacoesPendentesAceiteTestCase(TestCase):
         self.assertIn("Movimentação #10", html)
         self.assertIn("Bem A", html)
         self.assertIn("+ 2 item(ns) não exibido(s)", html)
-        self.assertIn("http://example.com", html)
+        self.assertIn("https://example.com", html)
