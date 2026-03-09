@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -34,7 +35,7 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         self.gestor_com_rf = Usuario.objects.create_user(
             username="gestor_rf",
             email="gestor.rf@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="José da Silva",
             rf="123456",
             is_staff=True,
@@ -44,7 +45,7 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         self.gestor_sem_rf = Usuario.objects.create_user(
             username="gestor_sem_rf",
             email="gestor.sem.rf@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Maria Santos",
             rf=None,
             is_staff=True,
@@ -55,7 +56,7 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         self.operador = Usuario.objects.create_user(
             username="operador",
             email="operador@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Operador Teste",
             rf="654321",
             is_staff=True,

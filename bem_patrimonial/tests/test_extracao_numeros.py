@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 # Cobertura total de bem_patrimonial/admins/actions/extracao_numeros.py
 
 import csv
@@ -61,7 +62,7 @@ class ExtracaoNumerosTest(TestCase):
         cls.grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         cls.gestor = Usuario.objects.create_user(
             username="gestor_ext",
-            password="x",
+            **auth_kwargs("x"),
             unidade_administrativa=cls.ua,
             unidade_orcamentaria=cls.uo,
             is_staff=True,
@@ -69,7 +70,7 @@ class ExtracaoNumerosTest(TestCase):
         cls.gestor.groups.add(cls.grupo_gestor)
         cls.operador = Usuario.objects.create_user(
             username="operador_ext",
-            password="x",
+            **auth_kwargs("x"),
             unidade_administrativa=cls.ua,
             unidade_orcamentaria=cls.uo,
             is_staff=True,

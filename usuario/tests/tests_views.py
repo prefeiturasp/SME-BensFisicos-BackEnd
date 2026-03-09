@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import Group
@@ -12,20 +13,20 @@ User = get_user_model()
 
 class PasswordChangeViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="alice", password="a123456")
+        self.user = User.objects.create_user(username="alice", **auth_kwargs("a123456"))
         self.staff = User.objects.create_user(
-            username="admin1", password="a123456", is_staff=True
+            username="admin1", **auth_kwargs("a123456"), is_staff=True
         )
 
     def test_get_own_password_change_page(self):
-        self.client.login(username="alice", password="a123456")
+        self.client.login(username="alice", **auth_kwargs("a123456"))
         url = reverse("password_change")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "admin/password_change.html")
 
     def test_post_own_password_change_sets_flags_and_redirects_next(self):
-        self.client.login(username="alice", password="a123456")
+        self.client.login(username="alice", **auth_kwargs("a123456"))
         next_url = "/admin/"
         url = f'{reverse("password_change")}?next={next_url}'
         resp = self.client.post(
@@ -45,10 +46,10 @@ class PasswordChangeViewTests(TestCase):
         self.assertFalse(u.must_change_password)
         self.assertIsNotNone(u.last_password_change)
         self.assertLessEqual(u.last_password_change, timezone.now())
-        self.assertTrue(self.client.login(username="alice", password="N0va@s3nhA!"))
+        self.assertTrue(self.client.login(username="alice", **auth_kwargs("N0va@s3nhA!")))
 
     def test_staff_changes_other_user_password_without_old_password(self):
-        self.client.login(username="admin1", password="a123456")
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
         target = self.user
         next_url = f"/admin/usuario/usuario/{target.pk}/change/"
         url = f'{reverse("password_change")}?user_id={target.pk}&next={next_url}'
@@ -69,19 +70,19 @@ class PasswordChangeViewTests(TestCase):
         target.refresh_from_db()
         self.assertFalse(target.must_change_password)
         self.assertIsNotNone(target.last_password_change)
-        self.assertTrue(self.client.login(username="alice", password="Sup3rS3nh@"))
+        self.assertTrue(self.client.login(username="alice", **auth_kwargs("Sup3rS3nh@")))
 
 
 class AdminLoginViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="bob", password="b123456")
+        self.user = User.objects.create_user(username="bob", **auth_kwargs("b123456"))
 
     def test_login_redirects_selecionar_ua(self):
         resp = self.client.post(
             "/admin/login/",
             {
                 "username": "bob",
-                "password": "b123456",
+                **auth_kwargs("b123456"),
             },
             follow=False,
         )
@@ -94,7 +95,7 @@ class AdminLoginViewTests(TestCase):
             "/admin/login/",
             {
                 "username": "bob",
-                "password": "b123456",
+                **auth_kwargs("b123456"),
                 "next": "/admin/",
             },
             follow=False,
@@ -122,7 +123,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.gestor = User.objects.create_user(
             username="gestor1",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -132,7 +133,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.operador = User.objects.create_user(
             username="operador1",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -142,7 +143,7 @@ class SelecionarUAViewTests(TestCase):
         self.operador.unidades_administrativas.add(self.ua1, self.ua2)
 
     def test_gestor_ve_opcao_visao_geral_no_select(self):
-        self.client.login(username="gestor1", password="senha123")
+        self.client.login(username="gestor1", **auth_kwargs("senha123"))
         resp = self.client.get(reverse("selecionar_ua"))
 
         self.assertEqual(resp.status_code, 200)
@@ -150,7 +151,7 @@ class SelecionarUAViewTests(TestCase):
         self.assertContains(resp, "__UO__")
 
     def test_gestor_pode_selecionar_visao_geral(self):
-        self.client.login(username="gestor1", password="senha123")
+        self.client.login(username="gestor1", **auth_kwargs("senha123"))
         resp = self.client.post(
             reverse("selecionar_ua"),
             {
@@ -170,7 +171,7 @@ class SelecionarUAViewTests(TestCase):
         )
 
     def test_operador_nao_ve_opcao_visao_geral(self):
-        self.client.login(username="operador1", password="senha123")
+        self.client.login(username="operador1", **auth_kwargs("senha123"))
         resp = self.client.get(reverse("selecionar_ua"))
 
         self.assertEqual(resp.status_code, 200)
@@ -185,7 +186,7 @@ class UsuarioViewSetTests(TestCase):
 
         self.admin = User.objects.create_user(
             username="admin",
-            password="admin123",
+            **auth_kwargs("admin123"),
             is_staff=True,
             is_superuser=True,
         )
@@ -193,10 +194,10 @@ class UsuarioViewSetTests(TestCase):
         self.user = User.objects.create_user(
             username="user1",
             email="user@test.com",
-            password="123456",
+            **auth_kwargs("123456"),
         )
 
-        self.client.login(username="admin", password="admin123")
+        self.client.login(username="admin", **auth_kwargs("admin123"))
         self.client.force_authenticate(user=self.admin)
 
         self.list_url = reverse("usuario-list")
@@ -224,7 +225,7 @@ class UsuarioViewSetTests(TestCase):
             {
                 "username": "novo",
                 "email": "novo@test.com",
-                "password": "Senha123!",
+                **auth_kwargs("Senha123!"),
             },
             format="json",
         )

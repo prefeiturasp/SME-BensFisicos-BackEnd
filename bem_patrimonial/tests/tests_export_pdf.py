@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from decimal import Decimal
 import re
 from django.test import TestCase, RequestFactory
@@ -31,7 +32,7 @@ class SetupExportData:
 
         usuario = Usuario.objects.create(
             username=username,
-            password="testpass123",
+            **auth_kwargs("testpass123"),
             nome=f"Usuario {username}",
             email=f"{username}@teste.com",
             unidade_administrativa=unidade,
@@ -270,7 +271,7 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         # Criar gestor SEM UA para ter acesso total
         gestor_sem_ua = Usuario.objects.create(
             username="gestor_sem_ua",
-            password="testpass123",
+            **auth_kwargs("testpass123"),
             nome="Gestor Sem UA",
             email="gestor_sem_ua@teste.com",
             is_staff=True,

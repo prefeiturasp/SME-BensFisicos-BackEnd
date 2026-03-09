@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -60,7 +61,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.gestor = Usuario.objects.create_user(
             username="gestor_ua_api",
             email="gestor.ua.api@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Gestor UA",
             is_staff=True,
             unidade_orcamentaria=self.uo1,
@@ -70,7 +71,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.operador = Usuario.objects.create_user(
             username="operador_ua_api",
             email="operador.ua.api@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Operador UA",
             is_staff=True,
             unidade_orcamentaria=self.uo1,
@@ -81,7 +82,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.superuser = Usuario.objects.create_user(
             username="super_ua_api",
             email="super.ua.api@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Super UA",
             is_staff=True,
             is_superuser=True,

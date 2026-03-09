@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from rest_framework.test import APITestCase
 from rest_framework import status
 from usuario.models import Usuario
@@ -15,7 +16,7 @@ class AuthEndpointsTestCase(APITestCase):
         self.user = Usuario.objects.create_user(
             username="testuser",
             email="testuser@example.com",
-            password="testpass123",
+            **auth_kwargs("testpass123"),
             nome="Test User",
             rf="1234567",
             is_active=True,
@@ -53,7 +54,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -75,7 +76,7 @@ class AuthEndpointsTestCase(APITestCase):
         self.user.save()
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "testpass123"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -100,7 +101,7 @@ class AuthEndpointsTestCase(APITestCase):
     def test_login_success(self):
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "testpass123"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("access", resp.data)
@@ -115,14 +116,14 @@ class AuthEndpointsTestCase(APITestCase):
     def test_login_fail(self):
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "wrongpass"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("wrongpass")}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_me_authenticated(self):
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "testpass123"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
         )
         access = resp.data["access"]
         me_url = "/api/auth/me/"
@@ -134,7 +135,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp_login = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         self.assertEqual(resp_login.status_code, status.HTTP_200_OK)
@@ -156,7 +157,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -214,7 +215,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -252,7 +253,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -282,7 +283,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]

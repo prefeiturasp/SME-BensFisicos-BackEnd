@@ -5,6 +5,7 @@ from django.core import mail
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.contrib.auth.tokens import default_token_generator
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 
 User = get_user_model()
 
@@ -14,7 +15,9 @@ class PasswordRecoveryTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            username="testuser", email="test@example.com", password="oldpassword123"
+            username="testuser",
+            email="test@example.com",
+            **auth_kwargs("OldPass@123"),
         )
         self.user.is_active = True
         self.user.save()
@@ -105,8 +108,8 @@ class PasswordRecoveryTests(TestCase):
         response = self.client.post(
             confirm_url,
             {
-                "new_password1": "newpassword123!",
-                "new_password2": "newpassword123!",
+                "new_password1": "NovaSenha@123",
+                "new_password2": "NovaSenha@123",
             },
         )
 
@@ -115,8 +118,8 @@ class PasswordRecoveryTests(TestCase):
             response = self.client.post(
                 set_password_url,
                 {
-                    "new_password1": "newpassword123!",
-                    "new_password2": "newpassword123!",
+                    "new_password1": "NovaSenha@123",
+                    "new_password2": "NovaSenha@123",
                 },
                 follow=True,
             )
@@ -126,7 +129,7 @@ class PasswordRecoveryTests(TestCase):
 
         self.user.refresh_from_db()
         login_success = self.client.login(
-            username="testuser", password="newpassword123!"
+            username="testuser", **auth_kwargs("NovaSenha@123")
         )
         self.assertTrue(login_success)
 
@@ -155,8 +158,8 @@ class PasswordRecoveryTests(TestCase):
             self.client.post(
                 set_password_url,
                 {
-                    "new_password1": "newpassword123!",
-                    "new_password2": "newpassword123!",
+                    "new_password1": "NovaSenha@123",
+                    "new_password2": "NovaSenha@123",
                 },
                 follow=True,
             )

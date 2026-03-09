@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from io import BytesIO
 from decimal import Decimal
 from unittest.mock import patch
@@ -51,7 +52,7 @@ class ConciliacaoPDFTestBase(TestCase):
             nome="Operador A",
             rf="1111111",
             email="operador_a@exemplo.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_a,
             unidade_orcamentaria=self.ua_a.unidade_orcamentaria,
         )
@@ -63,7 +64,7 @@ class ConciliacaoPDFTestBase(TestCase):
             nome="Operador B",
             rf="2222222",
             email="operador_b@exemplo.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_b,
             unidade_orcamentaria=self.ua_b.unidade_orcamentaria,
         )
@@ -75,7 +76,7 @@ class ConciliacaoPDFTestBase(TestCase):
             nome="Gestor",
             rf="9999999",
             email="gestor@exemplo.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_b,
         )
         self.gestor.groups.add(self.grupo_gestor)
@@ -152,7 +153,7 @@ class TestDownloadConciliacaoPDFView(ConciliacaoPDFTestBase):
         self.assertIn("/login/", resp.url)
 
     def test_operador_da_mesma_ua_pode_baixar(self):
-        self.client.login(username="operador_a", password="senha123")
+        self.client.login(username="operador_a", **auth_kwargs("senha123"))
 
         with patch(
             "inventario.views.gerar_pdf_conciliacao",
@@ -165,7 +166,7 @@ class TestDownloadConciliacaoPDFView(ConciliacaoPDFTestBase):
         self.assertIn("attachment", resp["Content-Disposition"])
 
     def test_operador_de_outra_ua_recebe_403(self):
-        self.client.login(username="operador_b", password="senha123")
+        self.client.login(username="operador_b", **auth_kwargs("senha123"))
 
         with patch(
             "inventario.views.gerar_pdf_conciliacao",
@@ -176,7 +177,7 @@ class TestDownloadConciliacaoPDFView(ConciliacaoPDFTestBase):
         self.assertEqual(resp.status_code, 403)
 
     def test_gestor_pode_baixar_qualquer_ua(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
 
         with patch(
             "inventario.views.gerar_pdf_conciliacao",
@@ -188,7 +189,7 @@ class TestDownloadConciliacaoPDFView(ConciliacaoPDFTestBase):
         self.assertEqual(resp["Content-Type"], "application/pdf")
 
     def test_conciliacao_inexistente_retorna_404(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
         url = reverse("download_conciliacao_pdf", kwargs={"pk": 999999})
 
         with patch(
@@ -200,7 +201,7 @@ class TestDownloadConciliacaoPDFView(ConciliacaoPDFTestBase):
         self.assertEqual(resp.status_code, 404)
 
     def test_filename_tem_numero_e_ua(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
 
         with patch(
             "inventario.views.gerar_pdf_conciliacao",
@@ -220,7 +221,7 @@ class TestDownloadConciliacaoPDFView(ConciliacaoPDFTestBase):
         self.assertIn(".pdf", disp)
 
     def test_pdf_streaming_valido(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
 
         fake = BytesIO(b"%PDF-1.4\nconteudo\n%%EOF")
         with patch("inventario.views.gerar_pdf_conciliacao", return_value=fake):

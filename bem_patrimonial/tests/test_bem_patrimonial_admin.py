@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 # Cobertura do bem_patrimonial/admins/bem_patrimonial.py
 # Complementa tests_admin.py, tests_aprovacao_lote.py, tests_admin_list_display.py,
 # test_edicao_restrita_operador.py e tests_export_pdf.py
@@ -61,7 +62,7 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
 
         cls.gestor = Usuario.objects.create_user(
             username="gestor_cob",
-            password="x",
+            **auth_kwargs("x"),
             unidade_administrativa=cls.ua,
             unidade_orcamentaria=cls.uo,
             is_staff=True,
@@ -72,7 +73,7 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
 
         cls.operador = Usuario.objects.create_user(
             username="operador_cob",
-            password="x",
+            **auth_kwargs("x"),
             unidade_administrativa=cls.ua,
             unidade_orcamentaria=cls.uo,
             is_staff=True,
@@ -81,7 +82,7 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
 
         cls.user_sem_grupo = Usuario.objects.create_user(
             username="sem_grupo_cob",
-            password="x",
+            **auth_kwargs("x"),
             unidade_administrativa=cls.ua,
             unidade_orcamentaria=cls.uo,
             is_staff=True,
@@ -90,7 +91,7 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         cls.superuser = user_model.objects.create_superuser(
             username="super_cob",
             email="super@test.com",
-            password="x",
+            **auth_kwargs("x"),
         )
         cls.superuser.unidade_orcamentaria = cls.uo
         cls.superuser.must_change_password = False

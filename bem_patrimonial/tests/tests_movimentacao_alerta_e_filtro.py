@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import timedelta
 
 from django.contrib import admin
@@ -33,7 +34,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
         self.usuario = Usuario.objects.create_user(
             username="operador",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
@@ -56,7 +57,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
         self.assertIsNone(resultado["pendencias"])
 
     def test_tag_usuario_sem_ua(self):
-        usuario = Usuario.objects.create_user(username="sem_ua", password="test123")
+        usuario = Usuario.objects.create_user(username="sem_ua", **auth_kwargs("test123"))
         request = self.factory.get("/")
         request.user = usuario
         resultado = alerta_movimentacoes_pendentes({"request": request})
@@ -64,7 +65,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
 
     def test_tag_superuser_sem_ua(self):
         usuario = Usuario.objects.create_user(
-            username="super", password="test123", is_superuser=True
+            username="super", **auth_kwargs("test123"), is_superuser=True
         )
         request = self.factory.get("/")
         request.user = usuario
@@ -73,7 +74,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
 
     def test_tag_gestor_sem_ua(self):
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
-        usuario = Usuario.objects.create_user(username="gestor", password="test123")
+        usuario = Usuario.objects.create_user(username="gestor", **auth_kwargs("test123"))
         usuario.groups.add(grupo_gestor)
         request = self.factory.get("/")
         request.user = usuario
@@ -83,7 +84,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
     def test_tag_usuario_sem_grupo(self):
         usuario = Usuario.objects.create_user(
             username="sem_grupo",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
@@ -132,7 +133,7 @@ class MovimentacaoAtrasadaFilterTestCase(TestCase):
         )
         self.usuario = Usuario.objects.create_user(
             username="operador2",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )

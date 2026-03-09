@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
@@ -21,7 +22,7 @@ class FirstLoginSignalTests(TestCase):
         self.factory = RequestFactory()
 
     def test_sets_session_flag_when_last_login_was_null(self):
-        u = User.objects.create_user(username="bob", password="x")
+        u = User.objects.create_user(username="bob", **auth_kwargs("x"))
         self.assertIsNone(
             User.objects.filter(pk=u.pk).values_list("last_login", flat=True).first()
         )
@@ -32,9 +33,9 @@ class FirstLoginSignalTests(TestCase):
         self.assertTrue(request.session.get("force_pw_change_first_admin", False))
 
     def test_no_flag_when_user_already_logged_once(self):
-        u = User.objects.create_user(username="bob2", password="x")
+        u = User.objects.create_user(username="bob2", **auth_kwargs("x"))
         c = self.client
-        c.login(username="bob2", password="x")
+        c.login(username="bob2", **auth_kwargs("x"))
         c.logout()
 
         self.assertIsNotNone(

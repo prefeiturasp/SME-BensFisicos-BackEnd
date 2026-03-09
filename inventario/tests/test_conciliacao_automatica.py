@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from unittest.mock import PropertyMock, patch
 from datetime import date
 from django.test import TestCase
@@ -20,7 +21,7 @@ class ConciliacaoAutomaticaTest(TestCase):
         self.ua = criar_ua(codigo="001.0002", sigla="UA2", nome="Unidade Auto")
         self.usuario = Usuario.objects.create_user(
             username="gestor",
-            password="123",
+            **auth_kwargs("123"),
             unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 

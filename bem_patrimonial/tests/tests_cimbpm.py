@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, Client
 from django.contrib.auth.models import Group
 from django.urls import reverse
@@ -50,7 +51,7 @@ class CIMBPMTestBase(TestCase):
             nome="João Silva",
             rf="1234567",
             email="operador@exemplo.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
@@ -62,7 +63,7 @@ class CIMBPMTestBase(TestCase):
             nome="Maria Santos",
             rf="7654321",
             email="gestor@exemplo.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
@@ -297,7 +298,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
             username="operador_terceiro",
             nome="José Costa",
             rf="9999999",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_terceira,
             unidade_orcamentaria=self.ua_terceira.unidade_orcamentaria,
         )
@@ -308,7 +309,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
             username="operador_destino",
             nome="Pedro Alves",
             rf="5555555",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )
@@ -336,36 +337,36 @@ class TestSegurancaDownload(CIMBPMTestBase):
         self.assertIn("/login/", response.url)
 
     def test_operador_origem_pode_baixar(self):
-        self.client.login(username="operador", password="senha123")
+        self.client.login(username="operador", **auth_kwargs("senha123"))
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_operador_destino_pode_baixar(self):
-        self.client.login(username="operador_destino", password="senha123")
+        self.client.login(username="operador_destino", **auth_kwargs("senha123"))
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_operador_sem_relacao_nao_pode_baixar(self):
-        self.client.login(username="operador_terceiro", password="senha123")
+        self.client.login(username="operador_terceiro", **auth_kwargs("senha123"))
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
 
     def test_gestor_pode_baixar_qualquer_documento(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_documento_inexistente_retorna_404(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
         url = reverse("download_documento_cimbpm", kwargs={"pk": 99999})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
     def test_filename_correto_download(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
         response = self.client.get(self.url)
 
         self.assertIn("attachment", response["Content-Disposition"])
@@ -392,7 +393,7 @@ class TestConteudoDownload(CIMBPMTestBase):
         )
 
     def test_conteudo_pdf_valido(self):
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
@@ -408,7 +409,7 @@ class TestConteudoDownload(CIMBPMTestBase):
 
         self.assertEqual(self.movimentacao.criado_em, data_criacao_original)
 
-        self.client.login(username="gestor", password="senha123")
+        self.client.login(username="gestor", **auth_kwargs("senha123"))
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
 
@@ -503,7 +504,7 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             username="semrf",
             nome="Sem RF",
             rf="",
-            password="123",
+            **auth_kwargs("123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
         )

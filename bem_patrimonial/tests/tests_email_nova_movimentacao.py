@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from unittest.mock import patch
 from django.contrib.auth.models import Group
@@ -32,7 +33,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             username="operador_origem",
             email="origem@test.com",
             nome="Operador Origem",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
@@ -43,7 +44,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             username="operador_destino_1",
             email="destino1@test.com",
             nome="Operador Destino 1",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
@@ -55,7 +56,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             username="operador_destino_2",
             email="destino2@test.com",
             nome="Operador Destino 2",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,

@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -35,7 +36,7 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
         )
         self.usuario = Usuario.objects.create_user(
             username="operador",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
@@ -149,7 +150,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         self.operador = Usuario.objects.create_user(
             username="operador",
             email="operador@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
@@ -160,7 +161,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         self.gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
@@ -171,7 +172,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         self.sem_email = Usuario.objects.create_user(
             username="sem_email",
             email="",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino_2,
             unidade_orcamentaria=self.ua_destino_2.unidade_orcamentaria,
             is_active=True,
@@ -181,7 +182,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
 
         self.solicitante = Usuario.objects.create_user(
             username="solicitante",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
