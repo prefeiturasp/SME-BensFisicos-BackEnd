@@ -1,5 +1,6 @@
 from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import timedelta
+import tempfile
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -294,11 +295,13 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
     @patch(COMMAND_ENVIA_PATH)
     def test_comando_log_file(self, mock_envia):
         self._cria_movimentacao(self.ua_destino)
+        with tempfile.NamedTemporaryFile(prefix="notificacoes_", suffix=".log") as tmp:
+            log_path = tmp.name
         with patch("builtins.open") as mock_open:
             call_command(
                 "notificar_movimentacoes_pendentes_aceite",
                 "--log-file",
-                "/tmp/test.log",
+                log_path,
             )
             mock_open.assert_called_once()
 
