@@ -2,6 +2,8 @@ from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from unittest.mock import patch
 from django.contrib.auth.models import Group
+from django.template import Context
+from django.template.loader import render_to_string
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -208,3 +210,21 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         template = call_args[2]
 
         self.assertEqual(template, "simple_message.html")
+
+    def test_template_simple_message_escape_html_no_body(self):
+        html = render_to_string(
+            "simple_message.html",
+            {
+                "context": Context(
+                    {
+                        "subject": "Assunto",
+                        "title": "Titulo",
+                        "subtitle": "Subtitulo",
+                        "body": "<script>alert('xss')</script>",
+                    }
+                )
+            },
+        )
+
+        self.assertIn("&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;", html)
+        self.assertNotIn("<script>alert('xss')</script>", html)
