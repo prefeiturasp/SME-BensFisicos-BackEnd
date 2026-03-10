@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import status
@@ -36,7 +37,7 @@ class EscopoEndpointsTestCase(APITestCase):
         self.gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@teste.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Gestor",
             is_staff=True,
             unidade_orcamentaria=self.uo1,
@@ -46,7 +47,7 @@ class EscopoEndpointsTestCase(APITestCase):
         self.operador = Usuario.objects.create_user(
             username="operador",
             email="operador@teste.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Operador",
             is_staff=True,
             unidade_orcamentaria=self.uo1,
@@ -58,7 +59,7 @@ class EscopoEndpointsTestCase(APITestCase):
         self.superuser = Usuario.objects.create_user(
             username="super",
             email="super@teste.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Super",
             is_staff=True,
             is_superuser=True,

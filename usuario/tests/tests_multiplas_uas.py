@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -40,7 +41,7 @@ class OperadorMultiplasUAsAPITestCase(APITestCase):
         self.operador = Usuario.objects.create_user(
             username="operador_multi",
             email="operador@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             nome="Operador Multi",
             is_staff=True,
             unidade_orcamentaria=self.uo,
@@ -134,7 +135,7 @@ class AdminValidacaoM2MTestCase(TestCase):
         self.superuser = Usuario.objects.create_superuser(
             username="super",
             email="super@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
         )
 
@@ -216,7 +217,7 @@ class UasDOUsuarioTestCase(TestCase):
 
         self.operador = Usuario.objects.create_user(
             username="operador_uas",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_orcamentaria=self.uo,
             unidade_administrativa=self.ua1,
         )
@@ -231,7 +232,7 @@ class UasDOUsuarioTestCase(TestCase):
     def test_fallback_para_fk_se_m2m_vazio(self):
         user = Usuario.objects.create_user(
             username="op_sem_m2m",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua1,
         )
         qs = uas_do_usuario(user)
@@ -254,7 +255,7 @@ class EmailMovimentacaoM2MTestCase(TestCase):
         self.operador_origem = Usuario.objects.create_user(
             username="op_origem",
             email="origem@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.uo,
         )
@@ -264,7 +265,7 @@ class EmailMovimentacaoM2MTestCase(TestCase):
         self.operador_multi = Usuario.objects.create_user(
             username="op_multi",
             email="multi@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.uo,
         )
@@ -317,7 +318,7 @@ class UasPermitidasPropertyTestCase(TestCase):
     def test_operador_retorna_m2m(self):
         operador = Usuario.objects.create_user(
             username="op",
-            password="t",
+            **auth_kwargs("t"),
             unidade_orcamentaria=self.uo,
             unidade_administrativa=self.ua1,
         )
@@ -330,7 +331,7 @@ class UasPermitidasPropertyTestCase(TestCase):
     def test_gestor_retorna_todas_uas_da_uo(self):
         gestor = Usuario.objects.create_user(
             username="ge",
-            password="t",
+            **auth_kwargs("t"),
             unidade_orcamentaria=self.uo,
         )
         gestor.groups.add(self.grupo_gestor)
@@ -342,7 +343,7 @@ class UasPermitidasPropertyTestCase(TestCase):
     def test_superuser_retorna_todas_ativas(self):
         su = Usuario.objects.create_superuser(
             username="su",
-            password="t",
+            **auth_kwargs("t"),
             email="su@t.com",
         )
         total_ativas = UnidadeAdministrativa.objects.filter(

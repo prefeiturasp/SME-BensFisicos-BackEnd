@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 import datetime
 from django.test import TestCase
 from django.core.exceptions import ValidationError
@@ -26,7 +27,7 @@ class OcorrenciaBaseTest(TestCase):
         cls.ua = criar_ua(codigo="001.0391", sigla="DRE-01", nome="DRE Teste")
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         cls.usuario = Usuario.objects.create_user(
-            username="gestor", password="testpass123", unidade_administrativa=cls.ua
+            username="gestor", **auth_kwargs("testpass123"), unidade_administrativa=cls.ua
         )
         cls.usuario.groups.add(grupo_gestor)
 

@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
+from django.views.decorators.http import require_GET
 
 from inventario.models import ConciliacaoUA
 
@@ -20,6 +21,7 @@ def _operador_pode_exportar(user, conciliacao):
 
 
 @login_required
+@require_GET
 def download_conciliacao_pdf(request, pk):
     """
     Exporta a Conciliação (Eventual ou Anual) em PDF.

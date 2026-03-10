@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -474,7 +475,7 @@ class EmailCancelamentoTestCase(TestCase):
         gestor_sem_nome = Usuario.objects.create_user(
             username="gestor_sem_nome",
             email="gestor_sem_nome@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,

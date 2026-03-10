@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.middleware import AuthenticationMiddleware
@@ -33,7 +34,7 @@ class ForcePasswordChangeMiddlewareTests(TestCase):
 
     def test_redirects_when_must_change_password_true(self):
         u = User.objects.create_user(
-            username="maria", password="x", must_change_password=True
+            username="maria", **auth_kwargs("x"), must_change_password=True
         )
         req = get_request_with_user("/admin/", u)
         resp = self.get_mw()(req)
@@ -42,7 +43,7 @@ class ForcePasswordChangeMiddlewareTests(TestCase):
 
     def test_redirects_when_session_flag_set(self):
         u = User.objects.create_user(
-            username="joao", password="x", must_change_password=False
+            username="joao", **auth_kwargs("x"), must_change_password=False
         )
         req = get_request_with_user("/admin/", u)
         req.session["force_pw_change_first_admin"] = True
@@ -53,7 +54,7 @@ class ForcePasswordChangeMiddlewareTests(TestCase):
 
     def test_allows_when_ok(self):
         u = User.objects.create_user(
-            username="ok", password="x", must_change_password=False
+            username="ok", **auth_kwargs("x"), must_change_password=False
         )
         req = get_request_with_user("/admin/", u)
         resp = self.get_mw()(req)

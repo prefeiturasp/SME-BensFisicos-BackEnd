@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -11,7 +12,7 @@ class BemPatrimonialAdminTest(TestCase):
     def setUp(self):
         user_model = get_user_model()
         self.admin_user = user_model.objects.create_superuser(
-            username="admin", email="admin@example.com", password="admin123"
+            username="admin", email="admin@example.com", **auth_kwargs("admin123")
         )
         self.uo = criar_uo(codigo="100", nome="UO 100")
 

@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -37,7 +38,7 @@ class BaseAprovacaoTestCase(TestCase):
         self.gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@test.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua,
             unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
@@ -46,7 +47,7 @@ class BaseAprovacaoTestCase(TestCase):
         self.operador = Usuario.objects.create_user(
             username="operador",
             email="operador@test.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua,
             unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )

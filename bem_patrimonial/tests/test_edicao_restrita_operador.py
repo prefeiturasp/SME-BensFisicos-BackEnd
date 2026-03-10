@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -36,7 +37,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         self.gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
@@ -45,7 +46,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         self.operador_ua1 = Usuario.objects.create_user(
             username="operador_ua1",
             email="operador_ua1@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua1,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
@@ -210,7 +211,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
         operador_ua2 = Usuario.objects.create_user(
             username="operador_ua2",
             email="operador_ua2@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua2,
             unidade_orcamentaria=self.ua2.unidade_orcamentaria,

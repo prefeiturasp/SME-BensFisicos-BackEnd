@@ -219,18 +219,13 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
 
         user_uo_id = getattr(user, "unidade_orcamentaria_id", None)
         user_ua_id = getattr(user, "unidade_administrativa_id", None)
+        has_uo_access = bool(user_uo_id and obj.unidade_orcamentaria_id == user_uo_id)
+        has_ua_access = bool(user_ua_id and obj.pk == user_ua_id)
 
-        if user_uo_id:
-            if obj.unidade_orcamentaria_id == user_uo_id:
-                return obj
+        if not (has_uo_access or has_ua_access):
             raise NotFound()
 
-        if user_ua_id:
-            if obj.pk == user_ua_id:
-                return obj
-            raise NotFound()
-
-        raise NotFound()
+        return obj
 
     def _uo_ids_permitidos(self, user):
         if getattr(user, "is_superuser", False):

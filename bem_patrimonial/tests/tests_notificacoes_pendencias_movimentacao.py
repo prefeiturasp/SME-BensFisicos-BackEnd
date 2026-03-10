@@ -1,4 +1,6 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from datetime import timedelta
+import tempfile
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -17,6 +19,7 @@ from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
+
 COMMAND_ENVIA_PATH = (
     "bem_patrimonial.management.commands."
     "notificar_movimentacoes_pendentes_aceite."
@@ -29,13 +32,13 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
         self.ua_origem = criar_ua()
         self.ua_destino = criar_ua(
             nome="UA Destino",
-            codigo="00.00.00.020",
+            codigo=codigo_ua(0, 0, 0, 20),
             sigla="UA-D",
             uo=self.ua_origem.unidade_orcamentaria,
         )
         self.usuario = Usuario.objects.create_user(
             username="operador",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
@@ -130,17 +133,19 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
 
 class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
     def setUp(self):
-        self.ua_origem = criar_ua(nome="UA Origem", codigo="00.00.00.030", sigla="UA-O")
+        self.ua_origem = criar_ua(
+            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 30), sigla="UA-O"
+        )
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
-            codigo="00.00.00.040",
+            codigo=codigo_ua(0, 0, 0, 40),
             sigla="UA-D",
         )
         self.ua_destino_2 = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino 2",
-            codigo="00.00.00.050",
+            codigo=codigo_ua(0, 0, 0, 50),
             sigla="UA-D2",
         )
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
@@ -149,7 +154,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         self.operador = Usuario.objects.create_user(
             username="operador",
             email="operador@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
@@ -160,7 +165,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         self.gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
@@ -171,7 +176,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         self.sem_email = Usuario.objects.create_user(
             username="sem_email",
             email="",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino_2,
             unidade_orcamentaria=self.ua_destino_2.unidade_orcamentaria,
             is_active=True,
@@ -181,7 +186,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
 
         self.solicitante = Usuario.objects.create_user(
             username="solicitante",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
@@ -293,11 +298,13 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
     @patch(COMMAND_ENVIA_PATH)
     def test_comando_log_file(self, mock_envia):
         self._cria_movimentacao(self.ua_destino)
+        with tempfile.NamedTemporaryFile(prefix="notificacoes_", suffix=".log") as tmp:
+            log_path = tmp.name
         with patch("builtins.open") as mock_open:
             call_command(
                 "notificar_movimentacoes_pendentes_aceite",
                 "--log-file",
-                "/tmp/test.log",
+                log_path,
             )
             mock_open.assert_called_once()
 
@@ -322,7 +329,7 @@ class TemplateMovimentacoesPendentesAceiteTestCase(TestCase):
                     "bens_excedentes": 2,
                 }
             ],
-            "pendentes_url": "http://example.com",
+            "pendentes_url": "https://example.com",
         }
 
         from django.template.loader import render_to_string
@@ -337,4 +344,4 @@ class TemplateMovimentacoesPendentesAceiteTestCase(TestCase):
         self.assertIn("Movimentação #10", html)
         self.assertIn("Bem A", html)
         self.assertIn("+ 2 item(ns) não exibido(s)", html)
-        self.assertIn("http://example.com", html)
+        self.assertIn("https://example.com", html)

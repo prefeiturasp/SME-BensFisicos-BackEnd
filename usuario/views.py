@@ -31,7 +31,15 @@ from drf_spectacular.utils import (
     extend_schema,
     OpenApiResponse,
 )
-from usuario.api_doc import *
+from usuario.api_doc import (
+    CREATE_USERS_DOC,
+    DELETE_USERS_DOC,
+    LIST_USERS_DOC,
+    PATCH_USERS_DOC,
+    RESTORE_USERS_DOC,
+    RETRIEVE_USERS_DOC,
+    UPDATE_USERS_DOC,
+)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -333,7 +341,7 @@ class UsuarioViewSet(
     CRUD completo de usuários com controle explícito
     """
 
-    queryset = User.objects.all()
+    queryset = User.objects.all().order_by("username")
     serializer_class = UsuarioSerializer
     permission_classes = [IsAdminUser]
     pagination_class = UsuarioPagination
