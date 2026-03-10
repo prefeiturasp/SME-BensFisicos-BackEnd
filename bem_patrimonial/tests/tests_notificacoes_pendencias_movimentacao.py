@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from datetime import timedelta
 import tempfile
 from unittest.mock import patch
@@ -19,6 +19,7 @@ from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
+
 COMMAND_ENVIA_PATH = (
     "bem_patrimonial.management.commands."
     "notificar_movimentacoes_pendentes_aceite."
@@ -31,7 +32,7 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
         self.ua_origem = criar_ua()
         self.ua_destino = criar_ua(
             nome="UA Destino",
-            codigo="00.00.00.020",
+            codigo=codigo_ua(0, 0, 0, 20),
             sigla="UA-D",
             uo=self.ua_origem.unidade_orcamentaria,
         )
@@ -132,17 +133,19 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
 
 class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
     def setUp(self):
-        self.ua_origem = criar_ua(nome="UA Origem", codigo="00.00.00.030", sigla="UA-O")
+        self.ua_origem = criar_ua(
+            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 30), sigla="UA-O"
+        )
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
-            codigo="00.00.00.040",
+            codigo=codigo_ua(0, 0, 0, 40),
             sigla="UA-D",
         )
         self.ua_destino_2 = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino 2",
-            codigo="00.00.00.050",
+            codigo=codigo_ua(0, 0, 0, 50),
             sigla="UA-D2",
         )
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)

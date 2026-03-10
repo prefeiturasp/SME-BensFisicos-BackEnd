@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -35,21 +35,21 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
         self.ua1 = criar_ua(
             uo=self.uo1,
-            codigo="10.10.10.001",
+            codigo=codigo_ua(10, 10, 10, 1),
             sigla="UA1",
             nome="Unidade 1",
             status=UnidadeAdministrativa.ATIVA,
         )
         self.ua2 = criar_ua(
             uo=self.uo1,
-            codigo="10.10.10.002",
+            codigo=codigo_ua(10, 10, 10, 2),
             sigla="UA2",
             nome="Unidade 2",
             status=UnidadeAdministrativa.INATIVA,
         )
         self.ua3 = criar_ua(
             uo=self.uo2,
-            codigo="20.20.20.003",
+            codigo=codigo_ua(20, 20, 20, 3),
             sigla="UA3",
             nome="Unidade 3",
             status=UnidadeAdministrativa.ATIVA,
@@ -173,9 +173,9 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
     def test_criacao_codigo_valido_em_varios_formatos(self):
         self._auth(self.gestor)
         cenarios = [
-            ("050", "10.10.10.050"),
+            ("050", codigo_ua(10, 10, 10, 50)),
             ("1002", "10.10.10.1002"),
-            ("10.10.10.777", "10.10.10.777"),
+            (codigo_ua(10, 10, 10, 777), codigo_ua(10, 10, 10, 777)),
         ]
 
         for codigo_in, codigo_out in cenarios:
@@ -199,7 +199,10 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         cenarios = [
             (self._payload_ua(uo_id=self.uo1.id, codigo=None), "codigo"),
             (self._payload_ua(uo_id=self.uo1.id, codigo="AB12"), "codigo"),
-            (self._payload_ua(uo_id=self.uo2.id, codigo="20.20.20.050"), "unidade_orcamentaria"),
+            (
+                self._payload_ua(uo_id=self.uo2.id, codigo=codigo_ua(20, 20, 20, 50)),
+                "unidade_orcamentaria",
+            ),
         ]
 
         for payload, campo_esperado in cenarios:
@@ -223,7 +226,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["unidade_orcamentaria"], self.uo2.id)
-        self.assertEqual(response.data["codigo"], "20.20.20.090")
+        self.assertEqual(response.data["codigo"], codigo_ua(20, 20, 20, 90))
 
     def test_operador_nao_pode_criar_editar_excluir(self):
         self._auth(self.operador)

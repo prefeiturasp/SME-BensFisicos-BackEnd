@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from datetime import timedelta
 
 from django.contrib import admin
@@ -24,11 +24,13 @@ from usuario.models import Usuario
 class AlertaMovimentacoesPendentesTagTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.ua_origem = criar_ua(nome="UA Origem", codigo="00.00.00.100", sigla="UA-O")
+        self.ua_origem = criar_ua(
+            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 100), sigla="UA-O"
+        )
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
-            codigo="00.00.00.200",
+            codigo=codigo_ua(0, 0, 0, 200),
             sigla="UA-D",
         )
         grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
@@ -124,11 +126,13 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
 class MovimentacaoAtrasadaFilterTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.ua_origem = criar_ua(nome="UA Origem", codigo="00.00.00.101", sigla="UA-O")
+        self.ua_origem = criar_ua(
+            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 101), sigla="UA-O"
+        )
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
-            codigo="00.00.00.201",
+            codigo=codigo_ua(0, 0, 0, 201),
             sigla="UA-D",
         )
         self.usuario = Usuario.objects.create_user(

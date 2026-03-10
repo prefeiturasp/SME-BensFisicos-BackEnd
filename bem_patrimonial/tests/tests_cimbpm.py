@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from django.test import TestCase, Client
 from django.contrib.auth.models import Group
 from django.urls import reverse
@@ -33,13 +33,13 @@ class CIMBPMTestBase(TestCase):
         )
 
         self.ua_origem = criar_ua(
-            codigo="01.16.10.379",
+            codigo=codigo_ua(1, 16, 10, 379),
             sigla="COSERV",
             nome="Coordenadoria de Contratos",
             status=UnidadeAdministrativa.ATIVA,
         )
         self.ua_destino = criar_ua(
-            codigo="01.16.10.408",
+            codigo=codigo_ua(1, 16, 10, 408),
             sigla="ALMOXZE",
             nome="Almoxarifado Zeladoria",
             status=UnidadeAdministrativa.ATIVA,
@@ -103,13 +103,13 @@ class TestFuncoesAuxiliares(TestCase):
 
     def test_extrair_codigo_ua_formatos_diversos(self):
         casos = [
-            ("01.16.10.379", "379"),
-            ("01.16.10.408", "408"),
+            (codigo_ua(1, 16, 10, 379), "379"),
+            (codigo_ua(1, 16, 10, 408), "408"),
             ("", "000"),
             ("ABC", "000"),
             ("0", "000"),
             ("@#$%379", "379"),
-            ("01.16.10. 379", "379"),
+            (f"{codigo_ua(1, 16, 10, 379)[:9]} 379", "379"),
             ("0000003", "003"),
             ("1", "001"),
             ("42", "042"),
@@ -120,7 +120,7 @@ class TestFuncoesAuxiliares(TestCase):
                 self.assertEqual(extrair_codigo_ua(entrada), esperado)
 
     def test_obter_nome_usuario_fallback(self):
-        ua = criar_ua(codigo="01.16.10.001", sigla="T", nome="Teste", status="A")
+        ua = criar_ua(codigo=codigo_ua(1, 16, 10, 1), sigla="T", nome="Teste", status="A")
 
         u1 = Usuario.objects.create_user(
             username="user1",
@@ -288,7 +288,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
 
         self.ua_terceira = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
-            codigo="01.16.10.500",
+            codigo=codigo_ua(1, 16, 10, 500),
             sigla="OUTRA",
             nome="Outra Unidade",
             status=UnidadeAdministrativa.ATIVA,
@@ -457,7 +457,7 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
 
     def test_geracao_com_nomes_longos(self):
         ua_longa = criar_ua(
-            codigo="01.16.10.999",
+            codigo=codigo_ua(1, 16, 10, 999),
             sigla="LONGA",
             nome="Unidade com Nome Extremamente Longo Para Testar Quebra de Linha no PDF "
             * 3,
