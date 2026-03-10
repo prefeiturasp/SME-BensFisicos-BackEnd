@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -151,8 +151,8 @@ class AdminValidacaoM2MTestCase(TestCase):
     def test_operador_sem_uas_no_m2m_erro(self):
         data = {
             "username": "op_sem_m2m",
-            "password1": "Teste@12345!x",
-            "password2": "Teste@12345!x",
+            PASSWORD1_KEY: "Teste@12345!x",
+            PASSWORD2_KEY: "Teste@12345!x",
             "nome": "Operador Sem M2M",
             "email": "op@test.com",
             "is_staff": True,
@@ -169,8 +169,8 @@ class AdminValidacaoM2MTestCase(TestCase):
     def test_ua_ativa_fora_do_m2m_erro(self):
         data = {
             "username": "op_fora_m2m",
-            "password1": "Teste@12345!x",
-            "password2": "Teste@12345!x",
+            PASSWORD1_KEY: "Teste@12345!x",
+            PASSWORD2_KEY: "Teste@12345!x",
             "nome": "Operador Fora M2M",
             "email": "op2@test.com",
             "is_staff": True,
@@ -187,8 +187,8 @@ class AdminValidacaoM2MTestCase(TestCase):
     def test_uas_de_uo_diferente_erro(self):
         data = {
             "username": "op_uo_diff",
-            "password1": "Teste@12345!x",
-            "password2": "Teste@12345!x",
+            PASSWORD1_KEY: "Teste@12345!x",
+            PASSWORD2_KEY: "Teste@12345!x",
             "nome": "Operador UO Diff",
             "email": "op3@test.com",
             "is_staff": True,

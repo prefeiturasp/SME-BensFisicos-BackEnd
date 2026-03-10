@@ -1,4 +1,8 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import (
+    NEW_PASSWORD1_KEY,
+    NEW_PASSWORD2_KEY,
+    auth_kwargs,
+)
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import Group
@@ -37,8 +41,8 @@ class PasswordChangeViewTests(TestCase):
         resp = self.client.post(
             url,
             {
-                "new_password1": "N0va@s3nhA!",
-                "new_password2": "N0va@s3nhA!",
+                NEW_PASSWORD1_KEY: "N0va@s3nhA!",
+                NEW_PASSWORD2_KEY: "N0va@s3nhA!",
                 "next": next_url,
             },
             follow=False,
@@ -61,8 +65,8 @@ class PasswordChangeViewTests(TestCase):
         resp = self.client.post(
             url,
             {
-                "new_password1": "Sup3rS3nh@",
-                "new_password2": "Sup3rS3nh@",
+                NEW_PASSWORD1_KEY: "Sup3rS3nh@",
+                NEW_PASSWORD2_KEY: "Sup3rS3nh@",
                 "user_id": str(target.pk),
                 "next": next_url,
             },

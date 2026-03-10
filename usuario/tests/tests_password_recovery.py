@@ -5,7 +5,11 @@ from django.core import mail
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.contrib.auth.tokens import default_token_generator
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import (
+    NEW_PASSWORD1_KEY,
+    NEW_PASSWORD2_KEY,
+    auth_kwargs,
+)
 
 User = get_user_model()
 
@@ -108,8 +112,8 @@ class PasswordRecoveryTests(TestCase):
         response = self.client.post(
             confirm_url,
             {
-                "new_password1": "NovaSenha@123",
-                "new_password2": "NovaSenha@123",
+                NEW_PASSWORD1_KEY: "NovaSenha@123",
+                NEW_PASSWORD2_KEY: "NovaSenha@123",
             },
         )
 
@@ -118,8 +122,8 @@ class PasswordRecoveryTests(TestCase):
             response = self.client.post(
                 set_password_url,
                 {
-                    "new_password1": "NovaSenha@123",
-                    "new_password2": "NovaSenha@123",
+                    NEW_PASSWORD1_KEY: "NovaSenha@123",
+                    NEW_PASSWORD2_KEY: "NovaSenha@123",
                 },
                 follow=True,
             )
@@ -158,8 +162,8 @@ class PasswordRecoveryTests(TestCase):
             self.client.post(
                 set_password_url,
                 {
-                    "new_password1": "NovaSenha@123",
-                    "new_password2": "NovaSenha@123",
+                    NEW_PASSWORD1_KEY: "NovaSenha@123",
+                    NEW_PASSWORD2_KEY: "NovaSenha@123",
                 },
                 follow=True,
             )

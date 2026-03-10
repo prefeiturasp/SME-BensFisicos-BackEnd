@@ -1,4 +1,9 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import (
+    NEW_PASSWORD_CONFIRM_KEY,
+    NEW_PASSWORD_KEY,
+    OLD_PASSWORD_KEY,
+    auth_kwargs,
+)
 from rest_framework.test import APITestCase
 from rest_framework import status
 from usuario.models import Usuario
@@ -43,8 +48,8 @@ class AuthEndpointsTestCase(APITestCase):
             {
                 "uidb64": uidb64,
                 "token": "tokeninvalido",
-                "new_password": "NovaSenha@123",
-                "new_password_confirm": "NovaSenha@123",
+                NEW_PASSWORD_KEY: "NovaSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "NovaSenha@123",
             },
             format="json",
         )
@@ -62,9 +67,9 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             change_url,
             {
-                "old_password": "errada",
-                "new_password": "OutraSenha@123",
-                "new_password_confirm": "OutraSenha@123",
+                OLD_PASSWORD_KEY: "errada",
+                NEW_PASSWORD_KEY: "OutraSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "OutraSenha@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
@@ -85,9 +90,9 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             change_url,
             {
-                "old_password": "testpass123",
-                "new_password": "OutraSenha@123",
-                "new_password_confirm": "OutraSenha@123",
+                OLD_PASSWORD_KEY: "testpass123",
+                NEW_PASSWORD_KEY: "OutraSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "OutraSenha@123",
             },
             format="json",
         )
@@ -202,8 +207,8 @@ class AuthEndpointsTestCase(APITestCase):
             {
                 "uidb64": uidb64,
                 "token": token,
-                "new_password": "NewPass@123",
-                "new_password_confirm": "NewPass@123",
+                NEW_PASSWORD_KEY: "NewPass@123",
+                NEW_PASSWORD_CONFIRM_KEY: "NewPass@123",
             },
             format="json",
         )
@@ -223,9 +228,9 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             change_url,
             {
-                "old_password": "testpass123",
-                "new_password": "OutraSenha@123",
-                "new_password_confirm": "OutraSenha@123",
+                OLD_PASSWORD_KEY: "testpass123",
+                NEW_PASSWORD_KEY: "OutraSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "OutraSenha@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
@@ -239,8 +244,8 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             url,
             {
-                "new_password": "PrimeiroAcesso@123",
-                "new_password_confirm": "PrimeiroAcesso@123",
+                NEW_PASSWORD_KEY: "PrimeiroAcesso@123",
+                NEW_PASSWORD_CONFIRM_KEY: "PrimeiroAcesso@123",
             },
             format="json",
         )
@@ -261,8 +266,8 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             url,
             {
-                "new_password": "PrimeiroAcesso@123",
-                "new_password_confirm": "PrimeiroAcesso@123",
+                NEW_PASSWORD_KEY: "PrimeiroAcesso@123",
+                NEW_PASSWORD_CONFIRM_KEY: "PrimeiroAcesso@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
@@ -292,8 +297,8 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             url,
             {
-                "new_password": "PrimeiroAcesso@123",
-                "new_password_confirm": "PrimeiroAcesso@123",
+                NEW_PASSWORD_KEY: "PrimeiroAcesso@123",
+                NEW_PASSWORD_CONFIRM_KEY: "PrimeiroAcesso@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
