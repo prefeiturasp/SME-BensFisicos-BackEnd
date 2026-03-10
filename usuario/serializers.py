@@ -390,6 +390,17 @@ class UsuarioSerializer(serializers.ModelSerializer):
         required=False
     )
 
+    # =========================
+    # CAMPOS PARA O FRONTEND
+    # =========================
+
+    unidade_codigo = serializers.SerializerMethodField()
+    unidade_nome = serializers.SerializerMethodField()
+    grupo_nome = serializers.SerializerMethodField()
+
+    status = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+
     # propriedades do model
     is_gestor_patrimonio = serializers.BooleanField(read_only=True)
     is_operador_inventario = serializers.BooleanField(read_only=True)
@@ -403,20 +414,32 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "nome",
             "rf",
             "password",
+
             "is_active",
             "is_staff",
             "is_superuser",
+
             "groups",
             "unidade_orcamentaria",
             "unidade_administrativa",
             "unidades_administrativas",
+
             "must_change_password",
             "last_password_change",
             "last_login",
             "date_joined",
+
+            # campos derivados para frontend
+            "unidade_codigo",
+            "unidade_nome",
+            "grupo_nome",
+            "status",
+            "status_display",
+
             "is_gestor_patrimonio",
             "is_operador_inventario",
         ]
+
         read_only_fields = [
             "id",
             "last_login",
@@ -424,9 +447,40 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "is_gestor_patrimonio",
             "is_operador_inventario",
         ]
+
         extra_kwargs = {
             "password": {"write_only": True}
         }
+
+    # =========================
+    # CAMPOS CALCULADOS
+    # =========================
+
+    def get_unidade_codigo(self, obj):
+        if obj.unidade_administrativa:
+            return obj.unidade_administrativa.codigo
+        return None
+
+    def get_unidade_nome(self, obj):
+        if obj.unidade_administrativa:
+            return obj.unidade_administrativa.nome
+        return None
+
+    def get_grupo_nome(self, obj):
+        grupo = obj.groups.first()
+        if grupo:
+            return grupo.name
+        return None
+
+    def get_status(self, obj):
+        return "ativo" if obj.is_active else "inativo"
+
+    def get_status_display(self, obj):
+        return "Ativo" if obj.is_active else "Inativo"
+
+    # =========================
+    # CREATE
+    # =========================
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
@@ -447,6 +501,10 @@ class UsuarioSerializer(serializers.ModelSerializer):
             user.groups.set(groups)
 
         return user
+
+    # =========================
+    # UPDATE
+    # =========================
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)

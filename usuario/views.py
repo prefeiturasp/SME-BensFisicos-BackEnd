@@ -6,6 +6,7 @@ from django.contrib.auth.views import (
     PasswordResetView,
     PasswordResetConfirmView,
 )
+from rest_framework.filters import SearchFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.tokens import default_token_generator
@@ -337,8 +338,15 @@ class UsuarioViewSet(
     serializer_class = UsuarioSerializer
     permission_classes = [IsAdminUser]
     pagination_class = UsuarioPagination
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_class = UsuarioFilter
+
+    search_fields = [
+        "username",
+        "nome",
+        "email",
+        "rf",
+    ]
 
     def _registrar_historico(self, request, original, instance, fields):
         """
