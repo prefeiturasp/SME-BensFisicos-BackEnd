@@ -341,7 +341,7 @@ class UsuarioViewSet(
     CRUD completo de usuários com controle explícito
     """
 
-    queryset = User.objects.all()
+    queryset = User.objects.all().order_by("username")
     serializer_class = UsuarioSerializer
     permission_classes = [IsAdminUser]
     pagination_class = UsuarioPagination
