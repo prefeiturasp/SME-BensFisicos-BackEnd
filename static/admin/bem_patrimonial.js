@@ -313,7 +313,7 @@
 
   function showError(containerId, msgs){
     const box = id(containerId);
-    if (!msgs || !msgs.length){
+    if (!msgs?.length){
       box?.classList.add('hide');
       if (box){
         box.innerHTML = '';
