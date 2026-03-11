@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
@@ -505,8 +505,8 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         form = form_class(
             data={
                 "username": "usuario_select_unico",
-                "password1": "Teste@12345!x",
-                "password2": "Teste@12345!x",
+                PASSWORD1_KEY: "Teste@12345!x",
+                PASSWORD2_KEY: "Teste@12345!x",
                 "nome": "Usuario Select",
                 "email": "select@teste.com",
                 "is_staff": True,
