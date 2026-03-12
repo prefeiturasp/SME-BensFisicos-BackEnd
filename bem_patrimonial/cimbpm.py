@@ -19,6 +19,7 @@ from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
     extrair_codigo_ua,
     criar_estilo_base,
+    formatar_moeda_brasileira,
     obter_nome_usuario,
     formatar_data,
 )
