@@ -613,12 +613,12 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
             group_names = {g.name for g in groups}
 
-            if "Operador Inventario" in group_names and not unidade_administrativa:
+            if GRUPO_OPERADOR_INVENTARIO in group_names and not unidade_administrativa:
                 raise serializers.ValidationError(
                     "Operador deve possuir unidade administrativa."
                 )
 
-            if "Gestor Patrimonio" in group_names and not unidade_orcamentaria:
+            if GRUPO_GESTOR_PATRIMONIO in group_names and not unidade_orcamentaria:
                 raise serializers.ValidationError(
                     "Gestor deve possuir unidade orçamentária."
                 )
