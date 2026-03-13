@@ -2,6 +2,7 @@ import os
 from io import BytesIO
 from django.conf import settings
 from django.utils import timezone
+from django.utils.timezone import localtime
 from import_export.formats.base_formats import Format
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -19,6 +20,10 @@ from reportlab.platypus import (
 
 
 class UnidadeAdministrativaPDFFormat(Format):
+
+    LOGO_WIDTH_CM = 3
+    LOGO_HEIGHT_CM = 1.5
+    TABLE_FONT_SIZE = 7
 
     def get_title(self):
         return "pdf"
@@ -59,21 +64,57 @@ class UnidadeAdministrativaPDFFormat(Format):
         buffer.close()
         return pdf_bytes
 
+    def _carregar_logo(self, filename, fallback_text, styles):
+        static_root = settings.STATIC_ROOT or (
+            settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None
+        )
+        if static_root:
+            logo_path = os.path.join(static_root, "img", filename)
+            if os.path.exists(logo_path):
+                try:
+                    return Image(
+                        logo_path,
+                        width=self.LOGO_WIDTH_CM * cm,
+                        height=self.LOGO_HEIGHT_CM * cm,
+                    )
+                except Exception:
+                    pass
+        return Paragraph(fallback_text, styles["Heading1"])
+
+    def _resolver_usuario_exportacao(self, request):
+        if not request or not hasattr(request, "user") or not request.user.is_authenticated:
+            return "Sistema", ""
+
+        user = request.user
+
+        if hasattr(user, "nome") and user.nome:
+            usuario = user.nome
+        elif user.get_full_name():
+            usuario = user.get_full_name().strip()
+        else:
+            usuario = user.username
+
+        rf_text = f" - RF: {user.rf}" if hasattr(user, "rf") and user.rf else ""
+        return usuario, rf_text
+
+    def _criar_estilos_celula(self, styles):
+        base_kwargs = {
+            "parent": styles["Normal"],
+            "fontSize": self.TABLE_FONT_SIZE,
+            "leading": 8,
+            "wordWrap": "CJK",
+        }
+
+        cell_style = ParagraphStyle("CellStyle", **base_kwargs)
+        cell_style_center = ParagraphStyle(
+            "CellStyleCenter",
+            alignment=TA_CENTER,
+            **base_kwargs,
+        )
+        return cell_style, cell_style_center
+
     def _criar_cabecalho(self):
         styles = getSampleStyleSheet()
-
-        def _carregar_logo(filename, fallback_text):
-            static_root = settings.STATIC_ROOT or (
-                settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None
-            )
-            if static_root:
-                logo_path = os.path.join(static_root, "img", filename)
-                if os.path.exists(logo_path):
-                    try:
-                        return Image(logo_path, width=3 * cm, height=1.5 * cm)
-                    except Exception:
-                        pass
-            return Paragraph(fallback_text, styles["Heading1"])
 
         title_style = ParagraphStyle(
             "CustomTitle",
@@ -92,7 +133,7 @@ class UnidadeAdministrativaPDFFormat(Format):
         )
 
         header_row = [
-            _carregar_logo("bens_default_logo.png", "SME"),
+            self._carregar_logo("bens_default_logo.png", "SME", styles),
             [
                 Paragraph("Relatório de Unidades Administrativas", title_style),
                 Paragraph(
@@ -100,7 +141,7 @@ class UnidadeAdministrativaPDFFormat(Format):
                     subtitle_style,
                 ),
             ],
-            _carregar_logo("prefeitura_default_logo.png", "PMSP"),
+            self._carregar_logo("prefeitura_default_logo.png", "PMSP", styles),
         ]
 
         header_table = Table([header_row], colWidths=[3.5 * cm, None, 3.5 * cm])
@@ -127,17 +168,7 @@ class UnidadeAdministrativaPDFFormat(Format):
                 )
             ]
 
-        cell_style = ParagraphStyle(
-            "CellStyle", parent=styles["Normal"], fontSize=7, leading=8, wordWrap="CJK"
-        )
-        cell_style_center = ParagraphStyle(
-            "CellStyleCenter",
-            parent=styles["Normal"],
-            fontSize=7,
-            leading=8,
-            wordWrap="CJK",
-            alignment=TA_CENTER,
-        )
+        cell_style, cell_style_center = self._criar_estilos_celula(styles)
         data = [["Código", "Sigla", "Nome", "Status"]]
 
         for ua in uas_list:
@@ -164,13 +195,13 @@ class UnidadeAdministrativaPDFFormat(Format):
                     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#149f67")),
                     ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
                     ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, 0), 7),
+                    ("FONTSIZE", (0, 0), (-1, 0), self.TABLE_FONT_SIZE),
                     ("ALIGN", (0, 0), (-1, 0), "CENTER"),
                     ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
                     ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
                     ("TOPPADDING", (0, 0), (-1, 0), 6),
                     ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                    ("FONTSIZE", (0, 1), (-1, -1), 7),
+                    ("FONTSIZE", (0, 1), (-1, -1), self.TABLE_FONT_SIZE),
                     ("VALIGN", (0, 1), (-1, -1), "TOP"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 3),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 3),
@@ -190,25 +221,11 @@ class UnidadeAdministrativaPDFFormat(Format):
         return [table]
 
     def _adicionar_numero_pagina(self, canvas, doc):
-        from django.utils.timezone import localtime
-
         canvas.saveState()
 
         request = getattr(self, "_export_request", None)
         data_emissao = localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
-        usuario = "Sistema"
-        rf_text = ""
-
-        if request and hasattr(request, "user") and request.user.is_authenticated:
-            user = request.user
-            if hasattr(user, "nome") and user.nome:
-                usuario = user.nome
-            elif user.get_full_name():
-                usuario = user.get_full_name().strip()
-            else:
-                usuario = user.username
-            if hasattr(user, "rf") and user.rf:
-                rf_text = f" - RF: {user.rf}"
+        usuario, rf_text = self._resolver_usuario_exportacao(request)
 
         footer_text = f"Emitido em: {data_emissao} | Por: {usuario}{rf_text}"
         canvas.setFont("Helvetica", 8)
