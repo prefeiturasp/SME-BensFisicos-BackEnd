@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import patch
@@ -44,7 +45,7 @@ class NBBPMTestBase(TestCase):
             nome="João Silva",
             rf="1234567",
             email="operador@exemplo.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
@@ -56,7 +57,7 @@ class NBBPMTestBase(TestCase):
             nome="Maria Santos",
             rf="7654321",
             email="gestor@exemplo.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )

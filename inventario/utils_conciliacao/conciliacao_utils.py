@@ -104,6 +104,37 @@ def get_filtro_bens_baixados(ano_baixa_minimo):
     )
 
 
+def remover_itens_baixados_invalidos(conciliacao):
+    """
+    Remove da conciliação aberta os itens cujos bens foram baixados a mais de
+    um período, ou seja, cuja data_baixa é anterior ao ano de referência da
+    conciliação. Conciliações fechadas não são alteradas.
+    Retorna o número de itens removidos.
+    """
+    if not conciliacao.esta_aberto:
+        return 0
+
+    if conciliacao.tipo == constants.CONCILIACAO_EVENTUAL:
+        if not conciliacao.periodo_final:
+            return 0
+        ano_conciliacao = conciliacao.periodo_final.year - 1
+    else:
+        ano_conciliacao = conciliacao._get_ano_referencia()
+
+    ano_baixa_minimo = ano_conciliacao
+
+    itens_invalidos = ItemConciliacao.objects.filter(
+        conciliacao=conciliacao,
+        bem__status=bem_constants.BAIXA_FISICA,
+    ).exclude(
+        bem__baixas_fisicas_itens__baixa__status=bem_constants.ACEITA,
+        bem__baixas_fisicas_itens__baixa__data_baixa__year__gte=ano_baixa_minimo,
+    )
+
+    count, _ = itens_invalidos.delete()
+    return count
+
+
 def criar_itens_conciliacao(conciliacao):
     """
     - bens da UA
@@ -123,7 +154,7 @@ def criar_itens_conciliacao(conciliacao):
     else:
         ano_conciliacao = conciliacao._get_ano_referencia()
 
-    ano_baixa_minimo = ano_conciliacao - 1
+    ano_baixa_minimo = ano_conciliacao
 
     ultima_ocorrencia_base = OcorrenciaConciliacao.objects.filter(
         item__bem_id=OuterRef("pk"),

@@ -12,6 +12,18 @@
     return p1 + '.' + p2 + '-' + p3;
   }
 
+  function addThousandSeparators(ints){
+    const s = String(ints || '0');
+    let out = '';
+    let count = 0;
+    for (let i = s.length - 1; i >= 0; i -= 1){
+      out = s[i] + out;
+      count += 1;
+      if (i > 0 && count % 3 === 0) out = '.' + out;
+    }
+    return out;
+  }
+
   function formatBRMoneyFromDigits(digits){
     if (!digits) digits = "0";
     digits = digits.replace(/^0+/, "") || "0";
@@ -19,7 +31,7 @@
     if (digits.length === 2) digits = "0" + digits;
     const cents = digits.slice(-2);
     const ints  = digits.slice(0, -2);
-    const withThousand = ints.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    const withThousand = addThousandSeparators(ints);
     return withThousand + "," + cents;
   }
 
@@ -29,9 +41,10 @@
     el.dataset.boundMask = "1";
     (function init(){
       const raw = (el.value?.trim() || "");
-      if (raw && !/^\d{1,3}(\.\d{3})*,\d{2}$/.test(raw)){
+      if (raw){
         const digits = raw.replace(/[^\d]/g, "");
-        el.value = formatBRMoneyFromDigits(digits);
+        const formatted = formatBRMoneyFromDigits(digits);
+        if (raw !== formatted) el.value = formatted;
       }
     })();
     el.addEventListener("input", function(){
@@ -300,7 +313,7 @@
 
   function showError(containerId, msgs){
     const box = id(containerId);
-    if (!msgs || !msgs.length){
+    if (!msgs?.length){
       box?.classList.add('hide');
       if (box){
         box.innerHTML = '';

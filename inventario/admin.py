@@ -16,6 +16,7 @@ from dados_comuns.escopo import (
 from inventario.utils_conciliacao.conciliacao_utils import (
     criar_itens_conciliacao,
     finalizar_conciliacao,
+    remover_itens_baixados_invalidos,
 )
 from inventario.utils_conciliacao.conciliacao_automatica import (
     processar_conciliacao_anual_automatica,
@@ -426,6 +427,15 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         obj = None
         if object_id:
             obj = self.get_object(request, object_id)
+
+        if obj and obj.esta_aberto and request.method == "GET":
+            removidos = remover_itens_baixados_invalidos(obj)
+            if removidos > 0:
+                messages.warning(
+                    request,
+                    f"{removidos} item(ns) removido(s) automaticamente pois "
+                    f"os bens foram baixados a mais de um período.",
+                )
 
         extra_context["show_save"] = (obj is None) or (obj and obj.esta_aberto)
 

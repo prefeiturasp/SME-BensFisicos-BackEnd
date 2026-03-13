@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory, TransactionTestCase
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -33,7 +34,7 @@ class SetupDuplicacaoData:
         operador = Usuario.objects.create_user(
             username="operador_teste",
             email="operador@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=ua_origem,
         )
         operador.groups.add(grupo_operador)

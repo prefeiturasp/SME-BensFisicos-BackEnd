@@ -212,25 +212,24 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
 
     def get_object(self):
         obj = super().get_object()
-        user = self.request.user
+        if not self._pode_acessar_objeto(self.request.user, obj):
+            raise NotFound()
 
+        return obj
+
+    def _pode_acessar_objeto(self, user, obj):
         if getattr(user, "is_superuser", False):
-            return obj
+            return True
 
         user_uo_id = getattr(user, "unidade_orcamentaria_id", None)
-        user_ua_id = getattr(user, "unidade_administrativa_id", None)
-
         if user_uo_id:
-            if obj.unidade_orcamentaria_id == user_uo_id:
-                return obj
-            raise NotFound()
+            return obj.unidade_orcamentaria_id == user_uo_id
 
+        user_ua_id = getattr(user, "unidade_administrativa_id", None)
         if user_ua_id:
-            if obj.pk == user_ua_id:
-                return obj
-            raise NotFound()
+            return obj.pk == user_ua_id
 
-        raise NotFound()
+        return False
 
     def _uo_ids_permitidos(self, user):
         if getattr(user, "is_superuser", False):

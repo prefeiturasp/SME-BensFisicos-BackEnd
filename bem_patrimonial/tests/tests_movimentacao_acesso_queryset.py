@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -44,7 +45,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
         self.gestor_sem_ua = Usuario.objects.create_user(
             username="gestor_sem_ua",
             email="gestor_sem_ua@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
@@ -53,7 +54,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
         self.gestor_com_ua1 = Usuario.objects.create_user(
             username="gestor_com_ua1",
             email="gestor_com_ua1@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua1,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
@@ -63,7 +64,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
         self.operador_ua1 = Usuario.objects.create_user(
             username="operador_ua1",
             email="operador_ua1@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua1,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
@@ -74,7 +75,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
         self.operador_ua2 = Usuario.objects.create_user(
             username="operador_ua2",
             email="operador_ua2@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua2,
             unidade_orcamentaria=self.ua2.unidade_orcamentaria,

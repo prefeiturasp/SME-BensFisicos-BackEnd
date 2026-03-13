@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
+from django.views.decorators.http import require_GET
 from usuario.views import (
     AdminLoginView,
     LoginPasswordChangeView,
@@ -29,9 +32,17 @@ admin.site.index_title = settings.ADMIN_INDEX_TITLE
 
 
 def redirect_admin_password(request, user_id: int):
+    if not request.user.is_staff:
+        raise PermissionDenied("Acesso restrito a usuários administrativos.")
+
     next_url = reverse("admin:usuario_usuario_change", args=[user_id])
     url = f"{reverse('password_change')}?user_id={user_id}&next={next_url}"
     return redirect(url)
+
+
+redirect_admin_password = login_required(
+    require_GET(redirect_admin_password), login_url="admin_login"
+)
 
 
 urlpatterns = [

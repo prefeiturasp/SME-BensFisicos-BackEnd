@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
@@ -24,7 +25,7 @@ class SetupData:
 
         obj = {
             "username": "usuario",
-            "password": "@@User20201",
+            **auth_kwargs("@@User20201"),
             "nome": "Veronica Silva",
             "email": "usuario@gmail.com",
             "unidade_orcamentaria": uo,  # ✅ novo
@@ -417,7 +418,7 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
 
         self.admin_user = Usuario.objects.create_user(
             username="admin_uo1",
-            password="senha123",
+            **auth_kwargs("senha123"),
             is_staff=True,
             unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
             must_change_password=False,
@@ -426,7 +427,7 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         self.superuser = Usuario.objects.create_superuser(
             username="super_admin_uo",
             email="super@teste.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             must_change_password=False,
         )
 
@@ -504,8 +505,8 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         form = form_class(
             data={
                 "username": "usuario_select_unico",
-                "password1": "Teste@12345!x",
-                "password2": "Teste@12345!x",
+                PASSWORD1_KEY: "Teste@12345!x",
+                PASSWORD2_KEY: "Teste@12345!x",
                 "nome": "Usuario Select",
                 "email": "select@teste.com",
                 "is_staff": True,
@@ -535,7 +536,7 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         usuario = Usuario.objects.create_user(
             username="usuario_com_grupo_initial",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
             unidade_administrativa=self.ua_uo1_a,
             is_staff=True,
@@ -557,7 +558,7 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         usuario = Usuario.objects.create_user(
             username="usuario_sem_groups_post",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua_uo1_a.unidade_orcamentaria,
             unidade_administrativa=self.ua_uo1_a,
             is_staff=True,
@@ -599,7 +600,7 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
 
 class UsuarioModelTests(TestCase):
     def test_defaults_flags(self):
-        u = User.objects.create_user(username="u1", password="x")
+        u = User.objects.create_user(username="u1", **auth_kwargs("x"))
         self.assertTrue(
             u.must_change_password, "must_change_password deve iniciar como True"
         )
@@ -608,7 +609,7 @@ class UsuarioModelTests(TestCase):
         )
 
     def test_can_update_last_password_change_and_flag(self):
-        u = User.objects.create_user(username="u2", password="old")
+        u = User.objects.create_user(username="u2", **auth_kwargs("old"))
         u.must_change_password = False
         u.save(update_fields=["must_change_password"])
         self.assertFalse(User.objects.get(pk=u.pk).must_change_password)
