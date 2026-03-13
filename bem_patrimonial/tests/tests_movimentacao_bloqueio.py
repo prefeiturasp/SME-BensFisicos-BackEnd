@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -41,7 +42,7 @@ class SetupMovimentacaoData:
         operador_origem = Usuario.objects.create_user(
             username="operador_origem",
             email="operador.origem@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_orcamentaria=ua_origem.unidade_orcamentaria,
             unidade_administrativa=ua_origem,
         )
@@ -51,7 +52,7 @@ class SetupMovimentacaoData:
         operador_destino = Usuario.objects.create_user(
             username="operador_destino",
             email="operador.destino@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=ua_destino,
             unidade_orcamentaria=ua_destino.unidade_orcamentaria,
         )
@@ -61,7 +62,7 @@ class SetupMovimentacaoData:
         gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             is_superuser=True,
             unidade_administrativa=ua_origem,

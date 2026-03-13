@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
@@ -27,7 +28,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         self.gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@teste.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.unidade,
             unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )
@@ -37,7 +38,7 @@ class BemPatrimonialAdminListDisplayTestCase(TestCase):
         self.operador = Usuario.objects.create_user(
             username="operador",
             email="operador@teste.com",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_administrativa=self.unidade,
             unidade_orcamentaria=self.unidade.unidade_orcamentaria,
         )

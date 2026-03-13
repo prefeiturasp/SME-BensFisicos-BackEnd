@@ -4,8 +4,12 @@ from django.contrib.auth.password_validation import validate_password
 from usuario.models import Usuario
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.escopo import obter_unidade_orcamentaria_id_do_usuario
+from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
 
 MSG_SENHAS_NAO_CONFEREM = "As senhas não conferem."
+
+User = get_user_model()
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -356,3 +360,111 @@ class SelecionarUnidadeAdministrativaSerializer(serializers.Serializer):
         attrs["ua_obj"] = ua
         attrs["uo_obj"] = uo
         return attrs
+
+
+class UsuarioSerializer(serializers.ModelSerializer):
+
+    password = serializers.CharField(write_only=True, required=False)
+
+    unidade_orcamentaria = serializers.PrimaryKeyRelatedField(
+        queryset=UnidadeOrcamentaria.objects.all(),
+        allow_null=True,
+        required=False
+    )
+
+    unidade_administrativa = serializers.PrimaryKeyRelatedField(
+        queryset=UnidadeAdministrativa.objects.all(),
+        allow_null=True,
+        required=False
+    )
+
+    unidades_administrativas = serializers.PrimaryKeyRelatedField(
+        queryset=UnidadeAdministrativa.objects.all(),
+        many=True,
+        required=False
+    )
+
+    groups = serializers.PrimaryKeyRelatedField(
+        queryset=Group.objects.all(),
+        many=True,
+        required=False
+    )
+
+    # propriedades do model
+    is_gestor_patrimonio = serializers.BooleanField(read_only=True)
+    is_operador_inventario = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "nome",
+            "rf",
+            "password",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "groups",
+            "unidade_orcamentaria",
+            "unidade_administrativa",
+            "unidades_administrativas",
+            "must_change_password",
+            "last_password_change",
+            "last_login",
+            "date_joined",
+            "is_gestor_patrimonio",
+            "is_operador_inventario",
+        ]
+        read_only_fields = [
+            "id",
+            "last_login",
+            "date_joined",
+            "is_gestor_patrimonio",
+            "is_operador_inventario",
+        ]
+        extra_kwargs = {
+            "password": {"write_only": True}
+        }
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        unidades_administrativas = validated_data.pop("unidades_administrativas", [])
+        groups = validated_data.pop("groups", [])
+
+        user = User(**validated_data)
+
+        if password:
+            user.set_password(password)
+
+        user.save()
+
+        if unidades_administrativas:
+            user.unidades_administrativas.set(unidades_administrativas)
+
+        if groups:
+            user.groups.set(groups)
+
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        unidades_administrativas = validated_data.pop("unidades_administrativas", None)
+        groups = validated_data.pop("groups", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if password:
+            instance.set_password(password)
+
+        instance.save()
+
+        if unidades_administrativas is not None:
+            instance.unidades_administrativas.set(unidades_administrativas)
+
+        if groups is not None:
+            instance.groups.set(groups)
+
+        return instance

@@ -1,3 +1,9 @@
+from dados_comuns.tests.auth_test_utils import (
+    NEW_PASSWORD_CONFIRM_KEY,
+    NEW_PASSWORD_KEY,
+    OLD_PASSWORD_KEY,
+    auth_kwargs,
+)
 from rest_framework.test import APITestCase
 from rest_framework import status
 from usuario.models import Usuario
@@ -15,7 +21,7 @@ class AuthEndpointsTestCase(APITestCase):
         self.user = Usuario.objects.create_user(
             username="testuser",
             email="testuser@example.com",
-            password="testpass123",
+            **auth_kwargs("testpass123"),
             nome="Test User",
             rf="1234567",
             is_active=True,
@@ -42,8 +48,8 @@ class AuthEndpointsTestCase(APITestCase):
             {
                 "uidb64": uidb64,
                 "token": "tokeninvalido",
-                "new_password": "NovaSenha@123",
-                "new_password_confirm": "NovaSenha@123",
+                NEW_PASSWORD_KEY: "NovaSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "NovaSenha@123",
             },
             format="json",
         )
@@ -53,7 +59,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -61,9 +67,9 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             change_url,
             {
-                "old_password": "errada",
-                "new_password": "OutraSenha@123",
-                "new_password_confirm": "OutraSenha@123",
+                OLD_PASSWORD_KEY: "errada",
+                NEW_PASSWORD_KEY: "OutraSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "OutraSenha@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
@@ -75,7 +81,7 @@ class AuthEndpointsTestCase(APITestCase):
         self.user.save()
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "testpass123"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -84,9 +90,9 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             change_url,
             {
-                "old_password": "testpass123",
-                "new_password": "OutraSenha@123",
-                "new_password_confirm": "OutraSenha@123",
+                OLD_PASSWORD_KEY: "testpass123",
+                NEW_PASSWORD_KEY: "OutraSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "OutraSenha@123",
             },
             format="json",
         )
@@ -100,7 +106,7 @@ class AuthEndpointsTestCase(APITestCase):
     def test_login_success(self):
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "testpass123"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("access", resp.data)
@@ -115,14 +121,14 @@ class AuthEndpointsTestCase(APITestCase):
     def test_login_fail(self):
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "wrongpass"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("wrongpass")}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_me_authenticated(self):
         url = "/api/auth/login/"
         resp = self.client.post(
-            url, {"username": "testuser", "password": "testpass123"}, format="json"
+            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
         )
         access = resp.data["access"]
         me_url = "/api/auth/me/"
@@ -134,7 +140,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp_login = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         self.assertEqual(resp_login.status_code, status.HTTP_200_OK)
@@ -156,7 +162,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -201,8 +207,8 @@ class AuthEndpointsTestCase(APITestCase):
             {
                 "uidb64": uidb64,
                 "token": token,
-                "new_password": "NewPass@123",
-                "new_password_confirm": "NewPass@123",
+                NEW_PASSWORD_KEY: "NewPass@123",
+                NEW_PASSWORD_CONFIRM_KEY: "NewPass@123",
             },
             format="json",
         )
@@ -214,7 +220,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -222,9 +228,9 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             change_url,
             {
-                "old_password": "testpass123",
-                "new_password": "OutraSenha@123",
-                "new_password_confirm": "OutraSenha@123",
+                OLD_PASSWORD_KEY: "testpass123",
+                NEW_PASSWORD_KEY: "OutraSenha@123",
+                NEW_PASSWORD_CONFIRM_KEY: "OutraSenha@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
@@ -238,8 +244,8 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             url,
             {
-                "new_password": "PrimeiroAcesso@123",
-                "new_password_confirm": "PrimeiroAcesso@123",
+                NEW_PASSWORD_KEY: "PrimeiroAcesso@123",
+                NEW_PASSWORD_CONFIRM_KEY: "PrimeiroAcesso@123",
             },
             format="json",
         )
@@ -252,7 +258,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -260,8 +266,8 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             url,
             {
-                "new_password": "PrimeiroAcesso@123",
-                "new_password_confirm": "PrimeiroAcesso@123",
+                NEW_PASSWORD_KEY: "PrimeiroAcesso@123",
+                NEW_PASSWORD_CONFIRM_KEY: "PrimeiroAcesso@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",
@@ -282,7 +288,7 @@ class AuthEndpointsTestCase(APITestCase):
         login_url = "/api/auth/login/"
         resp = self.client.post(
             login_url,
-            {"username": "testuser", "password": "testpass123"},
+            {"username": "testuser", **auth_kwargs("testpass123")},
             format="json",
         )
         access = resp.data["access"]
@@ -291,8 +297,8 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.post(
             url,
             {
-                "new_password": "PrimeiroAcesso@123",
-                "new_password_confirm": "PrimeiroAcesso@123",
+                NEW_PASSWORD_KEY: "PrimeiroAcesso@123",
+                NEW_PASSWORD_CONFIRM_KEY: "PrimeiroAcesso@123",
             },
             HTTP_AUTHORIZATION=f"Bearer {access}",
             format="json",

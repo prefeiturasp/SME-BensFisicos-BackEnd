@@ -1,3 +1,8 @@
+from dados_comuns.tests.auth_test_utils import (
+    NEW_PASSWORD1_KEY,
+    NEW_PASSWORD2_KEY,
+    auth_kwargs,
+)
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import Group
@@ -5,33 +10,39 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from rest_framework.test import APIClient, APITestCase
 
 User = get_user_model()
 
 
 class PasswordChangeViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="alice", password="a123456")
+        self.user = User.objects.create_user(
+            username="alice", **auth_kwargs("a123456"), must_change_password=False
+        )
         self.staff = User.objects.create_user(
-            username="admin1", password="a123456", is_staff=True
+            username="admin1",
+            **auth_kwargs("a123456"),
+            is_staff=True,
+            must_change_password=False,
         )
 
     def test_get_own_password_change_page(self):
-        self.client.login(username="alice", password="a123456")
+        self.client.login(username="alice", **auth_kwargs("a123456"))
         url = reverse("password_change")
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         self.assertTemplateUsed(resp, "admin/password_change.html")
 
     def test_post_own_password_change_sets_flags_and_redirects_next(self):
-        self.client.login(username="alice", password="a123456")
+        self.client.login(username="alice", **auth_kwargs("a123456"))
         next_url = "/admin/"
         url = f'{reverse("password_change")}?next={next_url}'
         resp = self.client.post(
             url,
             {
-                "new_password1": "N0va@s3nhA!",
-                "new_password2": "N0va@s3nhA!",
+                NEW_PASSWORD1_KEY: "N0va@s3nhA!",
+                NEW_PASSWORD2_KEY: "N0va@s3nhA!",
                 "next": next_url,
             },
             follow=False,
@@ -44,18 +55,18 @@ class PasswordChangeViewTests(TestCase):
         self.assertFalse(u.must_change_password)
         self.assertIsNotNone(u.last_password_change)
         self.assertLessEqual(u.last_password_change, timezone.now())
-        self.assertTrue(self.client.login(username="alice", password="N0va@s3nhA!"))
+        self.assertTrue(self.client.login(username="alice", **auth_kwargs("N0va@s3nhA!")))
 
     def test_staff_changes_other_user_password_without_old_password(self):
-        self.client.login(username="admin1", password="a123456")
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
         target = self.user
         next_url = f"/admin/usuario/usuario/{target.pk}/change/"
         url = f'{reverse("password_change")}?user_id={target.pk}&next={next_url}'
         resp = self.client.post(
             url,
             {
-                "new_password1": "Sup3rS3nh@",
-                "new_password2": "Sup3rS3nh@",
+                NEW_PASSWORD1_KEY: "Sup3rS3nh@",
+                NEW_PASSWORD2_KEY: "Sup3rS3nh@",
                 "user_id": str(target.pk),
                 "next": next_url,
             },
@@ -68,19 +79,50 @@ class PasswordChangeViewTests(TestCase):
         target.refresh_from_db()
         self.assertFalse(target.must_change_password)
         self.assertIsNotNone(target.last_password_change)
-        self.assertTrue(self.client.login(username="alice", password="Sup3rS3nh@"))
+        self.assertTrue(self.client.login(username="alice", **auth_kwargs("Sup3rS3nh@")))
+
+    def test_redirecionamento_admin_senha_exige_autenticacao(self):
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/admin/login/", resp["Location"])
+        self.assertIn("next=", resp["Location"])
+
+    def test_redirecionamento_admin_senha_nega_usuario_nao_staff(self):
+        self.client.login(username="alice", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 403)
+
+    def test_redirecionamento_admin_senha_permite_staff_via_get(self):
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("password_change"), resp["Location"])
+        self.assertIn(f"user_id={self.user.pk}", resp["Location"])
+
+    def test_redirecionamento_admin_senha_rejeita_post(self):
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.post(url)
+
+        self.assertEqual(resp.status_code, 405)
 
 
 class AdminLoginViewTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="bob", password="b123456")
+        self.user = User.objects.create_user(username="bob", **auth_kwargs("b123456"))
 
     def test_login_redirects_selecionar_ua(self):
         resp = self.client.post(
             "/admin/login/",
             {
                 "username": "bob",
-                "password": "b123456",
+                **auth_kwargs("b123456"),
             },
             follow=False,
         )
@@ -93,7 +135,7 @@ class AdminLoginViewTests(TestCase):
             "/admin/login/",
             {
                 "username": "bob",
-                "password": "b123456",
+                **auth_kwargs("b123456"),
                 "next": "/admin/",
             },
             follow=False,
@@ -121,7 +163,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.gestor = User.objects.create_user(
             username="gestor1",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -131,7 +173,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.operador = User.objects.create_user(
             username="operador1",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -141,7 +183,7 @@ class SelecionarUAViewTests(TestCase):
         self.operador.unidades_administrativas.add(self.ua1, self.ua2)
 
     def test_gestor_ve_opcao_visao_geral_no_select(self):
-        self.client.login(username="gestor1", password="senha123")
+        self.client.login(username="gestor1", **auth_kwargs("senha123"))
         resp = self.client.get(reverse("selecionar_ua"))
 
         self.assertEqual(resp.status_code, 200)
@@ -149,7 +191,7 @@ class SelecionarUAViewTests(TestCase):
         self.assertContains(resp, "__UO__")
 
     def test_gestor_pode_selecionar_visao_geral(self):
-        self.client.login(username="gestor1", password="senha123")
+        self.client.login(username="gestor1", **auth_kwargs("senha123"))
         resp = self.client.post(
             reverse("selecionar_ua"),
             {
@@ -169,8 +211,137 @@ class SelecionarUAViewTests(TestCase):
         )
 
     def test_operador_nao_ve_opcao_visao_geral(self):
-        self.client.login(username="operador1", password="senha123")
+        self.client.login(username="operador1", **auth_kwargs("senha123"))
         resp = self.client.get(reverse("selecionar_ua"))
 
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, "__UO__")
+
+
+class UsuarioViewSetTests(TestCase):
+
+    def setUp(self):
+
+        self.client = APIClient()
+
+        self.admin = User.objects.create_user(
+            username="admin",
+            **auth_kwargs("admin123"),
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        self.user = User.objects.create_user(
+            username="user1",
+            email="user@test.com",
+            **auth_kwargs("123456"),
+        )
+
+        self.client.login(username="admin", **auth_kwargs("admin123"))
+        self.client.force_authenticate(user=self.admin)
+
+        self.list_url = reverse("usuario-list")
+        self.detail_url = reverse("usuario-detail", args=[self.user.id])
+        self.restore_url = reverse("usuario-restore", args=[self.user.id])
+
+    def test_list_users(self):
+
+        resp = self.client.get(self.list_url)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("results", resp.data)
+
+    def test_retrieve_user(self):
+
+        resp = self.client.get(self.detail_url)
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["username"], "user1")
+
+    def test_create_user(self):
+
+        resp = self.client.post(
+            self.list_url,
+            {
+                "username": "novo",
+                "email": "novo@test.com",
+                **auth_kwargs("Senha123!"),
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 201)
+
+        user = User.objects.get(username="novo")
+
+        self.assertTrue(user.must_change_password)
+        self.assertIsNotNone(user.last_password_change)
+
+    def test_update_user(self):
+
+        resp = self.client.put(
+            self.detail_url,
+            {
+                "username": "user1",
+                "email": "novo@email.com",
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+
+        self.user.refresh_from_db()
+
+        self.assertEqual(self.user.email, "novo@email.com")
+
+    def test_partial_update_user(self):
+
+        resp = self.client.patch(
+            self.detail_url,
+            {
+                "email": "patch@email.com",
+            },
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+
+        self.user.refresh_from_db()
+
+        self.assertEqual(self.user.email, "patch@email.com")
+
+    def test_soft_delete_user(self):
+
+        resp = self.client.delete(self.detail_url)
+
+        self.assertEqual(resp.status_code, 204)
+
+        self.user.refresh_from_db()
+
+        self.assertFalse(self.user.is_active)
+
+    def test_restore_user(self):
+
+        self.user.is_active = False
+        self.user.save()
+
+        resp = self.client.get(self.restore_url)
+
+        self.assertEqual(resp.status_code, 200)
+
+        self.user.refresh_from_db()
+
+        self.assertTrue(self.user.is_active)
+
+    def test_filter_active_users(self):
+
+        self.user.is_active = False
+        self.user.save()
+
+        resp = self.client.get(self.list_url, {"is_active": False})
+
+        self.assertEqual(resp.status_code, 200)
+
+        usernames = [u["username"] for u in resp.data["results"]]
+
+        self.assertIn("user1", usernames)

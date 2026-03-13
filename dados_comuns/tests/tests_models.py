@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from django.contrib.admin.sites import AdminSite
 from dados_comuns.models import UnidadeAdministrativa
@@ -144,7 +145,7 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
         request.user = Usuario.objects.create_superuser(
             username="admin",
             email="admin@test.com",
-            password="123",
+            **auth_kwargs("123"),
             unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 

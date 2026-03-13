@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import date
 from django.test import TestCase
 from django.core.exceptions import ValidationError
@@ -17,7 +18,7 @@ class ConciliacaoAnualModelTest(TestCase):
         self.ua = criar_ua(codigo="001.0001", sigla="UA", nome="Unidade Teste")
         self.usuario = Usuario.objects.create_user(
             username="gestor",
-            password="123",
+            **auth_kwargs("123"),
             unidade_orcamentaria=self.ua.unidade_orcamentaria,
         )
 

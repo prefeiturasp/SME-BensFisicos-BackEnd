@@ -6,6 +6,7 @@ from django.contrib.auth.views import (
     PasswordResetView,
     PasswordResetConfirmView,
 )
+from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.contenttypes.models import ContentType
@@ -18,6 +19,27 @@ from django.views.generic import TemplateView
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 from dados_comuns.utils import dict_changes
 import logging
+from django.contrib.auth import get_user_model
+from rest_framework import viewsets, mixins, status
+from rest_framework.permissions import IsAdminUser
+from usuario.serializers import UsuarioSerializer
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+from usuario.filters import UsuarioFilter
+from rest_framework.decorators import action
+from drf_spectacular.utils import (
+    extend_schema,
+    OpenApiResponse,
+)
+from usuario.api_doc import (
+    CREATE_USERS_DOC,
+    DELETE_USERS_DOC,
+    LIST_USERS_DOC,
+    PATCH_USERS_DOC,
+    RESTORE_USERS_DOC,
+    RETRIEVE_USERS_DOC,
+    UPDATE_USERS_DOC,
+)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -287,3 +309,327 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
             return self.render_to_response(ctx)
 
         return self._post_ua_especifica(request, ua_id, next_url)
+
+
+class UsuarioPagination(PageNumberPagination):
+    # Aplica paginação default na listagem de usuários
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+    def get_paginated_response(self, data):
+        return Response({
+            "count": self.page.paginator.count,
+            "limit": self.get_page_size(self.request),
+            "total_pages": self.page.paginator.num_pages,
+            "current_page": self.page.number,
+            "next": self.get_next_link(),
+            "previous": self.get_previous_link(),
+            "results": data,
+        })
+
+
+class UsuarioViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """
+    CRUD completo de usuários com controle explícito
+    """
+
+    queryset = User.objects.all().order_by("username")
+    serializer_class = UsuarioSerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = UsuarioPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = UsuarioFilter
+
+    def _registrar_historico(self, request, original, instance, fields):
+        """
+        Registra alterações no HistoricoGeral
+        """
+        changes = dict_changes(original, instance, fields=fields)
+
+        if not changes:
+            return
+
+        ct = ContentType.objects.get_for_model(instance.__class__)
+
+        HistoricoGeral.objects.bulk_create(
+            [
+                HistoricoGeral(
+                    content_type=ct,
+                    object_id=str(instance.pk),
+                    campo=field,
+                    valor_antigo=old,
+                    valor_novo=new,
+                    alterado_por=request.user,
+                )
+                for field, (old, new) in changes.items()
+            ]
+        )
+
+    # =========================
+    # LIST
+    # =========================
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Listar usuários",
+        description=LIST_USERS_DOC,
+        responses={
+            200: UsuarioSerializer(many=True)
+        },
+    )
+    def list(self, request, *args, **kwargs):
+        """
+        Lista usuários com paginação
+        """
+        return super().list(request, *args, **kwargs)
+
+    # =========================
+    # CREATE
+    # =========================
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Criar usuário",
+        description=CREATE_USERS_DOC,
+        responses={
+            201: UsuarioSerializer,
+            400: OpenApiResponse(description="Erro de validação"),
+        },
+    )
+    def create(self, request, *args, **kwargs):
+        """
+        Cria um usuário dentro do sistema
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.save()
+
+        user.must_change_password = True
+        user.last_password_change = timezone.now()
+        user.save(update_fields=["must_change_password", "last_password_change"])
+
+        # registrar histórico
+        ct = ContentType.objects.get_for_model(User)
+
+        HistoricoGeral.objects.create(
+            content_type=ct,
+            object_id=str(user.pk),
+            campo="",
+            valor_antigo="",
+            valor_novo="",
+            alterado_por=request.user,
+            justificativa="Usuário criado"
+        )
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    # =========================
+    # RETRIEVE
+    # =========================
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Detalhar usuário",
+        description=RETRIEVE_USERS_DOC,
+        responses={
+            200: UsuarioSerializer,
+            404: OpenApiResponse(description="Usuário não encontrado"),
+        },
+    )
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Detalha usuário específico
+        """
+        return super().retrieve(request, *args, **kwargs)
+
+    # =========================
+    # UPDATE (PUT)
+    # =========================
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Atualizar usuário",
+        description=UPDATE_USERS_DOC,
+        responses={
+            200: UsuarioSerializer,
+            400: OpenApiResponse(description="Erro de validação"),
+            404: OpenApiResponse(description="Usuário não encontrado"),
+        },
+    )
+    def update(self, request, *args, **kwargs):
+        """
+        Atualização integral de um usuário
+        """
+
+        partial = kwargs.pop("partial", False)
+
+        instance = self.get_object()
+
+        # estado original
+        original = User.objects.get(pk=instance.pk)
+
+        serializer = self.get_serializer(
+            instance,
+            data=request.data,
+            partial=partial
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.save()
+
+        if "password" in request.data:
+            user.last_password_change = timezone.now()
+            user.save(update_fields=["last_password_change"])
+
+        # registrar histórico
+        self._registrar_historico(
+            request,
+            original,
+            user,
+            fields=[
+                "username",
+                "email",
+                "nome",
+                "rf",
+                "is_active",
+                "is_staff",
+                "is_superuser",
+                "unidade_orcamentaria",
+                "unidade_administrativa",
+            ],
+        )
+
+        return Response(serializer.data)
+
+    # =========================
+    # PARTIAL UPDATE (PATCH)
+    # =========================
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Atualização parcial",
+        description=PATCH_USERS_DOC,
+        responses={
+            200: UsuarioSerializer,
+            400: OpenApiResponse(description="Erro de validação"),
+        },
+    )
+    def partial_update(self, request, *args, **kwargs):
+        """
+        Atualização parcial
+        """
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
+
+    # =========================
+    # DELETE
+    # =========================
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Desativar usuário",
+        description=DELETE_USERS_DOC,
+        responses={
+            204: OpenApiResponse(description="Usuário desativado com sucesso"),
+            400: OpenApiResponse(description="Operação inválida"),
+            404: OpenApiResponse(description="Usuário não encontrado"),
+        },
+    )
+    def destroy(self, request, *args, **kwargs):
+        """
+        Soft delete do usuário (desativação)
+        """
+        instance = self.get_object()
+
+        if instance.is_superuser:
+            return Response(
+                {"detail": "Não é permitido remover superusuário."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not instance.is_active:
+            return Response(
+                {"detail": "Usuário já está desativado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ct = ContentType.objects.get_for_model(User)
+
+        # registra histórico
+        HistoricoGeral.objects.create(
+            content_type=ct,
+            object_id=str(instance.pk),
+            campo="is_active",
+            valor_antigo="True",
+            valor_novo="False",
+            alterado_por=request.user,
+            justificativa="Usuário Desativado",
+        )
+
+        # soft delete
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])
+
+        return Response(
+            {"detail": "Usuário desativado com sucesso."},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+
+    # =========================
+    # RESTORE
+    # =========================
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Reativar usuário",
+        description=RESTORE_USERS_DOC,
+        responses={
+                200: OpenApiResponse(description="Usuário reativado com sucesso"),
+                400: OpenApiResponse(description="Usuário já está ativo"),
+                404: OpenApiResponse(description="Usuário não encontrado"),
+        },
+    )
+    @action(detail=True, methods=["get"])
+    def restore(self, request, pk=None):
+        """
+        Reativa um usuário que foi desativado (soft delete).
+
+        Este endpoint altera o campo `is_active` para True,
+        permitindo que o usuário volte a acessar o sistema.
+        """
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "Usuário não encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if user.is_active:
+            return Response(
+                {"detail": "Usuário já está ativo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ct = ContentType.objects.get_for_model(User)
+
+        HistoricoGeral.objects.create(
+            content_type=ct,
+            object_id=str(user.pk),
+            campo="is_active",
+            valor_antigo="False",
+            valor_novo="True",
+            alterado_por=request.user,
+            justificativa="Usuário reativado",
+        )
+
+        user.is_active = True
+        user.save(update_fields=["is_active"])
+
+        return Response(
+            {"detail": "Usuário reativado com sucesso."},
+            status=status.HTTP_200_OK,
+        )

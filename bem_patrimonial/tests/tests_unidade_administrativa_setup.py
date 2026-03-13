@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 
 from bem_patrimonial.models import BemPatrimonial
@@ -42,7 +43,7 @@ class SetupUnidadeAdministrativaStatusData(TestCase):
         operador_1 = Usuario.objects.create_user(
             username="operador1",
             email="operador1@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=ua_ativa_1,
         )
         operador_1.groups.add(grupo_operador)
@@ -51,7 +52,7 @@ class SetupUnidadeAdministrativaStatusData(TestCase):
         operador_2 = Usuario.objects.create_user(
             username="operador2",
             email="operador2@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=ua_ativa_2,
         )
         operador_2.groups.add(grupo_operador)
@@ -60,7 +61,7 @@ class SetupUnidadeAdministrativaStatusData(TestCase):
         gestor = Usuario.objects.create_user(
             username="gestor",
             email="gestor@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             is_superuser=True,
             unidade_administrativa=ua_ativa_1,
