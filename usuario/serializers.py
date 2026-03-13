@@ -9,6 +9,7 @@ from dados_comuns.escopo import obter_unidade_orcamentaria_id_do_usuario
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 import re
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 MSG_SENHAS_NAO_CONFEREM = "As senhas não conferem."
 
@@ -543,8 +544,8 @@ class UsuarioSerializer(serializers.ModelSerializer):
         if groups:
 
             allowed_groups = {
-                "Gestor Patrimonio",
-                "Operador Inventario",
+                GRUPO_OPERADOR_INVENTARIO,
+                GRUPO_GESTOR_PATRIMONIO,
             }
 
             for group in groups:
