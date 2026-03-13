@@ -82,41 +82,55 @@ def _build_bem_kwargs(
 
 
 def _fill_bem_campos_simples(bem_model, bem_kwargs, idx_ua, i, seq, today, now):
-    if has_field(bem_model, "descricao"):
-        bem_kwargs["descricao"] = f"Bem UA{idx_ua:02d} #{i:02d}"
-    if has_field(bem_model, "titulo"):
-        bem_kwargs.setdefault("titulo", f"Bem UA{idx_ua:02d} #{i:02d}")
-    if has_field(bem_model, "numero_tombo"):
-        bem_kwargs["numero_tombo"] = seq
-    if has_field(bem_model, "numero_serie"):
-        bem_kwargs["numero_serie"] = seq
-    if has_field(bem_model, "numero_processo"):
-        bem_kwargs["numero_processo"] = seq
-    if has_field(bem_model, "data_compra_entrega"):
-        bem_kwargs["data_compra_entrega"] = today
-    if has_field(bem_model, "data_aquisicao"):
-        bem_kwargs.setdefault("data_aquisicao", today)
-    if has_field(bem_model, "data_compra"):
-        bem_kwargs.setdefault("data_compra", today)
-    if has_field(bem_model, "data_registro"):
-        bem_kwargs.setdefault("data_registro", now)
-    if has_field(bem_model, "valor_unitario"):
-        bem_kwargs["valor_unitario"] = Decimal("1000.00")
-    if has_field(bem_model, "quantidade"):
-        bem_kwargs["quantidade"] = 1
-    if has_field(bem_model, "valor_aquisicao"):
-        bem_kwargs.setdefault("valor_aquisicao", Decimal("1000.00"))
-    if has_field(bem_model, "valor_compra"):
-        bem_kwargs.setdefault("valor_compra", Decimal("1000.00"))
-    if has_field(bem_model, "valor"):
-        bem_kwargs.setdefault("valor", Decimal("1000.00"))
-    if has_field(bem_model, "nota_fiscal"):
-        bem_kwargs.setdefault("nota_fiscal", f"NF-{idx_ua:02d}{i:02d}")
-    if has_field(bem_model, "numero_empenho"):
-        bem_kwargs.setdefault("numero_empenho", f"EMP-{idx_ua:02d}{i:02d}")
-    for alt in ("status_atual", "situacao", "situacao_atual", "status"):
-        if has_field(bem_model, alt) and alt not in bem_kwargs:
-            bem_kwargs[alt] = "aguardando_aprovacao"
+    def put_if_field(name, value, *, default_only=False):
+        if not has_field(bem_model, name):
+            return
+        if default_only:
+            bem_kwargs.setdefault(name, value)
+            return
+        bem_kwargs[name] = value
+
+    descricao = f"Bem UA{idx_ua:02d} #{i:02d}"
+    nota_fiscal = f"NF-{idx_ua:02d}{i:02d}"
+    numero_empenho = f"EMP-{idx_ua:02d}{i:02d}"
+    valor_padrao = Decimal("1000.00")
+
+    direct_values = {
+        "descricao": descricao,
+        "numero_tombo": seq,
+        "numero_serie": seq,
+        "numero_processo": seq,
+        "data_compra_entrega": today,
+        "valor_unitario": valor_padrao,
+        "quantidade": 1,
+    }
+    for field_name, value in direct_values.items():
+        put_if_field(field_name, value)
+
+    default_values = {
+        "titulo": descricao,
+        "data_aquisicao": today,
+        "data_compra": today,
+        "data_registro": now,
+        "valor_aquisicao": valor_padrao,
+        "valor_compra": valor_padrao,
+        "valor": valor_padrao,
+        "nota_fiscal": nota_fiscal,
+        "numero_empenho": numero_empenho,
+    }
+    for field_name, value in default_values.items():
+        put_if_field(field_name, value, default_only=True)
+
+    status_field = next(
+        (
+            name
+            for name in ("status_atual", "situacao", "situacao_atual", "status")
+            if has_field(bem_model, name)
+        ),
+        None,
+    )
+    if status_field and status_field not in bem_kwargs:
+        bem_kwargs[status_field] = "aguardando_aprovacao"
 
 
 def _fill_bem_relacoes(

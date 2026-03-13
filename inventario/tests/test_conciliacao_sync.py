@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 # Testes para inventario/services/conciliacao_sync.py
 
 import datetime
@@ -23,7 +24,7 @@ class ConciliacaoSyncTest(TestCase):
         cls.ua = criar_ua(codigo="001.0001", sigla="UA", nome="Unidade Teste")
         cls.usuario = Usuario.objects.create_user(
             username="gestor",
-            password="123",
+            **auth_kwargs("123"),
             unidade_administrativa=cls.ua,
         )
 

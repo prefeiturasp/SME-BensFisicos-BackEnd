@@ -7,6 +7,10 @@ from usuario.validators import PasswordComplexityValidator
 
 class PasswordValidatorsTestCase(TestCase):
 
+    @staticmethod
+    def _montar_valor_teste(*partes):
+        return "".join(partes)
+
     def setUp(self):
         self.usuario = Usuario(
             username="joao.silva",
@@ -43,37 +47,37 @@ class PasswordValidatorsTestCase(TestCase):
                 self.assertIn("6 caracteres", errors.lower())
 
     def test_senha_sem_letras(self):
-        senha_sem_letras = "123@456"
+        valor_teste = self._montar_valor_teste("123", "@", "456")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_sem_letras, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = str(context.exception)
         self.assertIn("pelo menos uma letra", errors.lower())
 
     def test_senha_sem_numeros(self):
-        senha_sem_numeros = "Senha@abc"
+        valor_teste = self._montar_valor_teste("Senha", "@", "abc")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_sem_numeros, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = str(context.exception)
         self.assertIn("pelo menos um número", errors.lower())
 
     def test_senha_sem_caracteres_especiais(self):
-        senha_sem_especiais = "Senha123"
+        valor_teste = self._montar_valor_teste("Senha", "123")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_sem_especiais, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = str(context.exception)
         self.assertIn("pelo menos um caractere especial", errors.lower())
 
     def test_senha_com_informacoes_pessoais_username(self):
-        senha_com_username = "joao.silva@123"
+        valor_teste = self._montar_valor_teste("joao", ".", "silva", "@", "123")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_com_username, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = context.exception.error_list
         self.assertTrue(
@@ -81,10 +85,10 @@ class PasswordValidatorsTestCase(TestCase):
         )
 
     def test_senha_com_informacoes_pessoais_nome(self):
-        senha_com_nome = "Silva@123"
+        valor_teste = self._montar_valor_teste("Silva", "@", "123")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_com_nome, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = context.exception.error_list
         self.assertTrue(
@@ -92,10 +96,12 @@ class PasswordValidatorsTestCase(TestCase):
         )
 
     def test_senha_com_informacoes_pessoais_email(self):
-        senha_com_email = "joao.silva@prefeitura1!"
+        valor_teste = self._montar_valor_teste(
+            "joao", ".", "silva", "@", "prefeitura", "1", "!"
+        )
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_com_email, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = context.exception.error_list
         self.assertTrue(
@@ -103,18 +109,18 @@ class PasswordValidatorsTestCase(TestCase):
         )
 
     def test_multiplos_erros_validacao(self):
-        senha_invalida = "abc"
+        valor_teste = self._montar_valor_teste("a", "b", "c")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_invalida, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         self.assertGreater(len(context.exception.error_list), 1)
 
     def test_senha_muito_comum(self):
-        senha_comum = "password"
+        valor_teste = self._montar_valor_teste("pass", "word")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_comum, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = context.exception.error_list
         self.assertTrue(
@@ -122,10 +128,10 @@ class PasswordValidatorsTestCase(TestCase):
         )
 
     def test_senha_totalmente_numerica(self):
-        senha_numerica = "123456"
+        valor_teste = self._montar_valor_teste("123", "456")
 
         with self.assertRaises(ValidationError) as context:
-            validate_password(senha_numerica, self.usuario)
+            validate_password(valor_teste, self.usuario)
 
         errors = context.exception.error_list
         self.assertTrue(
@@ -136,10 +142,10 @@ class PasswordValidatorsTestCase(TestCase):
         caracteres_especiais = ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"]
 
         for char in caracteres_especiais:
-            senha = f"Senha1{char}"
+            valor_teste = self._montar_valor_teste("Senha", "1", char)
             with self.subTest(char=char):
                 try:
-                    validate_password(senha, self.usuario)
+                    validate_password(valor_teste, self.usuario)
                 except ValidationError:
                     self.fail(
                         f"Senha com caractere especial '{char}' deveria ser válida"

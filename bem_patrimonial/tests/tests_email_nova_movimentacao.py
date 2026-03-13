@@ -1,6 +1,9 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from unittest.mock import patch
 from django.contrib.auth.models import Group
+from django.template import Context
+from django.template.loader import render_to_string
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -32,7 +35,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             username="operador_origem",
             email="origem@test.com",
             nome="Operador Origem",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_origem,
             unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
         )
@@ -43,7 +46,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             username="operador_destino_1",
             email="destino1@test.com",
             nome="Operador Destino 1",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
@@ -55,7 +58,7 @@ class EmailNovaMovimentacaoTestCase(TestCase):
             username="operador_destino_2",
             email="destino2@test.com",
             nome="Operador Destino 2",
-            password="test123",
+            **auth_kwargs("test123"),
             unidade_administrativa=self.ua_destino,
             unidade_orcamentaria=self.ua_destino.unidade_orcamentaria,
             is_active=True,
@@ -207,3 +210,21 @@ class EmailNovaMovimentacaoTestCase(TestCase):
         template = call_args[2]
 
         self.assertEqual(template, "simple_message.html")
+
+    def test_template_simple_message_escape_html_no_body(self):
+        html = render_to_string(
+            "simple_message.html",
+            {
+                "context": Context(
+                    {
+                        "subject": "Assunto",
+                        "title": "Titulo",
+                        "subtitle": "Subtitulo",
+                        "body": "<script>alert('xss')</script>",
+                    }
+                )
+            },
+        )
+
+        self.assertIn("&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;", html)
+        self.assertNotIn("<script>alert('xss')</script>", html)

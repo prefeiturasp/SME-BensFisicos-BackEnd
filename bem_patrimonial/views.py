@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_GET
 from django.db.models import OuterRef, Subquery
 from django.db import models, transaction
 
@@ -38,6 +39,7 @@ from dados_comuns.escopo import filtrar_queryset_por_escopo, validar_objeto_no_e
 
 
 @login_required
+@require_GET
 def download_documento_cimbpm(request, pk):
     movimentacao = get_object_or_404(MovimentacaoBemPatrimonial, pk=pk)
 
@@ -85,6 +87,7 @@ def download_documento_cimbpm(request, pk):
 
 class BemPatrimonialViewSet(viewsets.ModelViewSet):
     permission_classes = [BemPatrimonialPermission]
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 

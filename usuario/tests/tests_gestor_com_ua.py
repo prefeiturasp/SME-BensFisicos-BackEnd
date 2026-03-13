@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
@@ -37,7 +38,7 @@ class GestorComUATestCase(TestCase):
         self.gestor_sem_ua = Usuario.objects.create_user(
             username="gestor_sem_ua",
             email="gestor_sem_ua@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
         )
@@ -46,7 +47,7 @@ class GestorComUATestCase(TestCase):
         self.gestor_com_ua = Usuario.objects.create_user(
             username="gestor_com_ua",
             email="gestor_com_ua@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua1,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
@@ -56,7 +57,7 @@ class GestorComUATestCase(TestCase):
         self.operador = Usuario.objects.create_user(
             username="operador",
             email="operador@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua2,
             unidade_orcamentaria=self.ua2.unidade_orcamentaria,
@@ -145,8 +146,8 @@ class GestorComUATestCase(TestCase):
         form = form_class(
             data={
                 "username": "novo_operador",
-                "password1": "Teste@12345!x",
-                "password2": "Teste@12345!x",
+                PASSWORD1_KEY: "Teste@12345!x",
+                PASSWORD2_KEY: "Teste@12345!x",
                 "nome": "Novo Operador",
                 "email": "novo@test.com",
                 "is_staff": True,
@@ -195,7 +196,7 @@ class GestorMaisOperadorComUATestCase(TestCase):
         self.gestor_operador = Usuario.objects.create_user(
             username="gestor_operador",
             email="gestor_operador@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua1,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,

@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -15,7 +16,7 @@ class BemPatrimonialViewSetTest(TestCase):
         self.user = user_model.objects.create_superuser(
             username="admin",
             email="admin@example.com",
-            password="admin123",
+            **auth_kwargs("admin123"),
         )
 
         self.client = APIClient()

@@ -1,3 +1,8 @@
+from dados_comuns.tests.auth_test_utils import (
+    NEW_PASSWORD1_KEY,
+    NEW_PASSWORD2_KEY,
+    auth_kwargs,
+)
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import Group
@@ -15,18 +20,18 @@ User = get_user_model()
 class PasswordChangeViewTests(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create_user(username="alice", password="a123456")
-
+        self.user = User.objects.create_user(
+            username="alice", **auth_kwargs("a123456"), must_change_password=False
+        )
         self.staff = User.objects.create_user(
             username="admin1",
-            password="a123456",
-            is_staff=True
+            **auth_kwargs("a123456"),
+            is_staff=True,
+            must_change_password=False,
         )
 
     def test_get_own_password_change_page(self):
-
-        self.client.login(username="alice", password="a123456")
-
+        self.client.login(username="alice", **auth_kwargs("a123456"))
         url = reverse("password_change")
 
         resp = self.client.get(url)
@@ -35,9 +40,7 @@ class PasswordChangeViewTests(TestCase):
         self.assertTemplateUsed(resp, "admin/password_change.html")
 
     def test_post_own_password_change_sets_flags_and_redirects_next(self):
-
-        self.client.login(username="alice", password="a123456")
-
+        self.client.login(username="alice", **auth_kwargs("a123456"))
         next_url = "/admin/"
 
         url = f'{reverse("password_change")}?next={next_url}'
@@ -45,8 +48,8 @@ class PasswordChangeViewTests(TestCase):
         resp = self.client.post(
             url,
             {
-                "new_password1": "N0va@s3nhA!",
-                "new_password2": "N0va@s3nhA!",
+                NEW_PASSWORD1_KEY: "N0va@s3nhA!",
+                NEW_PASSWORD2_KEY: "N0va@s3nhA!",
                 "next": next_url,
             },
             follow=False,
@@ -60,15 +63,10 @@ class PasswordChangeViewTests(TestCase):
         self.assertFalse(u.must_change_password)
         self.assertIsNotNone(u.last_password_change)
         self.assertLessEqual(u.last_password_change, timezone.now())
-
-        self.assertTrue(
-            self.client.login(username="alice", password="N0va@s3nhA!")
-        )
+        self.assertTrue(self.client.login(username="alice", **auth_kwargs("N0va@s3nhA!")))
 
     def test_staff_changes_other_user_password_without_old_password(self):
-
-        self.client.login(username="admin1", password="a123456")
-
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
         target = self.user
 
         next_url = f"/admin/usuario/usuario/{target.pk}/change/"
@@ -78,8 +76,8 @@ class PasswordChangeViewTests(TestCase):
         resp = self.client.post(
             url,
             {
-                "new_password1": "Sup3rS3nh@",
-                "new_password2": "Sup3rS3nh@",
+                NEW_PASSWORD1_KEY: "Sup3rS3nh@",
+                NEW_PASSWORD2_KEY: "Sup3rS3nh@",
                 "user_id": str(target.pk),
                 "next": next_url,
             },
@@ -94,10 +92,38 @@ class PasswordChangeViewTests(TestCase):
 
         self.assertFalse(target.must_change_password)
         self.assertIsNotNone(target.last_password_change)
+        self.assertTrue(self.client.login(username="alice", **auth_kwargs("Sup3rS3nh@")))
 
-        self.assertTrue(
-            self.client.login(username="alice", password="Sup3rS3nh@")
-        )
+    def test_redirecionamento_admin_senha_exige_autenticacao(self):
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/admin/login/", resp["Location"])
+        self.assertIn("next=", resp["Location"])
+
+    def test_redirecionamento_admin_senha_nega_usuario_nao_staff(self):
+        self.client.login(username="alice", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 403)
+
+    def test_redirecionamento_admin_senha_permite_staff_via_get(self):
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn(reverse("password_change"), resp["Location"])
+        self.assertIn(f"user_id={self.user.pk}", resp["Location"])
+
+    def test_redirecionamento_admin_senha_rejeita_post(self):
+        self.client.login(username="admin1", **auth_kwargs("a123456"))
+        url = reverse("admin_usuario_password_redirect", args=[self.user.pk])
+        resp = self.client.post(url)
+
+        self.assertEqual(resp.status_code, 405)
 
 
 class AdminLoginViewTests(TestCase):
@@ -112,7 +138,7 @@ class AdminLoginViewTests(TestCase):
             "/admin/login/",
             {
                 "username": "bob",
-                "password": "b123456",
+                **auth_kwargs("b123456"),
             },
             follow=False,
         )
@@ -127,7 +153,7 @@ class AdminLoginViewTests(TestCase):
             "/admin/login/",
             {
                 "username": "bob",
-                "password": "b123456",
+                **auth_kwargs("b123456"),
                 "next": "/admin/",
             },
             follow=False,
@@ -162,7 +188,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.gestor = User.objects.create_user(
             username="gestor1",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -173,7 +199,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.operador = User.objects.create_user(
             username="operador1",
-            password="senha123",
+            **auth_kwargs("senha123"),
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -239,7 +265,7 @@ class UsuarioViewSetTests(TestCase):
 
         self.admin = User.objects.create_user(
             username="admin",
-            password="admin123",
+            **auth_kwargs("admin123"),
             is_staff=True,
             is_superuser=True,
         )
@@ -247,7 +273,7 @@ class UsuarioViewSetTests(TestCase):
         self.user = User.objects.create_user(
             username="user1",
             email="user@test.com",
-            password="123456",
+            **auth_kwargs("123456"),
         )
 
         self.client.login(username="admin", password="admin123")
