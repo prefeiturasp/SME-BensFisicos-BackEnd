@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from rest_framework.exceptions import PermissionDenied
 
 
 class BemPatrimonialPermission(BasePermission):
@@ -114,22 +115,18 @@ class UnidadeAdministrativaPermission(BasePermission):
 
 class UsuarioPermission(BasePermission):
     """
-        Regras de acesso para API de Usuários:
+    Regras de acesso para API de Usuários:
 
-        - Listagem/detalhe: superuser, gestor e operador
-        - Criacao/edicao/desativacao/reativacao: apenas superuser e gestor
+    - Apenas SUPERUSER e GESTOR podem acessar o módulo
+    - Operador Inventário NÃO acessa gerenciamento de usuários
     """
 
+    message = "Operador não acessa gerenciamento de usuários."
+
     def _pode_acessar_modulo(self, user):
-        if not user or not user.is_authenticated:
-            return False
-
-        if getattr(user, "is_superuser", False):
-            return True
-
         return bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_operador_inventario", False)
+            getattr(user, "is_superuser", False)
+            or getattr(user, "is_gestor_patrimonio", False)
         )
 
     def _pode_gerenciar(self, user):
@@ -139,7 +136,15 @@ class UsuarioPermission(BasePermission):
         )
 
     def has_permission(self, request, view):
-        if not self._pode_acessar_modulo(request.user):
+
+        user = request.user
+
+        if not self._pode_acessar_modulo(user):
+
+            # bloquear operador explicitamente
+            if getattr(user, "is_operador_inventario", False):
+                raise PermissionDenied(self.message)
+
             return False
 
         action = getattr(view, "action", None)
@@ -156,18 +161,19 @@ class UsuarioPermission(BasePermission):
             "destroy",
             "restore",
         ):
-            return self._pode_gerenciar(request.user)
+            return self._pode_gerenciar(user)
 
-        return self._pode_gerenciar(request.user)
+        return self._pode_gerenciar(user)
 
     def has_object_permission(self, request, view, obj):
+
         action = getattr(view, "action", None)
 
-        # leitura sempre permitida se passou no has_permission
-        if action in ("retrieve",):
+        # leitura
+        if action == "retrieve":
             return True
 
-        # edição/desativação
+        # escrita
         if action in ("update", "partial_update", "destroy", "restore"):
             return self._pode_gerenciar(request.user)
 

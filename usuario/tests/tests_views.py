@@ -11,7 +11,7 @@ from django.utils import timezone
 import uuid
 from rest_framework.test import APIClient, APITestCase
 
-from dados_comuns.tests.factories import criar_ua
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 User = get_user_model()
@@ -449,7 +449,6 @@ class UsuarioPermissionNegativeTests(APITestCase):
         )
 
         self.list_url = reverse("usuario-list")
-
         self.detail_url = reverse("usuario-detail", args=[self.target_user.id])
 
     def test_operador_nao_pode_criar_usuario(self):
@@ -465,7 +464,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
             format="json",
         )
 
-        self.assertIn(resp.status_code, [403])
+        self.assertEqual(resp.status_code, 403)
 
     def test_operador_nao_pode_editar_usuario(self):
 
@@ -527,12 +526,23 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
     def test_acesso_fora_do_escopo_uo(self):
 
-        ua_externa = criar_ua(codigo="999", sigla="EXT", nome="Externa", uo=self.ua1.unidade_orcamentaria)
+        uo_externa = criar_uo(
+            codigo="998",
+            sigla="UOEXT",
+            nome="UO Externa"
+        )
+
+        ua_externa = criar_ua(
+            codigo="999",
+            sigla="EXT",
+            nome="Externa",
+            uo=uo_externa
+        )
 
         user_externo = User.objects.create_user(
             username="externo",
             password="123456",
-            unidade_orcamentaria=ua_externa.unidade_orcamentaria,
+            unidade_orcamentaria=uo_externa,
             unidade_administrativa=ua_externa,
         )
 
@@ -543,3 +553,66 @@ class UsuarioPermissionNegativeTests(APITestCase):
         resp = self.client.get(url)
 
         self.assertIn(resp.status_code, [403, 404])
+
+    def test_gestor_nao_pode_definir_superuser(self):
+
+        self.client.force_authenticate(user=self.gestor)
+
+        resp = self.client.patch(
+            self.detail_url,
+            {
+                "is_superuser": True
+            },
+            format="json",
+        )
+
+        self.assertIn(resp.status_code, [400, 403])
+
+    def test_gestor_nao_pode_criar_superuser(self):
+
+        self.client.force_authenticate(user=self.gestor)
+
+        resp = self.client.post(
+            self.list_url,
+            {
+                "username": "superhack",
+                "password": "Senha123!",
+                "password_confirm": "Senha123!",
+                "is_superuser": True,
+            },
+            format="json",
+        )
+
+        self.assertIn(resp.status_code, [400, 403])
+
+    def test_gestor_nao_pode_definir_staff(self):
+
+        self.client.force_authenticate(user=self.gestor)
+
+        resp = self.client.patch(
+            self.detail_url,
+            {
+                "is_staff": True
+            },
+            format="json",
+        )
+
+        self.assertIn(resp.status_code, [400, 403])
+
+    def test_usuario_nao_pode_alterar_proprio_grupo(self):
+
+        self.client.force_authenticate(user=self.gestor)
+
+        gestor_group = Group.objects.get(name=GRUPO_GESTOR_PATRIMONIO)
+
+        url = reverse("usuario-detail", args=[self.gestor.id])
+
+        resp = self.client.patch(
+            url,
+            {
+                "groups": [gestor_group.id]
+            },
+            format="json",
+        )
+
+        self.assertIn(resp.status_code, [400, 403])
