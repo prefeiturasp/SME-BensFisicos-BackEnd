@@ -679,7 +679,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
     criado_por = models.ForeignKey(
         Usuario,
-        verbose_name="Usuário que realizou a baixa",
+        verbose_name="Usuário que solicitou a baixa",
         related_name="baixas_fisicas_criadas",
         on_delete=models.PROTECT,
         null=False,
@@ -687,7 +687,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
     )
 
     data_criacao = models.DateTimeField(
-        "Data/hora da solicitação de baixa",
+        "Data da solicitação",
         auto_now_add=True,
     )
 
@@ -707,7 +707,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
     )
 
     data_aprovacao = models.DateTimeField(
-        "Data/hora da aprovação",
+        "Data da aprovação",
         null=True,
         blank=True,
     )
