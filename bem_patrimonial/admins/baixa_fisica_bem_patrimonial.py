@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 from django.forms import DateInput
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
+from django.utils.formats import date_format
+from rangefilter.filters import DateRangeFilter
 
 from bem_patrimonial.models import (
     BaixaFisicaBemPatrimonial,
@@ -166,29 +168,49 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
 
 class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     list_display = (
-        "id",
+        "numero_nbbpm",
         "unidade_administrativa_origem",
         "status",
         "criado_por",
-        "data_criacao",
         "aprovado_por",
-        "data_aprovacao",
+        "data_aprovacao_formatada",
     )
-
-    list_display_links = ("id",)
-    list_filter = ("status",)
+    list_display_links = ("numero_nbbpm",)
+    list_filter = ("status", 
+                   ("data_aprovacao", DateRangeFilter),
+                   )
     search_fields = (
         "numero_processo_baixa",
+        "numero_nbbpm",
         "unidade_administrativa_origem__nome",
+        "unidade_administrativa_origem__sigla",
         "unidade_administrativa_origem__codigo",
+        "criado_por__username",
+        "aprovado_por__username",
+        "itens__bem__numero_patrimonial",
+        "itens__bem__nome",
     )
+
+    def get_search_results(self, request, queryset, search_term):
+        queryset, _ = super().get_search_results(
+            request, queryset, search_term
+        )
+        return queryset.distinct(), True
+
+    def data_aprovacao_formatada(self, obj):
+        if obj.data_aprovacao:
+            return date_format(obj.data_aprovacao, "d \\d\\e F \\d\\e Y")
+        return "-"
+
+    data_aprovacao_formatada.short_description = "Data da aprovação"
+    data_aprovacao_formatada.admin_order_field = "data_aprovacao"
 
     inlines = [BaixaFisicaBensItemInline]
     autocomplete_fields = ("unidade_administrativa_origem",)
     change_form_template = "admin/bem_patrimonial/baixa_fisica/change_form.html"
 
     class Media:
-        js = ("admin/baixa_fisica_autocomplete.js",)
+        js = ("admin/baixa_fisica_autocomplete.js")
         css = {
             "all": (
                 "css/hide_crud_icons.css",
