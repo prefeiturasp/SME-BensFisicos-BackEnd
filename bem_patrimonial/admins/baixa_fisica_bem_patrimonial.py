@@ -168,6 +168,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
 
 class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     list_display = (
+        "id",
         "numero_nbbpm",
         "unidade_administrativa_origem",
         "status",
@@ -175,7 +176,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         "aprovado_por",
         "data_aprovacao_formatada",
     )
-    list_display_links = ("numero_nbbpm",)
+    list_display_links = ("id",)
     list_filter = ("status", 
                    ("data_aprovacao", DateRangeFilter),
                    )
@@ -210,7 +211,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
     change_form_template = "admin/bem_patrimonial/baixa_fisica/change_form.html"
 
     class Media:
-        js = ("admin/baixa_fisica_autocomplete.js")
+        js = ("admin/baixa_fisica_autocomplete.js,")
         css = {
             "all": (
                 "css/hide_crud_icons.css",
