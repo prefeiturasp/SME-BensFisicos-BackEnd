@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants
+from dados_comuns.models import UnidadeAdministrativa
 
 
 class _BemPatrimonialBaseMixin(serializers.Serializer):
@@ -381,3 +382,83 @@ class BemPatrimonialDetailSerializer(
             if hasattr(e, "message_dict"):
                 raise serializers.ValidationError(e.message_dict)
             raise serializers.ValidationError(str(e))
+
+
+class BemItemCriacaoSerializer(serializers.Serializer):
+    """Dados únicos de cada bem na criação em lote."""
+
+    numero_patrimonial = serializers.CharField(required=False, allow_blank=True, default="")
+    numero_formato_antigo = serializers.BooleanField(required=False, default=False)
+    sem_numeracao = serializers.BooleanField(required=False, default=False)
+    localizacao = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.Serializer):
+    """
+    Criação em lote: dados base compartilhados + lista de bens (multi_payload).
+
+    Valida todos os bens antes de persistir qualquer um — se qualquer número
+    patrimonial for inválido ou duplicado (no payload ou no banco), nenhum bem é criado.
+    """
+
+    unidade_administrativa = serializers.PrimaryKeyRelatedField(
+        queryset=UnidadeAdministrativa.objects.all()
+    )
+    nome = serializers.CharField()
+    descricao = serializers.CharField()
+    valor_unitario = serializers.CharField()
+    marca = serializers.CharField()
+    modelo = serializers.CharField()
+    numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
+    multi_payload = BemItemCriacaoSerializer(many=True)
+
+    def validate(self, attrs):
+        attrs["valor_unitario"] = self._parse_valor_unitario(attrs.get("valor_unitario"))
+
+        multi_payload = attrs.get("multi_payload", [])
+        if not multi_payload:
+            raise serializers.ValidationError(
+                {"multi_payload": "Informe ao menos um bem."}
+            )
+        linhas_errors = {}
+        numeros_vistos = set()
+
+        for i, item in enumerate(multi_payload):
+            item_errors = {}
+            sem = bool(item.get("sem_numeracao"))
+            antigo = bool(item.get("numero_formato_antigo"))
+            numero = (item.get("numero_patrimonial") or "").strip() or None
+
+            if sem and antigo:
+                item_errors["numero_patrimonial"] = (
+                    "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
+                )
+            elif not sem:
+                if not numero:
+                    item_errors["numero_patrimonial"] = (
+                        "Informe o Número Patrimonial ou marque 'Sem numeração'."
+                    )
+                elif not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
+                    item_errors["numero_patrimonial"] = (
+                        "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+                    )
+                elif numero in numeros_vistos:
+                    item_errors["numero_patrimonial"] = (
+                        "Número patrimonial duplicado neste cadastro."
+                    )
+                elif BemPatrimonial.objects.filter(
+                    numero_patrimonial=numero, excluido=False
+                ).exists():
+                    item_errors["numero_patrimonial"] = (
+                        "Número Patrimonial já está cadastrado no sistema."
+                    )
+                else:
+                    numeros_vistos.add(numero)
+
+            if item_errors:
+                linhas_errors[str(i)] = item_errors
+
+        if linhas_errors:
+            raise serializers.ValidationError({"linhas": linhas_errors})
+
+        return attrs
