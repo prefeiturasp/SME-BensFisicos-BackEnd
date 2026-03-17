@@ -370,15 +370,12 @@ class UsuarioViewSet(
 
         user = self.request.user
 
-        # superuser vê tudo
         if getattr(user, "is_superuser", False):
             return qs
 
-        # operador não tem acesso
         if getattr(user, "is_operador_inventario", False):
             return qs.none()
 
-        # gestor vê apenas usuários da mesma UO
         if getattr(user, "unidade_orcamentaria_id", None):
             return qs.filter(
                 unidade_orcamentaria_id=user.unidade_orcamentaria_id
@@ -394,17 +391,14 @@ class UsuarioViewSet(
         obj = super().get_object()
         user = self.request.user
 
-        # superuser pode acessar qualquer
         if getattr(user, "is_superuser", False):
             return obj
 
-        # operador não acessa usuários
         if getattr(user, "is_operador_inventario", False):
             raise PermissionDenied(
                 "Operadores não possuem acesso ao gerenciamento de usuários."
             )
 
-        # gestor só acessa usuários da mesma UO
         user_uo = getattr(user, "unidade_orcamentaria_id", None)
 
         if user_uo and obj.unidade_orcamentaria_id == user_uo:
@@ -417,9 +411,6 @@ class UsuarioViewSet(
     # =========================================================
 
     def _registrar_historico(self, request, original, instance, fields):
-        """
-        Registra alterações no HistoricoGeral
-        """
         changes = dict_changes(original, instance, fields=fields)
 
         if not changes:
@@ -527,7 +518,6 @@ class UsuarioViewSet(
         partial = kwargs.pop("partial", False)
 
         instance = self.get_object()
-
         original = User.objects.get(pk=instance.pk)
 
         serializer = self.get_serializer(
@@ -554,8 +544,6 @@ class UsuarioViewSet(
                 "nome",
                 "rf",
                 "is_active",
-                "is_staff",
-                "is_superuser",
                 "unidade_orcamentaria",
                 "unidade_administrativa",
             ],
@@ -674,3 +662,48 @@ class UsuarioViewSet(
             {"detail": "Usuário reativado com sucesso."},
             status=status.HTTP_200_OK,
         )
+
+    # =========================================================
+    # ✅ HISTÓRICO DO USUÁRIO (novo endpoint)
+    # =========================================================
+
+    @extend_schema(
+        tags=["Usuários"],
+        summary="Histórico de alterações do usuário",
+        description="Retorna o histórico de alterações registradas para o usuário informado.",
+        responses={
+            200: OpenApiResponse(description="Lista de registros do histórico"),
+            404: OpenApiResponse(description="Usuário não encontrado"),
+        },
+    )
+    @action(detail=True, methods=["get"], url_path="historico")
+    def historico(self, request, pk=None):
+
+        # Garante que o usuário existe e que o solicitante tem escopo para acessá-lo
+        instance = self.get_object()
+
+        ct = ContentType.objects.get_for_model(User)
+
+        registros = (
+            HistoricoGeral.objects
+            .filter(content_type=ct, object_id=str(instance.pk))
+            .select_related("alterado_por")
+            .order_by("-id")
+        )
+
+        data = [
+            {
+                "id": r.id,
+                "campo": r.campo,
+                "valor_antigo": r.valor_antigo,
+                "valor_novo": r.valor_novo,
+                "justificativa": r.justificativa,
+                "alterado_por": (
+                    r.alterado_por.username if r.alterado_por else None
+                ),
+                "data_alteracao": r.created_at if hasattr(r, "created_at") else None,
+            }
+            for r in registros
+        ]
+
+        return Response(data, status=status.HTTP_200_OK)

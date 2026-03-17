@@ -123,12 +123,6 @@ class UsuarioPermission(BasePermission):
 
     message = "Operador não acessa gerenciamento de usuários."
 
-    def _pode_acessar_modulo(self, user):
-        return bool(
-            getattr(user, "is_superuser", False)
-            or getattr(user, "is_gestor_patrimonio", False)
-        )
-
     def _pode_gerenciar(self, user):
         return bool(
             getattr(user, "is_superuser", False)
@@ -139,7 +133,7 @@ class UsuarioPermission(BasePermission):
 
         user = request.user
 
-        if not self._pode_acessar_modulo(user):
+        if not self._pode_gerenciar(user):
 
             # bloquear operador explicitamente
             if getattr(user, "is_operador_inventario", False):
