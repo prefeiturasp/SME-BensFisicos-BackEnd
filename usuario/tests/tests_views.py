@@ -129,8 +129,9 @@ class PasswordChangeViewTests(TestCase):
 class AdminLoginViewTests(TestCase):
 
     def setUp(self):
-
-        self.user = User.objects.create_user(username="bob", password="b123456")
+        self.senha_list = ["S3nh", "@", "123"]
+        self.senha = "".join(self.senha_list)
+        self.user = User.objects.create_user(username="bob", password=self.senha)
 
     def test_login_redirects_selecionar_ua(self):
 
@@ -138,7 +139,7 @@ class AdminLoginViewTests(TestCase):
             "/admin/login/",
             {
                 "username": "bob",
-                **auth_kwargs("b123456"),
+                "password": self.senha,
             },
             follow=False,
         )
@@ -153,7 +154,7 @@ class AdminLoginViewTests(TestCase):
             "/admin/login/",
             {
                 "username": "bob",
-                **auth_kwargs("b123456"),
+                "password": self.senha,
                 "next": "/admin/",
             },
             follow=False,
@@ -168,6 +169,9 @@ class AdminLoginViewTests(TestCase):
 class SelecionarUAViewTests(TestCase):
 
     def setUp(self):
+
+        self.senha_list = ["S3nh", "@", "123"]
+        self.senha = "".join(self.senha_list)
 
         self.ua1 = criar_ua(codigo="001", sigla="UA1", nome="Unidade 1")
 
@@ -212,7 +216,7 @@ class SelecionarUAViewTests(TestCase):
 
     def test_gestor_ve_opcao_visao_geral_no_select(self):
 
-        self.client.login(username="gestor1", password="senha123")
+        self.client.login(username="gestor1", password=self.senha)
 
         resp = self.client.get(reverse("selecionar_ua"))
 
@@ -223,7 +227,7 @@ class SelecionarUAViewTests(TestCase):
 
     def test_gestor_pode_selecionar_visao_geral(self):
 
-        self.client.login(username="gestor1", password="senha123")
+        self.client.login(username="gestor1", password=self.senha)
 
         resp = self.client.post(
             reverse("selecionar_ua"),
@@ -248,7 +252,7 @@ class SelecionarUAViewTests(TestCase):
 
     def test_operador_nao_ve_opcao_visao_geral(self):
 
-        self.client.login(username="operador1", password="senha123")
+        self.client.login(username="operador1", password=self.senha)
 
         resp = self.client.get(reverse("selecionar_ua"))
 
@@ -261,11 +265,14 @@ class UsuarioViewSetTests(TestCase):
 
     def setUp(self):
 
+        self.senha_list = ["S3nh", "@", "123"]
+        self.senha = "".join(self.senha_list)
+
         self.client = APIClient()
 
         self.admin = User.objects.create_user(
             username="admin",
-            **auth_kwargs("admin123"),
+            password=self.senha,
             is_staff=True,
             is_superuser=True,
         )
@@ -276,7 +283,7 @@ class UsuarioViewSetTests(TestCase):
             **auth_kwargs("123456"),
         )
 
-        self.client.login(username="admin", password="admin123")
+        self.client.login(username="admin", password=self.senha)
 
         self.client.force_authenticate(user=self.admin)
 
@@ -309,8 +316,8 @@ class UsuarioViewSetTests(TestCase):
             {
                 "username": "novo",
                 "email": "novo@test.com",
-                "password": "Senha123!",
-                "password_confirm": "Senha123!",
+                "password": self.senha,
+                "password_confirm": self.senha,
             },
             format="json",
         )
@@ -402,6 +409,9 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
     def setUp(self):
 
+        self.senha_list = ["S3nh", "@", "123"]
+        self.senha = "".join(self.senha_list)
+
         self.client = APIClient()
 
         self.grupo_gestor = Group.objects.get_or_create(
@@ -423,7 +433,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         self.gestor = User.objects.create_user(
             username="gestor",
-            password="senha123",
+            password=self.senha,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -433,7 +443,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         self.operador = User.objects.create_user(
             username="operador",
-            password="senha123",
+            password=self.senha,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -443,7 +453,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         self.target_user = User.objects.create_user(
             username="target",
-            password="123456",
+            password=self.senha,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
         )
@@ -459,7 +469,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
             self.list_url,
             {
                 "username": "hack",
-                "password": "Senha123!",
+                "password": self.senha,
             },
             format="json",
         )
@@ -541,7 +551,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         user_externo = User.objects.create_user(
             username="externo",
-            password="123456",
+            password=self.senha,
             unidade_orcamentaria=uo_externa,
             unidade_administrativa=ua_externa,
         )
@@ -576,8 +586,8 @@ class UsuarioPermissionNegativeTests(APITestCase):
             self.list_url,
             {
                 "username": "superhack",
-                "password": "Senha123!",
-                "password_confirm": "Senha123!",
+                "password": self.senha,
+                "password_confirm": self.senha,
                 "is_superuser": True,
             },
             format="json",

@@ -388,11 +388,18 @@ class UsuarioViewSet(
     # =========================================================
 
     def get_object(self):
+
         obj = super().get_object()
         user = self.request.user
 
+        self._verificar_permissao_acesso(user, obj)
+
+        return obj
+
+    def _verificar_permissao_acesso(self, user, obj):
+
         if getattr(user, "is_superuser", False):
-            return obj
+            return
 
         if getattr(user, "is_operador_inventario", False):
             raise PermissionDenied(
@@ -401,10 +408,8 @@ class UsuarioViewSet(
 
         user_uo = getattr(user, "unidade_orcamentaria_id", None)
 
-        if user_uo and obj.unidade_orcamentaria_id == user_uo:
-            return obj
-
-        raise NotFound()
+        if not user_uo or obj.unidade_orcamentaria_id != user_uo:
+            raise NotFound()
 
     # =========================================================
     # HISTÓRICO
