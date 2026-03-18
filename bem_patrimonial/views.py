@@ -23,6 +23,7 @@ from bem_patrimonial import constants
 from bem_patrimonial.serializers.bem_patrimonial_serializers import (
     BemPatrimonialListSerializer,
     BemPatrimonialDetailSerializer,
+    BemPatrimonialMultiCreateSerializer,
 )
 from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
 
@@ -210,6 +211,45 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             queryset=BemPatrimonial.objects.all(),
             campo_ua="unidade_administrativa",
+        )
+
+    @action(detail=False, methods=["post"], url_path="multi")
+    def create_multi(self, request):
+        serializer = BemPatrimonialMultiCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        vdata = dict(serializer.validated_data)
+        multi_payload = vdata.pop("multi_payload")
+        base = vdata
+
+        with transaction.atomic():
+            with audit_as(request.user):
+                bens = []
+                for item in multi_payload:
+                    sem = item.get("sem_numeracao", False)
+                    bem = BemPatrimonial(
+                        **base,
+                        numero_patrimonial=(
+                            None if sem else (item.get("numero_patrimonial") or None)
+                        ),
+                        numero_formato_antigo=item.get("numero_formato_antigo", False),
+                        sem_numeracao=sem,
+                        localizacao=item.get("localizacao", ""),
+                        criado_por=request.user,
+                        status=constants.AGUARDANDO_APROVACAO,
+                    )
+                    bem.save()
+                    bens.append(bem)
+
+        return Response(
+            {
+                "detail": f"{len(bens)} bem(ns) criado(s) com sucesso.",
+                "count": len(bens),
+            },
+            status=http_status.HTTP_201_CREATED,
         )
 
     @action(detail=False, methods=["post"], url_path="aprovar")
