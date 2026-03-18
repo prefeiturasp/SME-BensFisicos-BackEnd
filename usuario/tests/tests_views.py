@@ -192,7 +192,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.gestor = User.objects.create_user(
             username="gestor1",
-            **auth_kwargs("senha123"),
+            password=self.senha,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -203,7 +203,7 @@ class SelecionarUAViewTests(TestCase):
 
         self.operador = User.objects.create_user(
             username="operador1",
-            **auth_kwargs("senha123"),
+            password=self.senha,
             unidade_orcamentaria=self.ua1.unidade_orcamentaria,
             unidade_administrativa=self.ua1,
             is_staff=True,
@@ -280,7 +280,7 @@ class UsuarioViewSetTests(TestCase):
         self.user = User.objects.create_user(
             username="user1",
             email="user@test.com",
-            **auth_kwargs("123456"),
+            password=self.senha,
         )
 
         self.client.login(username="admin", password=self.senha)
