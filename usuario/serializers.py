@@ -663,6 +663,9 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
         user.save()
 
+        if not unidades_administrativas and user.unidade_administrativa:
+            unidades_administrativas = [user.unidade_administrativa]
+
         if unidades_administrativas:
             user.unidades_administrativas.set(unidades_administrativas)
 
