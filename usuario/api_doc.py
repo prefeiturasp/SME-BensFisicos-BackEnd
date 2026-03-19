@@ -14,10 +14,11 @@ Retorna uma lista paginada de usuários cadastrados no sistema.
 - **is_staff** → retorna apenas membros da equipe
 - **is_superuser** → retorna apenas superusuários
 - **is_active** → filtra usuários ativos ou inativos
-- **groups** → filtra usuários por grupo
+- **group_name** → filtra usuários por grupo
 - **date_joined_after** → usuários criados após uma data
 - **date_joined_before** → usuários criados antes de uma data
-
+- **search** → busca usuários por nome
+- **unidade** → busca usuários por código / nome / sigla da unidade administrativa
 A resposta segue o padrão de paginação da API.
 """)
 

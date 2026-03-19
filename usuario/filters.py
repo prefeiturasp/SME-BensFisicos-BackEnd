@@ -1,6 +1,6 @@
 import django_filters
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.db.models import Q
 
 User = get_user_model()
 
@@ -16,16 +16,14 @@ class UsuarioFilter(django_filters.FilterSet):
     # ativo (usado para soft delete)
     is_active = django_filters.BooleanFilter()
 
-    # grupo
-    groups = django_filters.ModelChoiceFilter(
-        field_name="groups__id",
-        queryset=Group.objects.all()
-    )
-
-    # sigla do grupo (ex: ST-UA)
+    # sigla do grupo (ex: Gestor Patrimonio)
     group_name = django_filters.CharFilter(
         field_name="groups__name",
         lookup_expr="icontains"
+    )
+
+    unidade = django_filters.CharFilter(
+        method="filter_unidade"
     )
 
     # data inicial
@@ -46,6 +44,13 @@ class UsuarioFilter(django_filters.FilterSet):
             "is_staff",
             "is_superuser",
             "is_active",
-            "groups",
             "group_name",
+            "unidade",
         ]
+
+    def filter_unidade(self, queryset, name, value):
+        return queryset.filter(
+            Q(unidade_administrativa__nome__icontains=value) |
+            Q(unidade_administrativa__codigo__icontains=value) |
+            Q(unidade_administrativa__sigla__icontains=value)
+        )
