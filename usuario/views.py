@@ -631,13 +631,19 @@ class UsuarioViewSet(
         tags=["Usuários"],
         summary="Reativar usuário",
         description=RESTORE_USERS_DOC,
+        request=None,
         responses={
             200: OpenApiResponse(description="Usuário reativado com sucesso"),
             400: OpenApiResponse(description="Usuário já está ativo"),
             404: OpenApiResponse(description="Usuário não encontrado"),
         },
     )
-    @action(detail=True, methods=["post"])
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="restore",
+        serializer_class=None,
+    )
     def restore(self, request, pk=None):
 
         user = self.get_object()
@@ -669,7 +675,7 @@ class UsuarioViewSet(
         )
 
     # =========================================================
-    # ✅ HISTÓRICO DO USUÁRIO (novo endpoint)
+    # HISTÓRICO DO USUÁRIO
     # =========================================================
 
     @extend_schema(

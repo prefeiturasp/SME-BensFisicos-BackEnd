@@ -476,10 +476,44 @@ class UsuarioSerializer(serializers.ModelSerializer):
         )
 
         self._validar_coerencia_ua_uo(unidade_administrativa, unidade_orcamentaria)
+        self._validar_escopo_uo_gestor(user, unidade_orcamentaria, instance)  # ✅ novo
         self._validar_senha(attrs)
         self._validar_coerencia_grupo_unidade(groups, unidade_administrativa, unidade_orcamentaria)
 
         return attrs
+
+    def _validar_escopo_uo_gestor(self, user, unidade_orcamentaria, instance):
+        """
+        Impede que um gestor crie ou mova um usuário para uma UO diferente da sua.
+        Superusuários não têm essa restrição.
+        """
+        if not user or getattr(user, "is_superuser", False):
+            return
+
+        gestor_uo_id = getattr(user, "unidade_orcamentaria_id", None)
+
+        if not gestor_uo_id:
+            return
+
+        # Em criação (sem instance), a UO informada deve ser a do gestor
+        if instance is None and unidade_orcamentaria:
+            if unidade_orcamentaria.id != gestor_uo_id:
+                raise serializers.ValidationError(
+                    {
+                        "unidade_orcamentaria":
+                        "Você só pode criar usuários na sua própria unidade orçamentária."
+                    }
+                )
+
+        # Em atualização, não permite mover o usuário para outra UO
+        if instance is not None and unidade_orcamentaria:
+            if unidade_orcamentaria.id != gestor_uo_id:
+                raise serializers.ValidationError(
+                    {
+                        "unidade_orcamentaria":
+                        "Você não pode transferir um usuário para outra unidade orçamentária."
+                    }
+                )
 
     def _validar_campos_sensiveis(self, raw):
 
