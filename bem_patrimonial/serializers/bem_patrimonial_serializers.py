@@ -168,6 +168,12 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
 
     _NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
     _SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
+    _MSG_NUMERO_FORMATO_INVALIDO = (
+        "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+    )
+    _MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM = (
+        "Informe o Número Patrimonial ou marque 'Sem numeração'."
+    )
 
     def _validate_numero_edicao(self, cleaned, sem, antigo, numero):
         """Valida número patrimonial na edição (tem_pk)."""
@@ -178,16 +184,12 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
                 return cleaned
             if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
                 raise serializers.ValidationError(
-                    {
-                        "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                    }
+                    {"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO}
                 )
         else:
             if not sem:
                 raise serializers.ValidationError(
-                    {
-                        "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                    }
+                    {"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM}
                 )
             cleaned["numero_formato_antigo"] = False
         return cleaned
@@ -204,15 +206,11 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
             return cleaned
         if not numero:
             raise serializers.ValidationError(
-                {
-                    "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                }
+                {"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM}
             )
         if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
             raise serializers.ValidationError(
-                {
-                    "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                }
+                {"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO}
             )
         cleaned["numero_patrimonial"] = numero
         return cleaned
@@ -412,6 +410,44 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
     numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
     multi_payload = BemItemCriacaoSerializer(many=True)
 
+    def _validate_item_multi_payload(self, item, numeros_vistos):
+        item_errors = {}
+        sem = bool(item.get("sem_numeracao"))
+        antigo = bool(item.get("numero_formato_antigo"))
+        numero = (item.get("numero_patrimonial") or "").strip() or None
+
+        if sem and antigo:
+            item_errors["numero_patrimonial"] = (
+                "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
+            )
+            return item_errors
+
+        if sem:
+            return item_errors
+
+        if not numero:
+            item_errors["numero_patrimonial"] = self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM
+            return item_errors
+
+        if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
+            item_errors["numero_patrimonial"] = self._MSG_NUMERO_FORMATO_INVALIDO
+            return item_errors
+
+        if numero in numeros_vistos:
+            item_errors["numero_patrimonial"] = (
+                "Número patrimonial duplicado neste cadastro."
+            )
+            return item_errors
+
+        if BemPatrimonial.objects.filter(numero_patrimonial=numero, excluido=False).exists():
+            item_errors["numero_patrimonial"] = (
+                "Número Patrimonial já está cadastrado no sistema."
+            )
+            return item_errors
+
+        numeros_vistos.add(numero)
+        return item_errors
+
     def validate(self, attrs):
         attrs["valor_unitario"] = self._parse_valor_unitario(attrs.get("valor_unitario"))
 
@@ -424,36 +460,7 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
         numeros_vistos = set()
 
         for i, item in enumerate(multi_payload):
-            item_errors = {}
-            sem = bool(item.get("sem_numeracao"))
-            antigo = bool(item.get("numero_formato_antigo"))
-            numero = (item.get("numero_patrimonial") or "").strip() or None
-
-            if sem and antigo:
-                item_errors["numero_patrimonial"] = (
-                    "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
-                )
-            elif not sem:
-                if not numero:
-                    item_errors["numero_patrimonial"] = (
-                        "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                    )
-                elif not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
-                    item_errors["numero_patrimonial"] = (
-                        "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                    )
-                elif numero in numeros_vistos:
-                    item_errors["numero_patrimonial"] = (
-                        "Número patrimonial duplicado neste cadastro."
-                    )
-                elif BemPatrimonial.objects.filter(
-                    numero_patrimonial=numero, excluido=False
-                ).exists():
-                    item_errors["numero_patrimonial"] = (
-                        "Número Patrimonial já está cadastrado no sistema."
-                    )
-                else:
-                    numeros_vistos.add(numero)
+            item_errors = self._validate_item_multi_payload(item, numeros_vistos)
 
             if item_errors:
                 linhas_errors[str(i)] = item_errors
