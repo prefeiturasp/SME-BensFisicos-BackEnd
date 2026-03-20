@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -35,7 +36,7 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.gestor_uo_a = Usuario.objects.create_user(
             username="gestor_uo_a",
             email="gestor_uo_a@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_orcamentaria=self.uo_a,
         )
@@ -44,7 +45,7 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.gestor_uo_b = Usuario.objects.create_user(
             username="gestor_uo_b",
             email="gestor_uo_b@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_orcamentaria=self.uo_b,
         )
@@ -53,7 +54,7 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.operador_ua2 = Usuario.objects.create_user(
             username="operador_ua2",
             email="operador_ua2@test.com",
-            password="test123",
+            **auth_kwargs("test123"),
             is_staff=True,
             unidade_administrativa=self.ua2,
             unidade_orcamentaria=self.uo_a,

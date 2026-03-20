@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_GET
 from django.db.models import OuterRef, Subquery
 from django.db import models, transaction
 
@@ -22,6 +23,7 @@ from bem_patrimonial import constants
 from bem_patrimonial.serializers.bem_patrimonial_serializers import (
     BemPatrimonialListSerializer,
     BemPatrimonialDetailSerializer,
+    BemPatrimonialMultiCreateSerializer,
 )
 from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
 
@@ -38,6 +40,7 @@ from dados_comuns.escopo import filtrar_queryset_por_escopo, validar_objeto_no_e
 
 
 @login_required
+@require_GET
 def download_documento_cimbpm(request, pk):
     movimentacao = get_object_or_404(MovimentacaoBemPatrimonial, pk=pk)
 
@@ -85,6 +88,7 @@ def download_documento_cimbpm(request, pk):
 
 class BemPatrimonialViewSet(viewsets.ModelViewSet):
     permission_classes = [BemPatrimonialPermission]
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
@@ -207,6 +211,45 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             usuario=request.user,
             queryset=BemPatrimonial.objects.all(),
             campo_ua="unidade_administrativa",
+        )
+
+    @action(detail=False, methods=["post"], url_path="multi")
+    def create_multi(self, request):
+        serializer = BemPatrimonialMultiCreateSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        vdata = dict(serializer.validated_data)
+        multi_payload = vdata.pop("multi_payload")
+        base = vdata
+
+        with transaction.atomic():
+            with audit_as(request.user):
+                bens = []
+                for item in multi_payload:
+                    sem = item.get("sem_numeracao", False)
+                    bem = BemPatrimonial(
+                        **base,
+                        numero_patrimonial=(
+                            None if sem else (item.get("numero_patrimonial") or None)
+                        ),
+                        numero_formato_antigo=item.get("numero_formato_antigo", False),
+                        sem_numeracao=sem,
+                        localizacao=item.get("localizacao", ""),
+                        criado_por=request.user,
+                        status=constants.AGUARDANDO_APROVACAO,
+                    )
+                    bem.save()
+                    bens.append(bem)
+
+        return Response(
+            {
+                "detail": f"{len(bens)} bem(ns) criado(s) com sucesso.",
+                "count": len(bens),
+            },
+            status=http_status.HTTP_201_CREATED,
         )
 
     @action(detail=False, methods=["post"], url_path="aprovar")

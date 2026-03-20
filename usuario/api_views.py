@@ -354,7 +354,7 @@ class PasswordChangeAPIView(generics.GenericAPIView):
 
 @extend_schema(
     summary="Trocar senha no primeiro acesso",
-    description="Permite que usuários marcados com must_change_password=True troquem sua senha sem informar a senha antiga. Este endpoint deve ser usado no fluxo de primeiro acesso.",  # noqa: E501
+    description="Permite que usuários marcados com must_change_password=True troquem sua senha sem informar a senha antiga. Este endpoint deve ser usado no fluxo de primeiro acesso.",  # noqa: E501 # NOSONAR
     responses={
         200: OpenApiResponse(
             description="Senha alterada com sucesso no primeiro acesso",

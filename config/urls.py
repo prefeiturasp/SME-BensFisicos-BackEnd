@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
+from django.views.decorators.http import require_GET
 from usuario.views import (
     AdminLoginView,
     LoginPasswordChangeView,
@@ -21,6 +24,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 from usuario import api_urls as auth_api_urls
+from dados_comuns import api_urls as dados_comuns_api_urls
 
 admin.site.site_title = settings.ADMIN_SITE_TITLE
 admin.site.site_header = settings.ADMIN_SITE_HEADER
@@ -28,17 +32,28 @@ admin.site.index_title = settings.ADMIN_INDEX_TITLE
 
 
 def redirect_admin_password(request, user_id: int):
+    if not request.user.is_staff:
+        raise PermissionDenied("Acesso restrito a usuários administrativos.")
+
     next_url = reverse("admin:usuario_usuario_change", args=[user_id])
     url = f"{reverse('password_change')}?user_id={user_id}&next={next_url}"
     return redirect(url)
+
+
+redirect_admin_password = login_required(
+    require_GET(redirect_admin_password), login_url="admin_login"
+)
 
 
 urlpatterns = [
     path("", AdminLoginView.as_view(), name="login"),
     path("admin/login/", AdminLoginView.as_view(), name="admin_login"),
     path("api/bens/", include("bem_patrimonial.urls")),
+    path("api/", include(dados_comuns_api_urls)),
     # API de Autenticação
     path("api/auth/", include(auth_api_urls)),
+    # API de Usuários
+    path("api/user/", include("usuario.urls")),
     # Swagger/OpenAPI Documentação
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path(

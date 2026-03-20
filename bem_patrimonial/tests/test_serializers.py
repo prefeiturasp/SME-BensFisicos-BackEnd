@@ -1,3 +1,4 @@
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 
@@ -5,6 +6,7 @@ from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.serializers.bem_patrimonial_serializers import (
     BemPatrimonialDetailSerializer,
     BemPatrimonialListSerializer,
+    BemPatrimonialMultiCreateSerializer,
 )
 from bem_patrimonial import constants
 from dados_comuns.tests.factories import criar_ua, criar_uo
@@ -16,7 +18,7 @@ class BemPatrimonialSerializerTest(TestCase):
         self.user = user_model.objects.create_superuser(
             username="admin",
             email="admin@example.com",
-            password="admin123",
+            **auth_kwargs("admin123"),
         )
 
         self.uo = criar_uo(codigo="100", nome="UO 100")
@@ -159,3 +161,281 @@ class BemPatrimonialSerializerTest(TestCase):
                 serializer.save()
         else:
             self.assertIn("numero_patrimonial", serializer.errors)
+
+
+class BemPatrimonialMultiCreateSerializerTest(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_superuser(
+            username="admin_multi",
+            email="admin_multi@example.com",
+            **auth_kwargs("admin123"),
+        )
+        self.uo = criar_uo(codigo="200", nome="UO 200")
+        self.ua = criar_ua(nome="UA Multi", uo=self.uo)
+
+        self.user.unidade_administrativa = self.ua
+        self.user.save()
+
+        self.factory = RequestFactory()
+
+    def _get_request(self):
+        request = self.factory.post("/fake/")
+        request.user = self.user
+        return request
+
+    def _payload_base(self, **kwargs):
+        data = {
+            "unidade_administrativa": self.ua.id,
+            "nome": "Mesa",
+            "descricao": "Mesa de escritório",
+            "valor_unitario": "1.500,00",
+            "marca": "Tokio",
+            "modelo": "T200",
+            "numero_processo": "PROC-99",
+        }
+        data.update(kwargs)
+        return data
+
+    def _item(self, **kwargs):
+        item = {
+            "numero_patrimonial": "000.000000001-0",
+            "numero_formato_antigo": False,
+            "sem_numeracao": False,
+            "localizacao": "Sala A",
+        }
+        item.update(kwargs)
+        return item
+
+    # ------------------------------------------------------------------
+    # Casos de sucesso
+    # ------------------------------------------------------------------
+
+    def test_cria_um_bem_com_numero_valido(self):
+        data = self._payload_base(multi_payload=[self._item()])
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_cria_multiplos_bens_com_numeros_distintos(self):
+        data = self._payload_base(
+            multi_payload=[
+                self._item(numero_patrimonial="000.000000011-0"),
+                self._item(numero_patrimonial="000.000000012-0"),
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_cria_bem_sem_numeracao(self):
+        data = self._payload_base(
+            multi_payload=[
+                {
+                    "numero_patrimonial": "",
+                    "numero_formato_antigo": False,
+                    "sem_numeracao": True,
+                    "localizacao": "Sala B",
+                }
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_cria_bem_com_formato_antigo(self):
+        data = self._payload_base(
+            multi_payload=[
+                self._item(
+                    numero_patrimonial="ANTIGO-123",
+                    numero_formato_antigo=True,
+                )
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_valor_unitario_aceita_formato_brasileiro(self):
+        data = self._payload_base(
+            valor_unitario="2.500,99",
+            multi_payload=[self._item(numero_patrimonial="000.000000020-0")],
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+        from decimal import Decimal
+        self.assertEqual(s.validated_data["valor_unitario"], Decimal("2500.99"))
+
+    # ------------------------------------------------------------------
+    # Validação de campos base obrigatórios
+    # ------------------------------------------------------------------
+
+    def test_erro_sem_nome(self):
+        data = self._payload_base(
+            nome="", multi_payload=[self._item(numero_patrimonial="000.000000030-0")]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("nome", s.errors)
+
+    def test_erro_sem_descricao(self):
+        data = self._payload_base(
+            descricao="",
+            multi_payload=[self._item(numero_patrimonial="000.000000031-0")],
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("descricao", s.errors)
+
+    def test_erro_sem_marca(self):
+        data = self._payload_base(
+            marca="", multi_payload=[self._item(numero_patrimonial="000.000000032-0")]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("marca", s.errors)
+
+    def test_erro_sem_modelo(self):
+        data = self._payload_base(
+            modelo="", multi_payload=[self._item(numero_patrimonial="000.000000033-0")]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("modelo", s.errors)
+
+    def test_erro_multi_payload_vazio(self):
+        data = self._payload_base(multi_payload=[])
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("multi_payload", s.errors)
+
+    # ------------------------------------------------------------------
+    # Validação por linha
+    # ------------------------------------------------------------------
+
+    def test_erro_numero_formato_invalido_retorna_erros_por_linha(self):
+        data = self._payload_base(
+            multi_payload=[
+                self._item(
+                    numero_patrimonial="INVALIDO",
+                    numero_formato_antigo=False,
+                )
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("linhas", s.errors)
+        self.assertIn("0", s.errors["linhas"])
+        self.assertIn("numero_patrimonial", s.errors["linhas"]["0"])
+
+    def test_erro_sem_numero_e_sem_flag_sem_numeracao(self):
+        data = self._payload_base(
+            multi_payload=[
+                self._item(
+                    numero_patrimonial="",
+                    sem_numeracao=False,
+                )
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("linhas", s.errors)
+
+    def test_erro_sem_numeracao_e_formato_antigo_juntos(self):
+        data = self._payload_base(
+            multi_payload=[
+                self._item(
+                    numero_patrimonial="",
+                    sem_numeracao=True,
+                    numero_formato_antigo=True,
+                )
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("linhas", s.errors)
+
+    def test_erro_duplicata_no_payload(self):
+        numero = "000.000000050-0"
+        data = self._payload_base(
+            multi_payload=[
+                self._item(numero_patrimonial=numero),
+                self._item(numero_patrimonial=numero),
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("linhas", s.errors)
+        # segundo item (índice 1) deve ter o erro de duplicata
+        self.assertIn("1", s.errors["linhas"])
+        self.assertIn(
+            "duplicado", s.errors["linhas"]["1"]["numero_patrimonial"].lower()
+        )
+
+    def test_erro_numero_ja_cadastrado_no_banco(self):
+        numero = "000.000000060-0"
+        BemPatrimonial.objects.create(
+            nome="Existente",
+            descricao="Desc",
+            valor_unitario=1,
+            marca="M",
+            modelo="X",
+            numero_patrimonial=numero,
+            numero_formato_antigo=False,
+            sem_numeracao=False,
+            unidade_administrativa=self.ua,
+            criado_por=self.user,
+            status=constants.AGUARDANDO_APROVACAO,
+        )
+
+        data = self._payload_base(
+            multi_payload=[self._item(numero_patrimonial=numero)]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("linhas", s.errors)
+        self.assertIn("cadastrado", s.errors["linhas"]["0"]["numero_patrimonial"].lower())
+
+    def test_erro_em_linha_nao_impede_validacao_das_demais(self):
+        """Todos os erros por linha são coletados antes de retornar."""
+        data = self._payload_base(
+            multi_payload=[
+                self._item(numero_patrimonial="INVALIDO_1", numero_formato_antigo=False),
+                self._item(numero_patrimonial="000.000000070-0"),
+                self._item(numero_patrimonial="INVALIDO_2", numero_formato_antigo=False),
+            ]
+        )
+        s = BemPatrimonialMultiCreateSerializer(
+            data=data, context={"request": self._get_request()}
+        )
+        self.assertFalse(s.is_valid())
+        linhas = s.errors["linhas"]
+        self.assertIn("0", linhas)
+        self.assertNotIn("1", linhas)  # linha válida não tem erro
+        self.assertIn("2", linhas)

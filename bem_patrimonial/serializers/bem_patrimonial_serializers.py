@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants
+from dados_comuns.models import UnidadeAdministrativa
 
 
 class _BemPatrimonialBaseMixin(serializers.Serializer):
@@ -167,6 +168,12 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
 
     _NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
     _SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
+    _MSG_NUMERO_FORMATO_INVALIDO = (
+        "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+    )
+    _MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM = (
+        "Informe o Número Patrimonial ou marque 'Sem numeração'."
+    )
 
     def _validate_numero_edicao(self, cleaned, sem, antigo, numero):
         """Valida número patrimonial na edição (tem_pk)."""
@@ -177,16 +184,12 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
                 return cleaned
             if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
                 raise serializers.ValidationError(
-                    {
-                        "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                    }
+                    {"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO}
                 )
         else:
             if not sem:
                 raise serializers.ValidationError(
-                    {
-                        "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                    }
+                    {"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM}
                 )
             cleaned["numero_formato_antigo"] = False
         return cleaned
@@ -203,15 +206,11 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
             return cleaned
         if not numero:
             raise serializers.ValidationError(
-                {
-                    "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                }
+                {"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM}
             )
         if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
             raise serializers.ValidationError(
-                {
-                    "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                }
+                {"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO}
             )
         cleaned["numero_patrimonial"] = numero
         return cleaned
@@ -381,3 +380,92 @@ class BemPatrimonialDetailSerializer(
             if hasattr(e, "message_dict"):
                 raise serializers.ValidationError(e.message_dict)
             raise serializers.ValidationError(str(e))
+
+
+class BemItemCriacaoSerializer(serializers.Serializer):
+    """Dados únicos de cada bem na criação em lote."""
+
+    numero_patrimonial = serializers.CharField(required=False, allow_blank=True, default="")
+    numero_formato_antigo = serializers.BooleanField(required=False, default=False)
+    sem_numeracao = serializers.BooleanField(required=False, default=False)
+    localizacao = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.Serializer):
+    """
+    Criação em lote: dados base compartilhados + lista de bens (multi_payload).
+
+    Valida todos os bens antes de persistir qualquer um — se qualquer número
+    patrimonial for inválido ou duplicado (no payload ou no banco), nenhum bem é criado.
+    """
+
+    unidade_administrativa = serializers.PrimaryKeyRelatedField(
+        queryset=UnidadeAdministrativa.objects.all()
+    )
+    nome = serializers.CharField()
+    descricao = serializers.CharField()
+    valor_unitario = serializers.CharField()
+    marca = serializers.CharField()
+    modelo = serializers.CharField()
+    numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
+    multi_payload = BemItemCriacaoSerializer(many=True)
+
+    def _validate_item_multi_payload(self, item, numeros_vistos):
+        item_errors = {}
+        sem = bool(item.get("sem_numeracao"))
+        antigo = bool(item.get("numero_formato_antigo"))
+        numero = (item.get("numero_patrimonial") or "").strip() or None
+
+        if sem and antigo:
+            item_errors["numero_patrimonial"] = (
+                "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
+            )
+            return item_errors
+
+        if sem:
+            return item_errors
+
+        if not numero:
+            item_errors["numero_patrimonial"] = self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM
+            return item_errors
+
+        if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
+            item_errors["numero_patrimonial"] = self._MSG_NUMERO_FORMATO_INVALIDO
+            return item_errors
+
+        if numero in numeros_vistos:
+            item_errors["numero_patrimonial"] = (
+                "Número patrimonial duplicado neste cadastro."
+            )
+            return item_errors
+
+        if BemPatrimonial.objects.filter(numero_patrimonial=numero, excluido=False).exists():
+            item_errors["numero_patrimonial"] = (
+                "Número Patrimonial já está cadastrado no sistema."
+            )
+            return item_errors
+
+        numeros_vistos.add(numero)
+        return item_errors
+
+    def validate(self, attrs):
+        attrs["valor_unitario"] = self._parse_valor_unitario(attrs.get("valor_unitario"))
+
+        multi_payload = attrs.get("multi_payload", [])
+        if not multi_payload:
+            raise serializers.ValidationError(
+                {"multi_payload": "Informe ao menos um bem."}
+            )
+        linhas_errors = {}
+        numeros_vistos = set()
+
+        for i, item in enumerate(multi_payload):
+            item_errors = self._validate_item_multi_payload(item, numeros_vistos)
+
+            if item_errors:
+                linhas_errors[str(i)] = item_errors
+
+        if linhas_errors:
+            raise serializers.ValidationError({"linhas": linhas_errors})
+
+        return attrs

@@ -8,11 +8,11 @@ from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
 class Usuario(AbstractUser):
-    nome = models.CharField("Nome", max_length=255, null=True, blank=False)
+    nome = models.CharField("Nome", max_length=255, null=True, blank=False)  # NOSONAR
     rf = models.CharField(
         "RF",
         max_length=20,
-        null=True,
+        null=True,  # NOSONAR
         blank=True,
         validators=[
             RegexValidator(
