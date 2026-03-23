@@ -197,9 +197,6 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
         qs = UnidadeAdministrativa.objects.select_related("unidade_orcamentaria")
 
         user = self.request.user
-        if getattr(user, "is_superuser", False):
-            return qs
-
         uo_id = getattr(user, "unidade_orcamentaria_id", None)
         if uo_id:
             return qs.filter(unidade_orcamentaria_id=uo_id)
@@ -232,9 +229,6 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
         return False
 
     def _uo_ids_permitidos(self, user):
-        if getattr(user, "is_superuser", False):
-            return None
-
         if getattr(user, "unidade_orcamentaria_id", None):
             return {user.unidade_orcamentaria_id}
 
@@ -259,9 +253,6 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
             return
 
         uo_ids_permitidos = self._uo_ids_permitidos(self.request.user)
-        if uo_ids_permitidos is None:
-            return
-
         if requested_uo_id not in uo_ids_permitidos:
             raise PermissionDenied(
                 "Você não tem acesso à Unidade Orçamentária informada no filtro."

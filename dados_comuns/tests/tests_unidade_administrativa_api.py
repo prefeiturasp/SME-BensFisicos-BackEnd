@@ -86,6 +86,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
             nome="Super UA",
             is_staff=True,
             is_superuser=True,
+            unidade_orcamentaria=self.uo1,
         )
 
         self.list_url = reverse("unidades-administrativas-list")
@@ -118,7 +119,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         cenarios = [
             (self.gestor, {self.ua1.id, self.ua2.id}, {self.ua3.id}),
             (self.operador, {self.ua1.id, self.ua2.id}, {self.ua3.id}),
-            (self.superuser, {self.ua1.id, self.ua2.id, self.ua3.id}, set()),
+            (self.superuser, {self.ua1.id, self.ua2.id}, {self.ua3.id}),
         ]
 
         for user, deve_ter, nao_deve_ter in cenarios:
@@ -309,6 +310,20 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.assertEqual(response["Content-Type"], content_type)
                 self.assertIn("attachment;", response["Content-Disposition"])
+
+    def test_exportacao_superuser_respeita_escopo_ativo(self):
+        self._auth(self.superuser)
+
+        response = self.client.get(
+            reverse("unidades-administrativas-exportar"),
+            {"formato": "csv"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        conteudo = response.content.decode("utf-8-sig")
+        self.assertIn(self.ua1.codigo, conteudo)
+        self.assertIn(self.ua2.codigo, conteudo)
+        self.assertNotIn(self.ua3.codigo, conteudo)
 
     def test_exportacao_validacoes_e_permissoes(self):
         self._auth(self.operador)
