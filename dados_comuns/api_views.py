@@ -18,7 +18,6 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import (
     NotFound,
-    PermissionDenied,
     ValidationError as DRFValidationError,
 )
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -70,12 +69,6 @@ UA_ID_PATH_PARAM = OpenApiParameter(
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
                 description="Filtra por status da unidade administrativa (ativa/inativa).",
-            ),
-            OpenApiParameter(
-                name="unidade_orcamentaria",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                description="Filtra por ID da Unidade Orçamentária. Retorna 403 quando o usuário não possui acesso ao escopo solicitado.",
             ),
             OpenApiParameter(
                 name="page",
@@ -160,7 +153,7 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
     permission_classes = [UnidadeAdministrativaPermission]
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["status", "unidade_orcamentaria"]
+    filterset_fields = ["status"]
     search_fields = [
         "codigo",
         "sigla",
@@ -215,9 +208,6 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
         return obj
 
     def _pode_acessar_objeto(self, user, obj):
-        if getattr(user, "is_superuser", False):
-            return True
-
         user_uo_id = getattr(user, "unidade_orcamentaria_id", None)
         if user_uo_id:
             return obj.unidade_orcamentaria_id == user_uo_id
@@ -227,40 +217,6 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
             return obj.pk == user_ua_id
 
         return False
-
-    def _uo_ids_permitidos(self, user):
-        if getattr(user, "unidade_orcamentaria_id", None):
-            return {user.unidade_orcamentaria_id}
-
-        if getattr(user, "unidade_administrativa_id", None):
-            uo_id = (
-                UnidadeAdministrativa.objects.filter(pk=user.unidade_administrativa_id)
-                .values_list("unidade_orcamentaria_id", flat=True)
-                .first()
-            )
-            return {uo_id} if uo_id else set()
-
-        return set()
-
-    def _validar_filtro_unidade_orcamentaria(self):
-        raw_uo = self.request.query_params.get("unidade_orcamentaria")
-        if raw_uo in (None, ""):
-            return
-
-        try:
-            requested_uo_id = int(raw_uo)
-        except (TypeError, ValueError):
-            return
-
-        uo_ids_permitidos = self._uo_ids_permitidos(self.request.user)
-        if requested_uo_id not in uo_ids_permitidos:
-            raise PermissionDenied(
-                "Você não tem acesso à Unidade Orçamentária informada no filtro."
-            )
-
-    def list(self, request, *args, **kwargs):
-        self._validar_filtro_unidade_orcamentaria()
-        return super().list(request, *args, **kwargs)
 
     def _validate_uo_scope(self, validated_data, instance=None):
         user = self.request.user
@@ -458,7 +414,6 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         formato = serializer.validated_data["formato"]
-        self._validar_filtro_unidade_orcamentaria()
 
         queryset = self.filter_queryset(self.get_queryset())
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
