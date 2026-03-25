@@ -61,6 +61,16 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
 
         return None
 
+    def _validar_codigo_unico(self, codigo):
+        queryset = UnidadeAdministrativa.objects.filter(codigo=codigo)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+
+        if queryset.exists():
+            raise serializers.ValidationError(
+                {"codigo": "Já existe uma unidade administrativa com este código."}
+            )
+
     def validate(self, attrs):
         uo = attrs.get("unidade_orcamentaria")
         if self.instance and uo is None:
@@ -84,6 +94,7 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
                         }
                     )
                 attrs["codigo"] = f"{uo.codigo}.{sufixo}"
+                self._validar_codigo_unico(attrs["codigo"])
             return attrs
 
         if codigo_informado is None:
@@ -102,6 +113,7 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
             )
 
         attrs["codigo"] = f"{uo.codigo}.{sufixo}"
+        self._validar_codigo_unico(attrs["codigo"])
         return attrs
 
 

@@ -86,6 +86,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
             nome="Super UA",
             is_staff=True,
             is_superuser=True,
+            unidade_orcamentaria=self.uo1,
         )
 
         self.list_url = reverse("unidades-administrativas-list")
@@ -118,7 +119,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         cenarios = [
             (self.gestor, {self.ua1.id, self.ua2.id}, {self.ua3.id}),
             (self.operador, {self.ua1.id, self.ua2.id}, {self.ua3.id}),
-            (self.superuser, {self.ua1.id, self.ua2.id, self.ua3.id}, set()),
+            (self.superuser, {self.ua1.id, self.ua2.id}, {self.ua3.id}),
         ]
 
         for user, deve_ter, nao_deve_ter in cenarios:
@@ -164,11 +165,19 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         fora_escopo = self.client.get(self._get_detail_url(self.ua3.id))
         self.assertEqual(fora_escopo.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_filtro_unidade_orcamentaria_fora_escopo_retorna_403(self):
+        self._auth(self.superuser)
+        ok_super = self.client.get(self._get_detail_url(self.ua1.id))
+        self.assertEqual(ok_super.status_code, status.HTTP_200_OK)
+
+        fora_escopo_super = self.client.get(self._get_detail_url(self.ua3.id))
+        self.assertEqual(fora_escopo_super.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_parametro_unidade_orcamentaria_nao_altera_escopo(self):
         self._auth(self.gestor)
         response = self.client.get(self.list_url, {"unidade_orcamentaria": self.uo2.id})
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("detail", response.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(ids, {self.ua1.id, self.ua2.id})
 
     def test_criacao_codigo_valido_em_varios_formatos(self):
         self._auth(self.gestor)
@@ -210,6 +219,53 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
                 response = self.client.post(self.list_url, payload, format="json")
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertIn(campo_esperado, response.data)
+
+    def test_post_nao_permite_codigo_duplicado(self):
+        self._auth(self.gestor)
+
+        response = self.client.post(
+            self.list_url,
+            self._payload_ua(
+                uo_id=self.uo1.id,
+                codigo="001",
+                sigla="UA DUP",
+                nome="Unidade Duplicada",
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("codigo", response.data)
+
+    def test_patch_nao_permite_codigo_duplicado(self):
+        self._auth(self.gestor)
+
+        response = self.client.patch(
+            self._get_detail_url(self.ua2.id),
+            {"codigo": "001"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("codigo", response.data)
+
+    def test_put_nao_permite_codigo_duplicado(self):
+        self._auth(self.gestor)
+
+        response = self.client.put(
+            self._get_detail_url(self.ua2.id),
+            self._payload_ua(
+                uo_id=self.uo1.id,
+                codigo="001",
+                sigla="UA2",
+                nome="Unidade 2",
+                status_=UnidadeAdministrativa.INATIVA,
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("codigo", response.data)
 
     def test_superuser_pode_criar_em_qualquer_uo(self):
         self._auth(self.superuser)
@@ -291,6 +347,12 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.assertGreaterEqual(len(response.data), 1)
         self.assertIn("acoes", response.data[0])
 
+        self._auth(self.superuser)
+        historico_fora_escopo = self.client.get(
+            reverse("unidades-administrativas-historico", args=[self.ua3.id])
+        )
+        self.assertEqual(historico_fora_escopo.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_exportacao_por_formato_permitido(self):
         self._auth(self.gestor)
         formatos = {
@@ -309,6 +371,20 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.assertEqual(response["Content-Type"], content_type)
                 self.assertIn("attachment;", response["Content-Disposition"])
+
+    def test_exportacao_superuser_respeita_escopo_ativo(self):
+        self._auth(self.superuser)
+
+        response = self.client.get(
+            reverse("unidades-administrativas-exportar"),
+            {"formato": "csv"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        conteudo = response.content.decode("utf-8-sig")
+        self.assertIn(self.ua1.codigo, conteudo)
+        self.assertIn(self.ua2.codigo, conteudo)
+        self.assertNotIn(self.ua3.codigo, conteudo)
 
     def test_exportacao_validacoes_e_permissoes(self):
         self._auth(self.operador)
