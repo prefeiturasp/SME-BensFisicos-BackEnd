@@ -257,3 +257,25 @@ class BemPatrimonialTestCase(TestCase):
         )
         self.assertRegex(c.numero_patrimonial, NPAT_AUTO_REGEX)
         self.assertNotEqual(c.numero_patrimonial, esperado_proximo)
+
+    def test_numero_patrimonial_duplicado(self):
+        BemPatrimonial.objects.create(
+            numero_patrimonial='123',
+            excluido=False,
+            valor_unitario=100.0,
+            nome='Bem Teste 1',
+            status='aguardando_aprovacao'
+        )
+        
+        obj2 = BemPatrimonial(
+            numero_patrimonial='123',
+            excluido=False,
+            valor_unitario=150.0,
+            nome='Bem Teste 2',
+            status='aguardando_aprovacao'
+        )
+        
+        with self.assertRaises(ValidationError) as cm:
+            obj2._clean_verifica_numero_patrimonial_cadastrado()
+        
+        self.assertIn('numero_patrimonial', cm.exception.message_dict)

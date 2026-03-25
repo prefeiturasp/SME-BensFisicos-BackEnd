@@ -548,11 +548,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     "numero_patrimonial",
                     "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema.",
                 )
-                raise ValidationError(
-                    {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa E501
-                    }
-                )
+                return
             raise
 
     def get_queryset(self, request):
