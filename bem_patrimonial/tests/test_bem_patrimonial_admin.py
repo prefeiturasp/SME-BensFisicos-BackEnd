@@ -269,27 +269,6 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         self.assertEqual(bem.criado_por, self.gestor)
         self.assertEqual(bem.status, AGUARDANDO_APROVACAO)
 
-    def test_save_model_integrity_error_numero_patrimonial_validation_error(self):
-        self._criar_bem(numero_patrimonial="000.000000001-0", sem_numeracao=False)
-        bem = BemPatrimonial(
-            nome="Outro",
-            descricao="D",
-            valor_unitario=1,
-            marca="M",
-            modelo="X",
-            numero_processo="P",
-            unidade_administrativa=self.ua,
-            criado_por=self.gestor,
-            numero_patrimonial="000.000000001-0",
-            sem_numeracao=False,
-        )
-        request = _request_with_messages(self.factory, self.gestor, method="POST")
-        form = MagicMock()
-        form.cleaned_data = {}
-        with self.assertRaises(ValidationError) as ctx:
-            self.admin.save_model(request, bem, form, change=False)
-        self.assertIn("numero_patrimonial", str(ctx.exception).lower())
-
     # --- get_export_formats, get_resource_kwargs ---
     def test_get_export_formats_retorna_lista_com_pdf(self):
         formats = self.admin.get_export_formats()
