@@ -220,6 +220,53 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertIn(campo_esperado, response.data)
 
+    def test_post_nao_permite_codigo_duplicado(self):
+        self._auth(self.gestor)
+
+        response = self.client.post(
+            self.list_url,
+            self._payload_ua(
+                uo_id=self.uo1.id,
+                codigo="001",
+                sigla="UA DUP",
+                nome="Unidade Duplicada",
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("codigo", response.data)
+
+    def test_patch_nao_permite_codigo_duplicado(self):
+        self._auth(self.gestor)
+
+        response = self.client.patch(
+            self._get_detail_url(self.ua2.id),
+            {"codigo": "001"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("codigo", response.data)
+
+    def test_put_nao_permite_codigo_duplicado(self):
+        self._auth(self.gestor)
+
+        response = self.client.put(
+            self._get_detail_url(self.ua2.id),
+            self._payload_ua(
+                uo_id=self.uo1.id,
+                codigo="001",
+                sigla="UA2",
+                nome="Unidade 2",
+                status_=UnidadeAdministrativa.INATIVA,
+            ),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("codigo", response.data)
+
     def test_superuser_pode_criar_em_qualquer_uo(self):
         self._auth(self.superuser)
         response = self.client.post(
