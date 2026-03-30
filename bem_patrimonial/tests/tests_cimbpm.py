@@ -15,8 +15,10 @@ from bem_patrimonial.cimbpm import (
     formatar_moeda_brasileira,
     obter_bens_movimentacao,
     obter_nome_usuario,
+    _criar_rodape_cimbpm,
     gerar_pdf_cimbpm,
 )
+from bem_patrimonial.pdf_utils import criar_info_geracao_paragraph
 from bem_patrimonial import constants
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
@@ -139,6 +141,23 @@ class TestFuncoesAuxiliares(TestCase):
         u3.nome = None
         u3.save()
         self.assertEqual(obter_nome_usuario(u3), "user3")
+
+    def test_info_geracao_exibe_apenas_rf(self):
+        ua = criar_ua(codigo=codigo_ua(1, 16, 10, 2), sigla="T2", nome="Teste 2", status="A")
+
+        usuario = Usuario.objects.create_user(
+            username="rf_user",
+            nome="Nome Completo",
+            rf="1234567",
+            unidade_administrativa=ua,
+            unidade_orcamentaria=ua.unidade_orcamentaria,
+        )
+
+        info_paragraph = criar_info_geracao_paragraph(usuario=usuario)[1]
+        info_texto = info_paragraph.getPlainText()
+
+        self.assertIn("Gerado por 1234567 em ", info_texto)
+        self.assertNotIn("Nome Completo", info_texto)
 
 
 class TestObterBensMovimentacao(CIMBPMTestBase):
@@ -415,6 +434,26 @@ class TestConteudoDownload(CIMBPMTestBase):
 
 
 class TestEdgeCasesPDF(CIMBPMTestBase):
+    def test_rodape_cimbpm_exibe_apenas_rf_nos_responsaveis(self):
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=self.criar_bem(),
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador,
+            aprovado_por=self.gestor,
+            status=constants.ACEITA,
+        )
+
+        rodape_table = _criar_rodape_cimbpm(mov, timezone.now())[0]
+
+        responsavel_entrega = rodape_table._cellvalues[1][0].getPlainText()
+        responsavel_recebimento = rodape_table._cellvalues[1][1].getPlainText()
+
+        self.assertEqual(responsavel_entrega, "1234567")
+        self.assertEqual(responsavel_recebimento, "7654321")
+        self.assertNotIn("João Silva", responsavel_entrega)
+        self.assertNotIn("Maria Santos", responsavel_recebimento)
+
     def test_geracao_com_campos_vazios(self):
         bem = self.criar_bem(
             descricao="",
