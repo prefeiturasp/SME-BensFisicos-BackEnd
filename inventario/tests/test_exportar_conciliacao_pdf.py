@@ -7,6 +7,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth.models import Group
 from django.utils import timezone
+from reportlab.lib.styles import getSampleStyleSheet
 
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
@@ -250,6 +251,31 @@ class TestHelpersRelatorioConciliacao(TestCase):
 
         self.assertEqual(formatar_status_para_header(Dummy()), "Fechado")
 
+    def test_info_geracao_exibe_apenas_rf(self):
+        ua = criar_ua(
+            codigo="01.16.10.501",
+            sigla="UA",
+            nome="Unidade",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        usuario = Usuario.objects.create_user(
+            username="operador_rf",
+            nome="Operador Nome Completo",
+            rf="3333333",
+            email="operador_rf@exemplo.com",
+            **auth_kwargs("senha123"),
+            unidade_administrativa=ua,
+            unidade_orcamentaria=ua.unidade_orcamentaria,
+        )
+
+        from inventario.relatorio_conciliacao_pdf import _criar_info_geracao
+
+        info_paragraph = _criar_info_geracao(usuario)[0]
+        info_texto = info_paragraph.getPlainText()
+
+        self.assertIn("Gerado por 3333333 em ", info_texto)
+        self.assertNotIn("Operador Nome Completo", info_texto)
+
 
 class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
     def setUp(self):
@@ -306,3 +332,35 @@ class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
             )
 
         self.assertTrue(buf.getvalue().startswith(b"%PDF"))
+
+    def test_rodape_e_ocorrencia_exibem_apenas_rf(self):
+        from inventario.relatorio_conciliacao_pdf import (
+            _criar_rodape_conciliacao,
+            _linhas_tabela_item,
+            _estilos_blocos_itens,
+        )
+
+        self.conciliacao.fechado_por = self.gestor
+
+        rodape_table = _criar_rodape_conciliacao(
+            self.conciliacao, usuario_gerador=self.operador_a
+        )[0]
+        responsavel_exportacao = rodape_table._cellvalues[1][0].getPlainText()
+        responsavel_fechamento = rodape_table._cellvalues[1][1].getPlainText()
+
+        self.assertEqual(responsavel_exportacao, "1111111")
+        self.assertEqual(responsavel_fechamento, "9999999")
+        self.assertNotIn("Operador A", responsavel_exportacao)
+        self.assertNotIn("Gestor", responsavel_fechamento)
+
+        item_com_ocorrencia = self.conciliacao.itens.get(situacao=constants.DIVERGENTE)
+        estilos = _estilos_blocos_itens(getSampleStyleSheet())
+        rows, _ = _linhas_tabela_item(
+            item_com_ocorrencia,
+            estilos["txt"],
+            estilos["txt_center"],
+        )
+        registrado_por = rows[-1][1].getPlainText()
+
+        self.assertEqual(registrado_por, "Registrado por: 1111111")
+        self.assertNotIn("Operador A", registrado_por)

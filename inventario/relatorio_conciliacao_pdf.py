@@ -25,6 +25,7 @@ from reportlab.platypus import (
 import pytz
 
 from inventario import constants as inv_constants
+from bem_patrimonial.pdf_utils import obter_rf_usuario
 
 
 class PDFConfig:
@@ -142,9 +143,9 @@ def _criar_info_geracao(usuario_gerador=None, data_geracao=None):
         data_ref = timezone.make_aware(data_ref)
 
     data_geracao_str = data_ref.astimezone(tz_sp).strftime("%d/%m/%Y às %H:%M")
-    nome_usuario = obter_nome_usuario(usuario_gerador) if usuario_gerador else "-"
+    rf_usuario = obter_rf_usuario(usuario_gerador)
 
-    info_text = f"Gerado por {nome_usuario} em {data_geracao_str}"
+    info_text = f"Gerado por {rf_usuario} em {data_geracao_str}"
     elements.append(Paragraph(info_text, info_style))
     return elements
 
@@ -319,21 +320,14 @@ def _criar_rodape_conciliacao(conciliacao, usuario_gerador=None):
     fechado_por = conciliacao.fechado_por
 
     responsavel_operacao = usuario_gerador or criado_por
-    nome_operacao = (
-        obter_nome_usuario(responsavel_operacao).upper()
-        if responsavel_operacao
-        else "-"
-    )
-    rf_operacao = getattr(responsavel_operacao, "rf", None) or "-"
+    rf_operacao = obter_rf_usuario(responsavel_operacao)
 
     status_display = conciliacao.get_status_display()
 
     if STATUS_NAO_CONCILIADO in status_display:
         nome_fechamento = status_display
     elif fechado_por:
-        nome = obter_nome_usuario(fechado_por).upper()
-        rf = getattr(fechado_por, "rf", None) or "-"
-        nome_fechamento = f"{nome} - RF: {rf}"
+        nome_fechamento = obter_rf_usuario(fechado_por)
     else:
         nome_fechamento = ""
 
@@ -343,7 +337,7 @@ def _criar_rodape_conciliacao(conciliacao, usuario_gerador=None):
             Paragraph("<b>RESPONSÁVEL (FECHAMENTO)</b>", label_style),
         ],
         [
-            Paragraph(f"{nome_operacao} - RF: {rf_operacao}", value_style),
+            Paragraph(rf_operacao, value_style),
             Paragraph(nome_fechamento, value_style),
         ],
         [
@@ -575,7 +569,7 @@ def _linhas_tabela_item(item, txt, txt_center):
     rows = [linha_topo, linha_desc, linha_situacao]
     oc = item.ocorrencias.first() if item.tem_ocorrencia else None
     if oc:
-        registrado_por = obter_nome_usuario(getattr(oc, "registrado_por", None))
+        registrado_por = obter_rf_usuario(getattr(oc, "registrado_por", None))
         registrado_em = _fmt_date(getattr(oc, "registrado_em", None))
         obs = (getattr(oc, "observacao", "") or "").strip() or "-"
         div = (getattr(oc, "divergencia", "") or "").strip() or "-"
