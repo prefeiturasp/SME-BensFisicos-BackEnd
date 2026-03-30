@@ -66,6 +66,12 @@ def obter_nome_usuario(usuario):
     return usuario.nome if getattr(usuario, "nome", None) else usuario.username
 
 
+def obter_rf_usuario(usuario):
+    if not usuario:
+        return "-"
+    return getattr(usuario, "rf", None) or "-"
+
+
 def criar_estilo_base(nome, parent_styles, config_cls=PDFConfigBase, **kwargs):
     if config_cls is None:
         config_cls = PDFConfigBase
@@ -130,10 +136,10 @@ def criar_info_geracao_paragraph(
         textColor=colors.grey,
     )
 
-    nome = obter_nome_usuario(usuario)
+    rf = obter_rf_usuario(usuario)
     quando = formatar_datahora_geracao(data_geracao, config_cls=config_cls)
 
     return [
         Spacer(1, 0.2 * cm),
-        Paragraph(f"Gerado por {nome} em {quando}", info_style),
+        Paragraph(f"Gerado por {rf} em {quando}", info_style),
     ]

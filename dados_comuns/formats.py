@@ -18,6 +18,8 @@ from reportlab.platypus import (
     Image,
 )
 
+from bem_patrimonial.pdf_utils import obter_rf_usuario
+
 
 class UnidadeAdministrativaPDFFormat(Format):
 
@@ -46,7 +48,7 @@ class UnidadeAdministrativaPDFFormat(Format):
             bottomMargin=0.9 * cm,
             title="Relatório de Unidades Administrativas",
             author=(
-                request.user.get_full_name() or request.user.username
+                obter_rf_usuario(request.user)
                 if request
                 else "Sistema Bens Físicos"
             ),
@@ -83,19 +85,9 @@ class UnidadeAdministrativaPDFFormat(Format):
 
     def _resolver_usuario_exportacao(self, request):
         if not request or not hasattr(request, "user") or not request.user.is_authenticated:
-            return "Sistema", ""
+            return "Sistema"
 
-        user = request.user
-
-        if hasattr(user, "nome") and user.nome:
-            usuario = user.nome
-        elif user.get_full_name():
-            usuario = user.get_full_name().strip()
-        else:
-            usuario = user.username
-
-        rf_text = f" - RF: {user.rf}" if hasattr(user, "rf") and user.rf else ""
-        return usuario, rf_text
+        return obter_rf_usuario(request.user)
 
     def _criar_estilos_celula(self, styles):
         base_kwargs = {
@@ -224,10 +216,10 @@ class UnidadeAdministrativaPDFFormat(Format):
         canvas.saveState()
 
         request = getattr(self, "_export_request", None)
-        data_emissao = localtime(timezone.now()).strftime("%d/%m/%Y %H:%M")
-        usuario, rf_text = self._resolver_usuario_exportacao(request)
+        data_emissao = localtime(timezone.now()).strftime("%d/%m/%Y às %H:%M")
+        usuario = self._resolver_usuario_exportacao(request)
 
-        footer_text = f"Emitido em: {data_emissao} | Por: {usuario}{rf_text}"
+        footer_text = f"Gerado por {usuario} em {data_emissao}"
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.grey)
         canvas.drawString(0.5 * cm, 0.5 * cm, footer_text)

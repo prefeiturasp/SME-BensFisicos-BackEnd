@@ -12,8 +12,8 @@ from bem_patrimonial.pdf_utils import (
     criar_estilo_base,
     carregar_logo,
     formatar_moeda_brasileira,
-    obter_nome_usuario,
     criar_info_geracao_paragraph,
+    obter_rf_usuario,
 )
 
 
@@ -416,9 +416,7 @@ def formatar_responsavel(usuario):
     if not usuario:
         return ""
 
-    nome = obter_nome_usuario(usuario).upper()
-    rf = getattr(usuario, "rf", None) or "-"
-    return f"{nome} - RF: {rf}"
+    return obter_rf_usuario(usuario)
 
 
 def criar_tabela_rodape_responsaveis(

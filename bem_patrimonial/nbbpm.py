@@ -19,7 +19,7 @@ from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
     extrair_codigo_ua,
     criar_estilo_base,
-    obter_nome_usuario,
+    obter_rf_usuario,
     formatar_data,
 )
 from bem_patrimonial.documentos_pdf_utils import (
@@ -260,15 +260,11 @@ def _criar_total_bens(baixa):
 
 def _criar_rodape_nbbpm(baixa):
     resp_baixa = getattr(baixa, "criado_por", None)
-    nome_baixa = obter_nome_usuario(resp_baixa).upper()
-    rf_baixa = getattr(resp_baixa, "rf", None) or "-"
-    responsavel_baixa = f"{nome_baixa} - RF: {rf_baixa}"
+    responsavel_baixa = obter_rf_usuario(resp_baixa)
 
     resp_aprov = getattr(baixa, "aprovado_por", None)
     if resp_aprov:
-        nome_aprov = obter_nome_usuario(resp_aprov).upper()
-        rf_aprov = getattr(resp_aprov, "rf", None) or "-"
-        responsavel_aprov = f"{nome_aprov} - RF: {rf_aprov}"
+        responsavel_aprov = obter_rf_usuario(resp_aprov)
     else:
         responsavel_aprov = ""
 

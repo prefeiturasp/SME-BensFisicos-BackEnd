@@ -25,7 +25,11 @@ class SetupExportData:
         return criar_ua(uo=self.uo, codigo=codigo, nome=nome)
 
     def create_usuario(
-        self, username="testuser", unidade=None, grupo=GRUPO_GESTOR_PATRIMONIO
+        self,
+        username="testuser",
+        unidade=None,
+        grupo=GRUPO_GESTOR_PATRIMONIO,
+        rf=None,
     ):
         if not unidade:
             unidade = self.create_unidade_administrativa()
@@ -35,6 +39,7 @@ class SetupExportData:
             **auth_kwargs("testpass123"),
             nome=f"Usuario {username}",
             email=f"{username}@teste.com",
+            rf=rf,
             unidade_administrativa=unidade,
             unidade_orcamentaria=unidade.unidade_orcamentaria,
             is_staff=True,
@@ -388,7 +393,7 @@ class PDFUserContextTestCase(TestCase):
         self.factory = RequestFactory()
 
     def test_pdf_uses_nome_field_when_available(self):
-        usuario = self.test_data.create_usuario()
+        usuario = self.test_data.create_usuario(rf="4444444")
         usuario.nome = "Maria Silva"
         usuario.first_name = "Maria"
         usuario.last_name = "Santos"
@@ -406,7 +411,7 @@ class PDFUserContextTestCase(TestCase):
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_pdf_uses_username_as_fallback(self):
-        usuario = self.test_data.create_usuario()
+        usuario = self.test_data.create_usuario(rf="5555555")
         usuario.nome = None
         usuario.first_name = ""
         usuario.last_name = ""
@@ -434,3 +439,16 @@ class PDFUserContextTestCase(TestCase):
         pdf_bytes = pdf_format.export_data(None)
 
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+    def test_info_relatorio_exibe_apenas_rf(self):
+        usuario = self.test_data.create_usuario(rf="6666666")
+        request = self.factory.get("/admin/")
+        request.user = usuario
+
+        pdf_format = PDFFormat()
+
+        info_table = pdf_format._criar_info_relatorio(request, total_registros=3)[0]
+
+        self.assertEqual(pdf_format._obter_usuario_geracao(request), "6666666")
+        self.assertEqual(info_table._cellvalues[0][2], "Gerado por:")
+        self.assertEqual(info_table._cellvalues[0][3], "6666666")

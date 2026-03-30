@@ -21,6 +21,7 @@ from bem_patrimonial.pdf_utils import (
     criar_estilo_base,
     formatar_moeda_brasileira,
     obter_nome_usuario,
+    obter_rf_usuario,
     formatar_data,
 )
 from bem_patrimonial.documentos_pdf_utils import (
@@ -245,18 +246,12 @@ def _criar_total_bens(movimentacao):
 
 def _criar_rodape_cimbpm(movimentacao, data_aceite):
     responsavel_entrega_obj = movimentacao.solicitado_por
-    nome_entrega = obter_nome_usuario(responsavel_entrega_obj).upper()
-    rf_entrega = (
-        responsavel_entrega_obj.rf if responsavel_entrega_obj.rf else "-"
-    )
-    responsavel_entrega = f"{nome_entrega} - RF: {rf_entrega}"
+    responsavel_entrega = obter_rf_usuario(responsavel_entrega_obj)
 
     responsavel_recebimento = ""
     if data_aceite and movimentacao.aprovado_por:
         responsavel_rec = movimentacao.aprovado_por
-        nome_recebimento = obter_nome_usuario(responsavel_rec).upper()
-        rf_recebimento = responsavel_rec.rf if responsavel_rec.rf else "-"
-        responsavel_recebimento = f"{nome_recebimento} - RF: {rf_recebimento}"
+        responsavel_recebimento = obter_rf_usuario(responsavel_rec)
 
     return criar_tabela_rodape_responsaveis(
         label_esquerda="RESPONSÁVEL PELA ENTREGA",
