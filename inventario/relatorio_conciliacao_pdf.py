@@ -491,8 +491,8 @@ def _criar_informacoes_gerais_conciliacao(conciliacao):
 
 def _estilos_blocos_itens(styles):
     """Cria estilos usados nos blocos de itens da conciliação."""
-    font = 6
-    leading = 7
+    font = 8
+    leading = 9
     _ = criar_estilo_base(
         "ItemLabel",
         styles,
