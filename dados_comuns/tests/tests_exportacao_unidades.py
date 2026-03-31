@@ -2,6 +2,7 @@ from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
+from unittest.mock import Mock
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.admin import UnidadeAdministrativaAdmin
 from dados_comuns.formats import UnidadeAdministrativaPDFFormat
@@ -87,7 +88,7 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertIn(b"%%EOF", pdf_bytes)
         self.assertGreater(len(pdf_bytes), 1000)
-        self.assertIn(b"/Author (gestor_rf)", pdf_bytes)
+        self.assertIn(b"/Author (123456)", pdf_bytes)
 
     def test_pdf_gerado_sem_rf_cadastrado(self):
         pdf_bytes = self._gerar_pdf(self.gestor_sem_rf)
@@ -96,7 +97,32 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertIn(b"%%EOF", pdf_bytes)
         self.assertGreater(len(pdf_bytes), 1000)
-        self.assertIn(b"/Author (gestor_sem_rf)", pdf_bytes)
+        self.assertIn(b"/Author (-)", pdf_bytes)
+
+    def test_resolve_usuario_exportacao_retorna_apenas_rf(self):
+        request = self.factory.get("/admin/dados_comuns/unidadeadministrativa/")
+        request.user = self.gestor_com_rf
+
+        pdf_format = UnidadeAdministrativaPDFFormat()
+
+        self.assertEqual(pdf_format._resolver_usuario_exportacao(request), "123456")
+
+    def test_rodape_pdf_exibe_apenas_rf(self):
+        request = self.factory.get("/admin/dados_comuns/unidadeadministrativa/")
+        request.user = self.gestor_com_rf
+
+        pdf_format = UnidadeAdministrativaPDFFormat()
+        pdf_format._export_request = request
+
+        canvas = Mock()
+        canvas.getPageNumber.return_value = 1
+        doc = Mock()
+
+        pdf_format._adicionar_numero_pagina(canvas, doc)
+
+        footer_text = canvas.drawString.call_args.args[2]
+        self.assertIn("Gerado por 123456 em ", footer_text)
+        self.assertNotIn("José da Silva", footer_text)
 
     def test_exportacao_excel_com_status_legivel(self):
         resource = UnidadeAdministrativaResource()

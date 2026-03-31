@@ -6,3 +6,33 @@
 .hide { display:none }
 .multi-inline { border:1px solid #ddd; padding:12px; margin:12px 0; border-radius:6px }
 #error-multi, #error-base-required { margin:8px 0; }
+
+#changelist-filter .filtro-baixados-periodo-form {
+    margin: 8px 0 6px 0 !important;
+    padding-left: 14px !important;
+}
+
+#changelist-filter .filtro-baixados-periodo-label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 4px 0 !important;
+}
+
+#changelist-filter .filtro-baixados-periodo-label input[type="checkbox"] {
+    margin: 0 !important;
+    width: 16px !important;
+    height: 16px !important;
+    flex: 0 0 auto !important;
+    vertical-align: middle !important;
+    
+}
+
+#changelist-filter .filtro-baixados-periodo-label span {
+    display: inline-block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+
+

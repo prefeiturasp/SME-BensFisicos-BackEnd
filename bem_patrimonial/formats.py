@@ -19,6 +19,8 @@ from reportlab.platypus import (
     KeepTogether,
 )
 
+from bem_patrimonial.pdf_utils import obter_rf_usuario
+
 
 class PDFFormat(Format):
 
@@ -51,7 +53,7 @@ class PDFFormat(Format):
             bottomMargin=0.9 * cm,
             title="Relatório de Bens Patrimoniais",
             author=(
-                request.user.get_full_name() or request.user.username
+                obter_rf_usuario(request.user)
                 if request
                 else "Sistema Bens Físicos"
             ),
@@ -148,10 +150,7 @@ class PDFFormat(Format):
         user = request.user
         if not user.is_authenticated:
             return "Sistema"
-        if hasattr(user, "nome") and user.nome:
-            return user.nome
-        full_name = user.get_full_name() if hasattr(user, "get_full_name") else ""
-        return full_name.strip() if full_name and full_name.strip() else user.username
+        return obter_rf_usuario(user)
 
     def _criar_info_relatorio(self, request, total_registros):
         elements = []
