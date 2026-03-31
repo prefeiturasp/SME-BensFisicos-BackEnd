@@ -554,6 +554,30 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
 
         self.assertIn(bem_antigo, filtrado)
 
+    def test_baixados_mais_de_um_periodo_filter_ignora_bem_nao_baixado_com_historico_antigo(self):
+        bem = self._criar_bem_baixado(
+            "Bem com historico antigo", anos_atras=2, numero_processo_baixa="PBAIXA4"
+        )
+        bem.status = APROVADO
+        bem.save(update_fields=["status"])
+
+        qs = self.admin._anotar_baixa_data(BemPatrimonial.objects.all())
+        request = self.factory.get(
+            "/admin/bem_patrimonial/bempatrimonial/",
+            {"baixados_mais_de_um_periodo": "1"},
+        )
+        request.user = self.gestor
+
+        filtro = BaixadosMaisDeUmPeriodoFilter(
+            request,
+            {"baixados_mais_de_um_periodo": "1"},
+            BemPatrimonial,
+            self.admin,
+        )
+        filtrado = filtro.queryset(request, qs)
+
+        self.assertNotIn(bem, filtrado)
+
     def test_get_queryset_padrao_exclui_baixados_antigos(self):
         bem_antigo = self._criar_bem_baixado(
             "Bem antigo", anos_atras=2, numero_processo_baixa="PBAIXA1"

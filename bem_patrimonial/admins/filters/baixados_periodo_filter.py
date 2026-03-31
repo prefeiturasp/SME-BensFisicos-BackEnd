@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.utils import timezone
 
+from bem_patrimonial import constants
+
 
 class BaixadosMaisDeUmPeriodoFilter(admin.SimpleListFilter):
     title = ""
@@ -25,5 +27,6 @@ class BaixadosMaisDeUmPeriodoFilter(admin.SimpleListFilter):
         ano_limite = ano_corrente - 1
 
         return queryset.filter(
+            status=constants.BAIXA_FISICA,
             baixa_data__year__lt=ano_limite,
         )
