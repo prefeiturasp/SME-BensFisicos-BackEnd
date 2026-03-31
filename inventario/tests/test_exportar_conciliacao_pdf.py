@@ -276,6 +276,16 @@ class TestHelpersRelatorioConciliacao(TestCase):
         self.assertIn("Gerado por 3333333 em ", info_texto)
         self.assertNotIn("Operador Nome Completo", info_texto)
 
+    def test_estilos_blocos_itens_usa_fonte_8(self):
+        from inventario.relatorio_conciliacao_pdf import _estilos_blocos_itens
+
+        estilos = _estilos_blocos_itens(getSampleStyleSheet())
+
+        self.assertEqual(estilos["txt"].fontSize, 8)
+        self.assertEqual(estilos["txt"].leading, 9)
+        self.assertEqual(estilos["txt_center"].fontSize, 8)
+        self.assertEqual(estilos["txt_center"].leading, 9)
+
 
 class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
     def setUp(self):
