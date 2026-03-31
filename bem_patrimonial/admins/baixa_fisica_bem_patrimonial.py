@@ -7,6 +7,10 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.formats import date_format
 from rangefilter.filters import DateRangeFilter
+from import_export import resources, fields
+from import_export.widgets import DateWidget
+from import_export.admin import ExportMixin
+from import_export.formats.base_formats import XLSX
 
 from bem_patrimonial.models import (
     BaixaFisicaBemPatrimonial,
@@ -166,7 +170,64 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
         return ()
 
 
-class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
+class BaixaFisicaResource(resources.ModelResource):
+    unidade_administrativa = fields.Field(
+        attribute="unidade_administrativa_origem__nome",
+        column_name="Unidade Administrativa",
+    )
+
+    numero_patrimonial = fields.Field(
+        column_name="Número Patrimonial"
+    )
+
+    nome_bem = fields.Field(
+        column_name="Nome do Bem"
+    )
+
+    status = fields.Field(
+        attribute="status",
+        column_name="Status",
+    )
+
+    nbbpm = fields.Field(
+        attribute="numero_nbbpm",
+        column_name="NBBPM",
+    )
+
+    criado_por = fields.Field(
+        attribute="criado_por__username",
+        column_name="Usuário que solicitou",
+    )
+
+    aprovado_por = fields.Field(
+        attribute="aprovado_por__username",
+        column_name="Gestor que aprovou",
+    )
+
+    data_aprovacao = fields.Field(
+        attribute="data_aprovacao",
+        column_name="Data da Aprovação",
+        widget=DateWidget(format="%d/%m/%Y"),
+    )
+
+    class Meta:
+        model = BaixaFisicaBemPatrimonial
+        fields = (
+            "unidade_administrativa",
+            "numero_patrimonial",
+            "nome_bem",
+            "status",
+            "nbbpm",
+            "criado_por",
+            "aprovado_por",
+            "data_aprovacao",
+        )
+        export_order = fields
+
+
+class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
+    resource_class = BaixaFisicaResource
+
     list_display = (
         "id",
         "numero_nbbpm",
@@ -177,7 +238,7 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         "data_aprovacao_formatada",
     )
     list_display_links = ("id",)
-    list_filter = ("status", 
+    list_filter = ("status",
                    ("data_aprovacao", DateRangeFilter),
                    )
     search_fields = (
@@ -191,6 +252,20 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
         "itens__bem__numero_patrimonial",
         "itens__bem__nome",
     )
+
+    def get_export_formats(self):
+        return [XLSX]
+
+    def get_export_queryset(self, request):
+        qs = super().get_export_queryset(request)
+
+        qs = filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=qs,
+            campo_ua="unidade_administrativa_origem",
+        )
+
+        return qs.prefetch_related("itens__bem").order_by("-id")
 
     def get_search_results(self, request, queryset, search_term):
         queryset, _ = super().get_search_results(
@@ -340,7 +415,11 @@ class BaixaFisicaBemPatrimonialAdmin(admin.ModelAdmin):
 
         return super().changelist_view(request, extra_context=extra_context)
 
-    actions = ["acao_enviar_baixa", "acao_aprovar_baixa", "acao_cancelar_baixa"]
+    actions = [
+        "acao_enviar_baixa",
+        "acao_aprovar_baixa",
+        "acao_cancelar_baixa",
+    ]
 
     def get_actions(self, request):
         actions = super().get_actions(request)
