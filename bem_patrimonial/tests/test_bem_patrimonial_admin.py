@@ -154,6 +154,20 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         request.resolver_match.url_name = "bem_patrimonial_bempatrimonial_changelist"
         return request
 
+    def _criar_bem_baixado(self, nome, anos_atras, numero_processo_baixa):
+        ano_corrente = timezone.localdate().year
+        data_baixa = date(ano_corrente - anos_atras, 1, 1)
+        bem = self._criar_bem(status=BAIXA_FISICA, nome=nome)
+        baixa = BaixaFisicaBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua,
+            numero_processo_baixa=numero_processo_baixa,
+            status=ACEITA,
+            criado_por=self.gestor,
+            data_baixa=data_baixa,
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        return bem
+
     # --- get_actions: delete_selected removido ---
     def test_get_actions_remove_delete_selected(self):
         request = _request_with_messages(self.factory, self.gestor)
@@ -492,30 +506,12 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         self.assertTrue(any("Erro ao reprovar" in m for m in msgs))
 
     def test_baixados_mais_de_um_periodo_filter_retorna_apenas_antigos_quando_selecionado(self):
-        ano_corrente = timezone.localdate().year
-        data_baixa_antiga = date(ano_corrente - 2, 1, 1)
-        data_baixa_recente = date(ano_corrente, 1, 1)
-
-        bem_antigo = self._criar_bem(status=BAIXA_FISICA, nome="Bem antigo")
-        bem_recente = self._criar_bem(status=BAIXA_FISICA, nome="Bem recente")
-
-        baixa_antiga = BaixaFisicaBemPatrimonial.objects.create(
-            unidade_administrativa_origem=self.ua,
-            numero_processo_baixa="PBAIXA1",
-            status=ACEITA,
-            criado_por=self.gestor,
-            data_baixa=data_baixa_antiga,
+        bem_antigo = self._criar_bem_baixado(
+            "Bem antigo", anos_atras=2, numero_processo_baixa="PBAIXA1"
         )
-        BaixaFisicaBensItem.objects.create(baixa=baixa_antiga, bem=bem_antigo)
-
-        baixa_recente = BaixaFisicaBemPatrimonial.objects.create(
-            unidade_administrativa_origem=self.ua,
-            numero_processo_baixa="PBAIXA2",
-            status=ACEITA,
-            criado_por=self.gestor,
-            data_baixa=data_baixa_recente,
+        bem_recente = self._criar_bem_baixado(
+            "Bem recente", anos_atras=0, numero_processo_baixa="PBAIXA2"
         )
-        BaixaFisicaBensItem.objects.create(baixa=baixa_recente, bem=bem_recente)
 
         qs = self.admin._anotar_baixa_data(BemPatrimonial.objects.all())
 
@@ -524,10 +520,6 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
             {"baixados_mais_de_um_periodo": "1"},
         )
         request.user = self.gestor
-
-        from bem_patrimonial.admins.filters.baixados_periodo_filter import (
-            BaixadosMaisDeUmPeriodoFilter,
-        )
 
         filtro = BaixadosMaisDeUmPeriodoFilter(
             request,
@@ -542,19 +534,9 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         self.assertNotIn(bem_recente, filtrado)
 
     def test_baixados_mais_de_um_periodo_filter_nao_altera_quando_nao_selecionado(self):
-        ano_corrente = timezone.localdate().year
-        data_baixa_antiga = date(ano_corrente - 2, 1, 1)
-
-        bem_antigo = self._criar_bem(status=BAIXA_FISICA, nome="Bem antigo")
-
-        baixa_antiga = BaixaFisicaBemPatrimonial.objects.create(
-            unidade_administrativa_origem=self.ua,
-            numero_processo_baixa="PBAIXA1",
-            status=ACEITA,
-            criado_por=self.gestor,
-            data_baixa=data_baixa_antiga,
+        bem_antigo = self._criar_bem_baixado(
+            "Bem antigo", anos_atras=2, numero_processo_baixa="PBAIXA1"
         )
-        BaixaFisicaBensItem.objects.create(baixa=baixa_antiga, bem=bem_antigo)
 
         qs = self.admin._anotar_baixa_data(BemPatrimonial.objects.all())
 
@@ -573,30 +555,12 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         self.assertIn(bem_antigo, filtrado)
 
     def test_get_queryset_padrao_exclui_baixados_antigos(self):
-        ano_corrente = timezone.localdate().year
-        data_baixa_antiga = date(ano_corrente - 2, 1, 1)
-        data_baixa_recente = date(ano_corrente, 1, 1)
-
-        bem_antigo = self._criar_bem(status=BAIXA_FISICA, nome="Bem antigo")
-        bem_recente = self._criar_bem(status=BAIXA_FISICA, nome="Bem recente")
-
-        baixa_antiga = BaixaFisicaBemPatrimonial.objects.create(
-            unidade_administrativa_origem=self.ua,
-            numero_processo_baixa="PBAIXA1",
-            status=ACEITA,
-            criado_por=self.gestor,
-            data_baixa=data_baixa_antiga,
+        bem_antigo = self._criar_bem_baixado(
+            "Bem antigo", anos_atras=2, numero_processo_baixa="PBAIXA1"
         )
-        BaixaFisicaBensItem.objects.create(baixa=baixa_antiga, bem=bem_antigo)
-
-        baixa_recente = BaixaFisicaBemPatrimonial.objects.create(
-            unidade_administrativa_origem=self.ua,
-            numero_processo_baixa="PBAIXA2",
-            status=ACEITA,
-            criado_por=self.gestor,
-            data_baixa=data_baixa_recente,
+        bem_recente = self._criar_bem_baixado(
+            "Bem recente", anos_atras=0, numero_processo_baixa="PBAIXA2"
         )
-        BaixaFisicaBensItem.objects.create(baixa=baixa_recente, bem=bem_recente)
 
         request_padrao = self._request_changelist()
 
@@ -615,18 +579,9 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         self.assertIn(bem_recente, qs_with_filter)
 
     def test_get_search_results_fallback_busca_baixados_antigos_quando_sem_resultado(self):
-        ano_corrente = timezone.localdate().year
-        data_baixa_antiga = date(ano_corrente - 2, 1, 1)
-
-        bem_antigo = self._criar_bem(status=BAIXA_FISICA, nome="Notebook Legado")
-        baixa_antiga = BaixaFisicaBemPatrimonial.objects.create(
-            unidade_administrativa_origem=self.ua,
-            numero_processo_baixa="PBAIXA3",
-            status=ACEITA,
-            criado_por=self.gestor,
-            data_baixa=data_baixa_antiga,
+        bem_antigo = self._criar_bem_baixado(
+            "Notebook Legado", anos_atras=2, numero_processo_baixa="PBAIXA3"
         )
-        BaixaFisicaBensItem.objects.create(baixa=baixa_antiga, bem=bem_antigo)
 
         request = self._request_changelist()
         queryset_padrao = self.admin.get_queryset(request)
