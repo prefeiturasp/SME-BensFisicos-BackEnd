@@ -224,6 +224,18 @@ class BaixaFisicaResource(resources.ModelResource):
         )
         export_order = fields
 
+    def dehydrate_numero_patrimonial(self, obj):
+        itens = obj.itens.all()
+        return ", ".join(
+            item.bem.numero_patrimonial for item in itens if item.bem
+        )
+
+    def dehydrate_nome_bem(self, obj):
+        itens = obj.itens.all()
+        return ", ".join(
+            item.bem.nome for item in itens if item.bem
+        )
+
 
 class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
     resource_class = BaixaFisicaResource
