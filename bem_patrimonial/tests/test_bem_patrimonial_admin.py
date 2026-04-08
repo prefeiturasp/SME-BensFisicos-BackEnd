@@ -3,6 +3,8 @@ from dados_comuns.tests.auth_test_utils import auth_kwargs
 # Complementa tests_admin.py, tests_aprovacao_lote.py, tests_admin_list_display.py,
 # test_edicao_restrita_operador.py e tests_export_pdf.py
 
+from datetime import date
+
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, RequestFactory, Client
@@ -12,20 +14,30 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, HttpResponse
 from django.urls import reverse
+from django.utils import timezone
 
-from bem_patrimonial.models import BemPatrimonial, StatusBemPatrimonial
+from bem_patrimonial.models import (
+    BemPatrimonial,
+    StatusBemPatrimonial,
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+)
 from bem_patrimonial.admins.bem_patrimonial import (
     BemPatrimonialAdmin,
     HistoricoGeralInline,
     aprovar_bens,
     reprovar_bens,
 )
+from bem_patrimonial.admins.filters.baixados_periodo_filter import (
+    BaixadosMaisDeUmPeriodoFilter,
+)
 from bem_patrimonial.constants import (
     AGUARDANDO_APROVACAO,
     APROVADO,
     BAIXA_FISICA,
+    ACEITA,
 )
 from bem_patrimonial.formats import PDFFormat
 from dados_comuns.models import UnidadeAdministrativa
@@ -132,6 +144,29 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         }
         defaults.update(kwargs)
         return BemPatrimonial.objects.create(**defaults)
+
+    def _request_changelist(self, params=None):
+        request = self.factory.get(
+            "/admin/bem_patrimonial/bempatrimonial/", params or {}
+        )
+        request.user = self.gestor
+        request.resolver_match = MagicMock()
+        request.resolver_match.url_name = "bem_patrimonial_bempatrimonial_changelist"
+        return request
+
+    def _criar_bem_baixado(self, nome, anos_atras, numero_processo_baixa):
+        ano_corrente = timezone.localdate().year
+        data_baixa = date(ano_corrente - anos_atras, 1, 1)
+        bem = self._criar_bem(status=BAIXA_FISICA, nome=nome)
+        baixa = BaixaFisicaBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua,
+            numero_processo_baixa=numero_processo_baixa,
+            status=ACEITA,
+            criado_por=self.gestor,
+            data_baixa=data_baixa,
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        return bem
 
     # --- get_actions: delete_selected removido ---
     def test_get_actions_remove_delete_selected(self):
@@ -268,27 +303,6 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         self.admin.save_model(request, bem, form, change=False)
         self.assertEqual(bem.criado_por, self.gestor)
         self.assertEqual(bem.status, AGUARDANDO_APROVACAO)
-
-    def test_save_model_integrity_error_numero_patrimonial_validation_error(self):
-        self._criar_bem(numero_patrimonial="000.000000001-0", sem_numeracao=False)
-        bem = BemPatrimonial(
-            nome="Outro",
-            descricao="D",
-            valor_unitario=1,
-            marca="M",
-            modelo="X",
-            numero_processo="P",
-            unidade_administrativa=self.ua,
-            criado_por=self.gestor,
-            numero_patrimonial="000.000000001-0",
-            sem_numeracao=False,
-        )
-        request = _request_with_messages(self.factory, self.gestor, method="POST")
-        form = MagicMock()
-        form.cleaned_data = {}
-        with self.assertRaises(ValidationError) as ctx:
-            self.admin.save_model(request, bem, form, change=False)
-        self.assertIn("numero_patrimonial", str(ctx.exception).lower())
 
     # --- get_export_formats, get_resource_kwargs ---
     def test_get_export_formats_retorna_lista_com_pdf(self):
@@ -490,3 +504,142 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
             reprovar_bens(self.admin, request, BemPatrimonial.objects.filter(pk=bem.pk))
         msgs = [str(m) for m in request._messages]
         self.assertTrue(any("Erro ao reprovar" in m for m in msgs))
+
+    def test_baixados_mais_de_um_periodo_filter_retorna_apenas_antigos_quando_selecionado(self):
+        bem_antigo = self._criar_bem_baixado(
+            "Bem antigo", anos_atras=2, numero_processo_baixa="PBAIXA1"
+        )
+        bem_recente = self._criar_bem_baixado(
+            "Bem recente", anos_atras=0, numero_processo_baixa="PBAIXA2"
+        )
+
+        qs = self.admin._anotar_baixa_data(BemPatrimonial.objects.all())
+
+        request = self.factory.get(
+            "/admin/bem_patrimonial/bempatrimonial/",
+            {"baixados_mais_de_um_periodo": "1"},
+        )
+        request.user = self.gestor
+
+        filtro = BaixadosMaisDeUmPeriodoFilter(
+            request,
+            {"baixados_mais_de_um_periodo": "1"},
+            BemPatrimonial,
+            self.admin,
+        )
+
+        filtrado = filtro.queryset(request, qs)
+
+        self.assertIn(bem_antigo, filtrado)
+        self.assertNotIn(bem_recente, filtrado)
+
+    def test_baixados_mais_de_um_periodo_filter_nao_altera_quando_nao_selecionado(self):
+        bem_antigo = self._criar_bem_baixado(
+            "Bem antigo", anos_atras=2, numero_processo_baixa="PBAIXA1"
+        )
+
+        qs = self.admin._anotar_baixa_data(BemPatrimonial.objects.all())
+
+        request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/")
+        request.user = self.gestor
+
+        filtro = BaixadosMaisDeUmPeriodoFilter(
+            request,
+            {},
+            BemPatrimonial,
+            self.admin,
+        )
+
+        filtrado = filtro.queryset(request, qs)
+
+        self.assertIn(bem_antigo, filtrado)
+
+    def test_baixados_mais_de_um_periodo_filter_ignora_bem_nao_baixado_com_historico_antigo(self):
+        bem = self._criar_bem_baixado(
+            "Bem com historico antigo", anos_atras=2, numero_processo_baixa="PBAIXA4"
+        )
+        bem.status = APROVADO
+        bem.save(update_fields=["status"])
+
+        qs = self.admin._anotar_baixa_data(BemPatrimonial.objects.all())
+        request = self.factory.get(
+            "/admin/bem_patrimonial/bempatrimonial/",
+            {"baixados_mais_de_um_periodo": "1"},
+        )
+        request.user = self.gestor
+
+        filtro = BaixadosMaisDeUmPeriodoFilter(
+            request,
+            {"baixados_mais_de_um_periodo": "1"},
+            BemPatrimonial,
+            self.admin,
+        )
+        filtrado = filtro.queryset(request, qs)
+
+        self.assertNotIn(bem, filtrado)
+
+    def test_get_queryset_padrao_exclui_baixados_antigos(self):
+        bem_antigo = self._criar_bem_baixado(
+            "Bem antigo", anos_atras=2, numero_processo_baixa="PBAIXA1"
+        )
+        bem_recente = self._criar_bem_baixado(
+            "Bem recente", anos_atras=0, numero_processo_baixa="PBAIXA2"
+        )
+
+        request_padrao = self._request_changelist()
+
+        qs_padrao = self.admin.get_queryset(request_padrao)
+
+        self.assertNotIn(bem_antigo, qs_padrao)
+        self.assertIn(bem_recente, qs_padrao)
+
+        request_with_filter = self._request_changelist(
+            {"baixados_mais_de_um_periodo": "1"}
+        )
+
+        qs_with_filter = self.admin.get_queryset(request_with_filter)
+
+        self.assertIn(bem_antigo, qs_with_filter)
+        self.assertIn(bem_recente, qs_with_filter)
+
+    def test_get_search_results_fallback_busca_baixados_antigos_quando_sem_resultado(self):
+        bem_antigo = self._criar_bem_baixado(
+            "Notebook Legado", anos_atras=2, numero_processo_baixa="PBAIXA3"
+        )
+
+        request = self._request_changelist()
+        queryset_padrao = self.admin.get_queryset(request)
+
+        self.assertNotIn(bem_antigo, queryset_padrao)
+
+        resultado, _ = self.admin.get_search_results(
+            request, queryset_padrao, "Notebook Legado"
+        )
+
+        self.assertTrue(getattr(request, "_busca_com_baixados_antigos", False))
+        self.assertIn(bem_antigo, resultado)
+
+    def test_changelist_view_redireciona_com_checkbox_marcado_no_fallback(self):
+        request = self._request_changelist({"q": "bem inexistente"})
+        request._busca_com_baixados_antigos = True
+
+        with patch(
+            "import_export.admin.ImportExportModelAdmin.changelist_view",
+            return_value=HttpResponse("ok"),
+        ):
+            response = self.admin.changelist_view(request)
+
+        self.assertIsInstance(response, HttpResponseRedirect)
+        self.assertIn("baixados_mais_de_um_periodo=1", response.url)
+
+    def test_baixados_mais_de_um_periodo_filter_titulo_dinamico(self):
+        request = self._request_changelist()
+        filtro = BaixadosMaisDeUmPeriodoFilter(
+            request,
+            {},
+            BemPatrimonial,
+            self.admin,
+        )
+
+        ano_corrente = timezone.localdate().year
+        self.assertEqual(filtro.title, f"Baixados antes de {ano_corrente - 1}")

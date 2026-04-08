@@ -192,6 +192,18 @@ class BemPatrimonial(BaseModel):
             )
         ]
 
+    def _clean_verifica_numero_patrimonial_cadastrado(self):
+        if not self.numero_patrimonial:
+            return
+
+        if BemPatrimonial.objects.filter(
+            numero_patrimonial=self.numero_patrimonial,
+            excluido=False
+        ).exclude(pk=self.pk).exists():
+            raise ValidationError({
+                'numero_patrimonial': 'Número Patrimonial já cadastrado'
+            })
+
     def _clean_valida_formato_antigo_ou_sem_numeracao(self):
         if not self.pk and self.numero_formato_antigo and self.sem_numeracao:
             raise ValidationError(
@@ -219,6 +231,7 @@ class BemPatrimonial(BaseModel):
         self._clean_valida_formato_antigo_ou_sem_numeracao()
         self._clean_valida_numero_obrigatorio()
         self._clean_valida_formato_novo()
+        self._clean_verifica_numero_patrimonial_cadastrado()
 
     def _obter_original_para_auditoria(self):
         if self._state.adding or (self.pk is None):

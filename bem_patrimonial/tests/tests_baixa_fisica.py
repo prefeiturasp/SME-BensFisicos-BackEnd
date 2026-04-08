@@ -4,6 +4,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from unittest.mock import patch
 from django.utils import timezone
+from import_export.formats.base_formats import XLSX
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -560,3 +561,104 @@ class BaixaFisicaAdminQuerysetPermissionsTestCase(TestCase):
                 for m in msgs
             )
         )
+
+
+class BaixaFisicaAdminExportTestCase(TestCase):
+    def setUp(self):
+        setup = SetupMovimentacaoData()
+        self.ua_origem, self.ua_destino = setup.create_unidades_administrativas()
+
+        (
+            self.operador_origem,
+            self.operador_destino,
+            self.gestor,
+        ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
+
+        # bens
+        self.bem1 = setup.create_bem_patrimonial(
+            self.operador_origem, self.ua_origem
+        )
+        self.bem2 = setup.create_bem_patrimonial(
+            self.operador_destino, self.ua_destino
+        )
+
+        self.bem1.status = APROVADO
+        self.bem2.status = APROVADO
+        self.bem1.save()
+        self.bem2.save()
+
+        # baixas
+        self.baixa1 = BaixaFisicaBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua_origem,
+            numero_processo_baixa="PROC-111",
+            status=SOLICITADA,
+            criado_por=self.operador_origem,
+            data_aprovacao=timezone.now(),
+            aprovado_por=self.gestor,
+        )
+
+        self.baixa2 = BaixaFisicaBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua_destino,
+            numero_processo_baixa="PROC-222",
+            status=SOLICITADA,
+            criado_por=self.operador_destino,
+            data_aprovacao=timezone.now(),
+            aprovado_por=self.gestor,
+        )
+
+        # itens
+        BaixaFisicaBensItem.objects.create(baixa=self.baixa1, bem=self.bem1)
+        BaixaFisicaBensItem.objects.create(baixa=self.baixa2, bem=self.bem2)
+
+        self.factory = RequestFactory()
+        self.site = AdminSite()
+        self.admin = BaixaFisicaBemPatrimonialAdmin(
+            BaixaFisicaBemPatrimonial, self.site
+        )
+
+    # ---------------------------------------------------------
+    # ✅ TESTE: apenas XLSX disponível
+    # ---------------------------------------------------------
+    def test_export_formats_apenas_xlsx(self):
+        formats = self.admin.get_export_formats()
+
+        self.assertEqual(len(formats), 1)
+        self.assertEqual(formats[0], XLSX)
+
+    # ---------------------------------------------------------
+    # ✅ TESTE: filtro por escopo no export
+    # ---------------------------------------------------------
+    def test_get_export_queryset_filtra_por_ua_usuario(self):
+        request = self.factory.get("/admin/")
+        request.user = self.operador_origem
+
+        qs = self.admin.get_export_queryset(request)
+
+        self.assertIn(self.baixa1, qs)
+        self.assertNotIn(self.baixa2, qs)
+
+    # ---------------------------------------------------------
+    # ✅ TESTE: gestor sem UA vê tudo
+    # ---------------------------------------------------------
+    def test_get_export_queryset_gestor_sem_ua(self):
+        self.gestor.unidade_administrativa = None
+        self.gestor.save()
+
+        request = self.factory.get("/admin/")
+        request.user = self.gestor
+
+        qs = self.admin.get_export_queryset(request)
+
+        self.assertIn(self.baixa1, qs)
+        self.assertIn(self.baixa2, qs)
+
+    # ---------------------------------------------------------
+    # ✅ TESTE: ordem do export (mais novo primeiro)
+    # ---------------------------------------------------------
+    def test_get_export_queryset_ordem_decrescente(self):
+        request = self.factory.get("/admin/")
+        request.user = self.gestor
+
+        qs = list(self.admin.get_export_queryset(request))
+
+        self.assertGreaterEqual(qs[0].id, qs[-1].id)

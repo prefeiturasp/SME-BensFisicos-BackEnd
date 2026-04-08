@@ -22,6 +22,7 @@ from bem_patrimonial.models import (
 from bem_patrimonial.nbbpm import (
     obter_bens_baixa,
     gerar_numero_nbbpm,
+    _criar_rodape_nbbpm,
     gerar_pdf_nbbpm,
     http_response_nbbpm,
 )
@@ -183,6 +184,19 @@ class TestGeracaoNumeroNBBPM(NBBPMTestBase):
 
 
 class TestGeracaoPDFNBBPM(NBBPMTestBase):
+    def test_rodape_nbbpm_exibe_apenas_rf_nos_responsaveis(self):
+        baixa = self.criar_baixa(status=constants.ACEITA)
+
+        rodape_table = _criar_rodape_nbbpm(baixa)[0]
+
+        responsavel_baixa = rodape_table._cellvalues[1][0].getPlainText()
+        responsavel_aprovacao = rodape_table._cellvalues[1][1].getPlainText()
+
+        self.assertEqual(responsavel_baixa, "1234567")
+        self.assertEqual(responsavel_aprovacao, "7654321")
+        self.assertNotIn("João Silva", responsavel_baixa)
+        self.assertNotIn("Maria Santos", responsavel_aprovacao)
+
     def test_gera_pdf_quando_aceita(self):
         baixa = self.criar_baixa(status=constants.ACEITA)
         bem = self.criar_bem()

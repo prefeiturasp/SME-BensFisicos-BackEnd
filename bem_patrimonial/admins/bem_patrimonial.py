@@ -165,7 +165,14 @@ class HistoricoGeralInline(GenericTabularInline):
         "alterado_por",
         "alterado_em",
     )
-    fields = ("campo", "valor_antigo", "valor_novo", "justificativa", "alterado_por", "alterado_em")
+    fields = (
+        "campo",
+        "valor_antigo",
+        "valor_novo",
+        "justificativa",
+        "alterado_por",
+        "alterado_em",
+    )
     ordering = ("-alterado_em",)
     template = "admin/bem_patrimonial/edit_inline/tabular-historico.html"
 
@@ -304,7 +311,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         return ("numero_patrimonial", "nome", "unidade_administrativa", "status")
 
     def get_readonly_fields(self, request, obj=None):
-
         base = ("status", "criado_por", "criado_em")
 
         if obj is None:
@@ -325,7 +331,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 "modelo",
                 "numero_processo",
                 "foto",
-                "justificativa"
+                "justificativa",
             )
 
         return base + (
@@ -352,7 +358,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             ("localizacao"),
             "numero_processo",
             "observacao",
-            "justificativa"
+            "justificativa",
         ]
 
         if request.user.is_operador_inventario:
@@ -548,14 +554,36 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                     "numero_patrimonial",
                     "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema.",
                 )
-                raise ValidationError(
-                    {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa E501
-                    }
-                )
+                return
             raise
 
-    def get_queryset(self, request):
+    def _anotar_baixa_data(self, queryset):
+        baixa_data_sq = (
+            BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
+            .order_by("-baixa__data_baixa")
+            .values("baixa__data_baixa")[:1]
+        )
+        return queryset.annotate(
+            baixa_data=Subquery(baixa_data_sq),
+        )
+
+    def _deve_aplicar_filtro_padrao_baixados(self, request):
+        is_changelist = (
+            request.resolver_match
+            and request.resolver_match.url_name.endswith("_changelist")
+        )
+        return is_changelist and "baixados_mais_de_um_periodo" not in request.GET
+
+    def _aplicar_filtro_padrao_baixados(self, queryset):
+        ano_corrente = timezone.localdate().year
+        ano_limite = ano_corrente - 1
+
+        return queryset.exclude(
+            status=constants.BAIXA_FISICA,
+            baixa_data__year__lt=ano_limite,
+        )
+
+    def _get_queryset_com_auditoria(self, request):
         qs = (
             super()
             .get_queryset(request)
@@ -568,27 +596,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             campo_ua="unidade_administrativa",
         )
 
-        baixa_data_sq = (
-            BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
-            .order_by("-baixa__data_baixa")
-            .values("baixa__data_baixa")[:1]
-        )
-        qs = qs.annotate(
-            baixa_data=Subquery(baixa_data_sq),
-        )
-        is_changelist = (
-            request.resolver_match
-            and request.resolver_match.url_name.endswith("_changelist")
-        )
-
-        if is_changelist and "baixados_mais_de_um_periodo" not in request.GET:
-            ano_corrente = timezone.localdate().year
-            ano_limite = ano_corrente - 1
-
-            qs = qs.exclude(
-                status=constants.BAIXA_FISICA,
-                baixa_data__year__lt=ano_limite,
-            )
+        qs = self._anotar_baixa_data(qs)
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
@@ -597,10 +605,32 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             content_type=ct, object_id=pk_as_char
         ).order_by("-alterado_em")
 
-        qs = qs.annotate(
+        return qs.annotate(
             audit_last_at=Subquery(hist_qs.values("alterado_em")[:1]),
             audit_last_by_id=Subquery(hist_qs.values("alterado_por_id")[:1]),
         )
+
+    def _buscar_com_baixados_antigos(self, request, search_term):
+        queryset_ampliado = self._get_queryset_com_auditoria(request)
+
+        qs, use_distinct = super().get_search_results(
+            request, queryset_ampliado, search_term
+        )
+
+        qs = filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=qs,
+            campo_ua="unidade_administrativa",
+        )
+
+        return qs, use_distinct
+
+    def get_queryset(self, request):
+        qs = self._get_queryset_com_auditoria(request)
+
+        if self._deve_aplicar_filtro_padrao_baixados(request):
+            qs = self._aplicar_filtro_padrao_baixados(qs)
+
         return qs
 
     def get_export_queryset(self, request):
@@ -611,20 +641,10 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             campo_ua="unidade_administrativa",
         )
 
-        baixa_data_sq = (
-            BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
-            .order_by("-baixa__data_baixa")
-            .values("baixa__data_baixa")[:1]
-        )
-        queryset = queryset.annotate(baixa_data=Subquery(baixa_data_sq))
+        queryset = self._anotar_baixa_data(queryset)
 
         if "baixados_mais_de_um_periodo" not in request.GET:
-            ano_corrente = timezone.localdate().year
-            ano_limite = ano_corrente - 1
-            queryset = queryset.exclude(
-                status=constants.BAIXA_FISICA,
-                baixa_data__year__lt=ano_limite,
-            )
+            queryset = self._aplicar_filtro_padrao_baixados(queryset)
 
         return queryset
 
@@ -877,8 +897,50 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         except Exception:
             pass
         return "—"
+    
+    def _aplicar_filtros_autocomplete_bem(self, request, qs, use_distinct):
+        app_label = request.GET.get("app_label")
+        model_name = request.GET.get("model_name")
+        field_name = request.GET.get("field_name")
+
+        if not (
+            app_label == "bem_patrimonial"
+            and model_name in ("movimentacaobensitem", "baixafisicabensitem")
+            and field_name == "bem"
+        ):
+            return qs, use_distinct
+
+        ua_origem = request.GET.get("ua_origem")
+        if not ua_origem:
+            return qs.none(), use_distinct
+
+        qs = qs.filter(status=constants.APROVADO).filter(
+            unidade_administrativa_id=ua_origem
+        )
+
+        exclude_bens = request.GET.get("exclude_bens")
+        if not exclude_bens:
+            return qs, use_distinct
+
+        ids = [int(pk) for pk in exclude_bens.split(",") if pk.isdigit()]
+        if ids:
+            qs = qs.exclude(pk__in=ids)
+
+        return qs, use_distinct
+    
+    def changelist_view(self, request, extra_context=None):
+        response = super().changelist_view(request, extra_context=extra_context)
+
+        if getattr(request, "_busca_com_baixados_antigos", False):
+            params = request.GET.copy()
+            params["baixados_mais_de_um_periodo"] = "1"
+            return HttpResponseRedirect(f"{request.path}?{params.urlencode()}")
+
+        return response
 
     def get_search_results(self, request, queryset, search_term):
+        request._busca_com_baixados_antigos = False
+
         qs, use_distinct = super().get_search_results(request, queryset, search_term)
         qs = filtrar_queryset_por_escopo(
             usuario=request.user,
@@ -887,26 +949,16 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
         if request.path.endswith("/autocomplete/"):
-            app_label = request.GET.get("app_label")
-            model_name = request.GET.get("model_name")
-            field_name = request.GET.get("field_name")
+            return self._aplicar_filtros_autocomplete_bem(
+                request, qs, use_distinct
+            )
 
-            if (
-                app_label == "bem_patrimonial"
-                and model_name in ("movimentacaobensitem", "baixafisicabensitem")
-                and field_name == "bem"
-            ):
-                ua_origem = request.GET.get("ua_origem")
-                if not ua_origem:
-                    return qs.none(), use_distinct
-                qs = qs.filter(status=constants.APROVADO).filter(
-                    unidade_administrativa_id=ua_origem
-                )
-
-                exclude_bens = request.GET.get("exclude_bens")
-                if exclude_bens:
-                    ids = [int(pk) for pk in exclude_bens.split(",") if pk.isdigit()]
-                    if ids:
-                        qs = qs.exclude(pk__in=ids)
+        if (
+            search_term
+            and "baixados_mais_de_um_periodo" not in request.GET
+            and not qs.exists()
+        ):
+            request._busca_com_baixados_antigos = True
+            return self._buscar_com_baixados_antigos(request, search_term)
 
         return qs, use_distinct
