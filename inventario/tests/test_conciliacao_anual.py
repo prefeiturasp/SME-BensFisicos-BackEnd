@@ -32,8 +32,19 @@ class ConciliacaoAnualModelTest(TestCase):
             criado_por=self.usuario,
         )
 
+    def criar_parametro_anual_vigente(self):
+        hoje = timezone.localdate()
+        return ParametroConciliacaoAnual.objects.create(
+            ano_referencia=hoje.year - 1,
+            periodo_inicial=hoje - timezone.timedelta(days=1),
+            periodo_final=hoje + timezone.timedelta(days=1),
+            ativo=True,
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
+        )
+
     def test_define_periodo_final_automaticamente(self):
         self.criar_bem()
+        self.criar_parametro_anual_vigente()
 
         conciliacao = ConciliacaoUA.objects.create(
             unidade_administrativa=self.ua,
@@ -46,6 +57,7 @@ class ConciliacaoAnualModelTest(TestCase):
 
     def test_nao_permite_duas_anuais_mesmo_ano(self):
         self.criar_bem()
+        self.criar_parametro_anual_vigente()
 
         ConciliacaoUA.objects.create(
             unidade_administrativa=self.ua,
