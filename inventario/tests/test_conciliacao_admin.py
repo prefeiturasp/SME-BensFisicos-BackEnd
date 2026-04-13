@@ -44,7 +44,9 @@ class ConciliacaoAdminBaseTest(TestCase):
         )
         cls.superuser.unidade_orcamentaria = cls.uo
         cls.superuser.must_change_password = False
-        cls.superuser.save(update_fields=["unidade_orcamentaria", "must_change_password"])
+        cls.superuser.save(
+            update_fields=["unidade_orcamentaria", "must_change_password"]
+        )
         cls.superuser.groups.add(cls.grupo_gestor)
 
         cls.criador = user_model.objects.create_user(
@@ -137,10 +139,7 @@ class ConciliacaoUAAdminFormTest(ConciliacaoAdminBaseTest):
     def test_form_em_edicao_mantem_campos_bloqueados(self):
         request = self.factory.get("/admin/")
         request.user = self.superuser
-        form = ConciliacaoUAAdminForm(
-            instance=self.conciliacao,
-            request=request,
-        )
+        form = ConciliacaoUAAdminForm(instance=self.conciliacao, request=request)
 
         self.assertTrue(form.fields["unidade_administrativa"].disabled)
         self.assertTrue(form.fields["tipo"].disabled)
@@ -151,10 +150,7 @@ class ConciliacaoAdminMethodsTest(ConciliacaoAdminBaseTest):
     def test_get_itens_conciliacao_url_monta_query_da_conciliacao(self):
         url = self.conciliacao_admin._get_itens_conciliacao_url(self.conciliacao)
 
-        self.assertIn(
-            reverse("admin:inventario_itemconciliacao_changelist"),
-            url,
-        )
+        self.assertIn(reverse("admin:inventario_itemconciliacao_changelist"), url)
         self.assertIn(f"conciliacao__id__exact={self.conciliacao.pk}", url)
 
     def test_situacao_display_renderiza_badge_padronizado(self):
@@ -189,9 +185,8 @@ class ItemConciliacaoChangeListViewTest(ConciliacaoAdminBaseTest):
         self.assertContains(response, self.bem_1.numero_patrimonial)
         self.assertContains(response, self.bem_2.numero_patrimonial)
         self.assertNotContains(response, self.bem_outro.numero_patrimonial)
-        self.assertNotContains(response, "Conciliação</th>", html=True)
+        self.assertNotContains(response, "Conciliação</th>")
         self.assertNotContains(response, "total)")
-
 
     def test_changelist_filtra_por_nome_do_bem(self):
         url = reverse("admin:inventario_itemconciliacao_changelist")
