@@ -33,6 +33,7 @@ from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
 
 URL_NAME_CONCILIACAOUA_CHANGE = "admin:inventario_conciliacaoua_change"
 URL_NAME_CONCILIACAOUA_CHANGELIST = "admin:inventario_conciliacaoua_changelist"
+HIDE_CRUD_ICONS_CSS = "css/hide_crud_icons.css"
 
 
 class AnoVigenciaSelectFilter(SimpleListFilter):
@@ -142,7 +143,7 @@ class ParametroConciliacaoAnualAdmin(admin.ModelAdmin):
     ordering = ("-ano_referencia", "-ativo")
 
     class Media:
-        css = {"all": ("css/hide_crud_icons.css",)}
+        css = {"all": (HIDE_CRUD_ICONS_CSS,)}
 
     def get_queryset(self, request):
         qs = super().get_queryset(request).select_related("unidade_orcamentaria")
@@ -184,6 +185,8 @@ class ParametroConciliacaoAnualAdmin(admin.ModelAdmin):
 @admin.register(ItemConciliacao)
 class ItemConciliacaoAdmin(admin.ModelAdmin):
     change_list_template = "admin/inventario/itemconciliacao/change_list.html"
+    change_form_template = "admin/inventario/itemconciliacao/change_form.html"
+    object_history_template = "admin/inventario/itemconciliacao/object_history.html"
     list_display = (
         "numero_patrimonial_bem",
         "nome_bem",
@@ -203,7 +206,7 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
     class Media:
         css = {
             "all": (
-                "css/hide_crud_icons.css",
+                HIDE_CRUD_ICONS_CSS,
                 "css/admin_item_conciliacao.css",
             )
         }
@@ -230,6 +233,44 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
 
     def get_actions(self, request):
         return {}
+
+    def _get_item_change_voltar_url(self, request, obj):
+        preserved_filters = request.GET.get("_changelist_filters")
+        if preserved_filters:
+            return "{}?{}".format(
+                reverse("admin:inventario_itemconciliacao_changelist"),
+                preserved_filters,
+            )
+        return "{}?{}".format(
+            reverse("admin:inventario_itemconciliacao_changelist"),
+            urlencode({"conciliacao__id__exact": obj.conciliacao.pk}),
+        )
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj:
+            extra_context["voltar_url"] = self._get_item_change_voltar_url(request, obj)
+        extra_context["show_close"] = False
+        extra_context["show_save"] = False
+        extra_context["show_save_and_continue"] = False
+        extra_context["show_save_and_add_another"] = False
+        return super().change_view(request, object_id, form_url, extra_context)
+
+    def history_view(self, request, object_id, extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id)
+        if obj:
+            extra_context["lista_url"] = self._get_item_change_voltar_url(request, obj)
+            extra_context["change_url"] = reverse(
+                "admin:inventario_itemconciliacao_change",
+                args=[obj.pk],
+            )
+            extra_context["voltar_url"] = reverse(
+                "admin:inventario_itemconciliacao_change",
+                args=[obj.pk],
+            )
+        return super().history_view(request, object_id, extra_context)
 
     def get_search_results(self, request, queryset, search_term):
         queryset, use_distinct = super().get_search_results(
@@ -405,7 +446,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     class Media:
         css = {
             "all": (
-                "css/hide_crud_icons.css",
+                HIDE_CRUD_ICONS_CSS,
                 "css/admin_filtros.css",
             )
         }
@@ -636,6 +677,90 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             urlencode({"conciliacao__id__exact": conciliacao.pk}),
         )
 
+    def _get_item_conciliacao(self, item_id):
+        return (
+            ItemConciliacao.objects.select_related("bem", "conciliacao")
+            .filter(pk=item_id)
+            .first()
+        )
+
+    def _get_voltar_url(self, request, conciliacao):
+        return request.GET.get("next") or self._get_itens_conciliacao_url(conciliacao)
+
+    def _validar_item_para_ocorrencia(self, request, item):
+        if not item.conciliacao.esta_aberto:
+            messages.error(request, "ConciliaÃ§Ã£o fechada nÃ£o permite ediÃ§Ãµes")
+            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
+
+        if item.permite_registrar_ocorrencia:
+            return None
+
+        messages.error(
+            request,
+            "Bem com status 'Baixa FÃ­sica' nÃ£o pode ter ocorrÃªncia registrada. "
+            "Este status Ã© definitivo.",
+        )
+        return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
+
+    def _registrar_ocorrencia_post(self, request, item, voltar_url):
+        situacao = request.POST.get("situacao")
+        if not situacao:
+            return "Selecione uma situaÃ§Ã£o."
+
+        try:
+            registrar_ocorrencia(
+                item=item,
+                situacao=situacao,
+                observacao=request.POST.get("observacao", ""),
+                divergencia=request.POST.get("divergencia", ""),
+                usuario=request.user,
+            )
+            messages.success(request, "OcorrÃªncia registrada com sucesso")
+            return redirect(voltar_url)
+        except ValidationError as e:
+            return str(e)
+
+    def _get_situacoes_disponiveis_para_item(self, item):
+        situacoes_disponiveis = list(constants.SITUACOES_ITEM_CONCILIACAO)
+        situacoes_disponiveis = [
+            s for s in situacoes_disponiveis if s[0] != constants.BAIXA_FISICA
+        ]
+
+        if not item.pode_resolver_situacao:
+            situacoes_disponiveis = [
+                s
+                for s in situacoes_disponiveis
+                if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
+            ]
+
+        if not item.pode_marcar_como_encontrado:
+            situacoes_disponiveis = [
+                s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO
+            ]
+
+        return situacoes_disponiveis
+
+    def _get_registrar_ocorrencia_context(
+        self, request, item, voltar_url, erro_formulario
+    ):
+        is_edicao = item.tem_ocorrencia
+        return {
+            **self.admin_site.each_context(request),
+            "item": item,
+            "situacoes_disponiveis": self._get_situacoes_disponiveis_para_item(item),
+            "DIVERGENTE": constants.DIVERGENTE,
+            "opts": self.model._meta,
+            "has_view_permission": self.has_view_permission(request),
+            "original": item.conciliacao,
+            "title": f"Registrar OcorrÃªncia - {item.bem.numero_patrimonial}",
+            "is_edicao": is_edicao,
+            "situacao_atual": item.situacao if is_edicao else None,
+            "observacao_atual": item.observacao if is_edicao else "",
+            "divergencia_atual": item.divergencia if is_edicao else "",
+            "voltar_url": voltar_url,
+            "erro_formulario": erro_formulario,
+        }
+
     def finalizar_conciliacao_view(self, request, pk: int):
         obj = self.get_object(request, pk)
         if not obj:
@@ -656,94 +781,33 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return redirect(URL_NAME_CONCILIACAOUA_CHANGE, obj.pk)
 
     def registrar_ocorrencia_view(self, request, item_id):
-        try:
-            item = ItemConciliacao.objects.select_related("bem", "conciliacao").get(
-                pk=item_id
-            )
-        except ItemConciliacao.DoesNotExist:
-            messages.error(request, "Item não encontrado")
+        item = self._get_item_conciliacao(item_id)
+        if not item:
+            messages.error(request, "Item n?o encontrado")
             return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
 
-        if not item.conciliacao.esta_aberto:
-            messages.error(request, "Conciliação fechada não permite edições")
-            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
+        redirect_response = self._validar_item_para_ocorrencia(request, item)
+        if redirect_response:
+            return redirect_response
 
-        if not item.permite_registrar_ocorrencia:
-            messages.error(
-                request,
-                "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
-                "Este status é definitivo.",
-            )
-            return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
-
-        voltar_url = request.GET.get("next") or self._get_itens_conciliacao_url(
-            item.conciliacao
-        )
+        voltar_url = self._get_voltar_url(request, item.conciliacao)
         erro_formulario = None
 
         if request.method == "POST":
-            situacao = request.POST.get("situacao")
-            observacao = request.POST.get("observacao", "")
-            divergencia = request.POST.get("divergencia", "")
-
-            if not situacao:
-                erro_formulario = "Selecione uma situação."
-            else:
-                try:
-                    registrar_ocorrencia(
-                        item=item,
-                        situacao=situacao,
-                        observacao=observacao,
-                        divergencia=divergencia,
-                        usuario=request.user,
-                    )
-                    messages.success(request, "Ocorrência registrada com sucesso")
-                    return redirect(voltar_url)
-                except ValidationError as e:
-                    erro_formulario = str(e)
+            resultado_post = self._registrar_ocorrencia_post(request, item, voltar_url)
+            if hasattr(resultado_post, "status_code"):
+                return resultado_post
+            erro_formulario = resultado_post
 
             if erro_formulario:
                 messages.error(request, erro_formulario)
 
-        situacoes_disponiveis = list(constants.SITUACOES_ITEM_CONCILIACAO)
-
-        situacoes_disponiveis = [
-            s for s in situacoes_disponiveis if s[0] != constants.BAIXA_FISICA
-        ]
-
-        if not item.pode_resolver_situacao:
-            situacoes_disponiveis = [
-                s
-                for s in situacoes_disponiveis
-                if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
-            ]
-
-        if not item.pode_marcar_como_encontrado:
-            situacoes_disponiveis = [
-                s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO
-            ]
-
-        is_edicao = item.tem_ocorrencia
-        situacao_atual = item.situacao if is_edicao else None
-        observacao_atual = item.observacao if is_edicao else ""
-        divergencia_atual = item.divergencia if is_edicao else ""
-
-        context = {
-            **self.admin_site.each_context(request),
-            "item": item,
-            "situacoes_disponiveis": situacoes_disponiveis,
-            "DIVERGENTE": constants.DIVERGENTE,
-            "opts": self.model._meta,
-            "has_view_permission": self.has_view_permission(request),
-            "original": item.conciliacao,
-            "title": f"Registrar Ocorrência - {item.bem.numero_patrimonial}",
-            "is_edicao": is_edicao,
-            "situacao_atual": situacao_atual,
-            "observacao_atual": observacao_atual,
-            "divergencia_atual": divergencia_atual,
-            "voltar_url": voltar_url,
-            "erro_formulario": erro_formulario,
-        }
+        context = self._get_registrar_ocorrencia_context(
+            request=request,
+            item=item,
+            voltar_url=voltar_url,
+            erro_formulario=erro_formulario,
+        )
 
         return render(request, "admin/conciliacao/registrar_ocorrencia.html", context)
 

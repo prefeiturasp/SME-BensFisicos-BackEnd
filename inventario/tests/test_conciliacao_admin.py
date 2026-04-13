@@ -202,6 +202,51 @@ class ItemConciliacaoChangeListViewTest(ConciliacaoAdminBaseTest):
         self.assertContains(response, self.bem_2.numero_patrimonial)
         self.assertNotContains(response, self.bem_1.numero_patrimonial)
 
+    def test_change_view_exibe_voltar_com_filtro_preservado(self):
+        url = reverse(
+            "admin:inventario_itemconciliacao_change",
+            args=[self.item_sem_ocorrencia.pk],
+        )
+        response = self.client.get(
+            url,
+            {"_changelist_filters": f"conciliacao__id__exact={self.conciliacao.pk}"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="/admin/inventario/itemconciliacao/?conciliacao__id__exact={self.conciliacao.pk}"',
+        )
+        self.assertContains(response, ">Voltar<", html=False)
+        self.assertNotContains(response, ">Close<", html=False)
+
+    def test_change_view_sem_filtro_preservado_volta_para_conciliacao_correta(self):
+        url = reverse(
+            "admin:inventario_itemconciliacao_change",
+            args=[self.item_sem_ocorrencia.pk],
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="/admin/inventario/itemconciliacao/?conciliacao__id__exact={self.conciliacao.pk}"',
+        )
+
+    def test_history_view_exibe_voltar_para_change_do_item(self):
+        url = reverse(
+            "admin:inventario_itemconciliacao_history",
+            args=[self.item_sem_ocorrencia.pk],
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="/admin/inventario/itemconciliacao/{self.item_sem_ocorrencia.pk}/change/"',
+        )
+        self.assertContains(response, ">Voltar<", html=False)
+
 
 class RegistrarOcorrenciaAdminViewTest(ConciliacaoAdminBaseTest):
     def test_get_registrar_ocorrencia_renderiza_fluxo_admin_com_botoes_novos(self):
