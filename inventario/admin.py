@@ -33,7 +33,9 @@ from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
 
 URL_NAME_CONCILIACAOUA_CHANGE = "admin:inventario_conciliacaoua_change"
 URL_NAME_CONCILIACAOUA_CHANGELIST = "admin:inventario_conciliacaoua_changelist"
+URL_NAME_ITEMCONCILIACAO_CHANGELIST = "admin:inventario_itemconciliacao_changelist"
 HIDE_CRUD_ICONS_CSS = "css/hide_crud_icons.css"
+URL_WITH_QUERY_TEMPLATE = "{}?{}"
 
 
 class AnoVigenciaSelectFilter(SimpleListFilter):
@@ -237,12 +239,12 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
     def _get_item_change_voltar_url(self, request, obj):
         preserved_filters = request.GET.get("_changelist_filters")
         if preserved_filters:
-            return "{}?{}".format(
-                reverse("admin:inventario_itemconciliacao_changelist"),
+            return URL_WITH_QUERY_TEMPLATE.format(
+                reverse(URL_NAME_ITEMCONCILIACAO_CHANGELIST),
                 preserved_filters,
             )
-        return "{}?{}".format(
-            reverse("admin:inventario_itemconciliacao_changelist"),
+        return URL_WITH_QUERY_TEMPLATE.format(
+            reverse(URL_NAME_ITEMCONCILIACAO_CHANGELIST),
             urlencode({"conciliacao__id__exact": obj.conciliacao.pk}),
         )
 
@@ -672,8 +674,8 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def _get_itens_conciliacao_url(self, conciliacao):
-        return "{}?{}".format(
-            reverse("admin:inventario_itemconciliacao_changelist"),
+        return URL_WITH_QUERY_TEMPLATE.format(
+            reverse(URL_NAME_ITEMCONCILIACAO_CHANGELIST),
             urlencode({"conciliacao__id__exact": conciliacao.pk}),
         )
 
