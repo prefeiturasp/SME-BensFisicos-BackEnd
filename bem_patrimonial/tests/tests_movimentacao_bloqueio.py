@@ -839,96 +839,101 @@ class PermissoesEntreUOsAdminActionsTestCase(TestCase):
         )
         return movimentacao
 
+    def _executar_acao(self, action, user, movimentacao=None):
+        movimentacao = movimentacao or self.movimentacao
+        request = self._create_request_with_messages(user)
+        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=movimentacao.pk)
+
+        action(self.admin, request, queryset)
+        movimentacao.refresh_from_db()
+        return request, movimentacao
+
+    def _assert_acao_bloqueada(self, action, user, mensagem, movimentacao=None):
+        request, movimentacao = self._executar_acao(action, user, movimentacao)
+        self.assertEqual(movimentacao.status, ENVIADA)
+        mensagens = [str(item) for item in messages.get_messages(request)]
+        self.assertTrue(any(mensagem in item for item in mensagens))
+
+    def _assert_acao_permitida(
+        self,
+        action,
+        user,
+        expected_status,
+        campo_usuario,
+        movimentacao=None,
+    ):
+        _, movimentacao = self._executar_acao(action, user, movimentacao)
+        self.assertEqual(movimentacao.status, expected_status)
+        self.assertEqual(getattr(movimentacao, campo_usuario), user)
+
     def test_gestor_origem_nao_pode_aprovar_movimentacao_entre_uos(self):
-        request = self._create_request_with_messages(self.gestor_origem)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        aprovar_solicitacao(self.admin, request, queryset)
-
-        self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, ENVIADA)
-        mensagens = [str(m) for m in messages.get_messages(request)]
-        self.assertTrue(any("Apenas gestores da UO de destino" in msg for msg in mensagens))
+        self._assert_acao_bloqueada(
+            aprovar_solicitacao,
+            self.gestor_origem,
+            "Apenas gestores da UO de destino",
+        )
 
     def test_gestor_origem_nao_pode_rejeitar_movimentacao_entre_uos(self):
-        request = self._create_request_with_messages(self.gestor_origem)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        rejeitar_solicitacao(self.admin, request, queryset)
-
-        self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, ENVIADA)
-        mensagens = [str(m) for m in messages.get_messages(request)]
-        self.assertTrue(any("Apenas gestores da UO de destino" in msg for msg in mensagens))
+        self._assert_acao_bloqueada(
+            rejeitar_solicitacao,
+            self.gestor_origem,
+            "Apenas gestores da UO de destino",
+        )
 
     def test_gestor_destino_pode_aprovar_movimentacao_entre_uos(self):
-        request = self._create_request_with_messages(self.gestor_destino)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        aprovar_solicitacao(self.admin, request, queryset)
-
-        self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, ACEITA)
-        self.assertEqual(self.movimentacao.aprovado_por, self.gestor_destino)
+        self._assert_acao_permitida(
+            aprovar_solicitacao,
+            self.gestor_destino,
+            ACEITA,
+            "aprovado_por",
+        )
 
     def test_gestor_destino_pode_rejeitar_movimentacao_entre_uos(self):
-        request = self._create_request_with_messages(self.gestor_destino)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        rejeitar_solicitacao(self.admin, request, queryset)
-
-        self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, REJEITADA)
-        self.assertEqual(self.movimentacao.rejeitado_por, self.gestor_destino)
+        self._assert_acao_permitida(
+            rejeitar_solicitacao,
+            self.gestor_destino,
+            REJEITADA,
+            "rejeitado_por",
+        )
 
     @patch(
         "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
     )
     def test_gestor_origem_pode_cancelar_movimentacao_entre_uos(self, mock_email):
-        request = self._create_request_with_messages(self.gestor_origem)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        cancelar_solicitacao(self.admin, request, queryset)
-
-        self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, CANCELADA)
-        self.assertEqual(self.movimentacao.cancelado_por, self.gestor_origem)
+        self._assert_acao_permitida(
+            cancelar_solicitacao,
+            self.gestor_origem,
+            CANCELADA,
+            "cancelado_por",
+        )
         mock_email.assert_called_once()
 
     @patch(
         "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
     )
     def test_gestor_destino_pode_cancelar_movimentacao_entre_uos(self, mock_email):
-        request = self._create_request_with_messages(self.gestor_destino)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
-
-        cancelar_solicitacao(self.admin, request, queryset)
-
-        self.movimentacao.refresh_from_db()
-        self.assertEqual(self.movimentacao.status, CANCELADA)
-        self.assertEqual(self.movimentacao.cancelado_por, self.gestor_destino)
+        self._assert_acao_permitida(
+            cancelar_solicitacao,
+            self.gestor_destino,
+            CANCELADA,
+            "cancelado_por",
+        )
         mock_email.assert_called_once()
 
     def test_gestor_origem_nao_pode_aprovar_propria_movimentacao_entre_uos(self):
         movimentacao = self._create_movimentacao(solicitado_por=self.gestor_origem)
-        request = self._create_request_with_messages(self.gestor_origem)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=movimentacao.pk)
-
-        aprovar_solicitacao(self.admin, request, queryset)
-
-        movimentacao.refresh_from_db()
-        self.assertEqual(movimentacao.status, ENVIADA)
-        mensagens = [str(m) for m in messages.get_messages(request)]
-        self.assertTrue(any("não pode aprovar sua própria solicitação em movimentações entre UOs" in msg for msg in mensagens))
+        self._assert_acao_bloqueada(
+            aprovar_solicitacao,
+            self.gestor_origem,
+            "não pode aprovar sua própria solicitação em movimentações entre UOs",
+            movimentacao,
+        )
 
     def test_gestor_destino_nao_pode_rejeitar_propria_movimentacao_entre_uos(self):
         movimentacao = self._create_movimentacao(solicitado_por=self.gestor_destino)
-        request = self._create_request_with_messages(self.gestor_destino)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=movimentacao.pk)
-
-        rejeitar_solicitacao(self.admin, request, queryset)
-
-        movimentacao.refresh_from_db()
-        self.assertEqual(movimentacao.status, ENVIADA)
-        mensagens = [str(m) for m in messages.get_messages(request)]
-        self.assertTrue(any("não pode rejeitar sua própria solicitação em movimentações entre UOs" in msg for msg in mensagens))
+        self._assert_acao_bloqueada(
+            rejeitar_solicitacao,
+            self.gestor_destino,
+            "não pode rejeitar sua própria solicitação em movimentações entre UOs",
+            movimentacao,
+        )

@@ -82,30 +82,28 @@ def _mensagem_mov_origem_destino_inativas(mov, request, acao_verb):
     return False
 
 
-def _check_operador_destino_aprovacao(mov, request):
-    if _movimentacao_entre_uos_diferentes(mov):
-        return False
-    if not request.user.is_operador_inventario:
+def _check_operador_destino_mesma_uo(mov, request, acao):
+    if _movimentacao_entre_uos_diferentes(mov) or not request.user.is_operador_inventario:
         return False
     if mov.unidade_administrativa_destino != request.user.unidade_administrativa:
         messages.add_message(
             request,
             messages.ERROR,
             f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
-            "podem aprovar esta movimentação.",
+            f"podem {acao} esta movimentação.",
         )
         return True
     if mov.solicitado_por_id == request.user.pk:
         messages.add_message(
             request,
             messages.WARNING,
-            f"Movimentação #{mov.pk}: Você não pode aprovar sua própria solicitação.",
+            f"Movimentação #{mov.pk}: Você não pode {acao} sua própria solicitação.",
         )
         return True
     return False
 
 
-def _check_aprovacao_entre_uos(mov, request):
+def _check_acao_entre_uos(mov, request, acao):
     if not _movimentacao_entre_uos_diferentes(mov):
         return False
 
@@ -114,7 +112,7 @@ def _check_aprovacao_entre_uos(mov, request):
         messages.add_message(
             request,
             messages.WARNING,
-            f"Movimentação #{mov.pk}: Você não pode aprovar sua própria solicitação em movimentações entre UOs.",
+            f"Movimentação #{mov.pk}: Você não pode {acao} sua própria solicitação em movimentações entre UOs.",
         )
         return True
 
@@ -123,7 +121,7 @@ def _check_aprovacao_entre_uos(mov, request):
             messages.add_message(
                 request,
                 messages.ERROR,
-                f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino podem aprovar esta movimentação.",
+                f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino podem {acao} esta movimentação.",
             )
             return True
         return False
@@ -134,66 +132,7 @@ def _check_aprovacao_entre_uos(mov, request):
         messages.add_message(
             request,
             messages.ERROR,
-            f"Movimentação #{mov.pk}: Apenas gestores da UO de destino podem aprovar esta movimentação entre UOs.",
-        )
-        return True
-
-    return False
-
-
-def _check_operador_destino_rejeicao(mov, request):
-    if _movimentacao_entre_uos_diferentes(mov):
-        return False
-    if not request.user.is_operador_inventario:
-        return False
-    if mov.unidade_administrativa_destino != request.user.unidade_administrativa:
-        messages.add_message(
-            request,
-            messages.ERROR,
-            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
-            "podem rejeitar esta movimentação.",
-        )
-        return True
-    if mov.solicitado_por_id == request.user.pk:
-        messages.add_message(
-            request,
-            messages.WARNING,
-            f"Movimentação #{mov.pk}: Você não pode rejeitar sua própria solicitação.",
-        )
-        return True
-    return False
-
-
-def _check_rejeicao_entre_uos(mov, request):
-    if not _movimentacao_entre_uos_diferentes(mov):
-        return False
-
-    usuario = request.user
-    if mov.solicitado_por_id == usuario.pk:
-        messages.add_message(
-            request,
-            messages.WARNING,
-            f"Movimentação #{mov.pk}: Você não pode rejeitar sua própria solicitação em movimentações entre UOs.",
-        )
-        return True
-
-    if usuario.is_operador_inventario and not usuario.is_gestor_patrimonio:
-        if mov.unidade_administrativa_destino_id != usuario.unidade_administrativa_id:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino podem rejeitar esta movimentação.",
-            )
-            return True
-        return False
-
-    if usuario.is_gestor_patrimonio and not _usuario_e_gestor_da_uo(
-        usuario, mov.unidade_administrativa_destino.unidade_orcamentaria_id
-    ):
-        messages.add_message(
-            request,
-            messages.ERROR,
-            f"Movimentação #{mov.pk}: Apenas gestores da UO de destino podem rejeitar esta movimentação entre UOs.",
+            f"Movimentação #{mov.pk}: Apenas gestores da UO de destino podem {acao} esta movimentação entre UOs.",
         )
         return True
 
@@ -233,6 +172,18 @@ def _bloqueio_se_algum(request, mov, checks):
     return False
 
 
+def _nao_pode_processar_movimentacao(mov, request, checks, acao):
+    if _bloqueio_se_algum(request, mov, checks):
+        return True
+    if _mensagem_mov_origem_destino_inativas(mov, request, acao):
+        return True
+    if _check_acao_entre_uos(mov, request, acao):
+        return True
+    if _check_operador_destino_mesma_uo(mov, request, acao):
+        return True
+    return False
+
+
 def _nao_pode_aprovar(mov, request):
     checks = [
         (
@@ -251,15 +202,7 @@ def _nao_pode_aprovar(mov, request):
             messages.ERROR,
         ),
     ]
-    if _bloqueio_se_algum(request, mov, checks):
-        return True
-    if _mensagem_mov_origem_destino_inativas(mov, request, "aprovar"):
-        return True
-    if _check_aprovacao_entre_uos(mov, request):
-        return True
-    if _check_operador_destino_aprovacao(mov, request):
-        return True
-    return False
+    return _nao_pode_processar_movimentacao(mov, request, checks, "aprovar")
 
 
 def aprovar_solicitacao(modeladmin, request, queryset):
@@ -315,15 +258,7 @@ def _nao_pode_rejeitar(mov, request):
             messages.ERROR,
         ),
     ]
-    if _bloqueio_se_algum(request, mov, checks):
-        return True
-    if _mensagem_mov_origem_destino_inativas(mov, request, "rejeitar"):
-        return True
-    if _check_rejeicao_entre_uos(mov, request):
-        return True
-    if _check_operador_destino_rejeicao(mov, request):
-        return True
-    return False
+    return _nao_pode_processar_movimentacao(mov, request, checks, "rejeitar")
 
 
 def rejeitar_solicitacao(modeladmin, request, queryset):

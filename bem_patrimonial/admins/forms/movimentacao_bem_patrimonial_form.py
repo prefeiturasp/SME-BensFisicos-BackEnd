@@ -392,7 +392,6 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        self.is_cleaned = True
         user = self._get_user()
         is_editing = self.instance.pk is not None
         if not is_editing:
