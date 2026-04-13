@@ -1,0 +1,64 @@
+{% extends "admin/change_list.html" %}
+{% load i18n admin_urls static %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=cl.opts.app_label %}">{{ cl.opts.app_config.verbose_name }}</a>
+    {% if conciliacao_origem %}
+      &rsaquo; <a href="{% url 'admin:inventario_conciliacaoua_changelist' %}">Gerenciamento de Conciliações</a>
+      &rsaquo; <a href="{{ voltar_conciliacao_url }}">{{ conciliacao_origem.numero_conciliacao }} - {{ conciliacao_origem.unidade_administrativa.sigla }}</a>
+      &rsaquo; Itens de Conciliação
+    {% else %}
+      &rsaquo; Itens de Conciliação
+    {% endif %}
+  </div>
+{% endblock %}
+
+{% block object-tools-items %}
+  {% if voltar_conciliacao_url and conciliacao_origem %}
+    <li>
+      <a
+        href="{{ voltar_conciliacao_url }}"
+        class="button"
+        style="background:#417690; border-color:#417690; color:#fff;"
+      >
+        Voltar para a Conciliação
+      </a>
+    </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
+
+{% block search %}
+  {% if cl.search_fields %}
+    <div id="toolbar">
+      <form id="changelist-search" method="get">
+        <div>
+          <label for="searchbar">
+            <img src="{% static 'admin/img/search.svg' %}" alt="{% translate 'Search' %}">
+          </label>
+          <input
+            type="text"
+            size="40"
+            name="q"
+            value="{{ cl.query }}"
+            id="searchbar"
+            autofocus
+            {% if cl.search_help_text %}aria-describedby="searchbar_helptext"{% endif %}
+          >
+          <input type="submit" value="{% translate 'Search' %}">
+          {% for pair in cl.params.items %}
+            {% if pair.0 != "q" %}
+              <input type="hidden" name="{{ pair.0 }}" value="{{ pair.1 }}">
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% if cl.search_help_text %}
+          <br class="clear">
+          <div class="help" id="searchbar_helptext">{{ cl.search_help_text }}</div>
+        {% endif %}
+      </form>
+    </div>
+  {% endif %}
+{% endblock %}

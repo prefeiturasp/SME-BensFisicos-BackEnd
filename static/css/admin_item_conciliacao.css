@@ -1,0 +1,5 @@
+body.app-inventario.model-itemconciliacao.change-list th.column-situacao_display,
+body.app-inventario.model-itemconciliacao.change-list td.field-situacao_display {
+  white-space: nowrap;
+  width: 190px;
+}
