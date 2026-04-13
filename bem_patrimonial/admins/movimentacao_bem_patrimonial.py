@@ -27,7 +27,30 @@ from dados_comuns.escopo import (
 )
 
 
-UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
+def _obter_uo_id_do_usuario(usuario):
+    uo_id = getattr(usuario, "unidade_orcamentaria_id", None)
+    if uo_id:
+        return uo_id
+
+    unidade_administrativa = getattr(usuario, "unidade_administrativa", None)
+    return getattr(unidade_administrativa, "unidade_orcamentaria_id", None)
+
+
+def _movimentacao_entre_uos_diferentes(mov):
+    origem_uo_id = getattr(
+        mov.unidade_administrativa_origem, "unidade_orcamentaria_id", None
+    )
+    destino_uo_id = getattr(
+        mov.unidade_administrativa_destino, "unidade_orcamentaria_id", None
+    )
+    return bool(origem_uo_id and destino_uo_id and origem_uo_id != destino_uo_id)
+
+
+def _usuario_e_gestor_da_uo(usuario, uo_id):
+    return bool(
+        getattr(usuario, "is_gestor_patrimonio", False)
+        and _obter_uo_id_do_usuario(usuario) == uo_id
+    )
 
 
 def _bens_da_movimentacao(mov):
@@ -60,6 +83,8 @@ def _mensagem_mov_origem_destino_inativas(mov, request, acao_verb):
 
 
 def _check_operador_destino_aprovacao(mov, request):
+    if _movimentacao_entre_uos_diferentes(mov):
+        return False
     if not request.user.is_operador_inventario:
         return False
     if mov.unidade_administrativa_destino != request.user.unidade_administrativa:
@@ -80,7 +105,45 @@ def _check_operador_destino_aprovacao(mov, request):
     return False
 
 
+def _check_aprovacao_entre_uos(mov, request):
+    if not _movimentacao_entre_uos_diferentes(mov):
+        return False
+
+    usuario = request.user
+    if mov.solicitado_por_id == usuario.pk:
+        messages.add_message(
+            request,
+            messages.WARNING,
+            f"Movimentação #{mov.pk}: Você não pode aprovar sua própria solicitação em movimentações entre UOs.",
+        )
+        return True
+
+    if usuario.is_operador_inventario and not usuario.is_gestor_patrimonio:
+        if mov.unidade_administrativa_destino_id != usuario.unidade_administrativa_id:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino podem aprovar esta movimentação.",
+            )
+            return True
+        return False
+
+    if usuario.is_gestor_patrimonio and not _usuario_e_gestor_da_uo(
+        usuario, mov.unidade_administrativa_destino.unidade_orcamentaria_id
+    ):
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f"Movimentação #{mov.pk}: Apenas gestores da UO de destino podem aprovar esta movimentação entre UOs.",
+        )
+        return True
+
+    return False
+
+
 def _check_operador_destino_rejeicao(mov, request):
+    if _movimentacao_entre_uos_diferentes(mov):
+        return False
     if not request.user.is_operador_inventario:
         return False
     if mov.unidade_administrativa_destino != request.user.unidade_administrativa:
@@ -99,6 +162,66 @@ def _check_operador_destino_rejeicao(mov, request):
         )
         return True
     return False
+
+
+def _check_rejeicao_entre_uos(mov, request):
+    if not _movimentacao_entre_uos_diferentes(mov):
+        return False
+
+    usuario = request.user
+    if mov.solicitado_por_id == usuario.pk:
+        messages.add_message(
+            request,
+            messages.WARNING,
+            f"Movimentação #{mov.pk}: Você não pode rejeitar sua própria solicitação em movimentações entre UOs.",
+        )
+        return True
+
+    if usuario.is_operador_inventario and not usuario.is_gestor_patrimonio:
+        if mov.unidade_administrativa_destino_id != usuario.unidade_administrativa_id:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino podem rejeitar esta movimentação.",
+            )
+            return True
+        return False
+
+    if usuario.is_gestor_patrimonio and not _usuario_e_gestor_da_uo(
+        usuario, mov.unidade_administrativa_destino.unidade_orcamentaria_id
+    ):
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f"Movimentação #{mov.pk}: Apenas gestores da UO de destino podem rejeitar esta movimentação entre UOs.",
+        )
+        return True
+
+    return False
+
+
+def _check_cancelamento_entre_uos(mov, request):
+    if not _movimentacao_entre_uos_diferentes(mov):
+        return False
+
+    usuario = request.user
+    if not usuario.is_gestor_patrimonio:
+        return False
+
+    usuario_uo_id = _obter_uo_id_do_usuario(usuario)
+    uos_permitidas = {
+        mov.unidade_administrativa_origem.unidade_orcamentaria_id,
+        mov.unidade_administrativa_destino.unidade_orcamentaria_id,
+    }
+    if usuario_uo_id in uos_permitidas:
+        return False
+
+    messages.add_message(
+        request,
+        messages.ERROR,
+        f"Movimentação #{mov.pk}: Apenas gestores da UO de origem ou destino podem cancelar esta movimentação entre UOs.",
+    )
+    return True
 
 
 def _bloqueio_se_algum(request, mov, checks):
@@ -131,6 +254,8 @@ def _nao_pode_aprovar(mov, request):
     if _bloqueio_se_algum(request, mov, checks):
         return True
     if _mensagem_mov_origem_destino_inativas(mov, request, "aprovar"):
+        return True
+    if _check_aprovacao_entre_uos(mov, request):
         return True
     if _check_operador_destino_aprovacao(mov, request):
         return True
@@ -193,6 +318,8 @@ def _nao_pode_rejeitar(mov, request):
     if _bloqueio_se_algum(request, mov, checks):
         return True
     if _mensagem_mov_origem_destino_inativas(mov, request, "rejeitar"):
+        return True
+    if _check_rejeicao_entre_uos(mov, request):
         return True
     if _check_operador_destino_rejeicao(mov, request):
         return True
@@ -263,7 +390,11 @@ def _nao_pode_cancelar(mov, request):
             messages.ERROR,
         ),
     ]
-    return _bloqueio_se_algum(request, mov, checks)
+    if _bloqueio_se_algum(request, mov, checks):
+        return True
+    if _check_cancelamento_entre_uos(mov, request):
+        return True
+    return False
 
 
 def cancelar_solicitacao(modeladmin, request, queryset):
@@ -295,6 +426,25 @@ cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"
 
 class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     model = MovimentacaoBemPatrimonial
+    create_fields = (
+        "unidade_administrativa_origem",
+        "unidade_orcamentaria_destino",
+        "unidade_administrativa_destino",
+        "observacao",
+    )
+    change_fields = (
+        "status",
+        "numero_cimbpm",
+        "get_documento_cimbpm_link",
+        "solicitado_por",
+        "aprovado_por",
+        "rejeitado_por",
+        "cancelado_por",
+        "unidade_administrativa_origem",
+        "get_unidade_orcamentaria_destino",
+        "unidade_administrativa_destino",
+        "observacao",
+    )
 
     list_display = (
         "id",
@@ -341,7 +491,6 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
 
     autocomplete_fields = (
         "unidade_administrativa_origem",
-        "unidade_administrativa_destino",
     )
 
     readonly_fields = (
@@ -352,6 +501,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "status",
         "numero_cimbpm",
         "get_documento_cimbpm_link",
+        "get_unidade_orcamentaria_destino",
         "unidade_administrativa_origem",
         "unidade_administrativa_destino",
     )
@@ -371,6 +521,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         js = (
             "js/bem_patrimonial/prevenir_duplo_submit.js",
             "admin/movimentacao_filtra_bens_por_ua.js",
+            "admin/movimentacao_uo_destino.js",
         )
         css = {
             "all": (
@@ -381,25 +532,10 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         }
 
     def get_fields(self, request, obj=None):
-        base_fields = [
-            "unidade_administrativa_origem",
-            "unidade_administrativa_destino",
-            "observacao",
-        ]
-
         if obj is not None:
-            return [
-                "status",
-                "numero_cimbpm",
-                "get_documento_cimbpm_link",
-                "solicitado_por",
-                "aprovado_por",
-                "rejeitado_por",
-                "cancelado_por",
-                *base_fields,
-            ]
+            return self.change_fields
 
-        return base_fields
+        return self.create_fields
 
     def get_readonly_fields(self, request, obj=None):
         if obj is None:
@@ -411,21 +547,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
 
         class RequestForm(form_class):
             def __init__(self_inner, *a, **kw):
+                kw["request"] = request
                 super().__init__(*a, **kw)
-                self_inner.request = request
-
-                if obj is None:
-                    ua_user = getattr(request.user, "unidade_administrativa", None)
-                    if (
-                        ua_user
-                        and ua_user.is_ativa
-                        and hasattr(self_inner, "base_fields")
-                        and UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                        in self_inner.base_fields
-                    ):
-                        self_inner.base_fields[
-                            UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE
-                        ].initial = ua_user.pk
 
         return RequestForm
 
@@ -464,9 +587,14 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
 
     get_documento_cimbpm_link.short_description = "Documento CIMBPM"
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        return actions
+    def get_unidade_orcamentaria_destino(self, obj):
+        if not obj or not obj.unidade_administrativa_destino_id:
+            return "-"
+        return obj.unidade_administrativa_destino.unidade_orcamentaria
+
+    get_unidade_orcamentaria_destino.short_description = (
+        "Unidade orçamentária de destino"
+    )
 
     def response_action(self, request, queryset):
 
