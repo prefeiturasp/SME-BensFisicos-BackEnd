@@ -691,7 +691,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
     def _validar_item_para_ocorrencia(self, request, item):
         if not item.conciliacao.esta_aberto:
-            messages.error(request, "ConciliaÃ§Ã£o fechada nÃ£o permite ediÃ§Ãµes")
+            messages.error(request, "Conciliação fechada não permite edições")
             return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
         if item.permite_registrar_ocorrencia:
@@ -699,15 +699,15 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         messages.error(
             request,
-            "Bem com status 'Baixa FÃ­sica' nÃ£o pode ter ocorrÃªncia registrada. "
-            "Este status Ã© definitivo.",
+            "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
+            "Este status é definitivo.",
         )
         return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
     def _registrar_ocorrencia_post(self, request, item, voltar_url):
         situacao = request.POST.get("situacao")
         if not situacao:
-            return "Selecione uma situaÃ§Ã£o."
+            return "Selecione uma situação."
 
         try:
             registrar_ocorrencia(
@@ -717,7 +717,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 divergencia=request.POST.get("divergencia", ""),
                 usuario=request.user,
             )
-            messages.success(request, "OcorrÃªncia registrada com sucesso")
+            messages.success(request, "Ocorrência registrada com sucesso")
             return redirect(voltar_url)
         except ValidationError as e:
             return str(e)
@@ -754,7 +754,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             "opts": self.model._meta,
             "has_view_permission": self.has_view_permission(request),
             "original": item.conciliacao,
-            "title": f"Registrar OcorrÃªncia - {item.bem.numero_patrimonial}",
+            "title": f"Registrar Ocorrência - {item.bem.numero_patrimonial}",
             "is_edicao": is_edicao,
             "situacao_atual": item.situacao if is_edicao else None,
             "observacao_atual": item.observacao if is_edicao else "",
@@ -785,7 +785,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     def registrar_ocorrencia_view(self, request, item_id):
         item = self._get_item_conciliacao(item_id)
         if not item:
-            messages.error(request, "Item n?o encontrado")
+            messages.error(request, "Item não encontrado")
             return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
 
         redirect_response = self._validar_item_para_ocorrencia(request, item)
