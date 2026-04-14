@@ -1,4 +1,5 @@
 from datetime import date
+from urllib.parse import urlencode
 
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
@@ -202,6 +203,40 @@ class ItemConciliacaoChangeListViewTest(ConciliacaoAdminBaseTest):
         self.assertContains(response, self.bem_2.numero_patrimonial)
         self.assertNotContains(response, self.bem_1.numero_patrimonial)
 
+    def test_acoes_lista_preserva_url_exata_da_listagem_no_next(self):
+        self.item_admin._current_changelist_full_path = (
+            "/admin/inventario/itemconciliacao/"
+            "?conciliacao__id__exact=24&q=Realista&o=1"
+        )
+        html = self.item_admin.acoes_lista(self.item_com_ocorrencia)
+
+        self.assertIn("next=%2Fadmin%2Finventario%2Fitemconciliacao%2F%3Fconciliacao__id__exact%3D24%26q%3DRealista%26o%3D1", html)
+
+    def test_changelist_renderiza_acoes_com_next_da_url_exata(self):
+        url = reverse("admin:inventario_itemconciliacao_changelist")
+        response = self.client.get(
+            url,
+            {
+                "conciliacao__id__exact": self.conciliacao.pk,
+                "q": "Realista",
+                "o": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-preserve-list-context="true"')
+        self.assertContains(response, 'window.location.pathname + window.location.search')
+
+    def test_changelist_nao_expoe_contexto_de_conciliacao_fora_do_escopo(self):
+        self.client.force_login(self.criador)
+        url = reverse("admin:inventario_itemconciliacao_changelist")
+        response = self.client.get(
+            url,
+            {"conciliacao__id__exact": self.outra_conciliacao.pk},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_change_view_exibe_voltar_com_filtro_preservado(self):
         url = reverse(
             "admin:inventario_itemconciliacao_change",
@@ -279,3 +314,66 @@ class RegistrarOcorrenciaAdminViewTest(ConciliacaoAdminBaseTest):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Selecione uma situação.")
         self.assertNotContains(response, "Please select an item in the list.")
+
+    def test_post_registrar_ocorrencia_redireciona_para_next_exato(self):
+        voltar_url = (
+            f"{reverse('admin:inventario_itemconciliacao_changelist')}"
+            f"?conciliacao__id__exact={self.conciliacao.pk}&q=Realista&o=1"
+        )
+        url = reverse(
+            "admin:inventario_item_registrar_ocorrencia",
+            args=[self.item_sem_ocorrencia.pk],
+        )
+        response = self.client.post(
+            f"{url}?{urlencode({'next': voltar_url})}",
+            {
+                "situacao": constants.NAO_ENCONTRADO,
+                "observacao": "Obs de retorno",
+                "divergencia": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, voltar_url)
+
+    def test_registrar_ocorrencia_fora_do_escopo_redireciona_sem_expor_item(self):
+        self.client.force_login(self.criador)
+        url = reverse(
+            "admin:inventario_item_registrar_ocorrencia",
+            args=[self.item_outra_conciliacao.pk],
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("admin:inventario_conciliacaoua_changelist"),
+        )
+
+    def test_post_excluir_ocorrencia_redireciona_para_next_exato(self):
+        voltar_url = (
+            f"{reverse('admin:inventario_itemconciliacao_changelist')}"
+            f"?conciliacao__id__exact={self.conciliacao.pk}&q=Realista&o=1"
+        )
+        url = reverse(
+            "admin:inventario_item_excluir_ocorrencia",
+            args=[self.item_com_ocorrencia.pk],
+        )
+        response = self.client.post(f"{url}?{urlencode({'next': voltar_url})}")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, voltar_url)
+
+    def test_excluir_ocorrencia_fora_do_escopo_redireciona_sem_expor_item(self):
+        self.client.force_login(self.criador)
+        url = reverse(
+            "admin:inventario_item_excluir_ocorrencia",
+            args=[self.item_outra_conciliacao.pk],
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("admin:inventario_conciliacaoua_changelist"),
+        )

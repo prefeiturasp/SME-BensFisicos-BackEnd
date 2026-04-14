@@ -34,6 +34,7 @@ from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
 URL_NAME_CONCILIACAOUA_CHANGE = "admin:inventario_conciliacaoua_change"
 URL_NAME_CONCILIACAOUA_CHANGELIST = "admin:inventario_conciliacaoua_changelist"
 URL_NAME_ITEMCONCILIACAO_CHANGELIST = "admin:inventario_itemconciliacao_changelist"
+URL_NAME_ITEMCONCILIACAO_CHANGE = "admin:inventario_itemconciliacao_change"
 HIDE_CRUD_ICONS_CSS = "css/hide_crud_icons.css"
 URL_WITH_QUERY_TEMPLATE = "{}?{}"
 
@@ -236,6 +237,14 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
     def get_actions(self, request):
         return {}
 
+    def _get_current_list_url(self):
+        return getattr(self, "_current_changelist_full_path", None)
+
+    def _build_action_url(self, url, next_url=None):
+        if not next_url:
+            return url
+        return URL_WITH_QUERY_TEMPLATE.format(url, urlencode({"next": next_url}))
+
     def _get_item_change_voltar_url(self, request, obj):
         preserved_filters = request.GET.get("_changelist_filters")
         if preserved_filters:
@@ -294,11 +303,11 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         conciliacao_id = request.GET.get("conciliacao__id__exact")
 
         if conciliacao_id:
-            conciliacao = (
-                ConciliacaoUA.objects.filter(pk=conciliacao_id)
-                .select_related("unidade_administrativa")
-                .first()
-            )
+            conciliacao = filtrar_queryset_por_escopo(
+                usuario=request.user,
+                queryset=ConciliacaoUA.objects.select_related("unidade_administrativa"),
+                campo_ua="unidade_administrativa",
+            ).filter(pk=conciliacao_id).first()
             if conciliacao:
                 extra_context["title"] = (
                     f"Itens da Conciliação {conciliacao.numero_conciliacao}"
@@ -309,7 +318,11 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
                     args=[conciliacao.pk],
                 )
 
-        return super().changelist_view(request, extra_context)
+        self._current_changelist_full_path = request.get_full_path()
+        try:
+            return super().changelist_view(request, extra_context)
+        finally:
+            self._current_changelist_full_path = None
 
     def numero_patrimonial_bem(self, obj):
         return getattr(obj.bem, "numero_patrimonial", "-")
@@ -369,7 +382,11 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
             )
 
         texto_botao = "Editar" if obj.tem_ocorrencia else "Registrar"
-        registrar_url = reverse("admin:inventario_item_registrar_ocorrencia", args=[obj.pk])
+        next_url = self._get_current_list_url()
+        registrar_url = self._build_action_url(
+            reverse("admin:inventario_item_registrar_ocorrencia", args=[obj.pk]),
+            next_url=next_url,
+        )
         botoes = [
             (
                 registrar_url,
@@ -380,7 +397,10 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         ]
 
         if obj.tem_ocorrencia:
-            excluir_url = reverse("admin:inventario_item_excluir_ocorrencia", args=[obj.pk])
+            excluir_url = self._build_action_url(
+                reverse("admin:inventario_item_excluir_ocorrencia", args=[obj.pk]),
+                next_url=next_url,
+            )
             botoes.append(
                 (
                     excluir_url,
@@ -394,7 +414,7 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
             '<div style="display:flex; flex-direction:column; align-items:flex-start; gap:4px;">'
             + "".join(
                 (
-                    f'<a class="button" href="{url}" '
+                    f'<a class="button" href="{url}" data-preserve-list-context="true" '
                     f'style="padding: 3px 10px; font-size: 11px; background-color: {cor_fundo}; '
                     f'border-color: {cor_borda}; color: white;">{texto}</a>'
                 )
@@ -679,12 +699,13 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             urlencode({"conciliacao__id__exact": conciliacao.pk}),
         )
 
-    def _get_item_conciliacao(self, item_id):
-        return (
-            ItemConciliacao.objects.select_related("bem", "conciliacao")
-            .filter(pk=item_id)
-            .first()
+    def _get_item_conciliacao(self, request, item_id):
+        queryset = filtrar_queryset_por_escopo(
+            usuario=request.user,
+            queryset=ItemConciliacao.objects.select_related("bem", "conciliacao"),
+            campo_ua="conciliacao__unidade_administrativa",
         )
+        return queryset.filter(pk=item_id).first()
 
     def _get_voltar_url(self, request, conciliacao):
         return request.GET.get("next") or self._get_itens_conciliacao_url(conciliacao)
@@ -783,7 +804,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return redirect(URL_NAME_CONCILIACAOUA_CHANGE, obj.pk)
 
     def registrar_ocorrencia_view(self, request, item_id):
-        item = self._get_item_conciliacao(item_id)
+        item = self._get_item_conciliacao(request, item_id)
         if not item:
             messages.error(request, "Item não encontrado")
             return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
@@ -814,11 +835,8 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         return render(request, "admin/conciliacao/registrar_ocorrencia.html", context)
 
     def excluir_ocorrencia_view(self, request, item_id):
-        try:
-            item = ItemConciliacao.objects.select_related("bem", "conciliacao").get(
-                pk=item_id
-            )
-        except ItemConciliacao.DoesNotExist:
+        item = self._get_item_conciliacao(request, item_id)
+        if not item:
             messages.error(request, "Item não encontrado")
             return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
 
