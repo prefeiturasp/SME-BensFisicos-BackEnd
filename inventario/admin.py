@@ -274,11 +274,11 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         if obj:
             extra_context["lista_url"] = self._get_item_change_voltar_url(request, obj)
             extra_context["change_url"] = reverse(
-                "admin:inventario_itemconciliacao_change",
+                URL_NAME_ITEMCONCILIACAO_CHANGE,
                 args=[obj.pk],
             )
             extra_context["voltar_url"] = reverse(
-                "admin:inventario_itemconciliacao_change",
+                URL_NAME_ITEMCONCILIACAO_CHANGE,
                 args=[obj.pk],
             )
         return super().history_view(request, object_id, extra_context)
