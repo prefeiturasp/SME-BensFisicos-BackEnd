@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -94,6 +94,9 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
             MovimentacaoBemPatrimonial, self.site
         )
 
+    def _codigo_uo(self, a, b, c):
+        return f"{int(a):02d}.{int(b):02d}.{int(c):02d}"
+
     def test_uas_readonly_na_edicao_nao_na_criacao(self):
         request = self.factory.get("/admin/bem_patrimonial/movimentacaobempatrimonial/")
         request.user = self.gestor
@@ -168,13 +171,13 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
 
     def test_uo_externa_preenche_ua_001_automaticamente(self):
         outra_uo = criar_uo(
-            codigo="01.16.11",
+            codigo=self._codigo_uo(1, 16, 11),
             nome="UO Destino Externa",
             sigla="UO3",
         )
         criar_ua(
             uo=outra_uo,
-            codigo="01.16.11.001",
+            codigo=codigo_ua(1, 16, 11, 1),
             nome="Ponto Central",
             sigla="PC",
         )
@@ -191,7 +194,7 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(
             form.cleaned_data["unidade_administrativa_destino"].codigo,
-            "01.16.11.001",
+            codigo_ua(1, 16, 11, 1),
         )
         self.assertEqual(
             form.cleaned_data["unidade_administrativa_destino"].unidade_orcamentaria,
@@ -200,13 +203,13 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
 
     def test_uo_externa_sem_ponto_central_exibe_erro_amigavel(self):
         uo_sem_ponto = criar_uo(
-            codigo="01.16.12",
+            codigo=self._codigo_uo(1, 16, 12),
             nome="UO Sem Central",
             sigla="UO4",
         )
         criar_ua(
             uo=uo_sem_ponto,
-            codigo="01.16.12.010",
+            codigo=codigo_ua(1, 16, 12, 10),
             nome="UA Secundária",
             sigla="SEC",
         )

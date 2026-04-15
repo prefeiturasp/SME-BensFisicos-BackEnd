@@ -90,7 +90,8 @@
             let config = null;
             try {
                 config = JSON.parse(rawConfig);
-            } catch (_error) {
+            } catch (error) {
+                console.error('Falha ao ler configuracao de destino da movimentacao.', error);
                 return;
             }
 

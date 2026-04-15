@@ -274,18 +274,10 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             destino_mesma_uo,
         )
 
-    def _validate_ua_origem_destino_new(self, cleaned_data, user):
-        ua_origem = cleaned_data.get("unidade_administrativa_origem")
+    def _obter_uo_destino(self, cleaned_data, user, ua_origem):
         uo_destino = cleaned_data.get("unidade_orcamentaria_destino")
-
-        if not ua_origem:
-            raise ValidationError(
-                {
-                    "unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."
-                }
-            )
-
         uo_referencia = self._get_uo_referencia(user, ua_origem)
+
         if not uo_destino:
             uo_destino = uo_referencia
             cleaned_data["unidade_orcamentaria_destino"] = uo_destino
@@ -307,24 +299,30 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         destino_mesma_uo = (
             uo_referencia is not None and uo_destino.pk == uo_referencia.pk
         )
+        return uo_destino, uo_referencia, destino_mesma_uo
 
+    def _obter_ua_destino(self, cleaned_data, uo_destino, destino_mesma_uo):
         ua_destino = cleaned_data.get("unidade_administrativa_destino")
-        if not destino_mesma_uo:
-            ua_destino = obter_ua_ponto_central(uo_destino)
+        if destino_mesma_uo:
             if not ua_destino:
                 raise ValidationError(
                     {
-                        "unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL
+                        "unidade_administrativa_destino": "Unidade administrativa de destino é obrigatória."
                     }
                 )
-            cleaned_data["unidade_administrativa_destino"] = ua_destino
+            return ua_destino
 
+        ua_destino = obter_ua_ponto_central(uo_destino)
         if not ua_destino:
             raise ValidationError(
                 {
-                    "unidade_administrativa_destino": "Unidade administrativa de destino é obrigatória."
+                    "unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL
                 }
             )
+        cleaned_data["unidade_administrativa_destino"] = ua_destino
+        return ua_destino
+
+    def _validar_estado_origem_destino(self, ua_origem, ua_destino, uo_destino):
         if not ua_origem.is_ativa:
             raise ValidationError(
                 {
@@ -347,7 +345,6 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             raise ValidationError(
                 "Operação não permitida: origem e destino são iguais."
             )
-
         if ua_destino.unidade_orcamentaria_id != uo_destino.id:
             raise ValidationError(
                 {
@@ -358,6 +355,15 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                 }
             )
 
+    def _validar_escopo_origem_destino(
+        self,
+        user,
+        ua_origem,
+        ua_destino,
+        uo_destino,
+        uo_referencia,
+        destino_mesma_uo,
+    ):
         if not user:
             return
 
@@ -389,6 +395,36 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                     "unidade_orcamentaria_destino": "UO de destino fora das opções disponíveis."
                 }
             )
+
+    def _validate_ua_origem_destino_new(self, cleaned_data, user):
+        ua_origem = cleaned_data.get("unidade_administrativa_origem")
+
+        if not ua_origem:
+            raise ValidationError(
+                {
+                    "unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."
+                }
+            )
+
+        uo_destino, uo_referencia, destino_mesma_uo = self._obter_uo_destino(
+            cleaned_data,
+            user,
+            ua_origem,
+        )
+        ua_destino = self._obter_ua_destino(
+            cleaned_data,
+            uo_destino,
+            destino_mesma_uo,
+        )
+        self._validar_estado_origem_destino(ua_origem, ua_destino, uo_destino)
+        self._validar_escopo_origem_destino(
+            user,
+            ua_origem,
+            ua_destino,
+            uo_destino,
+            uo_referencia,
+            destino_mesma_uo,
+        )
 
     def clean(self):
         cleaned_data = super().clean()

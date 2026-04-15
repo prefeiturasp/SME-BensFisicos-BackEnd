@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -136,6 +136,10 @@ class SetupMovimentacaoData:
             bem=bem,
         )
         return mov
+
+
+def codigo_uo(a, b, c):
+    return f"{int(a):02d}.{int(b):02d}.{int(c):02d}"
 
 
 class BloqueioAutomaticoTestCase(TestCase):
@@ -678,13 +682,13 @@ class IntegracaoCompletaTestCase(TestCase):
 
     def test_aprovacao_para_outra_uo_move_bem_para_ua_ponto_central(self):
         uo_destino_externa = criar_uo(
-            codigo="01.16.11",
+            codigo=codigo_uo(1, 16, 11),
             nome="UO Destino Externa",
             sigla="UO5",
         )
         criar_ua(
             uo=uo_destino_externa,
-            codigo="01.16.11.001",
+            codigo=codigo_ua(1, 16, 11, 1),
             nome="Ponto Central Externo",
             sigla="PCE",
         )
@@ -719,37 +723,37 @@ class PermissoesEntreUOsAdminActionsTestCase(TestCase):
         )
 
         self.uo_origem = criar_uo(
-            codigo="01.16.20",
+            codigo=codigo_uo(1, 16, 20),
             nome="UO Origem",
             sigla="UOOR",
         )
         self.ua_origem = criar_ua(
             uo=self.uo_origem,
-            codigo="01.16.20.005",
+            codigo=codigo_ua(1, 16, 20, 5),
             nome="UA Origem",
             sigla="UAOR",
         )
         self.ua_gestor_origem = criar_ua(
             uo=self.uo_origem,
-            codigo="01.16.20.010",
+            codigo=codigo_ua(1, 16, 20, 10),
             nome="UA Gestor Origem",
             sigla="UGOR",
         )
 
         self.uo_destino = criar_uo(
-            codigo="01.16.21",
+            codigo=codigo_uo(1, 16, 21),
             nome="UO Destino",
             sigla="UODE",
         )
         self.ua_destino_central = criar_ua(
             uo=self.uo_destino,
-            codigo="01.16.21.001",
+            codigo=codigo_ua(1, 16, 21, 1),
             nome="Ponto Central Destino",
             sigla="PCDE",
         )
         self.ua_gestor_destino = criar_ua(
             uo=self.uo_destino,
-            codigo="01.16.21.010",
+            codigo=codigo_ua(1, 16, 21, 10),
             nome="UA Gestor Destino",
             sigla="UGDE",
         )
