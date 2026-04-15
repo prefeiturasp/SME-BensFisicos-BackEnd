@@ -393,14 +393,12 @@ class ItemConciliacao(models.Model):
 
         if self.situacao == constants.DIVERGENTE and not self.divergencia:
             raise ValidationError(
-                {"divergencia": "Campo obrigatório quando situação é Divergente"}
+                "Campo divergência é obrigatório quando situação é Divergente"
             )
 
         if self.situacao != constants.DIVERGENTE and self.divergencia:
             raise ValidationError(
-                {
-                    "divergencia": "Preencha divergência apenas quando a situação for Divergente."
-                }
+                "Preencha divergência apenas quando a situação for Divergente."
             )
 
     @property
