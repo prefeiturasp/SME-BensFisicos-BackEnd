@@ -435,7 +435,7 @@ class BaixaFisicaCancelarSerializerTestCase(BaseSetup):
 class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
     def _serializer(self, baixa):
         req = MagicMock()
-        req.build_absolute_uri = lambda path: f"http://testserver{path}"
+        req.build_absolute_uri = lambda path: f"https://testserver{path}"
         return BaixaFisicaBemPatrimonialDetailSerializer(
             baixa, context={"request": req}
         )
