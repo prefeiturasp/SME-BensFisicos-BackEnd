@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.utils import timezone
 import uuid
 from rest_framework.test import APIClient, APITestCase
@@ -164,6 +165,58 @@ class AdminLoginViewTests(TestCase):
 
         self.assertIn(reverse("selecionar_ua"), resp["Location"])
         self.assertIn("next=%2Fadmin%2F", resp["Location"])
+
+
+class AdminGoogleAnalyticsTests(TestCase):
+
+    def setUp(self):
+        self.staff_user = User.objects.create_user(
+            username="analytics_admin",
+            password="S3nh@123",
+            is_staff=True,
+            is_superuser=True,
+            must_change_password=False,
+        )
+
+    def test_admin_login_exibe_google_analytics_em_producao(self):
+        with self.settings(DEBUG=False):
+            response = self.client.get(reverse("admin:login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f"https://www.googletagmanager.com/gtag/js?id={settings.GOOGLE_ANALYTICS_ID}",
+        )
+        self.assertContains(
+            response,
+            f"gtag('config', '{settings.GOOGLE_ANALYTICS_ID}');",
+            html=False,
+        )
+
+    def test_admin_login_nao_exibe_google_analytics_em_desenvolvimento(self):
+        with self.settings(DEBUG=True):
+            response = self.client.get(reverse("admin:login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "www.googletagmanager.com/gtag/js")
+        self.assertNotContains(response, "gtag('config'")
+
+    def test_admin_index_exibe_google_analytics_em_producao(self):
+        self.client.force_login(self.staff_user)
+
+        with self.settings(DEBUG=False):
+            response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f"https://www.googletagmanager.com/gtag/js?id={settings.GOOGLE_ANALYTICS_ID}",
+        )
+        self.assertContains(
+            response,
+            f"gtag('config', '{settings.GOOGLE_ANALYTICS_ID}');",
+            html=False,
+        )
 
 
 class SelecionarUAViewTests(TestCase):
