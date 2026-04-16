@@ -172,7 +172,7 @@ class AdminGoogleAnalyticsTests(TestCase):
     def setUp(self):
         self.staff_user = User.objects.create_user(
             username="analytics_admin",
-            password="S3nh@123",
+            **auth_kwargs("analytics-admin-123"),
             is_staff=True,
             is_superuser=True,
             must_change_password=False,
