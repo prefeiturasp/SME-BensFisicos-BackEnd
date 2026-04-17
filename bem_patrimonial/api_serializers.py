@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.urls import reverse
+from django.db import transaction
 from typing import Dict, Any
 
 from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial
@@ -8,6 +10,13 @@ from dados_comuns.models import UnidadeAdministrativa
 from . import constants
 
 User = get_user_model()
+
+# Status de bens que impedem inclusão em nova baixa
+_STATUS_BEM_INVALIDOS_PARA_BAIXA = {
+    constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
+    constants.BAIXA_FISICA,
+    constants.BLOQUEADO,
+}
 
 
 # ============================================================================
@@ -72,17 +81,26 @@ class BaixaFisicaBensItemCreateSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("Bem patrimonial é obrigatório.")
 
-        if value.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+        # ISSUE #2 — rejeitar bens com status inválido para baixa
+        if value.status in _STATUS_BEM_INVALIDOS_PARA_BAIXA:
             baixa_id = self.context.get('baixa_id')
-            item_atual = BaixaFisicaBensItem.objects.filter(
-                bem=value,
-                baixa__status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA]
-            ).exclude(baixa_id=baixa_id).first()
 
-            if item_atual:
+            # Se está aguardando aprovação, verificar se é da mesma baixa (edição)
+            if value.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+                item_atual = BaixaFisicaBensItem.objects.filter(
+                    bem=value,
+                    baixa__status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA]
+                ).exclude(baixa_id=baixa_id).first()
+
+                if item_atual:
+                    raise serializers.ValidationError(
+                        f"Este bem já está incluído em outra baixa física "
+                        f"(Baixa #{item_atual.baixa.id})."
+                    )
+            else:
                 raise serializers.ValidationError(
-                    f"Este bem já está incluído em outra baixa física "
-                    f"(Baixa #{item_atual.baixa.id})."
+                    f"O bem '{value.numero_patrimonial}' possui status "
+                    f"'{value.get_status_display()}' e não pode ser incluído em uma baixa física."
                 )
 
         return value
@@ -159,30 +177,45 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def _build_url(self, path: str) -> str | None:
+    def _build_url(self, viewname: str, pk: int) -> str | None:
+        """
+        ISSUE #3 — gera URLs via reverse() em vez de string fixa,
+        garantindo que sempre reflitam a rota real cadastrada no router.
+        """
         request = self.context.get('request')
-        if request:
-            return request.build_absolute_uri(path)
-        return None
+        if not request:
+            return None
+        path = reverse(viewname, kwargs={'pk': pk})
+        return request.build_absolute_uri(path)
+
+    def _usuario_e_gestor(self) -> bool:
+        """Verifica se o usuário logado é gestor ou superuser."""
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        user = request.user
+        return user.is_gestor_patrimonio or user.is_superuser
 
     def get_url_enviar_solicitacao(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status == constants.AGUARDANDO_ENVIO:
-            return self._build_url(f"/api/baixas-fisicas/{obj.id}/enviar-solicitacao/")
+            return self._build_url('baixas-fisicas-enviar-solicitacao', obj.id)
         return None
 
     def get_url_aprovar(self, obj: BaixaFisicaBemPatrimonial):
-        if obj.status == constants.SOLICITADA:
-            return self._build_url(f"/api/baixas-fisicas/{obj.id}/aprovar/")
+        # ISSUE #9 — url_aprovar só aparece para gestores
+        if obj.status == constants.SOLICITADA and self._usuario_e_gestor():
+            return self._build_url('baixas-fisicas-aprovar', obj.id)
         return None
 
     def get_url_cancelar(self, obj: BaixaFisicaBemPatrimonial):
-        if obj.status in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA]:
-            return self._build_url(f"/api/baixas-fisicas/{obj.id}/cancelar/")
+        # ISSUE #9 — url_cancelar só aparece para gestores
+        if obj.status in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA] and self._usuario_e_gestor():
+            return self._build_url('baixas-fisicas-cancelar', obj.id)
         return None
 
     def get_url_gerar_nbbpm(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status == constants.ACEITA and obj.numero_nbbpm:
-            return self._build_url(f"/api/baixas-fisicas/{obj.id}/gerar-nbbpm/")
+            return self._build_url('baixas-fisicas-gerar-nbbpm', obj.id)
         return None
 
 
@@ -225,10 +258,30 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        ISSUE #2 — validação de escopo: os bens incluídos devem pertencer
+        à UA de origem informada no payload.
+        """
+        ua_origem = attrs.get('unidade_administrativa_origem')
+        itens = attrs.get('itens', [])
+
+        if ua_origem and itens:
+            for item_data in itens:
+                bem = item_data.get('bem')
+                if bem and bem.unidade_administrativa != ua_origem:
+                    raise serializers.ValidationError(
+                        f"O bem '{bem.numero_patrimonial}' não pertence à unidade "
+                        f"administrativa de origem selecionada."
+                    )
+
+        return attrs
+
     def _atualizar_status_bem(self, bem: BemPatrimonial, novo_status: str) -> None:
         bem.status = novo_status
         bem.save(update_fields=['status'])
 
+    @transaction.atomic  # ISSUE #6
     def create(self, validated_data: Dict[str, Any]) -> BaixaFisicaBemPatrimonial:
         itens_data = validated_data.pop('itens')
         user = self.context['request'].user
@@ -249,8 +302,6 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
 class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
     """Serializer para atualizar baixa física"""
 
-    # CORRIGIDO: passa baixa_id no contexto dos itens para que a validação
-    # de "bem em outra baixa" ignore a própria baixa sendo editada.
     itens = serializers.ListField(child=serializers.DictField(), write_only=True)
 
     class Meta:
@@ -275,8 +326,6 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
                 "É necessário informar ao menos um bem para a baixa física."
             )
 
-        # Validar cada item individualmente, passando baixa_id no contexto
-        # para que o bem que já está nesta baixa não seja bloqueado
         baixa_id = self.instance.id if self.instance else None
         for item_data in value:
             s = BaixaFisicaBensItemCreateSerializer(
@@ -313,12 +362,11 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
         self,
         instance: BaixaFisicaBemPatrimonial,
         itens_data: list,
-        # itens_atuais: Dict[bem_id -> BaixaFisicaBensItem]
-        itens_atuais: Dict,
+        itens_atuais: Dict,  # Dict[bem_id -> BaixaFisicaBensItem]
     ) -> set:
         """
         Percorre os itens enviados pelo cliente.
-        Se o bem já existe na baixa → mantém/atualiza o item.
+        Se o bem já existe na baixa → mantém o item.
         Se o bem é novo → cria item novo.
         Retorna o conjunto de IDs de itens que devem ser mantidos.
         """
@@ -327,11 +375,9 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
         for item_data in itens_data:
             bem = self._bem_do_item_data(item_data)
             if bem and bem.id in itens_atuais:
-                # Bem já estava nesta baixa — item existe, apenas confirma
                 item_existente = itens_atuais[bem.id]
                 itens_enviados_ids.add(item_existente.id)
             else:
-                # Bem novo para esta baixa — cria o item
                 novo_item = self._criar_novo_item(instance, bem)
                 itens_enviados_ids.add(novo_item.id)
 
@@ -348,6 +394,7 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
                 self._restaurar_status_bem(item.bem)
                 item.delete()
 
+    @transaction.atomic  # ISSUE #6
     def update(self, instance: BaixaFisicaBemPatrimonial, validated_data: Dict[str, Any]) -> BaixaFisicaBemPatrimonial:
         itens_data = validated_data.pop('itens', None)
         self._atualizar_campos(instance, validated_data)
@@ -396,8 +443,10 @@ class BaixaFisicaAprovarSerializer(serializers.Serializer):
                 f"Não é possível aprovar esta baixa. Status atual: {baixa.get_status_display()}"
             )
 
+        # ISSUE #9 — permissão insuficiente retorna 403 via PermissionDenied
         if not (user.is_gestor_patrimonio or user.is_superuser):
-            raise serializers.ValidationError(
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
                 "Apenas Gestor de Patrimônio pode aprovar baixas físicas."
             )
 
@@ -427,8 +476,10 @@ class BaixaFisicaCancelarSerializer(serializers.Serializer):
                 f"Não é possível cancelar esta baixa. Status atual: {baixa.get_status_display()}"
             )
 
+        # ISSUE #9 — permissão insuficiente retorna 403 via PermissionDenied
         if not (user.is_gestor_patrimonio or user.is_superuser):
-            raise serializers.ValidationError(
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
                 "Apenas Gestor de Patrimônio pode cancelar baixas físicas."
             )
 

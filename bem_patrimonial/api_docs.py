@@ -95,15 +95,6 @@ O status dos bens é ajustado automaticamente conforme inclusão/remoção de it
 Todas as alterações são aplicadas de forma transacional (tudo ou nada).
 """)
 
-# API: /api/baixas-fisicas/{id}/ (DELETE)
-DELETE_BAIXAS_FISICAS_DOC = dedent("""
-A exclusão de baixas físicas **não é permitida** via API.
-
-Esta operação sempre retorna **403 Forbidden**.
-
-Para cancelar uma baixa, utilize o endpoint `/api/baixas-fisicas/{id}/cancelar/`.
-""")
-
 # API: /api/baixas-fisicas/{id}/enviar-solicitacao/ (POST)
 ENVIAR_SOLICITACAO_DOC = dedent("""
 Envia a baixa física para aprovação do Gestor de Patrimônio.

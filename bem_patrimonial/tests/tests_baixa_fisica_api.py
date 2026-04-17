@@ -5,6 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.test import APITestCase, APIClient
 
 from dados_comuns.tests.auth_test_utils import auth_kwargs
@@ -380,7 +381,8 @@ class BaixaFisicaAprovarSerializerTestCase(BaseSetup):
 
     def test_operador_nao_pode_aprovar(self):
         s = BaixaFisicaAprovarSerializer(data={}, context=self._ctx(self.operador))
-        self.assertFalse(s.is_valid())
+        with self.assertRaises(PermissionDenied):
+            s.is_valid(raise_exception=True)
 
     def test_invalido_quando_status_diferente_de_solicitada(self):
         self.baixa.status = constants.AGUARDANDO_ENVIO
@@ -408,7 +410,8 @@ class BaixaFisicaCancelarSerializerTestCase(BaseSetup):
 
     def test_operador_nao_pode_cancelar(self):
         s = BaixaFisicaCancelarSerializer(data={}, context=self._ctx(self.operador))
-        self.assertFalse(s.is_valid())
+        with self.assertRaises(PermissionDenied):
+            s.is_valid(raise_exception=True)
 
     def test_nao_pode_cancelar_baixa_aceita(self):
         self.baixa.status = constants.ACEITA
@@ -756,7 +759,7 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
     def test_operador_nao_pode_aprovar(self):
         self._auth(self.operador)
         resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_aprovar_status_errado_retorna_400(self):
         self.baixa.status = constants.AGUARDANDO_ENVIO
@@ -812,7 +815,7 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
         resp = self.client.post(
             self.action_url(self.baixa.id, "cancelar"), {}, format="json"
         )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_nao_pode_cancelar_baixa_aceita(self):
         self.baixa.status = constants.ACEITA
@@ -875,14 +878,12 @@ class BaixaFisicaViewSetGerarNbbpmTestCase(BaseAPISetup):
 
     @patch("bem_patrimonial.api_views.BaixaFisicaBemPatrimonialViewSet.get_object")
     def test_gerar_nbbpm_sem_numero_retorna_400(self, mock_get_object):
-        # numero_nbbpm é NOT NULL no banco, então mockamos o objeto retornado
-        # pelo get_object para simular uma baixa aceita sem número NBBPM
         baixa_sem_nbbpm = criar_baixa(
             self.ua, self.operador,
             status=constants.ACEITA,
-            numero_nbbpm="PLACEHOLDER",  # necessário para passar o NOT NULL
+            numero_nbbpm="PLACEHOLDER",
         )
-        baixa_sem_nbbpm.numero_nbbpm = None  # altera só em memória
+        baixa_sem_nbbpm.numero_nbbpm = None
         mock_get_object.return_value = baixa_sem_nbbpm
 
         self._auth(self.operador)
