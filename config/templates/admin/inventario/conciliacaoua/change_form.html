@@ -1,5 +1,26 @@
 {% extends "admin/change_form.html" %}
-{% load i18n admin_urls %}
+{% load i18n admin_urls admin_modify %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .conciliacao-submit-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .conciliacao-submit-row__actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+  </style>
+{% endblock %}
 
 {% block object-tools-items %}
   {{ block.super }}
@@ -26,6 +47,16 @@
 
     <li>
       <a
+        href="{{ itens_conciliacao_url }}"
+        class="button"
+        style="background:#417690; border-color:#417690; color:#fff;"
+      >
+        Ver Itens da Conciliação
+      </a>
+    </li>
+
+    <li>
+      <a
         href="{% url 'download_conciliacao_pdf' original.pk %}"
         class="button"
         style="background:#0b5ed7; border-color:#0b5ed7; color:#fff;"
@@ -35,4 +66,28 @@
     </li>
 
   {% endif %}
+{% endblock %}
+
+{% block submit_buttons_bottom %}
+  <div class="submit-row conciliacao-submit-row">
+    
+    {% if original and itens_conciliacao_url %}
+      <div class="conciliacao-submit-row__actions">
+        <a
+          href="{{ itens_conciliacao_url }}"
+          class="button"
+          style="background:#417690; border-color:#417690; color:#fff; padding: 8px 12px;"
+        >
+          Ver Itens da Conciliação
+        </a>
+      </div>
+    {% endif %}
+
+    <div class="conciliacao-submit-row__actions">
+      {% if show_save %}
+        <input type="submit" value="{% translate 'Save' %}" class="default" name="_save">
+      {% endif %}
+    </div>
+
+  </div>
 {% endblock %}

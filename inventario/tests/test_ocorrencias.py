@@ -3,6 +3,7 @@ import datetime
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import Group
+from django import forms
 from uuid import uuid4
 
 from bem_patrimonial.models import BemPatrimonial
@@ -493,6 +494,27 @@ class ValidacoesModelTest(OcorrenciaBaseTest):
 
         with self.assertRaises(ValidationError):
             item.full_clean()
+
+    def test_model_form_sem_campo_divergencia_nao_estoura_value_error(self):
+        _, _, item = self.criar_cenario_basico()
+        item.situacao = constants.NAO_ENCONTRADO
+        item.divergencia = "Não deveria ter divergência"
+
+        class ItemConciliacaoForm(forms.ModelForm):
+            class Meta:
+                model = ItemConciliacao
+                fields = ("situacao",)
+
+        form = ItemConciliacaoForm(
+            data={"situacao": constants.NAO_ENCONTRADO},
+            instance=item,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Preencha divergência apenas quando a situação for Divergente.",
+            form.non_field_errors(),
+        )
 
 
 class FluxoCompletoTest(OcorrenciaBaseTest):

@@ -42,6 +42,8 @@ SECRET_KEY = env(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG", False)
 
+GOOGLE_ANALYTICS_ID = "G-EPPJ4TCK5Y"
+
 # CORS CONFIG
 # https://pypi.org/project/django-cors-headers/
 
@@ -151,6 +153,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "config.context_processors.google_analytics",
             ],
         },
     },
