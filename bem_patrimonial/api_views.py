@@ -11,6 +11,9 @@ from openpyxl.utils import get_column_letter
 from datetime import datetime
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 
+from dados_comuns.models import HistoricoGeral
+from django.contrib.contenttypes.models import ContentType
+
 from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem
 from .api_serializers import (
     BaixaFisicaBemPatrimonialListSerializer,
@@ -77,8 +80,8 @@ class BaixaFisicaBemPatrimonialViewSet(
     - PUT    /api/baixa-fisica/{id}/                    → Atualizar
     - PATCH  /api/baixa-fisica/{id}/                    → Atualização parcial
     - POST   /api/baixa-fisica/{id}/aprovar/            → Aprovar
-    - POST   /api/baixa-fisica/{id}/cancelar/           → Cancelar/Recusar
-    - POST   /api/baixa-fisica/{id}/enviar-solicitacao/ → Enviar para aprovação
+    - POST   /api/baixa-fisica/{id}/recusar/            → Cancelar/Recusar
+    - POST   /api/baixa-fisica/{id}/solicitar/          → Enviar para aprovação
     - GET    /api/baixa-fisica/{id}/gerar-nbbpm/        → Gerar PDF NBBPM
     - GET    /api/baixa-fisica/{id}/historico/          → Histórico de alterações
     - GET    /api/baixa-fisica/exportar-excel/          → Exportar Excel
@@ -94,23 +97,22 @@ class BaixaFisicaBemPatrimonialViewSet(
         'data_criacao': ['gte', 'lte', 'range'],
     }
 
-    # ISSUE #7 — campos de busca alinhados com os do Django Admin:
-    # busca por número patrimonial, nome do bem, número processo,
-    # nbbpm, nome/sigla da UA e nome completo/username do criador
-    search_fields = [
-        'numero_processo_baixa',
-        'numero_nbbpm',
-        'unidade_administrativa_origem__nome',
-        'unidade_administrativa_origem__sigla',
-        'criado_por__username',
-        'criado_por__first_name',
-        'criado_por__last_name',
-        'aprovado_por__username',
-        'aprovado_por__first_name',
-        'aprovado_por__last_name',
-        'itens__bem__numero_patrimonial',
-        'itens__bem__nome',
-    ]
+    # Alinhado exatamente com o search_fields do Django Admin do módulo:
+    #   numero_processo_baixa, numero_nbbpm,
+    #   UA (nome, sigla, codigo),
+    #   criado_por__username, aprovado_por__username,
+    #   bem (numero_patrimonial, nome)
+    search_fields = (
+        "numero_processo_baixa",
+        "numero_nbbpm",
+        "unidade_administrativa_origem__nome",
+        "unidade_administrativa_origem__sigla",
+        "unidade_administrativa_origem__codigo",
+        "criado_por__username",
+        "aprovado_por__username",
+        "itens__bem__numero_patrimonial",
+        "itens__bem__nome",
+    )
 
     ordering_fields = [
         'id',
@@ -175,7 +177,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         return super().list(request, *args, **kwargs)
 
     # =========================================================
-    # CREATE — ISSUE #4: retorna DetailSerializer; ISSUE #6: atomic
+    # CREATE
     # =========================================================
 
     @extend_schema(
@@ -212,7 +214,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         return super().retrieve(request, *args, **kwargs)
 
     # =========================================================
-    # UPDATE / PARTIAL UPDATE — ISSUE #4: retorna Detail; ISSUE #6: atomic
+    # UPDATE / PARTIAL UPDATE
     # =========================================================
 
     @extend_schema(
@@ -249,7 +251,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         return self.update(request, *args, **kwargs)
 
     # =========================================================
-    # HISTÓRICO — ISSUE #5
+    # HISTÓRICO
     # =========================================================
 
     @extend_schema(
@@ -265,28 +267,38 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['get'], url_path='historico')
+    @action(detail=True, methods=["get"], url_path="historico")
     def historico(self, request, pk=None):
-        """
-        Retorna o histórico de alterações da baixa física.
-        Utiliza o padrão HistoricoGeral já existente no projeto.
-        """
-        from dados_comuns.models import HistoricoGeral
-        from dados_comuns.api_serializers import HistoricoGeralSerializer
-        from django.contrib.contenttypes.models import ContentType
+        instance = self.get_object()
 
-        baixa = self.get_object()
-        ct = ContentType.objects.get_for_model(baixa)
-        historico = HistoricoGeral.objects.filter(
-            content_type=ct,
-            object_id=baixa.id,
-        ).select_related('alterado_por').order_by('-criado_em')
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
 
-        serializer = HistoricoGeralSerializer(historico, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        registros = (
+            HistoricoGeral.objects
+            .filter(content_type=ct, object_id=str(instance.pk))
+            .select_related("alterado_por")
+            .order_by("-id")
+        )
+
+        data = [
+            {
+                "id": r.id,
+                "campo": r.campo,
+                "valor_antigo": r.valor_antigo,
+                "valor_novo": r.valor_novo,
+                "justificativa": r.justificativa,
+                "alterado_por": (
+                    r.alterado_por.username if r.alterado_por else None
+                ),
+                "data_alteracao": r.created_at if hasattr(r, "created_at") else None,
+            }
+            for r in registros
+        ]
+
+        return Response(data, status=status.HTTP_200_OK)
 
     # =========================================================
-    # ENVIAR SOLICITAÇÃO — ISSUE #6: atomic
+    # ENVIAR SOLICITAÇÃO
     # =========================================================
 
     @extend_schema(
@@ -300,7 +312,7 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['post'], url_path='enviar-solicitacao')
+    @action(detail=True, methods=['post'], url_path='solicitar')
     def enviar_solicitacao(self, request, pk=None):
         baixa = self.get_object()
 
@@ -320,7 +332,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         return self._detail_response(baixa, request)
 
     # =========================================================
-    # APROVAR — ISSUE #6: atomic; ISSUE #9: 403
+    # APROVAR
     # =========================================================
 
     @extend_schema(
@@ -339,13 +351,12 @@ class BaixaFisicaBemPatrimonialViewSet(
     def aprovar(self, request, pk=None):
         baixa = self.get_object()
 
-        # Validação no serializer — PermissionDenied lança 403 automaticamente
         serializer = self.get_serializer(
             data={}, context={'baixa': baixa, 'request': request}
         )
         serializer.is_valid(raise_exception=True)
 
-        with transaction.atomic():  # ISSUE #6
+        with transaction.atomic():
             set_user(request.user)
             baixa.aprovar(usuario_aprovador=request.user)
 
@@ -361,12 +372,12 @@ class BaixaFisicaBemPatrimonialViewSet(
         return self._detail_response(baixa, request)
 
     # =========================================================
-    # CANCELAR — ISSUE #6: atomic; ISSUE #9: 403
+    # CANCELAR / RECUSAR
     # =========================================================
 
     @extend_schema(
         tags=["Baixas Físicas"],
-        summary="Cancelar baixa física",
+        summary="Recusar baixa física",
         description=CANCELAR_BAIXA_FISICA_DOC,
         request=BaixaFisicaCancelarSerializer,
         responses={
@@ -376,17 +387,16 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], url_path='recusar')
     def cancelar(self, request, pk=None):
         baixa = self.get_object()
 
-        # Validação no serializer — PermissionDenied lança 403 automaticamente
         serializer = self.get_serializer(
             data=request.data, context={'baixa': baixa, 'request': request}
         )
         serializer.is_valid(raise_exception=True)
 
-        with transaction.atomic():  # ISSUE #6
+        with transaction.atomic():
             set_user(request.user)
             self._restaurar_bens_da_baixa(baixa)
             baixa.status = constants.RECUSADA

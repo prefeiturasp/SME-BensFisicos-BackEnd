@@ -141,7 +141,7 @@ Após a aprovação, é possível gerar o PDF da Nota NBBPM.
 
 # API: /api/baixas-fisicas/{id}/cancelar/ (POST)
 CANCELAR_BAIXA_FISICA_DOC = dedent("""
-Cancela ou recusa a baixa física, restaurando o status dos bens.
+Recusa a baixa física, restaurando o status dos bens.
 
 ### Comportamento
 

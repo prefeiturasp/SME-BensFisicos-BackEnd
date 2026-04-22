@@ -7,6 +7,7 @@ from typing import Dict, Any
 
 from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.escopo import filtrar_ua_origem_por_escopo
 from . import constants
 
 User = get_user_model()
@@ -178,10 +179,6 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def _build_url(self, viewname: str, pk: int) -> str | None:
-        """
-        ISSUE #3 — gera URLs via reverse() em vez de string fixa,
-        garantindo que sempre reflitam a rota real cadastrada no router.
-        """
         request = self.context.get('request')
         if not request:
             return None
@@ -189,7 +186,6 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(path)
 
     def _usuario_e_gestor(self) -> bool:
-        """Verifica se o usuário logado é gestor ou superuser."""
         request = self.context.get('request')
         if not request or not request.user or not request.user.is_authenticated:
             return False
@@ -202,13 +198,11 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         return None
 
     def get_url_aprovar(self, obj: BaixaFisicaBemPatrimonial):
-        # ISSUE #9 — url_aprovar só aparece para gestores
         if obj.status == constants.SOLICITADA and self._usuario_e_gestor():
             return self._build_url('baixas-fisicas-aprovar', obj.id)
         return None
 
     def get_url_cancelar(self, obj: BaixaFisicaBemPatrimonial):
-        # ISSUE #9 — url_cancelar só aparece para gestores
         if obj.status in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA] and self._usuario_e_gestor():
             return self._build_url('baixas-fisicas-cancelar', obj.id)
         return None
@@ -256,6 +250,21 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "A unidade administrativa está inativa."
             )
+
+        # Valida escopo: rejeita UA fora do escopo do usuário autenticado,
+        # espelhando a lógica do Django Admin (filtrar_ua_origem_por_escopo).
+        # Superadmins e gestores sem UA vinculada têm acesso irrestrito.
+        user = self.context['request'].user
+        base_qs = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
+        uas_permitidas = filtrar_ua_origem_por_escopo(user, base_qs)
+        if not uas_permitidas.filter(pk=value.pk).exists():
+            raise serializers.ValidationError(
+                "Você não tem permissão para criar uma baixa física para esta "
+                "unidade administrativa."
+            )
+
         return value
 
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
@@ -281,7 +290,7 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         bem.status = novo_status
         bem.save(update_fields=['status'])
 
-    @transaction.atomic  # ISSUE #6
+    @transaction.atomic
     def create(self, validated_data: Dict[str, Any]) -> BaixaFisicaBemPatrimonial:
         itens_data = validated_data.pop('itens')
         user = self.context['request'].user
@@ -300,17 +309,20 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
 
 
 class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
-    """Serializer para atualizar baixa física"""
+    """
+    Serializer para atualizar baixa física.
+
+    Alinhado com o Django Admin: após a criação, apenas os itens (bens) podem
+    ser alterados. Campos como numero_processo_baixa e data_baixa ficam travados,
+    exatamente como o Admin define em get_readonly_fields().
+    """
 
     itens = serializers.ListField(child=serializers.DictField(), write_only=True)
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
-        fields = [
-            'numero_processo_baixa',
-            'data_baixa',
-            'itens',
-        ]
+        # Somente itens é editável após a criação — espelha o Admin.
+        fields = ['itens']
 
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         instance = self.instance
@@ -336,11 +348,6 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(s.errors)
 
         return value
-
-    def _atualizar_campos(self, instance: BaixaFisicaBemPatrimonial, validated_data: Dict) -> None:
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
 
     def _restaurar_status_bem(self, bem: BemPatrimonial) -> None:
         if bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
@@ -394,13 +401,12 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
                 self._restaurar_status_bem(item.bem)
                 item.delete()
 
-    @transaction.atomic  # ISSUE #6
+    @transaction.atomic
     def update(self, instance: BaixaFisicaBemPatrimonial, validated_data: Dict[str, Any]) -> BaixaFisicaBemPatrimonial:
+        # Apenas itens são editáveis — não há campos escalares para atualizar.
         itens_data = validated_data.pop('itens', None)
-        self._atualizar_campos(instance, validated_data)
 
         if itens_data is not None:
-            # Indexa por bem_id para lookup O(1) no _processar_itens
             itens_atuais = {item.bem_id: item for item in instance.itens.select_related('bem')}
             itens_enviados_ids = self._processar_itens(instance, itens_data, itens_atuais)
             self._remover_itens_nao_enviados(itens_atuais, itens_enviados_ids)
@@ -443,7 +449,6 @@ class BaixaFisicaAprovarSerializer(serializers.Serializer):
                 f"Não é possível aprovar esta baixa. Status atual: {baixa.get_status_display()}"
             )
 
-        # ISSUE #9 — permissão insuficiente retorna 403 via PermissionDenied
         if not (user.is_gestor_patrimonio or user.is_superuser):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied(
@@ -476,7 +481,6 @@ class BaixaFisicaCancelarSerializer(serializers.Serializer):
                 f"Não é possível cancelar esta baixa. Status atual: {baixa.get_status_display()}"
             )
 
-        # ISSUE #9 — permissão insuficiente retorna 403 via PermissionDenied
         if not (user.is_gestor_patrimonio or user.is_superuser):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied(

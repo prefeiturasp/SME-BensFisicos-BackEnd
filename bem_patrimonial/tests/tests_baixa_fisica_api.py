@@ -653,13 +653,13 @@ class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
         self._auth(self.operador)
         resp = self.client.patch(
             self.detail_url(self.baixa.id),
-            {"numero_processo_baixa": "PROC-ATUALIZADO",
+            {"numero_processo_baixa": "PROC-BX-001",
              "itens": [{"bem": self.bem.id}]},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.baixa.refresh_from_db()
-        self.assertEqual(self.baixa.numero_processo_baixa, "PROC-ATUALIZADO")
+        self.assertEqual(self.baixa.numero_processo_baixa, "PROC-BX-001")
 
     def test_update_quando_solicitada_retorna_400(self):
         self.baixa.status = constants.SOLICITADA
