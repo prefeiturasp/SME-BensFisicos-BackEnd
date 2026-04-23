@@ -3,10 +3,10 @@ from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from unittest.mock import Mock
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.admin import UnidadeAdministrativaAdmin
-from dados_comuns.formats import UnidadeAdministrativaPDFFormat
-from dados_comuns.resources import UnidadeAdministrativaResource
+from dados_comuns.formats import UnidadeAdministrativaPDFFormat, UnidadeOrcamentariaPDFFormat
+from dados_comuns.resources import UnidadeAdministrativaResource, UnidadeOrcamentariaResource
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
@@ -193,3 +193,66 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         linhas_dados = [row for row in dataset if row != dataset.headers]
 
         self.assertEqual(len(linhas_dados), total_esperado)
+
+
+class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
+
+    def setUp(self):
+        criar_uo(codigo="10.10.10", nome="UO Ativa", sigla="ATV", ativa=True)
+        criar_uo(codigo="20.20.20", nome="UO Inativa", sigla="INA", ativa=False)
+
+        grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        self.superuser = Usuario.objects.create_user(
+            username="super_export_uo",
+            email="super.export.uo@test.com",
+            **auth_kwargs("test123"),
+            nome="Super Export UO",
+            rf="777888",
+            is_staff=True,
+            is_superuser=True,
+        )
+        self.superuser.groups.add(grupo_gestor)
+
+        self.factory = RequestFactory()
+
+    def _gerar_pdf(self, usuario=None, queryset=None):
+        if queryset is None:
+            queryset = UnidadeOrcamentaria.objects.all()
+
+        request = None
+        if usuario is not None:
+            request = self.factory.get("/api/unidades-orcamentarias/exportar/")
+            request.user = usuario
+
+        pdf_format = UnidadeOrcamentariaPDFFormat()
+        pdf_format._export_request = request
+        pdf_format._export_queryset = queryset
+        return pdf_format.export_data(None)
+
+    def test_pdf_uo_gerado_com_estrutura_valida(self):
+        pdf_bytes = self._gerar_pdf(self.superuser)
+
+        self.assertIsInstance(pdf_bytes, bytes)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"%%EOF", pdf_bytes)
+        self.assertGreater(len(pdf_bytes), 1000)
+        self.assertIn(b"/Author (777888)", pdf_bytes)
+
+    def test_pdf_uo_sem_request_usa_sistema(self):
+        pdf_bytes = self._gerar_pdf(usuario=None)
+
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"/Author", pdf_bytes)
+
+    def test_resolve_usuario_exportacao_sem_request_retorna_sistema(self):
+        pdf_format = UnidadeOrcamentariaPDFFormat()
+
+        self.assertEqual(pdf_format._resolver_usuario_exportacao(None), "Sistema")
+
+    def test_exportacao_excel_uo_com_status_legivel(self):
+        resource = UnidadeOrcamentariaResource()
+        dataset = resource.export(UnidadeOrcamentaria.objects.all())
+
+        status_values = [row[3] for row in dataset]
+        self.assertIn("Ativa", status_values)
+        self.assertIn("Inativa", status_values)

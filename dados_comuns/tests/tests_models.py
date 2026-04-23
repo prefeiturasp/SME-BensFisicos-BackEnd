@@ -1,9 +1,13 @@
+from datetime import date
+
 from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from django.contrib.admin.sites import AdminSite
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.admin import UnidadeAdministrativaAdmin
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from inventario.models import ParametroConciliacaoAnual
+from usuario.models import Usuario
 
 
 class SetupData:
@@ -155,3 +159,42 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
         self.assertGreater(len(unidades_list), 0)
         self.assertEqual(unidades_list[0].codigo, "050")
         self.assertEqual(unidades_list[-1].codigo, "200")
+
+
+class UnidadeOrcamentariaModelTestCase(TestCase):
+
+    def test_listar_vinculos_para_exclusao_sem_vinculos(self):
+        uo = criar_uo(codigo="11.11.11", nome="UO Livre", sigla="LIV")
+
+        self.assertEqual(uo.listar_vinculos_para_exclusao(), [])
+        self.assertTrue(uo.pode_excluir())
+
+    def test_listar_vinculos_para_exclusao_com_ua_usuario_e_parametro(self):
+        uo = criar_uo(codigo="22.22.22", nome="UO Vinculada", sigla="VIN")
+        criar_ua(
+            uo=uo,
+            codigo="22.22.22.001",
+            sigla="UA22",
+            nome="UA Vinculada",
+        )
+        Usuario.objects.create_user(
+            username="usuario_uo_vinculada",
+            email="usuario.uo.vinculada@test.com",
+            **auth_kwargs("123456"),
+            nome="Usuário Vinculado",
+            unidade_orcamentaria=uo,
+        )
+        ParametroConciliacaoAnual.objects.create(
+            unidade_orcamentaria=uo,
+            ano_referencia=2030,
+            periodo_inicial=date(2030, 1, 1),
+            periodo_final=date(2030, 3, 31),
+            ativo=True,
+        )
+
+        vinculos = uo.listar_vinculos_para_exclusao()
+
+        self.assertIn("unidades administrativas", vinculos)
+        self.assertIn("usuários", vinculos)
+        self.assertIn("parâmetros de conciliação anual", vinculos)
+        self.assertFalse(uo.pode_excluir())
