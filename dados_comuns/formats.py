@@ -21,7 +21,7 @@ from reportlab.platypus import (
 from bem_patrimonial.pdf_utils import obter_rf_usuario
 
 
-class UnidadeAdministrativaPDFFormat(Format):
+class BaseUnidadePDFFormat(Format):
 
     LOGO_WIDTH_CM = 3
     LOGO_HEIGHT_CM = 1.5
@@ -33,10 +33,26 @@ class UnidadeAdministrativaPDFFormat(Format):
     def create_dataset(self, in_stream):
         raise NotImplementedError("Importação não é suportada para PDF.")
 
+    REPORT_TITLE = ""
+    EMPTY_MESSAGE = ""
+    TABLE_COL_WIDTHS = []
+
+    def get_report_title(self):
+        return self.REPORT_TITLE
+
+    def get_empty_message(self):
+        return self.EMPTY_MESSAGE
+
+    def get_table_col_widths(self):
+        return self.TABLE_COL_WIDTHS
+
+    def get_status_text(self, unidade):
+        raise NotImplementedError("Subclasses devem implementar get_status_text().")
+
     def export_data(self, dataset, **kwargs):
         request = getattr(self, "_export_request", None)
         queryset = getattr(self, "_export_queryset", None)
-        uas_list = list(queryset) if queryset is not None else []
+        unidades = list(queryset) if queryset is not None else []
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -46,7 +62,7 @@ class UnidadeAdministrativaPDFFormat(Format):
             rightMargin=0.3 * cm,
             topMargin=0.9 * cm,
             bottomMargin=0.9 * cm,
-            title="Relatório de Unidades Administrativas",
+            title=self.get_report_title(),
             author=(
                 obter_rf_usuario(request.user)
                 if request
@@ -54,7 +70,7 @@ class UnidadeAdministrativaPDFFormat(Format):
             ),
         )
 
-        elements = self._criar_cabecalho() + self._criar_tabela_unidades(uas_list)
+        elements = self._criar_cabecalho() + self._criar_tabela_unidades(unidades)
 
         doc.build(
             elements,
@@ -127,7 +143,7 @@ class UnidadeAdministrativaPDFFormat(Format):
         header_row = [
             self._carregar_logo("bens_default_logo.png", "SME", styles),
             [
-                Paragraph("Relatório de Unidades Administrativas", title_style),
+                Paragraph(self.get_report_title(), title_style),
                 Paragraph(
                     "Secretaria Municipal de Educação - Prefeitura de São Paulo",
                     subtitle_style,
@@ -150,12 +166,20 @@ class UnidadeAdministrativaPDFFormat(Format):
 
         return [header_table, Spacer(1, 0.4 * cm)]
 
-    def _criar_tabela_unidades(self, uas_list):
+    def _criar_linha_unidade(self, unidade, cell_style, cell_style_center):
+        return [
+            Paragraph(str(unidade.codigo) if unidade.codigo else "-", cell_style_center),
+            Paragraph(str(unidade.sigla) if unidade.sigla else "-", cell_style),
+            Paragraph(str(unidade.nome) if unidade.nome else "-", cell_style),
+            Paragraph(self.get_status_text(unidade), cell_style_center),
+        ]
+
+    def _criar_tabela_unidades(self, unidades):
         styles = getSampleStyleSheet()
-        if not uas_list:
+        if not unidades:
             return [
                 Paragraph(
-                    "<i>Nenhuma unidade administrativa encontrada com os filtros aplicados.</i>",
+                    self.get_empty_message(),
                     styles["Normal"],
                 )
             ]
@@ -163,21 +187,12 @@ class UnidadeAdministrativaPDFFormat(Format):
         cell_style, cell_style_center = self._criar_estilos_celula(styles)
         data = [["Código", "Sigla", "Nome", "Status"]]
 
-        for ua in uas_list:
-            data.append(
-                [
-                    Paragraph(str(ua.codigo) if ua.codigo else "-", cell_style_center),
-                    Paragraph(str(ua.sigla) if ua.sigla else "-", cell_style),
-                    Paragraph(str(ua.nome) if ua.nome else "-", cell_style),
-                    Paragraph(
-                        ua.get_status_display() if ua.status else "-", cell_style_center
-                    ),
-                ]
-            )
+        for unidade in unidades:
+            data.append(self._criar_linha_unidade(unidade, cell_style, cell_style_center))
 
         table = Table(
             data,
-            colWidths=[2 * cm, 5.5 * cm, 10 * cm, 2 * cm],
+            colWidths=self.get_table_col_widths(),
             repeatRows=1,
             splitByRow=True,
         )
@@ -245,3 +260,27 @@ class UnidadeAdministrativaPDFFormat(Format):
 
     def can_export(self):
         return True
+
+
+class UnidadeAdministrativaPDFFormat(BaseUnidadePDFFormat):
+
+    REPORT_TITLE = "Relatório de Unidades Administrativas"
+    EMPTY_MESSAGE = (
+        "<i>Nenhuma unidade administrativa encontrada com os filtros aplicados.</i>"
+    )
+    TABLE_COL_WIDTHS = [2 * cm, 5.5 * cm, 10 * cm, 2 * cm]
+
+    def get_status_text(self, unidade):
+        return unidade.get_status_display() if unidade.status else "-"
+
+
+class UnidadeOrcamentariaPDFFormat(BaseUnidadePDFFormat):
+
+    REPORT_TITLE = "Relatório de Unidades Orçamentárias"
+    EMPTY_MESSAGE = (
+        "<i>Nenhuma unidade orçamentária encontrada com os filtros aplicados.</i>"
+    )
+    TABLE_COL_WIDTHS = [3 * cm, 4 * cm, 10.5 * cm, 2.5 * cm]
+
+    def get_status_text(self, unidade):
+        return "Ativa" if unidade.ativa else "Inativa"
