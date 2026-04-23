@@ -12,7 +12,6 @@ from . import constants
 
 User = get_user_model()
 
-# Status de bens que impedem inclusão em nova baixa
 _STATUS_BEM_INVALIDOS_PARA_BAIXA = {
     constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
     constants.BAIXA_FISICA,
@@ -25,8 +24,6 @@ _STATUS_BEM_INVALIDOS_PARA_BAIXA = {
 # ============================================================================
 
 class UnidadeAdministrativaSimpleSerializer(serializers.ModelSerializer):
-    """Serializer simplificado de Unidade Administrativa"""
-
     class Meta:
         model = UnidadeAdministrativa
         fields = ['id', 'nome', 'sigla', 'codigo', 'status']
@@ -34,8 +31,6 @@ class UnidadeAdministrativaSimpleSerializer(serializers.ModelSerializer):
 
 
 class UserSimpleSerializer(serializers.ModelSerializer):
-    """Serializer simplificado de Usuário"""
-
     nome_completo = serializers.SerializerMethodField()
 
     class Meta:
@@ -48,8 +43,6 @@ class UserSimpleSerializer(serializers.ModelSerializer):
 
 
 class BemPatrimonialSimpleSerializer(serializers.ModelSerializer):
-    """Serializer simplificado de Bem Patrimonial"""
-
     class Meta:
         model = BemPatrimonial
         fields = ['id', 'numero_patrimonial', 'nome', 'descricao', 'status']
@@ -61,8 +54,6 @@ class BemPatrimonialSimpleSerializer(serializers.ModelSerializer):
 # ============================================================================
 
 class BaixaFisicaBensItemSerializer(serializers.ModelSerializer):
-    """Serializer para itens da baixa física (leitura)"""
-
     bem = BemPatrimonialSimpleSerializer(read_only=True)
 
     class Meta:
@@ -72,8 +63,6 @@ class BaixaFisicaBensItemSerializer(serializers.ModelSerializer):
 
 
 class BaixaFisicaBensItemCreateSerializer(serializers.ModelSerializer):
-    """Serializer para criar/atualizar itens da baixa física"""
-
     class Meta:
         model = BaixaFisicaBensItem
         fields = ['id', 'bem']
@@ -82,11 +71,9 @@ class BaixaFisicaBensItemCreateSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("Bem patrimonial é obrigatório.")
 
-        # ISSUE #2 — rejeitar bens com status inválido para baixa
         if value.status in _STATUS_BEM_INVALIDOS_PARA_BAIXA:
             baixa_id = self.context.get('baixa_id')
 
-            # Se está aguardando aprovação, verificar se é da mesma baixa (edição)
             if value.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
                 item_atual = BaixaFisicaBensItem.objects.filter(
                     bem=value,
@@ -112,8 +99,6 @@ class BaixaFisicaBensItemCreateSerializer(serializers.ModelSerializer):
 # ============================================================================
 
 class BaixaFisicaBemPatrimonialListSerializer(serializers.ModelSerializer):
-    """Serializer simplificado para listagem de baixas físicas"""
-
     unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
     criado_por = UserSimpleSerializer(read_only=True)
     aprovado_por = UserSimpleSerializer(read_only=True)
@@ -143,17 +128,15 @@ class BaixaFisicaBemPatrimonialListSerializer(serializers.ModelSerializer):
 
 
 class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
-    """Serializer completo para detalhamento de baixa física"""
-
     unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
     criado_por = UserSimpleSerializer(read_only=True)
     aprovado_por = UserSimpleSerializer(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     itens = BaixaFisicaBensItemSerializer(many=True, read_only=True)
 
-    url_enviar_solicitacao = serializers.SerializerMethodField()
+    url_solicitar = serializers.SerializerMethodField()
     url_aprovar = serializers.SerializerMethodField()
-    url_cancelar = serializers.SerializerMethodField()
+    url_recusar = serializers.SerializerMethodField()
     url_gerar_nbbpm = serializers.SerializerMethodField()
 
     class Meta:
@@ -171,9 +154,9 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             'data_aprovacao',
             'data_baixa',
             'itens',
-            'url_enviar_solicitacao',
+            'url_solicitar',
             'url_aprovar',
-            'url_cancelar',
+            'url_recusar',
             'url_gerar_nbbpm',
         ]
         read_only_fields = fields
@@ -182,8 +165,11 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not request:
             return None
-        path = reverse(viewname, kwargs={'pk': pk})
-        return request.build_absolute_uri(path)
+        try:
+            path = reverse(viewname, kwargs={'pk': pk})
+            return request.build_absolute_uri(path)
+        except Exception:
+            return None
 
     def _usuario_e_gestor(self) -> bool:
         request = self.context.get('request')
@@ -192,9 +178,9 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         user = request.user
         return user.is_gestor_patrimonio or user.is_superuser
 
-    def get_url_enviar_solicitacao(self, obj: BaixaFisicaBemPatrimonial):
+    def get_url_solicitar(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status == constants.AGUARDANDO_ENVIO:
-            return self._build_url('baixas-fisicas-enviar-solicitacao', obj.id)
+            return self._build_url('baixas-fisicas-solicitar', obj.id)
         return None
 
     def get_url_aprovar(self, obj: BaixaFisicaBemPatrimonial):
@@ -202,9 +188,9 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             return self._build_url('baixas-fisicas-aprovar', obj.id)
         return None
 
-    def get_url_cancelar(self, obj: BaixaFisicaBemPatrimonial):
+    def get_url_recusar(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA] and self._usuario_e_gestor():
-            return self._build_url('baixas-fisicas-cancelar', obj.id)
+            return self._build_url('baixas-fisicas-recusar', obj.id)
         return None
 
     def get_url_gerar_nbbpm(self, obj: BaixaFisicaBemPatrimonial):
@@ -213,9 +199,11 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         return None
 
 
-class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
-    """Serializer para criar baixa física"""
+# ============================================================================
+# SERIALIZERS DE CRIAÇÃO E ATUALIZAÇÃO
+# ============================================================================
 
+class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
     itens = BaixaFisicaBensItemCreateSerializer(many=True)
 
     class Meta:
@@ -250,10 +238,6 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "A unidade administrativa está inativa."
             )
-
-        # Valida escopo: rejeita UA fora do escopo do usuário autenticado,
-        # espelhando a lógica do Django Admin (filtrar_ua_origem_por_escopo).
-        # Superadmins e gestores sem UA vinculada têm acesso irrestrito.
         user = self.context['request'].user
         base_qs = UnidadeAdministrativa.objects.filter(
             status=UnidadeAdministrativa.ATIVA
@@ -264,14 +248,9 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
                 "Você não tem permissão para criar uma baixa física para esta "
                 "unidade administrativa."
             )
-
         return value
 
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        ISSUE #2 — validação de escopo: os bens incluídos devem pertencer
-        à UA de origem informada no payload.
-        """
         ua_origem = attrs.get('unidade_administrativa_origem')
         itens = attrs.get('itens', [])
 
@@ -283,7 +262,6 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
                         f"O bem '{bem.numero_patrimonial}' não pertence à unidade "
                         f"administrativa de origem selecionada."
                     )
-
         return attrs
 
     def _atualizar_status_bem(self, bem: BemPatrimonial, novo_status: str) -> None:
@@ -309,19 +287,10 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
 
 
 class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
-    """
-    Serializer para atualizar baixa física.
-
-    Alinhado com o Django Admin: após a criação, apenas os itens (bens) podem
-    ser alterados. Campos como numero_processo_baixa e data_baixa ficam travados,
-    exatamente como o Admin define em get_readonly_fields().
-    """
-
     itens = serializers.ListField(child=serializers.DictField(), write_only=True)
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
-        # Somente itens é editável após a criação — espelha o Admin.
         fields = ['itens']
 
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
@@ -359,26 +328,13 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
         bem.save(update_fields=['status'])
 
     def _bem_do_item_data(self, item_data: Dict) -> BemPatrimonial:
-        """Resolve o bem a partir do dict (pode ser instância ou pk)."""
         bem = item_data.get('bem')
         if isinstance(bem, int):
             return BemPatrimonial.objects.get(pk=bem)
         return bem
 
-    def _processar_itens(
-        self,
-        instance: BaixaFisicaBemPatrimonial,
-        itens_data: list,
-        itens_atuais: Dict,  # Dict[bem_id -> BaixaFisicaBensItem]
-    ) -> set:
-        """
-        Percorre os itens enviados pelo cliente.
-        Se o bem já existe na baixa → mantém o item.
-        Se o bem é novo → cria item novo.
-        Retorna o conjunto de IDs de itens que devem ser mantidos.
-        """
+    def _processar_itens(self, instance, itens_data, itens_atuais) -> set:
         itens_enviados_ids = set()
-
         for item_data in itens_data:
             bem = self._bem_do_item_data(item_data)
             if bem and bem.id in itens_atuais:
@@ -387,15 +343,14 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
             else:
                 novo_item = self._criar_novo_item(instance, bem)
                 itens_enviados_ids.add(novo_item.id)
-
         return itens_enviados_ids
 
-    def _criar_novo_item(self, instance: BaixaFisicaBemPatrimonial, bem: BemPatrimonial) -> BaixaFisicaBensItem:
+    def _criar_novo_item(self, instance, bem) -> BaixaFisicaBensItem:
         novo_item = BaixaFisicaBensItem.objects.create(baixa=instance, bem=bem)
         self._marcar_bem_em_baixa(bem)
         return novo_item
 
-    def _remover_itens_nao_enviados(self, itens_atuais: Dict, itens_enviados_ids: set) -> None:
+    def _remover_itens_nao_enviados(self, itens_atuais, itens_enviados_ids) -> None:
         for item in itens_atuais.values():
             if item.id not in itens_enviados_ids:
                 self._restaurar_status_bem(item.bem)
@@ -403,7 +358,6 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance: BaixaFisicaBemPatrimonial, validated_data: Dict[str, Any]) -> BaixaFisicaBemPatrimonial:
-        # Apenas itens são editáveis — não há campos escalares para atualizar.
         itens_data = validated_data.pop('itens', None)
 
         if itens_data is not None:
@@ -419,8 +373,6 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
 # ============================================================================
 
 class BaixaFisicaEnviarSolicitacaoSerializer(serializers.Serializer):
-    """Serializer para enviar solicitação"""
-
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         baixa = self.context['baixa']
 
@@ -428,18 +380,14 @@ class BaixaFisicaEnviarSolicitacaoSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"Não é possível enviar esta baixa. Status atual: {baixa.get_status_display()}"
             )
-
         if not baixa.itens.exists():
             raise serializers.ValidationError(
                 "Não é possível enviar uma baixa sem itens."
             )
-
         return attrs
 
 
 class BaixaFisicaAprovarSerializer(serializers.Serializer):
-    """Serializer para aprovar baixa"""
-
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         baixa = self.context['baixa']
         user = self.context['request'].user
@@ -448,19 +396,15 @@ class BaixaFisicaAprovarSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f"Não é possível aprovar esta baixa. Status atual: {baixa.get_status_display()}"
             )
-
         if not (user.is_gestor_patrimonio or user.is_superuser):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied(
                 "Apenas Gestor de Patrimônio pode aprovar baixas físicas."
             )
-
         return attrs
 
 
 class BaixaFisicaCancelarSerializer(serializers.Serializer):
-    """Serializer para cancelar baixa"""
-
     motivo = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -475,16 +419,13 @@ class BaixaFisicaCancelarSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Não é possível cancelar uma baixa já aprovada."
             )
-
         if baixa.status not in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA]:
             raise serializers.ValidationError(
                 f"Não é possível cancelar esta baixa. Status atual: {baixa.get_status_display()}"
             )
-
         if not (user.is_gestor_patrimonio or user.is_superuser):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied(
                 "Apenas Gestor de Patrimônio pode cancelar baixas físicas."
             )
-
         return attrs

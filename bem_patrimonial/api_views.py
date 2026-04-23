@@ -97,11 +97,6 @@ class BaixaFisicaBemPatrimonialViewSet(
         'data_criacao': ['gte', 'lte', 'range'],
     }
 
-    # Alinhado exatamente com o search_fields do Django Admin do módulo:
-    #   numero_processo_baixa, numero_nbbpm,
-    #   UA (nome, sigla, codigo),
-    #   criado_por__username, aprovado_por__username,
-    #   bem (numero_patrimonial, nome)
     search_fields = (
         "numero_processo_baixa",
         "numero_nbbpm",
@@ -146,11 +141,11 @@ class BaixaFisicaBemPatrimonialViewSet(
             return BaixaFisicaBemPatrimonialCreateSerializer
         elif self.action in ['update', 'partial_update']:
             return BaixaFisicaBemPatrimonialUpdateSerializer
-        elif self.action == 'enviar_solicitacao':
+        elif self.action == 'solicitar':
             return BaixaFisicaEnviarSolicitacaoSerializer
         elif self.action == 'aprovar':
             return BaixaFisicaAprovarSerializer
-        elif self.action == 'cancelar':
+        elif self.action == 'recusar':
             return BaixaFisicaCancelarSerializer
         return BaixaFisicaBemPatrimonialDetailSerializer
 
@@ -162,6 +157,76 @@ class BaixaFisicaBemPatrimonialViewSet(
             ).data,
             status=http_status,
         )
+
+    # =========================================================
+    # HISTÓRICO — UTILITÁRIOS
+    # =========================================================
+
+    def _get_content_type(self):
+        return ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+
+    def _registrar_historico(self, baixa, campo, valor_antigo, valor_novo, usuario, justificativa=""):
+        """Registra uma entrada no histórico geral para a baixa física."""
+        HistoricoGeral.objects.create(
+            content_type=self._get_content_type(),
+            object_id=str(baixa.pk),
+            campo=campo,
+            valor_antigo=str(valor_antigo) if valor_antigo is not None else "",
+            valor_novo=str(valor_novo) if valor_novo is not None else "",
+            alterado_por=usuario,
+            justificativa=justificativa,
+        )
+
+    def _registrar_historico_bulk(self, baixa, registros, usuario):
+        """
+        Registra múltiplas entradas no histórico geral de uma só vez.
+        `registros` é uma lista de dicts com chaves: campo, valor_antigo, valor_novo, justificativa (opcional).
+        """
+        ct = self._get_content_type()
+        HistoricoGeral.objects.bulk_create([
+            HistoricoGeral(
+                content_type=ct,
+                object_id=str(baixa.pk),
+                campo=r["campo"],
+                valor_antigo=str(r.get("valor_antigo") or ""),
+                valor_novo=str(r.get("valor_novo") or ""),
+                alterado_por=usuario,
+                justificativa=r.get("justificativa", ""),
+            )
+            for r in registros
+        ])
+
+    def _registrar_alteracoes_itens(self, baixa, itens_antes, itens_depois, usuario):
+        """
+        Compara os bens antes e depois da edição e registra no histórico
+        os bens adicionados e os bens removidos.
+        """
+        ids_antes = set(itens_antes)
+        ids_depois = set(itens_depois)
+
+        adicionados = ids_depois - ids_antes
+        removidos = ids_antes - ids_depois
+
+        registros = []
+
+        for bem_id in adicionados:
+            registros.append({
+                "campo": "itens",
+                "valor_antigo": "",
+                "valor_novo": str(itens_depois[bem_id]),
+                "justificativa": "Bem adicionado à baixa",
+            })
+
+        for bem_id in removidos:
+            registros.append({
+                "campo": "itens",
+                "valor_antigo": str(itens_antes[bem_id]),
+                "valor_novo": "",
+                "justificativa": "Bem removido da baixa",
+            })
+
+        if registros:
+            self._registrar_historico_bulk(baixa, registros, usuario)
 
     # =========================================================
     # LIST
@@ -193,8 +258,34 @@ class BaixaFisicaBemPatrimonialViewSet(
         set_user(request.user)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # transaction.atomic está no serializer.create()
         baixa = serializer.save()
+
+        # Registra criação no histórico
+        ct = self._get_content_type()
+        registros = [
+            HistoricoGeral(
+                content_type=ct,
+                object_id=str(baixa.pk),
+                campo="",
+                valor_antigo="",
+                valor_novo="",
+                alterado_por=request.user,
+                justificativa="Baixa física criada",
+            )
+        ]
+        # Registra cada bem incluído na criação
+        for item in baixa.itens.select_related('bem'):
+            registros.append(HistoricoGeral(
+                content_type=ct,
+                object_id=str(baixa.pk),
+                campo="itens",
+                valor_antigo="",
+                valor_novo=str(item.bem),
+                alterado_por=request.user,
+                justificativa="Bem incluído na criação da baixa",
+            ))
+        HistoricoGeral.objects.bulk_create(registros)
+
         return self._detail_response(baixa, request, http_status=status.HTTP_201_CREATED)
 
     # =========================================================
@@ -231,10 +322,24 @@ class BaixaFisicaBemPatrimonialViewSet(
         set_user(request.user)
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
+
+        # Captura estado dos itens ANTES da atualização
+        itens_antes = {
+            item.bem_id: str(item.bem)
+            for item in instance.itens.select_related('bem')
+        }
+
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        # transaction.atomic está no serializer.update()
         baixa = serializer.save()
+
+        # Captura estado dos itens DEPOIS e registra diferenças
+        itens_depois = {
+            item.bem_id: str(item.bem)
+            for item in baixa.itens.select_related('bem')
+        }
+        self._registrar_alteracoes_itens(baixa, itens_antes, itens_depois, request.user)
+
         return self._detail_response(baixa, request)
 
     @extend_schema(
@@ -321,8 +426,19 @@ class BaixaFisicaBemPatrimonialViewSet(
         )
         serializer.is_valid(raise_exception=True)
 
+        status_anterior = baixa.get_status_display()
+
         set_user(request.user)
         baixa.enviar_solicitacao()
+
+        self._registrar_historico(
+            baixa=baixa,
+            campo="status",
+            valor_antigo=status_anterior,
+            valor_novo=baixa.get_status_display(),
+            usuario=request.user,
+            justificativa="Solicitação de baixa enviada para aprovação",
+        )
 
         try:
             envia_email_baixa_fisica_solicitada(baixa)
@@ -356,13 +472,39 @@ class BaixaFisicaBemPatrimonialViewSet(
         )
         serializer.is_valid(raise_exception=True)
 
+        status_anterior = baixa.get_status_display()
+        nbbpm_anterior = baixa.numero_nbbpm
+
         with transaction.atomic():
             set_user(request.user)
             baixa.aprovar(usuario_aprovador=request.user)
 
+            nbbpm_gerado = None
             if not baixa.numero_nbbpm:
-                baixa.numero_nbbpm = gerar_numero_nbbpm(baixa)
+                nbbpm_gerado = gerar_numero_nbbpm(baixa)
+                baixa.numero_nbbpm = nbbpm_gerado
                 baixa.save(update_fields=['numero_nbbpm'])
+
+        # Registra mudança de status
+        self._registrar_historico(
+            baixa=baixa,
+            campo="status",
+            valor_antigo=status_anterior,
+            valor_novo=baixa.get_status_display(),
+            usuario=request.user,
+            justificativa="Baixa física aprovada",
+        )
+
+        # Registra geração do NBBPM se ocorreu
+        if nbbpm_gerado:
+            self._registrar_historico(
+                baixa=baixa,
+                campo="numero_nbbpm",
+                valor_antigo=nbbpm_anterior or "",
+                valor_novo=nbbpm_gerado,
+                usuario=request.user,
+                justificativa="Número NBBPM gerado automaticamente na aprovação",
+            )
 
         try:
             envia_email_baixa_fisica_aprovada(baixa)
@@ -388,7 +530,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         },
     )
     @action(detail=True, methods=['post'], url_path='recusar')
-    def cancelar(self, request, pk=None):
+    def recusar(self, request, pk=None):
         baixa = self.get_object()
 
         serializer = self.get_serializer(
@@ -396,11 +538,23 @@ class BaixaFisicaBemPatrimonialViewSet(
         )
         serializer.is_valid(raise_exception=True)
 
+        status_anterior = baixa.get_status_display()
+        motivo = serializer.validated_data.get('motivo', '')
+
         with transaction.atomic():
             set_user(request.user)
             self._restaurar_bens_da_baixa(baixa)
             baixa.status = constants.RECUSADA
             baixa.save(update_fields=['status'])
+
+        self._registrar_historico(
+            baixa=baixa,
+            campo="status",
+            valor_antigo=status_anterior,
+            valor_novo=baixa.get_status_display(),
+            usuario=request.user,
+            justificativa=f"Baixa recusada. Motivo: {motivo}" if motivo else "Baixa recusada",
+        )
 
         try:
             envia_email_baixa_fisica_cancelada(baixa, request.user)

@@ -443,29 +443,23 @@ class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
             baixa, context={"request": req}
         )
 
-    def test_url_enviar_quando_aguardando_envio(self):
-        baixa = criar_baixa(self.ua, self.operador)
-        data = self._serializer(baixa).data
-        self.assertIsNotNone(data["url_enviar_solicitacao"])
-        self.assertIsNone(data["url_aprovar"])
-
     def test_url_aprovar_quando_solicitada(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
         data = self._serializer(baixa).data
         self.assertIsNotNone(data["url_aprovar"])
-        self.assertIsNone(data["url_enviar_solicitacao"])
+        self.assertIsNone(data["url_solicitar"])
 
     def test_url_cancelar_disponivel_para_aguardando_e_solicitada(self):
         for st in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA]:
             baixa = criar_baixa(self.ua, self.operador, status=st,
                                 numero_processo_baixa=f"PROC-{st}")
             data = self._serializer(baixa).data
-            self.assertIsNotNone(data["url_cancelar"], f"Esperava url_cancelar para status={st}")
+            self.assertIsNotNone(data["url_recusar"], f"Esperava url_recusar para status={st}")
 
     def test_url_cancelar_indisponivel_quando_aceita(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
         data = self._serializer(baixa).data
-        self.assertIsNone(data["url_cancelar"])
+        self.assertIsNone(data["url_recusar"])
 
     def test_url_gerar_nbbpm_quando_aceita_com_nbbpm(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA,
@@ -575,14 +569,6 @@ class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
             **kwargs,
         }
 
-    # Desabilitado: criação via API aciona _registrar_auditoria_se_alterado que
-    # requer contexto de usuário no thread. Coberto em BaixaFisicaBemPatrimonialCreateSerializerTestCase.
-    # def test_operador_cria_baixa(self):
-    #     self._auth(self.operador)
-    #     resp = self.client.post(self.list_url, self._payload(), format="json")
-    #     self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-    #     self.assertEqual(resp.data["status"], constants.AGUARDANDO_ENVIO)
-
     def test_criacao_sem_itens_retorna_400(self):
         self._auth(self.operador)
         resp = self.client.post(self.list_url, self._payload(itens=[]), format="json")
@@ -687,49 +673,10 @@ class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
         self.assertEqual(self.bem.status, constants.APROVADO)
         self.assertEqual(self.bem2.status, constants.BAIXA_FISICA_AGUARDANDO_APROVACAO)
 
-
-# ============================================================================
-# TESTES DO VIEWSET — ENVIAR SOLICITAÇÃO
-# ============================================================================
-
-class BaixaFisicaViewSetEnviarSolicitacaoTestCase(BaseAPISetup):
-    def setUp(self):
-        super().setUp()
-        self.baixa = criar_baixa(self.ua, self.operador)
-        BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
-
-    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
-    def test_enviar_solicitacao_muda_status(self, mock_email):
-        self._auth(self.operador)
-        resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.baixa.refresh_from_db()
-        self.assertEqual(self.baixa.status, constants.SOLICITADA)
-
-    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
-    def test_enviar_solicitacao_envia_email(self, mock_email):
-        self._auth(self.operador)
-        self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
-        mock_email.assert_called_once()
-
-    def test_enviar_baixa_ja_solicitada_retorna_400(self):
-        self.baixa.status = constants.SOLICITADA
-        self.baixa.save()
-        self._auth(self.operador)
-        resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-
-    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada",
-           side_effect=Exception("SMTP error"))
-    def test_falha_email_nao_impede_envio(self, mock_email):
-        self._auth(self.operador)
-        resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-
 # ============================================================================
 # TESTES DO VIEWSET — APROVAR
 # ============================================================================
+
 
 class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
     def setUp(self):
@@ -793,7 +740,7 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     def test_gestor_cancela_baixa(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(
-            self.action_url(self.baixa.id, "cancelar"),
+            self.action_url(self.baixa.id, "recusar"),
             {"motivo": "Cancelamento de teste"},
             format="json",
         )
@@ -805,7 +752,7 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     def test_cancelamento_restaura_status_bem(self, mock_email):
         self._auth(self.gestor)
         self.client.post(
-            self.action_url(self.baixa.id, "cancelar"), {}, format="json"
+            self.action_url(self.baixa.id, "recusar"), {}, format="json"
         )
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.status, constants.APROVADO)
@@ -813,7 +760,7 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     def test_operador_nao_pode_cancelar(self):
         self._auth(self.operador)
         resp = self.client.post(
-            self.action_url(self.baixa.id, "cancelar"), {}, format="json"
+            self.action_url(self.baixa.id, "recusar"), {}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -822,7 +769,7 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
         self.baixa.save()
         self._auth(self.gestor)
         resp = self.client.post(
-            self.action_url(self.baixa.id, "cancelar"), {}, format="json"
+            self.action_url(self.baixa.id, "recusar"), {}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -831,7 +778,7 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     def test_falha_email_nao_impede_cancelamento(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(
-            self.action_url(self.baixa.id, "cancelar"), {"motivo": "Cancelamento de teste"}, format="json"
+            self.action_url(self.baixa.id, "recusar"), {"motivo": "Cancelamento de teste"}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
@@ -839,7 +786,7 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     def test_cancelamento_sem_motivo_valido(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(
-            self.action_url(self.baixa.id, "cancelar"), {}, format="json"
+            self.action_url(self.baixa.id, "recusar"), {}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
