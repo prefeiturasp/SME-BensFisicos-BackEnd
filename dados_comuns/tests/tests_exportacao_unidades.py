@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -18,14 +18,14 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         uo = criar_uo(codigo="100", nome="UO 100")
         criar_ua(
             uo=uo,
-            codigo="01.01.01.0001",
+            codigo=codigo_ua(1, 1, 1, 1),
             sigla="SME",
             nome="Secretaria Municipal de Educação",
             status=UnidadeAdministrativa.ATIVA,
         )
         criar_ua(
             uo=uo,
-            codigo="01.01.02.0002",
+            codigo=codigo_ua(1, 1, 2, 2),
             sigla="PMSP/SME/SME-GAB/MEMORIAL",
             nome="COORDENADORIA DOS CENTROS EDUCACIONAIS UNIFICADOS",
             status=UnidadeAdministrativa.INATIVA,
@@ -154,10 +154,10 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
         self.assertEqual(resource.Meta.export_order, expected_order)
 
     def test_pdf_paginacao_multiplas_paginas(self):
-        uo = criar_uo(codigo="99.99.00", nome="UO 99.99.00.0000")
+        uo = criar_uo(codigo=codigo_uo(99, 99, 0), nome="UO 99")
         for i in range(50):
             criar_ua(
-                codigo=f"99.99.{i:02d}.{i:04d}",
+                codigo=codigo_ua(99, 99, i, i),
                 sigla=f"UA-{i:03d}",
                 nome=f"Unidade Administrativa de Teste {i}",
                 status=UnidadeAdministrativa.ATIVA,
@@ -198,8 +198,8 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
 class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
 
     def setUp(self):
-        criar_uo(codigo="10.10.10", nome="UO Ativa", sigla="ATV", ativa=True)
-        criar_uo(codigo="20.20.20", nome="UO Inativa", sigla="INA", ativa=False)
+        criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO Ativa", sigla="ATV", ativa=True)
+        criar_uo(codigo=codigo_uo(20, 20, 20), nome="UO Inativa", sigla="INA", ativa=False)
 
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         self.superuser = Usuario.objects.create_user(

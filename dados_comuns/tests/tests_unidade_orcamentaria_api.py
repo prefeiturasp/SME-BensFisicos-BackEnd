@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -23,11 +23,20 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
     }
 
     def setUp(self):
-        self.uo1 = criar_uo(codigo="10.10.10", nome="UO 1", sigla="UO1")
-        self.uo2 = criar_uo(codigo="20.20.20", nome="UO 2", sigla="UO2", ativa=False)
-        self.uo3 = criar_uo(codigo="30.30.30", nome="UO 3", sigla="UO3")
+        self.uo1 = criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO 1", sigla="UO1")
+        self.uo2 = criar_uo(
+            codigo=codigo_uo(20, 20, 20),
+            nome="UO 2",
+            sigla="UO2",
+            ativa=False,
+        )
+        self.uo3 = criar_uo(codigo=codigo_uo(30, 30, 30), nome="UO 3", sigla="UO3")
 
-        self.uo_com_ua = criar_uo(codigo="40.40.40", nome="UO Com UA", sigla="UOUA")
+        self.uo_com_ua = criar_uo(
+            codigo=codigo_uo(40, 40, 40),
+            nome="UO Com UA",
+            sigla="UOUA",
+        )
         criar_ua(
             uo=self.uo_com_ua,
             codigo=codigo_ua(40, 40, 40, 1),
@@ -36,7 +45,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         )
 
         self.uo_sem_vinculo = criar_uo(
-            codigo="50.50.50",
+            codigo=codigo_uo(50, 50, 50),
             nome="UO Sem Vinculo",
             sigla="UOLIVRE",
         )
@@ -84,7 +93,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
 
     def _payload_uo(self, **overrides):
         payload = {
-            "codigo": "60.60.60",
+            "codigo": codigo_uo(60, 60, 60),
             "sigla": "UO60",
             "nome": "UO 60",
             "ativa": True,
@@ -162,7 +171,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
 
         create_response = self.client.post(
             self.list_url,
-            self._payload_uo(codigo="61.61.61", sigla="UO61", nome="UO 61"),
+            self._payload_uo(codigo=codigo_uo(61, 61, 61), sigla="UO61", nome="UO 61"),
             format="json",
         )
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
@@ -196,7 +205,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
 
         cenarios = [
             ({"codigo": "", "sigla": "UO", "nome": "Nome", "ativa": True}, "codigo"),
-            ({"codigo": "70.70.70", "sigla": "UO", "nome": "", "ativa": True}, "nome"),
+            ({"codigo": codigo_uo(70, 70, 70), "sigla": "UO", "nome": "", "ativa": True}, "nome"),
             ({"codigo": self.uo1.codigo, "sigla": "UO", "nome": "Duplicada", "ativa": True}, "codigo"),
         ]
 
@@ -246,7 +255,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
 
     def test_delete_bloqueia_quando_existirem_usuarios_vinculados(self):
         uo_com_usuario = criar_uo(
-            codigo="80.80.80",
+            codigo=codigo_uo(80, 80, 80),
             nome="UO Com Usuario",
             sigla="UOUSR",
         )
@@ -276,7 +285,11 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         self.assertEqual(get_response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_delete_quando_protected_error_retorna_400(self):
-        uo_livre = criar_uo(codigo="90.90.90", nome="UO Livre", sigla="UOL")
+        uo_livre = criar_uo(
+            codigo=codigo_uo(90, 90, 90),
+            nome="UO Livre",
+            sigla="UOL",
+        )
 
         self._auth(self.superuser)
         with patch(
