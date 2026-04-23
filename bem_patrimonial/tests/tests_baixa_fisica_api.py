@@ -288,10 +288,7 @@ class BaixaFisicaBemPatrimonialUpdateSerializerTestCase(BaseSetup):
         )
 
     def test_edicao_valida(self):
-        s = self._serializer({
-            "numero_processo_baixa": "PROC-NOVO",
-            "itens": [{"bem": self.bem.id}],
-        })
+        s = self._serializer({"itens": [{"bem": self.bem.id}]})
         self.assertTrue(s.is_valid(), s.errors)
 
     def test_sem_itens_invalido(self):
@@ -302,7 +299,7 @@ class BaixaFisicaBemPatrimonialUpdateSerializerTestCase(BaseSetup):
     def test_status_diferente_aguardando_envio_invalido(self):
         self.baixa.status = constants.SOLICITADA
         self.baixa.save()
-        s = self._serializer({"numero_processo_baixa": "PROC-X"})
+        s = self._serializer({"itens": [{"bem": self.bem.id}]})
         self.assertFalse(s.is_valid())
 
     def test_update_troca_bem_atualiza_status(self):
@@ -436,16 +433,22 @@ class BaixaFisicaCancelarSerializerTestCase(BaseSetup):
 # ============================================================================
 
 class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
-    def _serializer(self, baixa):
+    def _serializer(self, baixa, user):
         req = MagicMock()
+        req.user = user
         req.build_absolute_uri = lambda path: f"https://testserver{path}"
         return BaixaFisicaBemPatrimonialDetailSerializer(
             baixa, context={"request": req}
         )
 
+    def test_url_solicitar_quando_aguardando_envio(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        data = self._serializer(baixa, self.operador).data
+        self.assertIsNotNone(data["url_solicitar"])
+
     def test_url_aprovar_quando_solicitada(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
-        data = self._serializer(baixa).data
+        data = self._serializer(baixa, self.gestor).data
         self.assertIsNotNone(data["url_aprovar"])
         self.assertIsNone(data["url_solicitar"])
 
@@ -453,23 +456,23 @@ class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
         for st in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA]:
             baixa = criar_baixa(self.ua, self.operador, status=st,
                                 numero_processo_baixa=f"PROC-{st}")
-            data = self._serializer(baixa).data
+            data = self._serializer(baixa, self.gestor).data
             self.assertIsNotNone(data["url_recusar"], f"Esperava url_recusar para status={st}")
 
     def test_url_cancelar_indisponivel_quando_aceita(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
-        data = self._serializer(baixa).data
+        data = self._serializer(baixa, self.gestor).data
         self.assertIsNone(data["url_recusar"])
 
     def test_url_gerar_nbbpm_quando_aceita_com_nbbpm(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA,
                             numero_nbbpm="NBBPM-001")
-        data = self._serializer(baixa).data
+        data = self._serializer(baixa, self.gestor).data
         self.assertIsNotNone(data["url_gerar_nbbpm"])
 
     def test_url_gerar_nbbpm_ausente_sem_numero(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
-        data = self._serializer(baixa).data
+        data = self._serializer(baixa, self.gestor).data
         self.assertIsNone(data["url_gerar_nbbpm"])
 
 
@@ -635,15 +638,15 @@ class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
         self.bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
         self.bem.save()
 
-    def test_patch_numero_processo(self):
+    def test_patch_numero_processo_retorna_400(self):
         self._auth(self.operador)
         resp = self.client.patch(
             self.detail_url(self.baixa.id),
-            {"numero_processo_baixa": "PROC-BX-001",
+            {"numero_processo_baixa": "PROC-ALTERADO",
              "itens": [{"bem": self.bem.id}]},
             format="json",
         )
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.numero_processo_baixa, "PROC-BX-001")
 
@@ -653,7 +656,7 @@ class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
         self._auth(self.operador)
         resp = self.client.patch(
             self.detail_url(self.baixa.id),
-            {"numero_processo_baixa": "PROC-X", "itens": [{"bem": self.bem.id}]},
+            {"itens": [{"bem": self.bem.id}]},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -672,6 +675,87 @@ class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
         self.bem2.refresh_from_db()
         self.assertEqual(self.bem.status, constants.APROVADO)
         self.assertEqual(self.bem2.status, constants.BAIXA_FISICA_AGUARDANDO_APROVACAO)
+
+    def test_update_retorna_itens_persistidos(self):
+        self.bem2.status = constants.APROVADO
+        self.bem2.save()
+        novo_bem = criar_bem(
+            self.ua,
+            self.operador,
+            numero_patrimonial="000.000000003-0",
+        )
+        self._auth(self.operador)
+        resp = self.client.patch(
+            self.detail_url(self.baixa.id),
+            {"itens": [{"bem": self.bem2.id}, {"bem": novo_bem.id}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["bem"]["id"] for item in resp.data["itens"]],
+            [self.bem2.id, novo_bem.id],
+        )
+
+
+# ============================================================================
+# TESTES DO VIEWSET — ENVIAR SOLICITAÇÃO
+# ============================================================================
+
+class BaixaFisicaViewSetEnviarSolicitacaoTestCase(BaseAPISetup):
+    def setUp(self):
+        super().setUp()
+        self.baixa = criar_baixa(self.ua, self.operador)
+        BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
+    def test_enviar_solicitacao_com_sucesso(self, mock_email):
+        self._auth(self.operador)
+        resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.SOLICITADA)
+
+    def test_enviar_solicitacao_sem_itens_retorna_400(self):
+        self.baixa.itens.all().delete()
+        self._auth(self.operador)
+        resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch("bem_patrimonial.api_views.gerar_numero_nbbpm", return_value="NBBPM-2024-001")
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada")
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
+    def test_enviar_solicitacao_nao_reabre_baixa_aceita(self, mock_email_solicitada, mock_email_aprovada, mock_nbbpm):
+        self._auth(self.operador)
+        self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
+        self._auth(self.gestor)
+        self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.ACEITA)
+
+        self._auth(self.operador)
+        resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.ACEITA)
+
+
+# ============================================================================
+# TESTES DO VIEWSET — HISTÓRICO
+# ============================================================================
+
+class BaixaFisicaViewSetHistoricoTestCase(BaseAPISetup):
+    def setUp(self):
+        super().setUp()
+        self.baixa = criar_baixa(self.ua, self.operador)
+        BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
+
+    def test_historico_retorna_data_alteracao(self):
+        self._auth(self.operador)
+        self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
+        resp = self.client.get(self.action_url(self.baixa.id, "historico"))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data)
+        self.assertIsNotNone(resp.data[0]["data_alteracao"])
 
 # ============================================================================
 # TESTES DO VIEWSET — APROVAR

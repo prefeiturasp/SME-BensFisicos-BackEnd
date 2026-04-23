@@ -67,9 +67,9 @@ A resposta inclui:
 - Dados completos da baixa
 - Lista de todos os **itens (bens)** associados
 - **URLs de ações** disponíveis conforme o status atual:
-  - `url_enviar_solicitacao` → se status for aguardando_envio
+  - `url_solicitar` → se status for aguardando_envio
   - `url_aprovar` → se status for solicitada
-  - `url_cancelar` → se status for aguardando_envio ou solicitada
+  - `url_recusar` → se status for aguardando_envio ou solicitada
   - `url_gerar_nbbpm` → se status for aceita e tiver número NBBPM
 """)
 
@@ -80,22 +80,23 @@ Atualiza os dados de uma baixa física existente.
 ### Restrições importantes
 
 - Somente baixas com status **aguardando_envio** podem ser editadas
-- Não é possível alterar a **unidade administrativa de origem**
+- Após a criação, apenas a lista de **itens** pode ser alterada
+- Não é possível alterar **unidade administrativa**, **número do processo** ou **data da baixa**
 
 ### Gerenciamento de itens
 
-Ao atualizar a lista de itens:
+Ao atualizar a lista de itens, a API trata o payload como a lista final desejada:
 
-- **Itens com ID** → são atualizados
-- **Itens sem ID** → são criados
-- **Itens não enviados** → são removidos
+- **Bens enviados** e já presentes → são mantidos
+- **Bens enviados** e ainda não presentes → são incluídos
+- **Bens não enviados** → são removidos
 
 O status dos bens é ajustado automaticamente conforme inclusão/remoção de itens.
 
 Todas as alterações são aplicadas de forma transacional (tudo ou nada).
 """)
 
-# API: /api/baixas-fisicas/{id}/enviar-solicitacao/ (POST)
+# API: /api/baixas-fisicas/{id}/solicitar/ (POST)
 ENVIAR_SOLICITACAO_DOC = dedent("""
 Envia a baixa física para aprovação do Gestor de Patrimônio.
 
@@ -139,7 +140,7 @@ Aprova a baixa física, autorizando a baixa definitiva dos bens.
 Após a aprovação, é possível gerar o PDF da Nota NBBPM.
 """)
 
-# API: /api/baixas-fisicas/{id}/cancelar/ (POST)
+# API: /api/baixas-fisicas/{id}/recusar/ (POST)
 CANCELAR_BAIXA_FISICA_DOC = dedent("""
 Recusa a baixa física, restaurando o status dos bens.
 

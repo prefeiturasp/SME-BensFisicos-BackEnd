@@ -141,7 +141,7 @@ class BaixaFisicaBemPatrimonialViewSet(
             return BaixaFisicaBemPatrimonialCreateSerializer
         elif self.action in ['update', 'partial_update']:
             return BaixaFisicaBemPatrimonialUpdateSerializer
-        elif self.action == 'solicitar':
+        elif self.action == 'enviar_solicitacao':
             return BaixaFisicaEnviarSolicitacaoSerializer
         elif self.action == 'aprovar':
             return BaixaFisicaAprovarSerializer
@@ -331,7 +331,8 @@ class BaixaFisicaBemPatrimonialViewSet(
 
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
-        baixa = serializer.save()
+        serializer.save()
+        baixa = self.get_queryset().get(pk=instance.pk)
 
         # Captura estado dos itens DEPOIS e registra diferenças
         itens_depois = {
@@ -395,7 +396,7 @@ class BaixaFisicaBemPatrimonialViewSet(
                 "alterado_por": (
                     r.alterado_por.username if r.alterado_por else None
                 ),
-                "data_alteracao": r.created_at if hasattr(r, "created_at") else None,
+                "data_alteracao": r.alterado_em,
             }
             for r in registros
         ]

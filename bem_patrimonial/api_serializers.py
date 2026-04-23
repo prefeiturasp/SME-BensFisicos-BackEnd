@@ -180,7 +180,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
 
     def get_url_solicitar(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status == constants.AGUARDANDO_ENVIO:
-            return self._build_url('baixas-fisicas-solicitar', obj.id)
+            return self._build_url('baixas-fisicas-enviar-solicitacao', obj.id)
         return None
 
     def get_url_aprovar(self, obj: BaixaFisicaBemPatrimonial):
@@ -287,6 +287,8 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
 
 
 class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
+    CAMPOS_EDITAVEIS = {'itens'}
+
     itens = serializers.ListField(child=serializers.DictField(), write_only=True)
 
     class Meta:
@@ -295,6 +297,16 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         instance = self.instance
+        campos_nao_permitidos = set(self.initial_data) - self.CAMPOS_EDITAVEIS
+        if campos_nao_permitidos:
+            raise serializers.ValidationError(
+                {
+                    campo: (
+                        "Este campo não pode ser alterado após a criação da baixa física."
+                    )
+                    for campo in sorted(campos_nao_permitidos)
+                }
+            )
         if instance.status != constants.AGUARDANDO_ENVIO:
             raise serializers.ValidationError(
                 "Apenas baixas com status 'Aguardando envio' podem ser editadas."
