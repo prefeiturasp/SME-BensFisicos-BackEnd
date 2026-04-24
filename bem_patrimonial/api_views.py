@@ -396,7 +396,7 @@ class BaixaFisicaBemPatrimonialViewSet(
                 "alterado_por": (
                     r.alterado_por.username if r.alterado_por else None
                 ),
-                "data_alteracao": r.alterado_em,
+                "data_alteracao": r.alterado_em if hasattr(r, "alterado_em") else None,
             }
             for r in registros
         ]
