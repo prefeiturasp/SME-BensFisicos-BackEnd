@@ -1,11 +1,14 @@
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
+from rest_framework.exceptions import PermissionDenied
 
 from bem_patrimonial import constants as bem_constants
 from dados_comuns.permissions import (
     BemPatrimonialPermission,
     UnidadeAdministrativaPermission,
+    UnidadeOrcamentariaPermission,
+    UsuarioPermission,
 )
 
 
@@ -141,4 +144,126 @@ class PermissionsAPITestCase(SimpleTestCase):
 
         self.assertTrue(
             perm.has_object_permission(self._request(operador), self._view("acao_desconhecida"), obj)
+        )
+
+    def test_uo_has_permission_apenas_superuser(self):
+        perm = UnidadeOrcamentariaPermission()
+
+        self.assertFalse(
+            perm.has_permission(self._request(self._user(authenticated=False)), self._view("list"))
+        )
+
+        superuser = self._user(superuser=True)
+        for action in (
+            "list",
+            "retrieve",
+            "historico",
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "exportar",
+            "acao_desconhecida",
+        ):
+            with self.subTest(action=action):
+                self.assertTrue(perm.has_permission(self._request(superuser), self._view(action)))
+
+        self.assertFalse(
+            perm.has_permission(self._request(self._request_user_gestor()), self._view("list"))
+        )
+        self.assertFalse(
+            perm.has_permission(self._request(self._request_user_operador()), self._view("exportar"))
+        )
+
+    def test_uo_has_object_permission_apenas_superuser(self):
+        perm = UnidadeOrcamentariaPermission()
+        obj = SimpleNamespace()
+
+        self.assertTrue(
+            perm.has_object_permission(
+                self._request(self._user(superuser=True)),
+                self._view("retrieve"),
+                obj,
+            )
+        )
+        self.assertFalse(
+            perm.has_object_permission(
+                self._request(self._request_user_gestor()),
+                self._view("destroy"),
+                obj,
+            )
+        )
+        self.assertFalse(
+            perm.has_object_permission(
+                self._request(self._request_user_operador()),
+                self._view("historico"),
+                obj,
+            )
+        )
+
+    def _request_user_gestor(self):
+        return self._user(gestor=True)
+
+    def _request_user_operador(self):
+        return self._user(operador=True)
+
+    def test_usuario_has_permission_cobre_ramos(self):
+        perm = UsuarioPermission()
+
+        superuser = self._user(superuser=True)
+        for action in (
+            "list",
+            "retrieve",
+            "create",
+            "update",
+            "partial_update",
+            "destroy",
+            "restore",
+            "acao_desconhecida",
+        ):
+            with self.subTest(action=action):
+                self.assertTrue(perm.has_permission(self._request(superuser), self._view(action)))
+
+        gestor = self._user(gestor=True)
+        self.assertTrue(perm.has_permission(self._request(gestor), self._view("list")))
+        self.assertTrue(perm.has_permission(self._request(gestor), self._view("destroy")))
+
+        with self.assertRaises(PermissionDenied):
+            perm.has_permission(self._request(self._user(operador=True)), self._view("list"))
+
+        self.assertFalse(
+            perm.has_permission(self._request(self._user()), self._view("list"))
+        )
+
+    def test_usuario_has_object_permission_cobre_ramos(self):
+        perm = UsuarioPermission()
+        obj = SimpleNamespace()
+
+        self.assertTrue(
+            perm.has_object_permission(
+                self._request(self._user(operador=True)),
+                self._view("retrieve"),
+                obj,
+            )
+        )
+        self.assertTrue(
+            perm.has_object_permission(
+                self._request(self._user(gestor=True)),
+                self._view("update"),
+                obj,
+            )
+        )
+        self.assertFalse(
+            perm.has_object_permission(
+                self._request(self._user(operador=True)),
+                self._view("destroy"),
+                obj,
+            )
+        )
+        self.assertTrue(
+            perm.has_object_permission(
+                self._request(self._user()),
+                self._view("acao_desconhecida"),
+                obj,
+            )
         )

@@ -28,12 +28,25 @@ from dados_comuns.api_serializers import (
     UnidadeAdministrativaExportQuerySerializer,
     UnidadeAdministrativaHistoricoGrupoSerializer,
     UnidadeAdministrativaListSerializer,
+    UnidadeOrcamentariaDetailSerializer,
+    UnidadeOrcamentariaExportQuerySerializer,
+    UnidadeOrcamentariaHistoricoGrupoSerializer,
+    UnidadeOrcamentariaListSerializer,
 )
 from dados_comuns.context import audit_as
-from dados_comuns.formats import UnidadeAdministrativaPDFFormat
-from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
-from dados_comuns.permissions import UnidadeAdministrativaPermission
-from dados_comuns.resources import UnidadeAdministrativaResource
+from dados_comuns.formats import (
+    UnidadeAdministrativaPDFFormat,
+    UnidadeOrcamentariaPDFFormat,
+)
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
+from dados_comuns.permissions import (
+    UnidadeAdministrativaPermission,
+    UnidadeOrcamentariaPermission,
+)
+from dados_comuns.resources import (
+    UnidadeAdministrativaResource,
+    UnidadeOrcamentariaResource,
+)
 from dados_comuns.utils import dict_changes
 
 
@@ -44,6 +57,384 @@ UA_ID_PATH_PARAM = OpenApiParameter(
     location=OpenApiParameter.PATH,
     description="Identificador numérico único da unidade administrativa.",
 )
+
+UO_ID_PATH_PARAM = OpenApiParameter(
+    name="id",
+    required=True,
+    type=OpenApiTypes.INT,
+    location=OpenApiParameter.PATH,
+    description="Identificador numérico único da unidade orçamentária.",
+)
+
+
+class AuditHistoryExportMixin:
+    audit_model = None
+    historico_grupo_serializer_class = None
+    export_query_serializer_class = None
+    export_resource_class = None
+    export_pdf_format_class = None
+    export_filename_prefix = ""
+
+    def _get_audit_content_type(self):
+        return ContentType.objects.get_for_model(self.audit_model)
+
+    def _audit_changes(self, obj, original=None, operation="update"):
+        ct = self._get_audit_content_type()
+
+        if operation == "update" and original is not None:
+            changes = dict_changes(
+                original,
+                obj,
+                fields=self.AUDIT_TRACK_FIELDS,
+            )
+            if not changes:
+                return
+
+            HistoricoGeral.objects.bulk_create(
+                [
+                    HistoricoGeral(
+                        content_type=ct,
+                        object_id=str(obj.pk),
+                        campo=field,
+                        valor_antigo=old,
+                        valor_novo=new,
+                        alterado_por=self.request.user,
+                    )
+                    for field, (old, new) in changes.items()
+                ]
+            )
+            return
+
+        if operation == "create":
+            HistoricoGeral.objects.create(
+                content_type=ct,
+                object_id=str(obj.pk),
+                campo="acao",
+                valor_antigo="",
+                valor_novo="criado",
+                alterado_por=self.request.user,
+            )
+            return
+
+        if operation == "delete":
+            HistoricoGeral.objects.create(
+                content_type=ct,
+                object_id=str(obj.pk),
+                campo="acao",
+                valor_antigo="existente",
+                valor_novo="excluido",
+                alterado_por=self.request.user,
+            )
+
+    def _build_historico_response(self, instance):
+        historicos = (
+            HistoricoGeral.objects.filter(
+                content_type=self._get_audit_content_type(),
+                object_id=str(instance.pk),
+            )
+            .select_related("alterado_por")
+            .order_by("-alterado_em")
+        )
+
+        agrupado = defaultdict(list)
+        for item in historicos:
+            chave = (item.alterado_em.replace(microsecond=0), item.alterado_por_id)
+            agrupado[chave].append(item)
+
+        resposta = []
+        for (alterado_em, alterado_por_id), itens in agrupado.items():
+            resposta.append(
+                {
+                    "alterado_em": alterado_em,
+                    "alterado_por": alterado_por_id,
+                    "alterado_por_nome": (
+                        itens[0].alterado_por.nome if itens[0].alterado_por else None
+                    ),
+                    "acoes": [
+                        {
+                            "campo": i.campo,
+                            "valor_antigo": i.valor_antigo,
+                            "valor_novo": i.valor_novo,
+                        }
+                        for i in itens
+                    ],
+                }
+            )
+
+        resposta_ordenada = sorted(
+            resposta,
+            key=lambda row: row["alterado_em"],
+            reverse=True,
+        )
+
+        serializer = self.historico_grupo_serializer_class(
+            resposta_ordenada,
+            many=True,
+        )
+        return Response(serializer.data)
+
+    def _build_export_response(self, request):
+        serializer = self.export_query_serializer_class(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        formato = serializer.validated_data["formato"]
+
+        queryset = self.filter_queryset(self.get_queryset())
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{self.export_filename_prefix}_{timestamp}.{formato}"
+
+        if formato == "pdf":
+            pdf_format = self.export_pdf_format_class()
+            pdf_format._export_request = request
+            pdf_format._export_queryset = queryset
+            pdf_bytes = pdf_format.export_data(None)
+
+            response = HttpResponse(pdf_bytes, content_type="application/pdf")
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return response
+
+        resource = self.export_resource_class()
+        dataset = resource.export(queryset)
+
+        if formato == "csv":
+            content = dataset.csv.encode("utf-8-sig")
+            content_type = "text/csv"
+        elif formato == "xls":
+            content = dataset.xls
+            content_type = "application/vnd.ms-excel"
+        else:
+            content = dataset.xlsx
+            content_type = (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Listar unidades orçamentárias",
+        description="Lista paginada com busca, filtros e ordenação. Acesso restrito a superusuário.",
+        parameters=[
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Busca em: codigo, sigla e nome.",
+            ),
+            OpenApiParameter(
+                name="ordering",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="Ordenação por: id, codigo, sigla, nome e ativa. Use '-' para descendente.",
+            ),
+            OpenApiParameter(
+                name="ativa",
+                type=OpenApiTypes.BOOL,
+                location=OpenApiParameter.QUERY,
+                description="Filtra por unidade orçamentária ativa/inativa.",
+            ),
+            OpenApiParameter(
+                name="page",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="Número da página.",
+            ),
+            OpenApiParameter(
+                name="page_size",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                description="Quantidade de itens por página (máximo 100).",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description="Lista retornada com sucesso."),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para acessar o recurso."),
+        },
+    ),
+    retrieve=extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Detalhar unidade orçamentária",
+        parameters=[UO_ID_PATH_PARAM],
+        responses={
+            200: OpenApiResponse(description="Detalhe retornado com sucesso."),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para acessar o recurso."),
+            404: OpenApiResponse(description="Unidade orçamentária não encontrada."),
+        },
+    ),
+    create=extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Criar unidade orçamentária",
+        responses={
+            201: OpenApiResponse(description="Unidade orçamentária criada com sucesso."),
+            400: OpenApiResponse(description="Dados inválidos."),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para criar."),
+        },
+    ),
+    update=extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Atualizar unidade orçamentária",
+        parameters=[UO_ID_PATH_PARAM],
+        responses={
+            200: OpenApiResponse(description="Unidade orçamentária atualizada com sucesso."),
+            400: OpenApiResponse(description="Dados inválidos."),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para atualizar."),
+            404: OpenApiResponse(description="Unidade orçamentária não encontrada."),
+        },
+    ),
+    partial_update=extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Atualizar parcialmente unidade orçamentária",
+        parameters=[UO_ID_PATH_PARAM],
+        responses={
+            200: OpenApiResponse(description="Unidade orçamentária atualizada com sucesso."),
+            400: OpenApiResponse(description="Dados inválidos."),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para atualizar."),
+            404: OpenApiResponse(description="Unidade orçamentária não encontrada."),
+        },
+    ),
+    destroy=extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Excluir unidade orçamentária",
+        description="A exclusão é permitida apenas para superusuário e bloqueada quando existirem vínculos ativos no sistema.",
+        parameters=[UO_ID_PATH_PARAM],
+        responses={
+            204: OpenApiResponse(description="Unidade orçamentária excluída com sucesso."),
+            400: OpenApiResponse(description="Não foi possível excluir por regra de integridade/vínculos."),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para excluir."),
+            404: OpenApiResponse(description="Unidade orçamentária não encontrada."),
+        },
+    ),
+)
+class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet):
+    permission_classes = [UnidadeOrcamentariaPermission]
+    audit_model = UnidadeOrcamentaria
+    historico_grupo_serializer_class = UnidadeOrcamentariaHistoricoGrupoSerializer
+    export_query_serializer_class = UnidadeOrcamentariaExportQuerySerializer
+    export_resource_class = UnidadeOrcamentariaResource
+    export_pdf_format_class = UnidadeOrcamentariaPDFFormat
+    export_filename_prefix = "unidades_orcamentarias"
+
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ["ativa"]
+    search_fields = ["codigo", "sigla", "nome"]
+    ordering_fields = ["id", "codigo", "sigla", "nome", "ativa"]
+    ordering = ["codigo", "nome"]
+
+    AUDIT_TRACK_FIELDS = (
+        "codigo",
+        "sigla",
+        "nome",
+        "ativa",
+    )
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return UnidadeOrcamentariaListSerializer
+        return UnidadeOrcamentariaDetailSerializer
+
+    def get_queryset(self):
+        if getattr(self.request.user, "is_superuser", False):
+            return UnidadeOrcamentaria.objects.all()
+
+        return UnidadeOrcamentaria.objects.none()
+
+    def _validar_exclusao_segura(self, instance):
+        vinculos = instance.listar_vinculos_para_exclusao()
+        if vinculos:
+            raise DRFValidationError(
+                {
+                    "detail": "Não foi possível excluir esta Unidade Orçamentária porque existem vínculos ativos no sistema: {}.".format(
+                        ", ".join(vinculos)
+                    )
+                }
+            )
+
+    def perform_create(self, serializer):
+        with transaction.atomic():
+            with audit_as(self.request.user):
+                obj = serializer.save()
+            self._audit_changes(obj, operation="create")
+
+    def perform_update(self, serializer):
+        original = UnidadeOrcamentaria.objects.get(pk=serializer.instance.pk)
+
+        with transaction.atomic():
+            with audit_as(self.request.user):
+                obj = serializer.save()
+            self._audit_changes(obj, original=original, operation="update")
+
+    def perform_destroy(self, instance):
+        self._validar_exclusao_segura(instance)
+
+        with transaction.atomic():
+            try:
+                self._audit_changes(instance, operation="delete")
+                with audit_as(self.request.user):
+                    instance.delete()
+            except ProtectedError:
+                raise DRFValidationError(
+                    {
+                        "detail": "Não foi possível excluir esta Unidade Orçamentária porque existem vínculos ativos no sistema."
+                    }
+                )
+
+    @extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Histórico da unidade orçamentária",
+        description="Retorna o histórico de alterações da unidade orçamentária informada no ID.",
+        parameters=[UO_ID_PATH_PARAM],
+        responses={
+            200: OpenApiResponse(
+                response=UnidadeOrcamentariaHistoricoGrupoSerializer(many=True),
+                description="Histórico retornado com sucesso.",
+            ),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para visualizar histórico."),
+            404: OpenApiResponse(description="Unidade orçamentária não encontrada."),
+        },
+    )
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="historico",
+        filter_backends=[],
+        pagination_class=None,
+    )
+    def historico(self, request, pk=None):
+        return self._build_historico_response(self.get_object())
+
+    @extend_schema(
+        tags=["Unidades Orçamentárias"],
+        summary="Exportar unidades orçamentárias",
+        description="Exporta os dados filtrados para csv, xls, xlsx ou pdf.",
+        parameters=[
+            OpenApiParameter(
+                name="formato",
+                required=True,
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=["csv", "xls", "xlsx", "pdf"],
+            )
+        ],
+        responses={
+            200: OpenApiResponse(description="Arquivo de exportação gerado com sucesso."),
+            400: OpenApiResponse(description="Parâmetros inválidos para exportação."),
+            401: OpenApiResponse(description="Usuário não autenticado."),
+            403: OpenApiResponse(description="Usuário sem permissão para exportar."),
+        },
+    )
+    @action(detail=False, methods=["get"], url_path="exportar")
+    def exportar(self, request):
+        return self._build_export_response(request)
 
 
 @extend_schema_view(
@@ -149,8 +540,14 @@ UA_ID_PATH_PARAM = OpenApiParameter(
         },
     ),
 )
-class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
+class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet):
     permission_classes = [UnidadeAdministrativaPermission]
+    audit_model = UnidadeAdministrativa
+    historico_grupo_serializer_class = UnidadeAdministrativaHistoricoGrupoSerializer
+    export_query_serializer_class = UnidadeAdministrativaExportQuerySerializer
+    export_resource_class = UnidadeAdministrativaResource
+    export_pdf_format_class = UnidadeAdministrativaPDFFormat
+    export_filename_prefix = "unidades_administrativas"
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["status"]
@@ -241,54 +638,6 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
                 }
             )
 
-    def _audit_changes(self, obj, original=None, operation="update"):
-        ct = ContentType.objects.get_for_model(UnidadeAdministrativa)
-
-        if operation == "update" and original is not None:
-            changes = dict_changes(
-                original,
-                obj,
-                fields=self.AUDIT_TRACK_FIELDS,
-            )
-            if not changes:
-                return
-
-            HistoricoGeral.objects.bulk_create(
-                [
-                    HistoricoGeral(
-                        content_type=ct,
-                        object_id=str(obj.pk),
-                        campo=field,
-                        valor_antigo=old,
-                        valor_novo=new,
-                        alterado_por=self.request.user,
-                    )
-                    for field, (old, new) in changes.items()
-                ]
-            )
-            return
-
-        if operation == "create":
-            HistoricoGeral.objects.create(
-                content_type=ct,
-                object_id=str(obj.pk),
-                campo="acao",
-                valor_antigo="",
-                valor_novo="criado",
-                alterado_por=self.request.user,
-            )
-            return
-
-        if operation == "delete":
-            HistoricoGeral.objects.create(
-                content_type=ct,
-                object_id=str(obj.pk),
-                campo="acao",
-                valor_antigo="existente",
-                valor_novo="excluido",
-                alterado_por=self.request.user,
-            )
-
     def perform_create(self, serializer):
         self._validate_uo_scope(serializer.validated_data)
         with transaction.atomic():
@@ -341,51 +690,7 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
         pagination_class=None,
     )
     def historico(self, request, pk=None):
-        ua = self.get_object()
-
-        ct = ContentType.objects.get_for_model(UnidadeAdministrativa)
-        historicos = (
-            HistoricoGeral.objects.filter(content_type=ct, object_id=str(ua.pk))
-            .select_related("alterado_por")
-            .order_by("-alterado_em")
-        )
-
-        agrupado = defaultdict(list)
-        for item in historicos:
-            chave = (item.alterado_em.replace(microsecond=0), item.alterado_por_id)
-            agrupado[chave].append(item)
-
-        resposta = []
-        for (alterado_em, alterado_por_id), itens in agrupado.items():
-            resposta.append(
-                {
-                    "alterado_em": alterado_em,
-                    "alterado_por": alterado_por_id,
-                    "alterado_por_nome": (
-                        itens[0].alterado_por.nome if itens[0].alterado_por else None
-                    ),
-                    "acoes": [
-                        {
-                            "campo": i.campo,
-                            "valor_antigo": i.valor_antigo,
-                            "valor_novo": i.valor_novo,
-                        }
-                        for i in itens
-                    ],
-                }
-            )
-
-        resposta_ordenada = sorted(
-            resposta,
-            key=lambda row: row["alterado_em"],
-            reverse=True,
-        )
-
-        serializer = UnidadeAdministrativaHistoricoGrupoSerializer(
-            resposta_ordenada,
-            many=True,
-        )
-        return Response(serializer.data)
+        return self._build_historico_response(self.get_object())
 
     @extend_schema(
         tags=["Unidades Administrativas"],
@@ -409,41 +714,4 @@ class UnidadeAdministrativaViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=["get"], url_path="exportar")
     def exportar(self, request):
-        serializer = UnidadeAdministrativaExportQuerySerializer(
-            data=request.query_params
-        )
-        serializer.is_valid(raise_exception=True)
-        formato = serializer.validated_data["formato"]
-
-        queryset = self.filter_queryset(self.get_queryset())
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"unidades_administrativas_{timestamp}.{formato}"
-
-        if formato == "pdf":
-            pdf_format = UnidadeAdministrativaPDFFormat()
-            pdf_format._export_request = request
-            pdf_format._export_queryset = queryset
-            pdf_bytes = pdf_format.export_data(None)
-
-            response = HttpResponse(pdf_bytes, content_type="application/pdf")
-            response["Content-Disposition"] = f'attachment; filename="{filename}"'
-            return response
-
-        resource = UnidadeAdministrativaResource()
-        dataset = resource.export(queryset)
-
-        if formato == "csv":
-            content = dataset.csv.encode("utf-8-sig")
-            content_type = "text/csv"
-        elif formato == "xls":
-            content = dataset.xls
-            content_type = "application/vnd.ms-excel"
-        else:
-            content = dataset.xlsx
-            content_type = (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        response = HttpResponse(content, content_type=content_type)
-        response["Content-Disposition"] = f'attachment; filename="{filename}"'
-        return response
+        return self._build_export_response(request)
