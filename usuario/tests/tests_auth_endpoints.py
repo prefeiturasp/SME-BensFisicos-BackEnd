@@ -135,6 +135,31 @@ class AuthEndpointsTestCase(APITestCase):
         resp = self.client.get(me_url, HTTP_AUTHORIZATION=f"Bearer {access}")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["username"], "testuser")
+        self.assertIs(resp.data["is_superuser"], False)
+
+    def test_me_authenticated_superuser(self):
+        superuser = Usuario.objects.create_superuser(
+            username="adminuser",
+            email="adminuser@example.com",
+            **auth_kwargs("adminpass123"),
+            must_change_password=False,
+        )
+
+        login_url = "/api/auth/login/"
+        resp = self.client.post(
+            login_url,
+            {"username": "adminuser", **auth_kwargs("adminpass123")},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        access = resp.data["access"]
+        me_url = "/api/auth/me/"
+        resp = self.client.get(me_url, HTTP_AUTHORIZATION=f"Bearer {access}")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["id"], superuser.id)
+        self.assertIs(resp.data["is_superuser"], True)
 
     def test_token_refresh(self):
         login_url = "/api/auth/login/"

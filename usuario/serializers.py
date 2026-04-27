@@ -146,6 +146,7 @@ class FirstAccessPasswordChangeSerializer(serializers.Serializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    is_superuser = serializers.BooleanField(read_only=True)
     is_gestor_patrimonio = serializers.BooleanField(read_only=True)
     is_operador_inventario = serializers.BooleanField(read_only=True)
     uo_ativa = serializers.SerializerMethodField()
@@ -160,6 +161,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "email",
             "nome",
             "rf",
+            "is_superuser",
             "is_gestor_patrimonio",
             "is_operador_inventario",
             "must_change_password",
