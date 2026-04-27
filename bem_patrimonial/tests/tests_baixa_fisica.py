@@ -1,5 +1,6 @@
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
+from django.contrib.admin.models import LogEntry
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from unittest.mock import patch
@@ -427,6 +428,12 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
         _add_messages_support(request)
         return request
 
+    def _logentry_qs(self):
+        return LogEntry.objects.filter(
+            object_id=str(self.baixa.pk),
+            user_id=self.gestor.pk,
+        )
+
     def test_acao_enviar_baixa_dispara_enviar_solicitacao(self):
         request = self._request(self.operador_origem)
         qs = BaixaFisicaBemPatrimonial.objects.filter(pk=self.baixa.pk)
@@ -459,6 +466,7 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
         self.bem.refresh_from_db()
         self.assertEqual(self.baixa.status, ACEITA)
         self.assertEqual(self.bem.status, BAIXA_FISICA)
+        self.assertTrue(self._logentry_qs().exists())
 
     def test_acao_cancelar_baixa_reseta_status_bem(self):
         # simula baixa enviada (bens aguardando aprovação)
@@ -476,6 +484,20 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
         self.bem.refresh_from_db()
         self.assertEqual(self.baixa.status, RECUSADA)
         self.assertEqual(self.bem.status, APROVADO)
+        self.assertTrue(self._logentry_qs().exists())
+
+    def test_acao_enviar_baixa_registra_logentry(self):
+        request = self._request(self.operador_origem)
+        qs = BaixaFisicaBemPatrimonial.objects.filter(pk=self.baixa.pk)
+
+        self.admin.acao_enviar_baixa(request, qs)
+
+        self.assertTrue(
+            LogEntry.objects.filter(
+                object_id=str(self.baixa.pk),
+                user_id=self.operador_origem.pk,
+            ).exists()
+        )
 
     def test_acao_cancelar_nao_cancela_baixas_aceitas(self):
         # envia e aprova
