@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
@@ -12,11 +12,12 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
 )
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
+    MENSAGEM_SEM_PONTO_CENTRAL,
     MovimentacaoBemPatrimonialForm,
 )
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.factories import criar_ua
+from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -93,16 +94,44 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
             MovimentacaoBemPatrimonial, self.site
         )
 
+    def _codigo_uo(self, a, b, c):
+        return f"{int(a):02d}.{int(b):02d}.{int(c):02d}"
+
     def test_uas_readonly_na_edicao_nao_na_criacao(self):
         request = self.factory.get("/admin/bem_patrimonial/movimentacaobempatrimonial/")
         request.user = self.gestor
 
         readonly_edicao = self.admin.get_readonly_fields(request, obj=self.movimentacao)
+        self.assertIn("get_unidade_orcamentaria_destino", readonly_edicao)
         self.assertIn("unidade_administrativa_origem", readonly_edicao)
         self.assertIn("unidade_administrativa_destino", readonly_edicao)
 
         readonly_criacao = self.admin.get_readonly_fields(request, obj=None)
         self.assertEqual(len(readonly_criacao), 0)
+
+    def test_form_de_edicao_instancia_sem_keyerror_com_campos_readonly(self):
+        request = self.factory.get(
+            "/admin/bem_patrimonial/movimentacaobempatrimonial/1/change/"
+        )
+        request.user = self.gestor
+
+        form_class = self.admin.get_form(request, obj=self.movimentacao)
+        form = form_class(instance=self.movimentacao)
+
+        self.assertIn("unidade_orcamentaria_destino", form.fields)
+        self.assertTrue(form.fields["unidade_orcamentaria_destino"].disabled)
+        self.assertNotIn("unidade_administrativa_origem", form.fields)
+        self.assertNotIn("unidade_administrativa_destino", form.fields)
+
+    def test_campo_uo_destino_exibido_entre_origem_e_destino(self):
+        request = self.factory.get("/admin/bem_patrimonial/movimentacaobempatrimonial/add/")
+        request.user = self.gestor
+
+        fields = self.admin.get_fields(request)
+
+        self.assertEqual(fields[0], "unidade_administrativa_origem")
+        self.assertEqual(fields[1], "unidade_orcamentaria_destino")
+        self.assertEqual(fields[2], "unidade_administrativa_destino")
 
     def test_validacao_uas_so_acontece_na_criacao(self):
         form_criacao = MovimentacaoBemPatrimonialForm(
@@ -110,9 +139,9 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
                 "unidade_administrativa_origem": self.ua1.pk,
                 "unidade_administrativa_destino": self.ua1.pk,  # Mesma UA - inválido
                 "observacao": "Teste",
-            }
+            },
+            request=type("obj", (object,), {"user": self.gestor})(),
         )
-        form_criacao.request = type("obj", (object,), {"user": self.gestor})()
 
         self.assertFalse(form_criacao.is_valid())
         self.assertIn(
@@ -127,7 +156,72 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
                 "observacao": "Observação atualizada",
             },
             instance=self.movimentacao,
+            request=type("obj", (object,), {"user": self.gestor})(),
         )
-        form_edicao.request = type("obj", (object,), {"user": self.gestor})()
 
         self.assertTrue(form_edicao.is_valid())
+
+    def test_uo_destino_padrao_e_uo_do_usuario(self):
+        form = MovimentacaoBemPatrimonialForm(request=type("obj", (object,), {"user": self.gestor})())
+
+        self.assertEqual(
+            form.fields["unidade_orcamentaria_destino"].initial,
+            self.gestor.unidade_orcamentaria_id,
+        )
+
+    def test_uo_externa_preenche_ua_001_automaticamente(self):
+        outra_uo = criar_uo(
+            codigo=self._codigo_uo(1, 16, 11),
+            nome="UO Destino Externa",
+            sigla="UO3",
+        )
+        criar_ua(
+            uo=outra_uo,
+            codigo=codigo_ua(1, 16, 11, 1),
+            nome="Ponto Central",
+            sigla="PC",
+        )
+
+        form = MovimentacaoBemPatrimonialForm(
+            data={
+                "unidade_administrativa_origem": self.ua1.pk,
+                "unidade_orcamentaria_destino": outra_uo.pk,
+                "observacao": "Teste UO externa",
+            },
+            request=type("obj", (object,), {"user": self.gestor})(),
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.cleaned_data["unidade_administrativa_destino"].codigo,
+            codigo_ua(1, 16, 11, 1),
+        )
+        self.assertEqual(
+            form.cleaned_data["unidade_administrativa_destino"].unidade_orcamentaria,
+            outra_uo,
+        )
+
+    def test_uo_externa_sem_ponto_central_exibe_erro_amigavel(self):
+        uo_sem_ponto = criar_uo(
+            codigo=self._codigo_uo(1, 16, 12),
+            nome="UO Sem Central",
+            sigla="UO4",
+        )
+        criar_ua(
+            uo=uo_sem_ponto,
+            codigo=codigo_ua(1, 16, 12, 10),
+            nome="UA Secundária",
+            sigla="SEC",
+        )
+
+        form = MovimentacaoBemPatrimonialForm(
+            data={
+                "unidade_administrativa_origem": self.ua1.pk,
+                "unidade_orcamentaria_destino": uo_sem_ponto.pk,
+                "observacao": "Teste UO sem central",
+            },
+            request=type("obj", (object,), {"user": self.gestor})(),
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(MENSAGEM_SEM_PONTO_CENTRAL, str(form.errors))

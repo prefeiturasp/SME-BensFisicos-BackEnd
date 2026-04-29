@@ -36,9 +36,7 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
     def _create_form_with_request(self, user, data):
         request = self.factory.post("/admin/")
         request.user = user
-        form = MovimentacaoBemPatrimonialForm(data=data)
-        form.request = request
-        return form
+        return MovimentacaoBemPatrimonialForm(data=data, request=request)
 
     def test_nao_pode_criar_movimentacao_com_ua_origem_inativa(self):
         data = {

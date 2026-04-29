@@ -1,5 +1,10 @@
 {% extends "admin/base.html" %}
 
+{% block extrahead %}
+{{ block.super }}
+{% include "admin/includes/google_analytics.html" %}
+{% endblock %}
+
 {% block extrastyle %}
 <style>
   html[data-theme="light"],

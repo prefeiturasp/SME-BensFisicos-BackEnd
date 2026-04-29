@@ -124,6 +124,12 @@ O provisionamento de grupos/permissões é feito por comando de gestão.
   docker compose -f docker-compose-ok.yml exec web python manage.py migrate
   ```
 
+## Google Analytics no Django Admin
+
+O Django Admin renderiza o snippet do Google Analytics apenas em produção, quando `DJANGO_DEBUG=False`.
+
+O ID do Google Analytics está fixado no código do backend. No ambiente local, mantenha `DJANGO_DEBUG=True` para evitar carregamento do script durante desenvolvimento.
+
 ## Endpoints principais
 
 - `GET /api/docs/` - Swagger UI

@@ -57,9 +57,12 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
 
     def _init_disable_em_edicao(self):
         if self.instance and self.instance.pk:
-            for f in ("unidade_administrativa", "tipo", "periodo_final"):
+            for f in ("unidade_administrativa", "tipo"):
                 if f in self.fields:
                     self.fields[f].disabled = True
+
+            if "periodo_final" in self.fields:
+                self.fields["periodo_final"].disabled = True
 
     def clean(self):
         cleaned = super().clean()
