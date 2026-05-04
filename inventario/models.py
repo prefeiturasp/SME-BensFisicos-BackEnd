@@ -71,7 +71,7 @@ class ParametroConciliacaoAnual(models.Model):
             )
 
         conflito = ParametroConciliacaoAnual.objects.filter(
-            ano_referencia=self.ano_referencia
+            unidade_orcamentaria=self.unidade_orcamentaria,
         ).exclude(pk=self.pk)
 
         conflito = conflito.filter(
@@ -86,6 +86,7 @@ class ParametroConciliacaoAnual(models.Model):
 
         if self.ativo:
             ja_ativo = ParametroConciliacaoAnual.objects.filter(
+                unidade_orcamentaria=self.unidade_orcamentaria,
                 ano_referencia=self.ano_referencia,
                 ativo=True,
             ).exclude(pk=self.pk)
