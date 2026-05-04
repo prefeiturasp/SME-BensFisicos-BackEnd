@@ -70,10 +70,33 @@ PARAMETRO_ID_PATH_PARAM = OpenApiParameter(
     description="Identificador numérico único do parâmetro de conciliação anual.",
 )
 
+PARAMETRO_TAG = "Parâmetros de Conciliação Anual"
+PARAMETRO_NAO_ENCONTRADO = "Parâmetro de conciliação anual não encontrado."
+UNAUTHORIZED_RESPONSE = OpenApiResponse(description="Usuário não autenticado.")
+INVALID_DATA_RESPONSE = OpenApiResponse(description="Dados inválidos.")
+
+
+def forbidden_response(action):
+    return OpenApiResponse(description=f"Usuário sem permissão para {action}.")
+
+
+def not_found_response():
+    return OpenApiResponse(description=PARAMETRO_NAO_ENCONTRADO)
+
+
+def write_responses(success_status, success_description, action):
+    return {
+        success_status: OpenApiResponse(description=success_description),
+        400: INVALID_DATA_RESPONSE,
+        401: UNAUTHORIZED_RESPONSE,
+        403: forbidden_response(action),
+        404: not_found_response(),
+    }
+
 
 @extend_schema_view(
     list=extend_schema(
-        tags=["Parâmetros de Conciliação Anual"],
+        tags=[PARAMETRO_TAG],
         summary="Listar parâmetros de conciliação anual",
         description="Lista paginada com busca, filtros e ordenação.",
         parameters=[
@@ -123,71 +146,40 @@ PARAMETRO_ID_PATH_PARAM = OpenApiParameter(
         ],
         responses={
             200: OpenApiResponse(description="Lista retornada com sucesso."),
-            401: OpenApiResponse(description="Usuário não autenticado."),
-            403: OpenApiResponse(
-                description="Usuário sem permissão para acessar o recurso."
-            ),
+            401: UNAUTHORIZED_RESPONSE,
+            403: forbidden_response("acessar o recurso"),
         },
     ),
     retrieve=extend_schema(
-        tags=["Parâmetros de Conciliação Anual"],
+        tags=[PARAMETRO_TAG],
         summary="Detalhar parâmetro de conciliação anual",
         parameters=[PARAMETRO_ID_PATH_PARAM],
         responses={
             200: OpenApiResponse(description="Detalhe retornado com sucesso."),
-            401: OpenApiResponse(description="Usuário não autenticado."),
-            403: OpenApiResponse(
-                description="Usuário sem permissão para acessar o recurso."
-            ),
-            404: OpenApiResponse(
-                description="Parâmetro de conciliação anual não encontrado."
-            ),
+            401: UNAUTHORIZED_RESPONSE,
+            403: forbidden_response("acessar o recurso"),
+            404: not_found_response(),
         },
     ),
     create=extend_schema(
-        tags=["Parâmetros de Conciliação Anual"],
+        tags=[PARAMETRO_TAG],
         summary="Criar parâmetro de conciliação anual",
-        responses={
-            201: OpenApiResponse(description="Parâmetro criado com sucesso."),
-            400: OpenApiResponse(description="Dados inválidos."),
-            401: OpenApiResponse(description="Usuário não autenticado."),
-            403: OpenApiResponse(description="Usuário sem permissão para criar."),
-        },
+        responses=write_responses(201, "Parâmetro criado com sucesso.", "criar"),
     ),
     update=extend_schema(
-        tags=["Parâmetros de Conciliação Anual"],
+        tags=[PARAMETRO_TAG],
         summary="Atualizar parâmetro de conciliação anual",
         parameters=[PARAMETRO_ID_PATH_PARAM],
-        responses={
-            200: OpenApiResponse(description="Parâmetro atualizado com sucesso."),
-            400: OpenApiResponse(description="Dados inválidos."),
-            401: OpenApiResponse(description="Usuário não autenticado."),
-            403: OpenApiResponse(
-                description="Usuário sem permissão para atualizar."
-            ),
-            404: OpenApiResponse(
-                description="Parâmetro de conciliação anual não encontrado."
-            ),
-        },
+        responses=write_responses(200, "Parâmetro atualizado com sucesso.", "atualizar"),
     ),
     partial_update=extend_schema(
-        tags=["Parâmetros de Conciliação Anual"],
+        tags=[PARAMETRO_TAG],
         summary="Atualizar parcialmente parâmetro de conciliação anual",
         parameters=[PARAMETRO_ID_PATH_PARAM],
-        responses={
-            200: OpenApiResponse(description="Parâmetro atualizado com sucesso."),
-            400: OpenApiResponse(description="Dados inválidos."),
-            401: OpenApiResponse(description="Usuário não autenticado."),
-            403: OpenApiResponse(
-                description="Usuário sem permissão para atualizar."
-            ),
-            404: OpenApiResponse(
-                description="Parâmetro de conciliação anual não encontrado."
-            ),
-        },
+        responses=write_responses(200, "Parâmetro atualizado com sucesso.", "atualizar"),
     ),
     destroy=extend_schema(
-        tags=["Parâmetros de Conciliação Anual"],
+        tags=[PARAMETRO_TAG],
         summary="Excluir parâmetro de conciliação anual",
         parameters=[PARAMETRO_ID_PATH_PARAM],
         responses={
@@ -195,11 +187,9 @@ PARAMETRO_ID_PATH_PARAM = OpenApiParameter(
             400: OpenApiResponse(
                 description="Não foi possível excluir por regra de integridade."
             ),
-            401: OpenApiResponse(description="Usuário não autenticado."),
-            403: OpenApiResponse(description="Usuário sem permissão para excluir."),
-            404: OpenApiResponse(
-                description="Parâmetro de conciliação anual não encontrado."
-            ),
+            401: UNAUTHORIZED_RESPONSE,
+            403: forbidden_response("excluir"),
+            404: not_found_response(),
         },
     ),
 )

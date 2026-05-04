@@ -115,6 +115,20 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
     def _assert_response_fields(self, payload):
         self.assertEqual(set(payload.keys()), self.RESPONSE_FIELDS)
 
+    def _post_parametro(self, **payload_overrides):
+        payload = self._payload_parametro(
+            unidade_orcamentaria=self.uo1.id,
+            **payload_overrides,
+        )
+        return self.client.post(self.list_url, payload, format="json")
+
+    def _assert_bad_request(self, response):
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            "non_field_errors" in response.data
+            or "periodo_final" in response.data
+        )
+
     def test_nao_autenticado_retorna_401_no_get(self):
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -172,47 +186,22 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
         self.assertEqual(response.data["ano_referencia"], 2022)
         self.assertEqual(response.data["unidade_orcamentaria"], self.uo1.id)
 
-    def test_criacao_com_erro_de_validacao(self):
+    def test_criacao_nao_permite_sobreposicao_de_periodos(self):
         self._auth(self.gestor)
 
-        response = self.client.post(
-            self.list_url,
-            self._payload_parametro(
-                unidade_orcamentaria=self.uo1.id,
-                ano_referencia=2025,
-                periodo_inicial="2026-02-01",
-                periodo_final="2026-04-30",
-                ativo=False,
-            ),
-            format="json",
+        cenarios = (
+            {"ano_referencia": 2025},
+            {"ano_referencia": 2026},
         )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertTrue(
-            "non_field_errors" in response.data
-            or "periodo_final" in response.data
-        )
-
-    def test_criacao_nao_permite_sobreposicao_em_ano_diferente(self):
-        self._auth(self.gestor)
-
-        response = self.client.post(
-            self.list_url,
-            self._payload_parametro(
-                unidade_orcamentaria=self.uo1.id,
-                ano_referencia=2026,
-                periodo_inicial="2026-02-01",
-                periodo_final="2026-04-30",
-                ativo=False,
-            ),
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertTrue(
-            "non_field_errors" in response.data
-            or "periodo_final" in response.data
-        )
+        for payload in cenarios:
+            with self.subTest(**payload):
+                response = self._post_parametro(
+                    **payload,
+                    periodo_inicial="2026-02-01",
+                    periodo_final="2026-04-30",
+                    ativo=False,
+                )
+                self._assert_bad_request(response)
 
     def test_criacao_permite_mesmo_ano_em_outra_uo(self):
         self._auth(self.superuser)
