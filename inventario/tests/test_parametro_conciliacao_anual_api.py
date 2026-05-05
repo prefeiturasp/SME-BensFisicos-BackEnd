@@ -129,6 +129,9 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
             or "periodo_final" in response.data
         )
 
+    def _assert_forbidden(self, response):
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_nao_autenticado_retorna_401_no_get(self):
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -136,7 +139,6 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
     def test_listagem_respeita_escopo_por_perfil(self):
         cenarios = [
             (self.gestor, {self.parametro1.id, self.parametro2.id}, {self.parametro3.id}),
-            (self.operador, {self.parametro1.id, self.parametro2.id}, {self.parametro3.id}),
             (self.superuser, {self.parametro1.id, self.parametro2.id}, {self.parametro3.id}),
         ]
 
@@ -149,6 +151,12 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
                 self.assertTrue(deve_ter.issubset(ids))
                 self.assertTrue(ids.isdisjoint(nao_deve_ter))
                 self._assert_response_fields(response.data["results"][0])
+
+    def test_operador_nao_pode_listar_ou_detalhar(self):
+        self._auth(self.operador)
+
+        self._assert_forbidden(self.client.get(self.list_url))
+        self._assert_forbidden(self.client.get(self._detail_url(self.parametro1.id)))
 
     def test_listagem_filtros_ordenacao_e_busca(self):
         self._auth(self.gestor)
@@ -189,19 +197,26 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
     def test_criacao_nao_permite_sobreposicao_de_periodos(self):
         self._auth(self.gestor)
 
-        cenarios = (
-            {"ano_referencia": 2025},
-            {"ano_referencia": 2026},
+        response = self._post_parametro(
+            ano_referencia=2025,
+            periodo_inicial="2026-02-01",
+            periodo_final="2026-04-30",
+            ativo=False,
         )
-        for payload in cenarios:
-            with self.subTest(**payload):
-                response = self._post_parametro(
-                    **payload,
-                    periodo_inicial="2026-02-01",
-                    periodo_final="2026-04-30",
-                    ativo=False,
-                )
-                self._assert_bad_request(response)
+        self._assert_bad_request(response)
+
+    def test_criacao_permite_sobreposicao_em_ano_diferente(self):
+        self._auth(self.gestor)
+
+        response = self._post_parametro(
+            ano_referencia=2026,
+            periodo_inicial="2026-02-01",
+            periodo_final="2026-04-30",
+            ativo=True,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["ano_referencia"], 2026)
 
     def test_criacao_permite_mesmo_ano_em_outra_uo(self):
         self._auth(self.superuser)
@@ -243,17 +258,17 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
             self._payload_parametro(unidade_orcamentaria=self.uo1.id),
             format="json",
         )
-        self.assertEqual(create_resp.status_code, status.HTTP_403_FORBIDDEN)
+        self._assert_forbidden(create_resp)
 
         patch_resp = self.client.patch(
             self._detail_url(self.parametro1.id),
             {"ativo": False},
             format="json",
         )
-        self.assertEqual(patch_resp.status_code, status.HTTP_403_FORBIDDEN)
+        self._assert_forbidden(patch_resp)
 
         delete_resp = self.client.delete(self._detail_url(self.parametro1.id))
-        self.assertEqual(delete_resp.status_code, status.HTTP_403_FORBIDDEN)
+        self._assert_forbidden(delete_resp)
 
     def test_patch_e_put_atualizam_parametro(self):
         self._auth(self.gestor)
@@ -281,17 +296,19 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
         self.assertEqual(put_response.data["periodo_inicial"], "2025-04-01")
         self.assertFalse(put_response.data["ativo"])
 
-    def test_patch_nao_permite_gerenciar_uo_fora_do_escopo(self):
-        self._auth(self.gestor)
+    def test_patch_nao_permite_alterar_unidade_orcamentaria(self):
+        for user in (self.gestor, self.superuser):
+            with self.subTest(user=user.username):
+                self._auth(user)
 
-        response = self.client.patch(
-            self._detail_url(self.parametro1.id),
-            {"unidade_orcamentaria": self.uo2.id},
-            format="json",
-        )
+                response = self.client.patch(
+                    self._detail_url(self.parametro1.id),
+                    {"unidade_orcamentaria": self.uo2.id},
+                    format="json",
+                )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("unidade_orcamentaria", response.data)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("unidade_orcamentaria", response.data)
 
     def test_delete_exclui_registro(self):
         extra = ParametroConciliacaoAnual.objects.create(

@@ -72,6 +72,7 @@ class ParametroConciliacaoAnual(models.Model):
 
         conflito = ParametroConciliacaoAnual.objects.filter(
             unidade_orcamentaria=self.unidade_orcamentaria,
+            ano_referencia=self.ano_referencia,
         ).exclude(pk=self.pk)
 
         conflito = conflito.filter(

@@ -2,13 +2,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models.deletion import ProtectedError
 
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import (
-    OpenApiParameter,
-    OpenApiResponse,
-    extend_schema,
-    extend_schema_view,
-)
 from rest_framework import viewsets
 from rest_framework.exceptions import NotFound, ValidationError as DRFValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -27,10 +20,7 @@ class ParametroConciliacaoAnualPermission(BasePermission):
             return False
         if getattr(user, "is_superuser", False):
             return True
-        return bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_operador_inventario", False)
-        )
+        return bool(getattr(user, "is_gestor_patrimonio", False))
 
     def _pode_gerenciar(self, user):
         return bool(
@@ -62,137 +52,6 @@ class ParametroConciliacaoAnualPermission(BasePermission):
         return True
 
 
-PARAMETRO_ID_PATH_PARAM = OpenApiParameter(
-    name="id",
-    required=True,
-    type=OpenApiTypes.INT,
-    location=OpenApiParameter.PATH,
-    description="Identificador numérico único do parâmetro de conciliação anual.",
-)
-
-PARAMETRO_TAG = "Parâmetros de Conciliação Anual"
-PARAMETRO_NAO_ENCONTRADO = "Parâmetro de conciliação anual não encontrado."
-UNAUTHORIZED_RESPONSE = OpenApiResponse(description="Usuário não autenticado.")
-INVALID_DATA_RESPONSE = OpenApiResponse(description="Dados inválidos.")
-
-
-def forbidden_response(action):
-    return OpenApiResponse(description=f"Usuário sem permissão para {action}.")
-
-
-def not_found_response():
-    return OpenApiResponse(description=PARAMETRO_NAO_ENCONTRADO)
-
-
-def write_responses(success_status, success_description, action):
-    return {
-        success_status: OpenApiResponse(description=success_description),
-        400: INVALID_DATA_RESPONSE,
-        401: UNAUTHORIZED_RESPONSE,
-        403: forbidden_response(action),
-        404: not_found_response(),
-    }
-
-
-@extend_schema_view(
-    list=extend_schema(
-        tags=[PARAMETRO_TAG],
-        summary="Listar parâmetros de conciliação anual",
-        description="Lista paginada com busca, filtros e ordenação.",
-        parameters=[
-            OpenApiParameter(
-                name="search",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description=(
-                    "Busca em: ano_referencia, unidade_orcamentaria__codigo, "
-                    "unidade_orcamentaria__sigla e unidade_orcamentaria__nome."
-                ),
-            ),
-            OpenApiParameter(
-                name="ordering",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.QUERY,
-                description=(
-                    "Ordenação por: id, ano_referencia, periodo_inicial, "
-                    "periodo_final, ativo e unidade_orcamentaria__codigo. "
-                    "Use '-' para descendente."
-                ),
-            ),
-            OpenApiParameter(
-                name="ativo",
-                type=OpenApiTypes.BOOL,
-                location=OpenApiParameter.QUERY,
-                description="Filtra por parâmetros ativos/inativos.",
-            ),
-            OpenApiParameter(
-                name="ano_referencia",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                description="Filtra pelo ano de referência.",
-            ),
-            OpenApiParameter(
-                name="page",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                description="Número da página.",
-            ),
-            OpenApiParameter(
-                name="page_size",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                description="Quantidade de itens por página (máximo 100).",
-            ),
-        ],
-        responses={
-            200: OpenApiResponse(description="Lista retornada com sucesso."),
-            401: UNAUTHORIZED_RESPONSE,
-            403: forbidden_response("acessar o recurso"),
-        },
-    ),
-    retrieve=extend_schema(
-        tags=[PARAMETRO_TAG],
-        summary="Detalhar parâmetro de conciliação anual",
-        parameters=[PARAMETRO_ID_PATH_PARAM],
-        responses={
-            200: OpenApiResponse(description="Detalhe retornado com sucesso."),
-            401: UNAUTHORIZED_RESPONSE,
-            403: forbidden_response("acessar o recurso"),
-            404: not_found_response(),
-        },
-    ),
-    create=extend_schema(
-        tags=[PARAMETRO_TAG],
-        summary="Criar parâmetro de conciliação anual",
-        responses=write_responses(201, "Parâmetro criado com sucesso.", "criar"),
-    ),
-    update=extend_schema(
-        tags=[PARAMETRO_TAG],
-        summary="Atualizar parâmetro de conciliação anual",
-        parameters=[PARAMETRO_ID_PATH_PARAM],
-        responses=write_responses(200, "Parâmetro atualizado com sucesso.", "atualizar"),
-    ),
-    partial_update=extend_schema(
-        tags=[PARAMETRO_TAG],
-        summary="Atualizar parcialmente parâmetro de conciliação anual",
-        parameters=[PARAMETRO_ID_PATH_PARAM],
-        responses=write_responses(200, "Parâmetro atualizado com sucesso.", "atualizar"),
-    ),
-    destroy=extend_schema(
-        tags=[PARAMETRO_TAG],
-        summary="Excluir parâmetro de conciliação anual",
-        parameters=[PARAMETRO_ID_PATH_PARAM],
-        responses={
-            204: OpenApiResponse(description="Parâmetro excluído com sucesso."),
-            400: OpenApiResponse(
-                description="Não foi possível excluir por regra de integridade."
-            ),
-            401: UNAUTHORIZED_RESPONSE,
-            403: forbidden_response("excluir"),
-            404: not_found_response(),
-        },
-    ),
-)
 class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
     permission_classes = [ParametroConciliacaoAnualPermission]
 
@@ -245,6 +104,17 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
         user = self.request.user
 
         nova_uo = validated_data.get("unidade_orcamentaria")
+
+        if instance is not None and nova_uo is not None:
+            if nova_uo != instance.unidade_orcamentaria:
+                raise DRFValidationError(
+                    {
+                        "unidade_orcamentaria": (
+                            "A Unidade Orçamentária não pode ser alterada."
+                        )
+                    }
+                )
+
         if instance is not None and nova_uo is None:
             nova_uo = instance.unidade_orcamentaria
 
