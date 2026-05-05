@@ -219,6 +219,8 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
         self.assertEqual(response.data["ano_referencia"], 2026)
 
     def test_criacao_permite_mesmo_ano_em_outra_uo(self):
+        self.superuser.unidade_orcamentaria = self.uo2
+        self.superuser.save()
         self._auth(self.superuser)
 
         response = self.client.post(
@@ -235,7 +237,7 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["unidade_orcamentaria"], self.uo2.id)
 
-    def test_superuser_pode_criar_em_qualquer_uo(self):
+    def test_superuser_nao_pode_criar_fora_da_uo_atribuida(self):
         self._auth(self.superuser)
 
         response = self.client.post(
@@ -247,8 +249,8 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["unidade_orcamentaria"], self.uo2.id)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("unidade_orcamentaria", response.data)
 
     def test_operador_nao_pode_criar_editar_excluir(self):
         self._auth(self.operador)

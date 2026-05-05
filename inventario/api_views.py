@@ -123,9 +123,6 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
                 {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
             )
 
-        if getattr(user, "is_superuser", False):
-            return
-
         user_uo = getattr(user, "unidade_orcamentaria", None)
         if user_uo is None or nova_uo != user_uo:
             raise DRFValidationError(
