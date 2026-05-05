@@ -113,6 +113,26 @@ class UnidadeAdministrativaPermission(BasePermission):
         return True
 
 
+class UnidadeOrcamentariaPermission(BasePermission):
+    """
+    Regras de acesso para API de Unidade Orçamentária:
+    - Apenas superusuário acessa o módulo inteiro.
+    """
+
+    def _pode_acessar_modulo(self, user):
+        return bool(
+            user
+            and user.is_authenticated
+            and getattr(user, "is_superuser", False)
+        )
+
+    def has_permission(self, request, view):
+        return self._pode_acessar_modulo(request.user)
+
+    def has_object_permission(self, request, view, obj):
+        return self._pode_acessar_modulo(request.user)
+
+
 class UsuarioPermission(BasePermission):
     """
     Regras de acesso para API de Usuários:

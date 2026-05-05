@@ -474,6 +474,11 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         solicitadas = 0
         for baixa in baixas_permitidas:
             baixa.enviar_solicitacao()
+            self.log_change(
+                request,
+                baixa,
+                "Baixa Física solicitada para aprovação.",
+            )
             envia_email_baixa_fisica_solicitada(baixa)
             solicitadas += 1
 
@@ -523,6 +528,11 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         aprovadas = 0
         for baixa in baixas_solicitadas:
             baixa.aprovar(usuario_aprovador=request.user)
+            self.log_change(
+                request,
+                baixa,
+                "Baixa Física aprovada.",
+            )
             envia_email_baixa_fisica_aprovada(baixa)
             aprovadas += 1
 
@@ -596,6 +606,11 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
 
             baixa.status = constants.RECUSADA
             baixa.save(update_fields=["status"])
+            self.log_change(
+                request,
+                baixa,
+                "Baixa Física recusada.",
+            )
             canceladas += 1
 
             envia_email_baixa_fisica_cancelada(baixa, request.user)

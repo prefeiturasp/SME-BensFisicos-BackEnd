@@ -1,5 +1,22 @@
 from import_export import resources, fields
-from dados_comuns.models import UnidadeAdministrativa
+
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+
+
+class UnidadeOrcamentariaResource(resources.ModelResource):
+
+    ativa_display = fields.Field(
+        column_name="Status",
+        attribute="ativa",
+    )
+
+    class Meta:
+        model = UnidadeOrcamentaria
+        fields = ("codigo", "sigla", "nome", "ativa_display")
+        export_order = ("codigo", "sigla", "nome", "ativa_display")
+
+    def dehydrate_ativa_display(self, uo):
+        return "Ativa" if uo.ativa else "Inativa"
 
 
 class UnidadeAdministrativaResource(resources.ModelResource):

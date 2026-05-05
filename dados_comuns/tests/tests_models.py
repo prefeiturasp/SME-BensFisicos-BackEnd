@@ -1,9 +1,14 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from datetime import date
+
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from django.test import TestCase
+from django.test import RequestFactory
 from django.contrib.admin.sites import AdminSite
-from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.admin import UnidadeAdministrativaAdmin
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from dados_comuns.admin import UnidadeAdministrativaAdmin, UnidadeOrcamentariaAdmin
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from inventario.models import ParametroConciliacaoAnual
+from usuario.models import Usuario
 
 
 class SetupData:
@@ -155,3 +160,119 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
         self.assertGreater(len(unidades_list), 0)
         self.assertEqual(unidades_list[0].codigo, "050")
         self.assertEqual(unidades_list[-1].codigo, "200")
+
+
+class UnidadeOrcamentariaModelTestCase(TestCase):
+
+    def test_listar_vinculos_para_exclusao_sem_vinculos(self):
+        uo = criar_uo(codigo=codigo_uo(11, 11, 11), nome="UO Livre", sigla="LIV")
+
+        self.assertEqual(uo.listar_vinculos_para_exclusao(), [])
+        self.assertTrue(uo.pode_excluir())
+
+    def test_listar_vinculos_para_exclusao_com_ua_usuario_e_parametro(self):
+        uo = criar_uo(codigo=codigo_uo(22, 22, 22), nome="UO Vinculada", sigla="VIN")
+        criar_ua(
+            uo=uo,
+            codigo=codigo_ua(22, 22, 22, 1),
+            sigla="UA22",
+            nome="UA Vinculada",
+        )
+        Usuario.objects.create_user(
+            username="usuario_uo_vinculada",
+            email="usuario.uo.vinculada@test.com",
+            **auth_kwargs("123456"),
+            nome="Usuário Vinculado",
+            unidade_orcamentaria=uo,
+        )
+        ParametroConciliacaoAnual.objects.create(
+            unidade_orcamentaria=uo,
+            ano_referencia=2030,
+            periodo_inicial=date(2030, 1, 1),
+            periodo_final=date(2030, 3, 31),
+            ativo=True,
+        )
+
+        vinculos = uo.listar_vinculos_para_exclusao()
+
+        self.assertIn("unidades administrativas", vinculos)
+        self.assertIn("usuários", vinculos)
+        self.assertIn("parâmetros de conciliação anual", vinculos)
+        self.assertFalse(uo.pode_excluir())
+
+
+class UnidadeOrcamentariaAdminTestCase(TestCase):
+
+    def setUp(self):
+        self.site = AdminSite()
+        self.admin = UnidadeOrcamentariaAdmin(UnidadeOrcamentaria, self.site)
+        self.factory = RequestFactory()
+        self.superuser = Usuario.objects.create_superuser(
+            username="admin_uo",
+            email="admin.uo@test.com",
+            **auth_kwargs("123"),
+        )
+        self.gestor = Usuario.objects.create_user(
+            username="gestor_uo_admin",
+            email="gestor.uo.admin@test.com",
+            **auth_kwargs("123"),
+            is_staff=True,
+        )
+
+    def test_permissoes_admin_somente_superuser(self):
+        request_super = self.factory.get("/admin/dados_comuns/unidadeorcamentaria/")
+        request_super.user = self.superuser
+
+        request_gestor = self.factory.get("/admin/dados_comuns/unidadeorcamentaria/")
+        request_gestor.user = self.gestor
+
+        self.assertTrue(self.admin.has_module_permission(request_super))
+        self.assertTrue(self.admin.has_view_permission(request_super))
+        self.assertTrue(self.admin.has_add_permission(request_super))
+        self.assertTrue(self.admin.has_change_permission(request_super))
+        self.assertFalse(self.admin.has_delete_permission(request_super))
+        self.assertTrue(self.admin.has_export_permission(request_super))
+
+        self.assertFalse(self.admin.has_module_permission(request_gestor))
+        self.assertFalse(self.admin.has_view_permission(request_gestor))
+        self.assertFalse(self.admin.has_add_permission(request_gestor))
+        self.assertFalse(self.admin.has_change_permission(request_gestor))
+        self.assertFalse(self.admin.has_export_permission(request_gestor))
+
+    def test_form_admin_exige_codigo_e_nome_mas_nao_sigla(self):
+        request = self.factory.get("/admin/dados_comuns/unidadeorcamentaria/add/")
+        request.user = self.superuser
+
+        form_class = self.admin.get_form(request)
+
+        form_sem_sigla = form_class(
+            data={
+                "codigo": codigo_uo(33, 33, 33),
+                "nome": "UO Admin",
+                "sigla": "",
+                "ativa": True,
+            }
+        )
+        self.assertTrue(form_sem_sigla.is_valid())
+
+        form_sem_codigo = form_class(
+            data={
+                "codigo": "",
+                "nome": "UO Admin",
+                "sigla": "ADM",
+                "ativa": True,
+            }
+        )
+        self.assertFalse(form_sem_codigo.is_valid())
+        self.assertIn("codigo", form_sem_codigo.errors)
+
+        form_sem_nome = form_class(
+            data={
+                "codigo": codigo_uo(44, 44, 44),
+                "nome": "",
+                "sigla": "ADM",
+                "ativa": True,
+            }
+        )
+        self.assertFalse(form_sem_nome.is_valid())
+        self.assertIn("nome", form_sem_nome.errors)
