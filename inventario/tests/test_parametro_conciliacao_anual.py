@@ -69,3 +69,22 @@ class ParametroConciliacaoAnualTest(TestCase):
 
         with self.assertRaises(ValidationError):
             p2.full_clean()
+
+    def test_permite_sobreposicao_de_periodos_em_anos_diferentes(self):
+        ParametroConciliacaoAnual.objects.create(
+            ano_referencia=2025,
+            periodo_inicial=date(2026, 1, 1),
+            periodo_final=date(2026, 3, 31),
+            ativo=False,
+            unidade_orcamentaria=self.uo,
+        )
+
+        p2 = ParametroConciliacaoAnual(
+            ano_referencia=2026,
+            periodo_inicial=date(2026, 3, 1),
+            periodo_final=date(2026, 4, 30),
+            ativo=False,
+            unidade_orcamentaria=self.uo,
+        )
+
+        p2.full_clean()
