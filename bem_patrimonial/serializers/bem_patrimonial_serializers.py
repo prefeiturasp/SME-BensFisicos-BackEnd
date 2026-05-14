@@ -302,9 +302,9 @@ class BemPatrimonialDetailSerializer(
             raise serializers.ValidationError(
                 "Este bem está excluído e não pode ser editado."
             )
-        if self.instance.status == constants.BAIXA_FISICA:
+        if self.instance.status in constants.STATUS_FINAIS_BEM:
             raise serializers.ValidationError(
-                "Este bem está com status 'Baixa Física' e não pode ser editado."
+                f"Este bem está com status '{self.instance.get_status_display()}' e não pode ser editado."
             )
         if "unidade_administrativa" in attrs and attrs["unidade_administrativa"] != self.instance.unidade_administrativa:
             raise serializers.ValidationError(
