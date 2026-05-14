@@ -23,6 +23,8 @@ from bem_patrimonial.models import (
     StatusBemPatrimonial,
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
+    TransferenciaBemPatrimonial,
+    TransferenciaBensItem,
 )
 from bem_patrimonial.admins.bem_patrimonial import (
     BemPatrimonialAdmin,
@@ -38,6 +40,7 @@ from bem_patrimonial.constants import (
     APROVADO,
     BAIXA_FISICA,
     ACEITA,
+    TRANSFERIDO,
 )
 from bem_patrimonial.formats import PDFFormat
 from dados_comuns.models import UnidadeAdministrativa
@@ -249,6 +252,11 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         bem = self._criar_bem(status=BAIXA_FISICA)
         self.assertFalse(self.admin.has_change_permission(request, obj=bem))
 
+    def test_has_change_permission_false_se_transferido(self):
+        request = _request_with_messages(self.factory, self.gestor)
+        bem = self._criar_bem(status=TRANSFERIDO)
+        self.assertFalse(self.admin.has_change_permission(request, obj=bem))
+
     # --- has_delete_permission ---
     def test_has_delete_permission_false_se_obj_none(self):
         request = _request_with_messages(self.factory, self.gestor)
@@ -270,6 +278,11 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         bem = self._criar_bem(status=BAIXA_FISICA)
         self.assertFalse(self.admin.has_delete_permission(request, obj=bem))
 
+    def test_has_delete_permission_false_se_transferido(self):
+        request = _request_with_messages(self.factory, self.gestor)
+        bem = self._criar_bem(status=TRANSFERIDO)
+        self.assertFalse(self.admin.has_delete_permission(request, obj=bem))
+
     def test_has_delete_permission_true_gestor_bem_normal(self):
         request = _request_with_messages(self.factory, self.gestor)
         bem = self._criar_bem()
@@ -284,6 +297,15 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             self.admin.save_model(request, bem, form, change=True)
         self.assertIn("Baixa Física", str(ctx.exception))
+
+    def test_save_model_raise_se_editar_bem_transferido(self):
+        bem = self._criar_bem(status=TRANSFERIDO)
+        request = _request_with_messages(self.factory, self.gestor, method="POST")
+        form = MagicMock()
+        form.cleaned_data = {}
+        with self.assertRaises(ValidationError) as ctx:
+            self.admin.save_model(request, bem, form, change=True)
+        self.assertIn("Transferido", str(ctx.exception))
 
     def test_save_model_criar_preenche_criado_por_e_status_default(self):
         bem = BemPatrimonial(
@@ -428,6 +450,192 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         result_qs, _ = self.admin.get_search_results(request, qs, "")
         self.assertNotIn(b1, result_qs)
         self.assertIn(b2, result_qs)
+
+    def test_get_search_results_transferencia_com_uo_origem_filtra_todas_uas_da_uo(self):
+        ua_2 = criar_ua(
+            uo=self.uo,
+            codigo="002",
+            sigla="UA2",
+            nome="UA 2",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem_ua1 = self._criar_bem(status=APROVADO, unidade_administrativa=self.ua)
+        bem_ua2 = self._criar_bem(status=APROVADO, unidade_administrativa=ua_2)
+        request = self.factory.get(
+            "/admin/",
+            {
+                "app_label": "bem_patrimonial",
+                "model_name": "transferenciabensitem",
+                "field_name": "bem",
+                "uo_origem": str(self.uo.pk),
+            },
+        )
+        request.path = "/admin/bem_patrimonial/bempatrimonial/autocomplete/"
+        request.user = self.gestor
+        qs = BemPatrimonial.objects.filter(pk__in=[bem_ua1.pk, bem_ua2.pk])
+
+        result_qs, _ = self.admin.get_search_results(request, qs, "")
+
+        self.assertIn(bem_ua1, result_qs)
+        self.assertIn(bem_ua2, result_qs)
+
+    def test_get_search_results_transferencia_com_ua_origem_filtra_ua_especifica(self):
+        ua_2 = criar_ua(
+            uo=self.uo,
+            codigo="003",
+            sigla="UA3",
+            nome="UA 3",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem_ua1 = self._criar_bem(status=APROVADO, unidade_administrativa=self.ua)
+        bem_ua2 = self._criar_bem(status=APROVADO, unidade_administrativa=ua_2)
+        request = self.factory.get(
+            "/admin/",
+            {
+                "app_label": "bem_patrimonial",
+                "model_name": "transferenciabensitem",
+                "field_name": "bem",
+                "uo_origem": str(self.uo.pk),
+                "ua_origem": str(ua_2.pk),
+            },
+        )
+        request.path = "/admin/bem_patrimonial/bempatrimonial/autocomplete/"
+        request.user = self.gestor
+        qs = BemPatrimonial.objects.filter(pk__in=[bem_ua1.pk, bem_ua2.pk])
+
+        result_qs, _ = self.admin.get_search_results(request, qs, "")
+
+        self.assertNotIn(bem_ua1, result_qs)
+        self.assertIn(bem_ua2, result_qs)
+
+    def test_get_search_results_transferencia_anota_rotulo_com_ua_e_bem(self):
+        bem = self._criar_bem(status=APROVADO, unidade_administrativa=self.ua)
+        request = self.factory.get(
+            "/admin/",
+            {
+                "app_label": "bem_patrimonial",
+                "model_name": "transferenciabensitem",
+                "field_name": "bem",
+                "uo_origem": str(self.uo.pk),
+            },
+        )
+        request.path = "/admin/bem_patrimonial/bempatrimonial/autocomplete/"
+        request.user = self.gestor
+
+        result_qs, _ = self.admin.get_search_results(
+            request,
+            BemPatrimonial.objects.filter(pk=bem.pk),
+            "",
+        )
+        result = result_qs.get(pk=bem.pk)
+
+        self.assertEqual(
+            str(result),
+            f"{self.ua} | {bem.numero_patrimonial} - {bem.nome}",
+        )
+
+    def test_get_queryset_inclui_bem_transferido_para_uo_origem(self):
+        uo_destino = criar_uo(codigo="210", nome="UO 210")
+        ua_destino = criar_ua(
+            uo=uo_destino,
+            codigo="210.001",
+            sigla="UD1",
+            nome="UA Destino 1",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem = self._criar_bem(status=APROVADO)
+        transferencia = TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo,
+            unidade_orcamentaria_destino=uo_destino,
+            unidade_administrativa_destino=ua_destino,
+            numero_processo="SEI-ORIGEM",
+            criado_por=self.gestor,
+        )
+        TransferenciaBensItem.objects.create(transferencia=transferencia, bem=bem)
+        transferencia.efetivar_transferencia(self.gestor)
+
+        request = _request_with_messages(self.factory, self.gestor)
+
+        queryset = self.admin.get_queryset(request)
+
+        self.assertIn(bem, queryset)
+
+    def test_get_queryset_inclui_bem_transferido_para_uo_destino_mesmo_fora_da_ua(self):
+        uo_destino = criar_uo(codigo="220", nome="UO 220")
+        ua_destino_transferencia = criar_ua(
+            uo=uo_destino,
+            codigo="220.001",
+            sigla="UD1",
+            nome="UA Destino Transferencia",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        ua_destino_usuario = criar_ua(
+            uo=uo_destino,
+            codigo="220.002",
+            sigla="UD2",
+            nome="UA Destino Usuario",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        gestor_destino = Usuario.objects.create_user(
+            username="gestor_destino_bem_admin",
+            **auth_kwargs("x"),
+            unidade_administrativa=ua_destino_usuario,
+            unidade_orcamentaria=uo_destino,
+            is_staff=True,
+        )
+        gestor_destino.groups.add(self.grupo_gestor)
+
+        bem = self._criar_bem(status=APROVADO)
+        transferencia = TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo,
+            unidade_orcamentaria_destino=uo_destino,
+            unidade_administrativa_destino=ua_destino_transferencia,
+            numero_processo="SEI-DESTINO",
+            criado_por=self.gestor,
+        )
+        TransferenciaBensItem.objects.create(transferencia=transferencia, bem=bem)
+        transferencia.efetivar_transferencia(self.gestor)
+
+        request = _request_with_messages(self.factory, gestor_destino)
+
+        queryset = self.admin.get_queryset(request)
+
+        self.assertIn(bem, queryset)
+
+    def test_get_search_results_mantem_bem_transferido_visivel_na_busca_textual(self):
+        uo_destino = criar_uo(codigo="230", nome="UO 230")
+        ua_destino = criar_ua(
+            uo=uo_destino,
+            codigo="230.001",
+            sigla="UD1",
+            nome="UA Destino",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem = self._criar_bem(
+            status=APROVADO,
+            numero_patrimonial="000.000009999-0",
+            nome="Bem buscavel transferido",
+        )
+        transferencia = TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo,
+            unidade_orcamentaria_destino=uo_destino,
+            unidade_administrativa_destino=ua_destino,
+            numero_processo="SEI-BUSCA",
+            criado_por=self.gestor,
+        )
+        TransferenciaBensItem.objects.create(transferencia=transferencia, bem=bem)
+        transferencia.efetivar_transferencia(self.gestor)
+
+        request = self._request_changelist()
+        queryset = self.admin.get_queryset(request)
+
+        result_qs, _ = self.admin.get_search_results(
+            request,
+            queryset,
+            "000.000009999-0",
+        )
+
+        self.assertIn(bem, result_qs)
 
     # --- add_view modo multi: linhas vazias; sucesso (Client + gestor com UA no escopo) ---
     def test_add_view_multi_linhas_vazias_retorna_super_com_erro(self):
