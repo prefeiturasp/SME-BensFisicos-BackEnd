@@ -47,7 +47,7 @@ from dados_comuns.resources import (
     UnidadeAdministrativaResource,
     UnidadeOrcamentariaResource,
 )
-from dados_comuns.utils import dict_changes
+from dados_comuns.utils import dict_changes, garantir_ua_ponto_central_externa
 
 
 UA_ID_PATH_PARAM = OpenApiParameter(
@@ -325,7 +325,7 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["ativa"]
-    search_fields = ["codigo", "sigla", "nome"]
+    search_fields = ["codigo", "sigla", "nome", "orgao", "codigo_orgao"]
     ordering_fields = ["id", "codigo", "sigla", "nome", "ativa"]
     ordering = ["codigo", "nome"]
 
@@ -333,6 +333,8 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
         "codigo",
         "sigla",
         "nome",
+        "orgao",
+        "codigo_orgao",
         "ativa",
     )
 
@@ -362,6 +364,7 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
         with transaction.atomic():
             with audit_as(self.request.user):
                 obj = serializer.save()
+                garantir_ua_ponto_central_externa(obj)
             self._audit_changes(obj, operation="create")
 
     def perform_update(self, serializer):
@@ -370,6 +373,7 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
         with transaction.atomic():
             with audit_as(self.request.user):
                 obj = serializer.save()
+                garantir_ua_ponto_central_externa(obj)
             self._audit_changes(obj, original=original, operation="update")
 
     def perform_destroy(self, instance):

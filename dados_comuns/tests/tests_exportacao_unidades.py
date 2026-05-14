@@ -253,6 +253,7 @@ class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
         resource = UnidadeOrcamentariaResource()
         dataset = resource.export(UnidadeOrcamentaria.objects.all())
 
-        status_values = [row[3] for row in dataset]
+        status_index = dataset.headers.index("Status")
+        status_values = [row[status_index] for row in dataset]
         self.assertIn("Ativa", status_values)
         self.assertIn("Inativa", status_values)

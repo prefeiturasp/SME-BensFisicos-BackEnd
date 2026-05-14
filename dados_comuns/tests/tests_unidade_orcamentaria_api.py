@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
@@ -18,6 +19,8 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         "codigo",
         "sigla",
         "nome",
+        "orgao",
+        "codigo_orgao",
         "ativa",
         "ativa_display",
     }
@@ -96,6 +99,8 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             "codigo": codigo_uo(60, 60, 60),
             "sigla": "UO60",
             "nome": "UO 60",
+            "orgao": "Órgão 60",
+            "codigo_orgao": "60.60",
             "ativa": True,
         }
         payload.update(overrides)
@@ -175,6 +180,12 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             format="json",
         )
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            UnidadeAdministrativa.objects.filter(
+                unidade_orcamentaria_id=create_response.data["id"],
+                codigo=f"{create_response.data['codigo']}.001",
+            ).exists()
+        )
 
         patch_response = self.client.patch(
             self._detail_url(self.uo1.id),
@@ -207,6 +218,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             ({"codigo": "", "sigla": "UO", "nome": "Nome", "ativa": True}, "codigo"),
             ({"codigo": codigo_uo(70, 70, 70), "sigla": "UO", "nome": "", "ativa": True}, "nome"),
             ({"codigo": self.uo1.codigo, "sigla": "UO", "nome": "Duplicada", "ativa": True}, "codigo"),
+            ({"codigo": codigo_uo(70, 70, 71), "sigla": "UO", "nome": "Inválida", "ativa": True, "codigo_orgao": "7071"}, "codigo_orgao"),
         ]
 
         for payload, campo in cenarios:
