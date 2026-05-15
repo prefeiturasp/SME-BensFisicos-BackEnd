@@ -46,6 +46,9 @@ class BaseUnidadePDFFormat(Format):
     def get_table_col_widths(self):
         return self.TABLE_COL_WIDTHS
 
+    def get_table_headers(self):
+        return ["Código", "Sigla", "Nome", "Status"]
+
     def get_status_text(self, unidade):
         raise NotImplementedError("Subclasses devem implementar get_status_text().")
 
@@ -185,7 +188,7 @@ class BaseUnidadePDFFormat(Format):
             ]
 
         cell_style, cell_style_center = self._criar_estilos_celula(styles)
-        data = [["Código", "Sigla", "Nome", "Status"]]
+        data = [self.get_table_headers()]
 
         for unidade in unidades:
             data.append(self._criar_linha_unidade(unidade, cell_style, cell_style_center))
@@ -280,7 +283,31 @@ class UnidadeOrcamentariaPDFFormat(BaseUnidadePDFFormat):
     EMPTY_MESSAGE = (
         "<i>Nenhuma unidade orçamentária encontrada com os filtros aplicados.</i>"
     )
-    TABLE_COL_WIDTHS = [3 * cm, 4 * cm, 10.5 * cm, 2.5 * cm]
+    TABLE_FONT_SIZE = 6
+    TABLE_COL_WIDTHS = [2.1 * cm, 4.1 * cm, 4.7 * cm, 2.1 * cm, 4.7 * cm, 2.3 * cm]
+
+    def get_table_headers(self):
+        return [
+            "Código UO",
+            "Sigla UO",
+            "Nome UO",
+            "Código Órgão",
+            "Nome Órgão",
+            "Status",
+        ]
+
+    def _criar_linha_unidade(self, unidade, cell_style, cell_style_center):
+        return [
+            Paragraph(str(unidade.codigo) if unidade.codigo else "-", cell_style_center),
+            Paragraph(str(unidade.sigla) if unidade.sigla else "-", cell_style_center),
+            Paragraph(str(unidade.nome) if unidade.nome else "-", cell_style),
+            Paragraph(
+                str(unidade.codigo_orgao) if unidade.codigo_orgao else "-",
+                cell_style_center,
+            ),
+            Paragraph(str(unidade.orgao) if unidade.orgao else "-", cell_style),
+            Paragraph(self.get_status_text(unidade), cell_style_center),
+        ]
 
     def get_status_text(self, unidade):
         return "Ativa" if unidade.ativa else "Inativa"

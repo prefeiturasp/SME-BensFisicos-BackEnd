@@ -26,6 +26,12 @@ class UnidadeOrcamentaria(models.Model):
     )
 
     sigla = models.CharField("sigla", max_length=255, blank=True, default="")
+    sigla_orgao = models.CharField(
+        "Sigla do Órgão",
+        max_length=255,
+        blank=True,
+        default="",
+    )
 
     orgao = models.CharField("Órgão", max_length=255, blank=True, default="")
     codigo_orgao = models.CharField(

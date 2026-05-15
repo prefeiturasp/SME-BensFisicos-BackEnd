@@ -198,8 +198,22 @@ class ExportacaoUnidadeAdministrativaTestCase(TestCase):
 class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
 
     def setUp(self):
-        criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO Ativa", sigla="ATV", ativa=True)
-        criar_uo(codigo=codigo_uo(20, 20, 20), nome="UO Inativa", sigla="INA", ativa=False)
+        self.uo_ativa = criar_uo(
+            codigo=codigo_uo(10, 10, 10),
+            nome="UO Ativa",
+            sigla="ATV",
+            orgao="Órgão Ativo",
+            codigo_orgao="10.10",
+            ativa=True,
+        )
+        self.uo_inativa = criar_uo(
+            codigo=codigo_uo(20, 20, 20),
+            nome="UO Inativa",
+            sigla="INA",
+            orgao="Órgão Inativo",
+            codigo_orgao="20.20",
+            ativa=False,
+        )
 
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         self.superuser = Usuario.objects.create_user(
@@ -257,3 +271,34 @@ class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
         status_values = [row[status_index] for row in dataset]
         self.assertIn("Ativa", status_values)
         self.assertIn("Inativa", status_values)
+
+    def test_pdf_uo_tabela_exibe_colunas_na_ordem_nova(self):
+        pdf_format = UnidadeOrcamentariaPDFFormat()
+        tabela = pdf_format._criar_tabela_unidades([self.uo_ativa, self.uo_inativa])[0]
+        linhas = [
+            [celula.getPlainText() if hasattr(celula, "getPlainText") else celula for celula in linha]
+            for linha in tabela._cellvalues
+        ]
+
+        self.assertEqual(
+            linhas[0],
+            [
+                "Código UO",
+                "Sigla UO",
+                "Nome UO",
+                "Código Órgão",
+                "Nome Órgão",
+                "Status",
+            ],
+        )
+        self.assertEqual(
+            linhas[1],
+            [
+                self.uo_ativa.codigo,
+                self.uo_ativa.sigla,
+                self.uo_ativa.nome,
+                self.uo_ativa.codigo_orgao,
+                self.uo_ativa.orgao,
+                "Ativa",
+            ],
+        )
