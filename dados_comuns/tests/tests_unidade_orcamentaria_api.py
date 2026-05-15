@@ -19,21 +19,33 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         "codigo",
         "sigla",
         "nome",
-        "orgao",
         "codigo_orgao",
+        "sigla_orgao",
+        "orgao",
         "ativa",
         "ativa_display",
     }
 
     def setUp(self):
-        self.uo1 = criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO 1", sigla="UO1")
+        self.uo1 = criar_uo(
+            codigo=codigo_uo(10, 10, 10),
+            nome="UO 1",
+            sigla="UO1",
+            sigla_orgao="ORG1",
+        )
         self.uo2 = criar_uo(
             codigo=codigo_uo(20, 20, 20),
             nome="UO 2",
             sigla="UO2",
+            sigla_orgao="ORG2",
             ativa=False,
         )
-        self.uo3 = criar_uo(codigo=codigo_uo(30, 30, 30), nome="UO 3", sigla="UO3")
+        self.uo3 = criar_uo(
+            codigo=codigo_uo(30, 30, 30),
+            nome="UO 3",
+            sigla="UO3",
+            sigla_orgao="ORG3",
+        )
 
         self.uo_com_ua = criar_uo(
             codigo=codigo_uo(40, 40, 40),
@@ -99,6 +111,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             "codigo": codigo_uo(60, 60, 60),
             "sigla": "UO60",
             "nome": "UO 60",
+            "sigla_orgao": "ORG60",
             "orgao": "Órgão 60",
             "codigo_orgao": "60.60",
             "ativa": True,
@@ -160,6 +173,12 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         self.assertEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["id"], self.uo2.id)
         self.assertEqual(set(response.data["results"][0].keys()), self.LIST_FIELDS)
+        self.assertEqual(response.data["results"][0]["sigla_orgao"], "ORG2")
+
+        response_sigla_orgao = self.client.get(self.list_url, {"search": "ORG3"})
+        self.assertEqual(response_sigla_orgao.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response_sigla_orgao.data["results"]), 1)
+        self.assertEqual(response_sigla_orgao.data["results"][0]["id"], self.uo3.id)
 
         response_id = self.client.get(self.list_url, {"ordering": "-id"})
         ids = [row["id"] for row in response_id.data["results"]]
@@ -172,6 +191,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         self.assertEqual(detail.status_code, status.HTTP_200_OK)
         self.assertEqual(detail.data["id"], self.uo1.id)
         self.assertEqual(detail.data["ativa_display"], "Ativa")
+        self.assertEqual(detail.data["sigla_orgao"], "ORG1")
         self.assertEqual(set(detail.data.keys()), self.LIST_FIELDS)
 
         create_response = self.client.post(
@@ -195,6 +215,14 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         self.assertEqual(patch_response.status_code, status.HTTP_200_OK)
         self.assertEqual(patch_response.data["nome"], "UO 1 Alterada")
 
+        patch_sigla_orgao = self.client.patch(
+            self._detail_url(self.uo1.id),
+            {"sigla_orgao": "ORG1-ALT"},
+            format="json",
+        )
+        self.assertEqual(patch_sigla_orgao.status_code, status.HTTP_200_OK)
+        self.assertEqual(patch_sigla_orgao.data["sigla_orgao"], "ORG1-ALT")
+
         historico_response = self.client.get(
             reverse("unidades-orcamentarias-historico", args=[self.uo1.id]),
             {"search": "ignorar", "page": 99},
@@ -205,7 +233,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         self.assertIn("acoes", historico_response.data[0])
         self.assertTrue(
             any(
-                acao["campo"] == "nome"
+                acao["campo"] in {"nome", "sigla_orgao"}
                 for grupo in historico_response.data
                 for acao in grupo["acoes"]
             )

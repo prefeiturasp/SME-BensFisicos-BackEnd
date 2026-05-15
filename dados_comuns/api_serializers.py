@@ -15,8 +15,9 @@ class UnidadeOrcamentariaListSerializer(serializers.ModelSerializer):
             "codigo",
             "sigla",
             "nome",
-            "orgao",
             "codigo_orgao",
+            "sigla_orgao",
+            "orgao",
             "ativa",
             "ativa_display",
         ]
@@ -35,6 +36,9 @@ class UnidadeOrcamentariaDetailSerializer(UnidadeOrcamentariaListSerializer):
             },
             "codigo_orgao": {
                 "help_text": "Código do Órgão no padrão NN.NN."
+            },
+            "sigla_orgao": {
+                "help_text": "Sigla do Orgão vinculada à Unidade Orçamentária."
             }
         }
 
