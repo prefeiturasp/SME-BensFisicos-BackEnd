@@ -632,6 +632,7 @@ class TransferenciaBemPatrimonial(models.Model):
     numero_processo = models.CharField(
         "Número do processo",
         max_length=64,
+        unique=True,
         null=False,
         blank=False,
     )
@@ -652,19 +653,10 @@ class TransferenciaBemPatrimonial(models.Model):
         null=False,
         blank=False,
     )
-    efetivado_por = models.ForeignKey(
-        Usuario,
-        verbose_name="Efetivado por",
-        related_name="transferencias_efetivadas",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-    )
     criado_em = models.DateTimeField("Criado em", auto_now_add=True)
     atualizado_em = models.DateTimeField(
         VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
-    efetivado_em = models.DateTimeField("Efetivado em", null=True, blank=True)
 
     class Meta:
         verbose_name = "transferência de bem patrimonial"
@@ -718,16 +710,26 @@ class TransferenciaBemPatrimonial(models.Model):
             )
 
     def _obter_itens_para_efetivar(self):
-        itens = list(
-            self.itens.select_related(
-                "bem",
-                "bem__unidade_administrativa",
-                "bem__unidade_administrativa__unidade_orcamentaria",
-            )
-        )
+        itens = list(self.itens.select_for_update().all())
 
         if not itens:
             raise ValidationError("Não é possível efetivar transferência sem bens.")
+
+        bens_por_id = BemPatrimonial.objects.select_for_update().in_bulk(
+            [item.bem_id for item in itens]
+        )
+        uas_por_id = UnidadeAdministrativa.objects.in_bulk(
+            {
+                bem.unidade_administrativa_id
+                for bem in bens_por_id.values()
+                if bem.unidade_administrativa_id
+            }
+        )
+
+        for item in itens:
+            bem = bens_por_id[item.bem_id]
+            bem.unidade_administrativa = uas_por_id.get(bem.unidade_administrativa_id)
+            item.bem = bem
 
         return itens
 
@@ -740,31 +742,35 @@ class TransferenciaBemPatrimonial(models.Model):
                 )
 
             unidade_administrativa = bem.unidade_administrativa
-            unidade_orcamentaria = getattr(
-                unidade_administrativa, "unidade_orcamentaria", None
-            )
-            if not unidade_orcamentaria or unidade_orcamentaria.pk != self.unidade_orcamentaria_origem_id:
+            if (
+                not unidade_administrativa
+                or unidade_administrativa.unidade_orcamentaria_id
+                != self.unidade_orcamentaria_origem_id
+            ):
                 raise ValidationError(
                     f"O bem '{bem.nome}' não pertence à UO de origem da transferência."
                 )
 
     @transaction.atomic
     def efetivar_transferencia(self, usuario):
-        if self.efetivado_em:
+        transferencia = type(self).objects.select_for_update().get(pk=self.pk)
+
+        if transferencia.numero_ntbpm:
+            self.refresh_from_db()
             return
 
-        self._validar_destino()
-        itens = self._obter_itens_para_efetivar()
-        self._validar_bens(itens)
+        transferencia._validar_destino()
+        itens = transferencia._obter_itens_para_efetivar()
+        transferencia._validar_bens(itens)
 
         observacao_status = (
-            f"Transferência concluída para {self.unidade_orcamentaria_destino} "
-            f"(processo {self.numero_processo})."
+            f"Transferência concluída para {transferencia.unidade_orcamentaria_destino} "
+            f"(processo {transferencia.numero_processo})."
         )
 
         for item in itens:
             bem = item.bem
-            bem.unidade_administrativa = self.unidade_administrativa_destino
+            bem.unidade_administrativa = transferencia.unidade_administrativa_destino
             bem.status = constants.TRANSFERIDO
             bem.save(update_fields=["unidade_administrativa", "status", "atualizado_em"])
 
@@ -774,21 +780,17 @@ class TransferenciaBemPatrimonial(models.Model):
                 atualizado_por=usuario,
                 observacao=observacao_status,
             )
-
-        self.efetivado_por = usuario
-        self.efetivado_em = timezone.now()
-        if not self.numero_ntbpm:
+        if not transferencia.numero_ntbpm:
             from bem_patrimonial.ntbpm import gerar_numero_ntbpm
 
-            self.numero_ntbpm = gerar_numero_ntbpm(self)
-        self.save(
+            transferencia.numero_ntbpm = gerar_numero_ntbpm(transferencia)
+        transferencia.save(
             update_fields=[
-                "efetivado_por",
-                "efetivado_em",
                 "numero_ntbpm",
                 "atualizado_em",
             ]
         )
+        self.refresh_from_db()
 
 
 @receiver(post_save, sender=BemPatrimonial)

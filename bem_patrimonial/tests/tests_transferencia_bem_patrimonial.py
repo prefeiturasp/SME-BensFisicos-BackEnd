@@ -95,8 +95,6 @@ class TransferenciaBemPatrimonialModelTestCase(TestCase):
         self.assertEqual(bem2.unidade_administrativa, self.ua_destino)
         self.assertEqual(bem1.status, constants.TRANSFERIDO)
         self.assertEqual(bem2.status, constants.TRANSFERIDO)
-        self.assertEqual(transferencia.efetivado_por, self.gestor)
-        self.assertIsNotNone(transferencia.efetivado_em)
         self.assertTrue(transferencia.numero_ntbpm)
         self.assertEqual(
             StatusBemPatrimonial.objects.filter(
@@ -148,3 +146,35 @@ class TransferenciaBemPatrimonialModelTestCase(TestCase):
             transferencia.efetivar_transferencia(self.gestor)
 
         self.assertIn("status 'Aprovado'", str(ctx.exception))
+
+    def test_efetivar_transferencia_revalida_bem_antes_de_gravar(self):
+        bem = self._criar_bem("001.000000005-5", self.ua_origem_1)
+        transferencia = self._criar_transferencia()
+        TransferenciaBensItem.objects.create(transferencia=transferencia, bem=bem)
+
+        bem.unidade_administrativa = self.ua_destino
+        bem.status = constants.TRANSFERIDO
+        bem.save(update_fields=["unidade_administrativa", "status", "atualizado_em"])
+
+        with self.assertRaises(ValidationError) as ctx:
+            transferencia.efetivar_transferencia(self.gestor)
+
+        transferencia.refresh_from_db()
+        self.assertIn("status 'Aprovado'", str(ctx.exception))
+        self.assertFalse(transferencia.numero_ntbpm)
+
+    def test_numero_processo_da_transferencia_deve_ser_unico(self):
+        self._criar_transferencia()
+        transferencia = TransferenciaBemPatrimonial(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino,
+            numero_processo="SEI-123456/2026",
+            observacao="Outra transferência",
+            criado_por=self.gestor,
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            transferencia.full_clean()
+
+        self.assertIn("numero_processo", ctx.exception.message_dict)
