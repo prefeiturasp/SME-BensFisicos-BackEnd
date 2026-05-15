@@ -33,18 +33,17 @@ class TransferenciaBemPatrimonialAdmin(admin.ModelAdmin):
         "numero_processo",
         "observacao",
         "criado_por",
-        "efetivado_por",
         "criado_em",
-        "efetivado_em",
     )
 
     list_display = (
         "id",
+        "numero_ntbpm",
         "numero_processo",
         "unidade_orcamentaria_origem",
         "unidade_orcamentaria_destino",
         "criado_por",
-        "efetivado_em",
+        "criado_em",
     )
     search_fields = (
         "numero_processo",
@@ -68,9 +67,7 @@ class TransferenciaBemPatrimonialAdmin(admin.ModelAdmin):
         "numero_processo",
         "observacao",
         "criado_por",
-        "efetivado_por",
         "criado_em",
-        "efetivado_em",
     )
 
     class Media:
@@ -82,6 +79,7 @@ class TransferenciaBemPatrimonialAdmin(admin.ModelAdmin):
             "all": (
                 "css/prevenir_duplo_submit.css",
                 "css/custom_inline.css",
+                "css/transferencia_bem_patrimonial.css",
                 "css/hide_crud_icons.css",
             )
         }
@@ -133,7 +131,6 @@ class TransferenciaBemPatrimonialAdmin(admin.ModelAdmin):
                 "unidade_orcamentaria_destino",
                 "unidade_administrativa_destino",
                 "criado_por",
-                "efetivado_por",
             )
         )
         return filtrar_queryset_transferencia_por_escopo(request.user, qs).distinct()
@@ -223,7 +220,7 @@ class TransferenciaBemPatrimonialAdmin(admin.ModelAdmin):
         super().save_related(request, form, formsets, change)
 
         transferencia = form.instance
-        if not change and not transferencia.efetivado_em:
+        if not change and not transferencia.numero_ntbpm:
             transferencia.efetivar_transferencia(request.user)
 
     def get_inline_formsets(self, request, formsets, inline_instances, obj=None):

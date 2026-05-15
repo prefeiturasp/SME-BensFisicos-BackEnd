@@ -1,0 +1,28 @@
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group .tabular {
+    overflow-x: auto;
+}
+
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group .tabular table {
+    min-width: 60rem;
+}
+
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group th.column-bem,
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group td.field-bem {
+    min-width: 60rem;
+}
+
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group .field-bem .select2-container,
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group .field-bem .related-widget-wrapper,
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group .field-bem .admin-autocomplete,
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group .field-bem select {
+    width: 100% !important;
+    min-width: 60rem;
+    max-width: 100%;
+}
+
+body.app-bem_patrimonial.model-transferenciabempatrimonial #itens-group .field-bem .select2-selection__rendered,
+body.app-bem_patrimonial.model-transferenciabempatrimonial .select2-results__option {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

@@ -111,6 +111,20 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
         )
         self.operador.groups.add(grupo_operador)
 
+    def test_list_display_exibe_ntbpm_logo_apos_id(self):
+        self.assertEqual(
+            self.admin.list_display,
+            (
+                "id",
+                "numero_ntbpm",
+                "numero_processo",
+                "unidade_orcamentaria_origem",
+                "unidade_orcamentaria_destino",
+                "criado_por",
+                "criado_em",
+            ),
+        )
+
     def test_form_resolve_ua_destino_001_automaticamente(self):
         form = TransferenciaBemPatrimonialForm(
             data={
@@ -141,6 +155,27 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
             list(queryset.values_list("id", flat=True)),
             [self.ua_origem.id, self.ua_origem_2.id],
         )
+
+    def test_form_rejeita_numero_processo_duplicado(self):
+        TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino,
+            numero_processo="SEI-123/2026",
+            criado_por=self.gestor,
+        )
+
+        form = TransferenciaBemPatrimonialForm(
+            data={
+                "unidade_orcamentaria_destino": self.uo_destino.pk,
+                "numero_processo": "SEI-123/2026",
+                "observacao": "Teste duplicado",
+            },
+            request=type("obj", (object,), {"user": self.gestor})(),
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("numero_processo", form.errors)
 
     def test_change_form_nao_quebra_quando_campos_model_sao_readonly(self):
         transferencia = TransferenciaBemPatrimonial.objects.create(
@@ -338,6 +373,12 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
         self.assertFalse(context["show_save_and_continue"])
         self.assertFalse(context["show_save_and_add_another"])
         self.assertTrue(context["show_close"])
+
+    def test_admin_media_inclui_css_especifico_da_transferencia(self):
+        self.assertIn(
+            "css/transferencia_bem_patrimonial.css",
+            self.admin.media._css.get("all", []),
+        )
 
     def test_change_view_rejeita_post_em_registro_existente(self):
         request = self.factory.post("/admin/bem_patrimonial/transferenciabempatrimonial/1/change/")
