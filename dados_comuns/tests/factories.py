@@ -5,8 +5,7 @@ from dados_comuns.models import UnidadeOrcamentaria, UnidadeAdministrativa
 
 def criar_uo(codigo="200", nome="UO Teste", sigla="UO", **kwargs):
     """
-    Ajuste os campos aqui para bater com o model real.
-    Pelo erro, UnidadeOrcamentaria NÃO aceita 'sigla'.
+    Factory simples para UnidadeOrcamentaria alinhada ao model atual.
     """
     data = {
         "codigo": codigo,

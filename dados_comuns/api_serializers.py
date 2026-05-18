@@ -2,7 +2,53 @@ import re
 
 from rest_framework import serializers
 
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+
+
+class UnidadeOrcamentariaListSerializer(serializers.ModelSerializer):
+    ativa_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UnidadeOrcamentaria
+        fields = [
+            "id",
+            "codigo",
+            "sigla",
+            "nome",
+            "ativa",
+            "ativa_display",
+        ]
+        read_only_fields = fields
+
+    def get_ativa_display(self, obj):
+        return "Ativa" if obj.ativa else "Inativa"
+
+
+class UnidadeOrcamentariaDetailSerializer(UnidadeOrcamentariaListSerializer):
+    class Meta(UnidadeOrcamentariaListSerializer.Meta):
+        read_only_fields = ["id", "ativa_display"]
+        extra_kwargs = {
+            "codigo": {
+                "help_text": "Código da Unidade Orçamentária no padrão do projeto (ex.: 01.16.10)."
+            }
+        }
+
+
+class UnidadeOrcamentariaHistoricoAcaoSerializer(serializers.Serializer):
+    campo = serializers.CharField()
+    valor_antigo = serializers.CharField(allow_null=True)
+    valor_novo = serializers.CharField(allow_null=True)
+
+
+class UnidadeOrcamentariaHistoricoGrupoSerializer(serializers.Serializer):
+    alterado_em = serializers.DateTimeField()
+    alterado_por = serializers.IntegerField(allow_null=True)
+    alterado_por_nome = serializers.CharField(allow_null=True)
+    acoes = UnidadeOrcamentariaHistoricoAcaoSerializer(many=True)
+
+
+class UnidadeOrcamentariaExportQuerySerializer(serializers.Serializer):
+    formato = serializers.ChoiceField(choices=["csv", "xls", "xlsx", "pdf"])
 
 
 class UnidadeAdministrativaListSerializer(serializers.ModelSerializer):

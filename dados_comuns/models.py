@@ -34,6 +34,23 @@ class UnidadeOrcamentaria(models.Model):
     def __str__(self):
         return f"{self.codigo} - {self.nome}"
 
+    def listar_vinculos_para_exclusao(self):
+        vinculos = []
+
+        if self.unidades_administrativas.exists():
+            vinculos.append("unidades administrativas")
+
+        if self.usuarios.exists():
+            vinculos.append("usuários")
+
+        if self.parametros_conciliacao_anual.exists():
+            vinculos.append("parâmetros de conciliação anual")
+
+        return vinculos
+
+    def pode_excluir(self):
+        return not self.listar_vinculos_para_exclusao()
+
 
 class UnidadeAdministrativa(models.Model):
     """Classe que representa uma unidade administrativa"""

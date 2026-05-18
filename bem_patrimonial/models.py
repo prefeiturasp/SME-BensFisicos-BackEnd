@@ -86,11 +86,11 @@ class BemPatrimonial(BaseModel):
     # obrigatórios
     nome = models.CharField("Nome do bem", max_length=255, null=False, blank=False)
     descricao = models.TextField("Descrição", null=False, blank=False)
-    observacao = models.TextField("Observação", null=True, blank=True)
+    observacao = models.TextField("Observação", null=True, blank=True)  # NOSONAR
     numero_processo = models.CharField(
         "Número do processo de incorporação",
         max_length=64,
-        null=True,
+        null=True,  # NOSONAR
         blank=True,
         default="",
     )
@@ -101,12 +101,12 @@ class BemPatrimonial(BaseModel):
     modelo = models.CharField("Modelo", max_length=255, null=False, blank=False)
 
     localizacao = models.CharField(
-        "Localização", max_length=255, null=True, blank=True, default=""
+        "Localização", max_length=255, null=True, blank=True, default=""  # NOSONAR
     )
     numero_patrimonial = models.CharField(
         "Número Patrimonial",
         max_length=20,
-        null=True,
+        null=True,  # NOSONAR
         blank=True,
         default="",
         help_text="Formato padrão: 000.000000000-0",

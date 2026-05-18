@@ -1,4 +1,4 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -30,8 +30,8 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
     }
 
     def setUp(self):
-        self.uo1 = criar_uo(codigo="10.10.10", nome="UO 1")
-        self.uo2 = criar_uo(codigo="20.20.20", nome="UO 2")
+        self.uo1 = criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO 1")
+        self.uo2 = criar_uo(codigo=codigo_uo(20, 20, 20), nome="UO 2")
 
         self.ua1 = criar_ua(
             uo=self.uo1,
@@ -183,7 +183,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self._auth(self.gestor)
         cenarios = [
             ("050", codigo_ua(10, 10, 10, 50)),
-            ("1002", "10.10.10.1002"),
+            ("1002", f"{codigo_uo(10, 10, 10)}.1002"),
             (codigo_ua(10, 10, 10, 777), codigo_ua(10, 10, 10, 777)),
         ]
 
