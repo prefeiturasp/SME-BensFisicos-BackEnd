@@ -9,7 +9,10 @@ from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.admin import UnidadeAdministrativaAdmin, UnidadeOrcamentariaAdmin
 from dados_comuns.formats import UnidadeOrcamentariaPDFFormat
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from dados_comuns.utils import garantir_ua_ponto_central_externa
+from dados_comuns.utils import (
+    PREFIXO_CODIGO_UO_SME,
+    garantir_ua_ponto_central_externa,
+)
 from inventario.models import ParametroConciliacaoAnual
 from usuario.models import Usuario
 
@@ -400,7 +403,7 @@ class UnidadeOrcamentariaAdminTestCase(TestCase):
     def test_save_model_nao_cria_ua_001_para_uo_sme(self):
         request = self._request_com_messages()
         uo = UnidadeOrcamentaria(
-            codigo="01.16.10.99",
+            codigo=f"{PREFIXO_CODIGO_UO_SME}.99",
             nome="SME",
             sigla="SME",
             sigla_orgao="PMSP",

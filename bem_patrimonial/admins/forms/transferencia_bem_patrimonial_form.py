@@ -46,51 +46,60 @@ class TransferenciaBemPatrimonialForm(forms.ModelForm):
         user = self._get_user()
         uo_origem = obter_uo_referencia_do_usuario(user)
 
-        possui_campo_uo_origem = "unidade_orcamentaria_origem" in self.fields
-        possui_campo_uo_destino = "unidade_orcamentaria_destino" in self.fields
-        possui_campo_processo = "numero_processo" in self.fields
-        possui_campo_observacao = "observacao" in self.fields
-        possui_campo_filtro_ua = "unidade_administrativa_filtro" in self.fields
+        self._configurar_campos_iniciais(uo_origem)
 
-        if possui_campo_uo_origem:
+        if self.instance.pk:
+            self._configurar_campos_edicao()
+            return
+
+        self._configurar_campos_criacao(uo_origem)
+
+    def _configurar_campos_iniciais(self, uo_origem):
+        if "unidade_orcamentaria_origem" in self.fields:
             self.fields["unidade_orcamentaria_origem"].queryset = UnidadeOrcamentaria.objects.none()
-        if possui_campo_uo_destino:
+
+        if "unidade_orcamentaria_destino" in self.fields:
             self.fields["unidade_orcamentaria_destino"].queryset = queryset_uos_destino_externas()
-        if possui_campo_filtro_ua and uo_origem:
+
+        if "unidade_administrativa_filtro" in self.fields and uo_origem:
             self.fields["unidade_administrativa_filtro"].queryset = queryset_uas_da_uo(
                 uo_origem
             )
 
-        if self.instance.pk:
-            if possui_campo_uo_origem:
-                self.fields["unidade_orcamentaria_origem"].queryset = UnidadeOrcamentaria.objects.filter(
-                    pk=self.instance.unidade_orcamentaria_origem_id
-                )
-                self.fields["unidade_orcamentaria_origem"].disabled = True
-            if possui_campo_uo_destino:
-                self.fields["unidade_orcamentaria_destino"].queryset = UnidadeOrcamentaria.objects.filter(
-                    pk=self.instance.unidade_orcamentaria_destino_id
-                )
-                self.fields["unidade_orcamentaria_destino"].disabled = True
-            if possui_campo_processo:
-                self.fields["numero_processo"].disabled = True
-            if possui_campo_observacao:
-                self.fields["observacao"].disabled = True
-            if possui_campo_filtro_ua:
-                self.fields["unidade_administrativa_filtro"].queryset = queryset_uas_da_uo(
-                    self.instance.unidade_orcamentaria_origem
-                )
-                self.fields["unidade_administrativa_filtro"].disabled = True
+    def _configurar_campos_edicao(self):
+        if "unidade_orcamentaria_origem" in self.fields:
+            self.fields["unidade_orcamentaria_origem"].queryset = UnidadeOrcamentaria.objects.filter(
+                pk=self.instance.unidade_orcamentaria_origem_id
+            )
+            self.fields["unidade_orcamentaria_origem"].disabled = True
+
+        if "unidade_orcamentaria_destino" in self.fields:
+            self.fields["unidade_orcamentaria_destino"].queryset = UnidadeOrcamentaria.objects.filter(
+                pk=self.instance.unidade_orcamentaria_destino_id
+            )
+            self.fields["unidade_orcamentaria_destino"].disabled = True
+
+        for field_name in ("numero_processo", "observacao"):
+            if field_name in self.fields:
+                self.fields[field_name].disabled = True
+
+        if "unidade_administrativa_filtro" in self.fields:
+            self.fields["unidade_administrativa_filtro"].queryset = queryset_uas_da_uo(
+                self.instance.unidade_orcamentaria_origem
+            )
+            self.fields["unidade_administrativa_filtro"].disabled = True
+
+    def _configurar_campos_criacao(self, uo_origem):
+        if "unidade_orcamentaria_origem" not in self.fields:
             return
 
-        if uo_origem and possui_campo_uo_origem:
+        if uo_origem:
             self.fields["unidade_orcamentaria_origem"].queryset = UnidadeOrcamentaria.objects.filter(
                 pk=uo_origem.pk
             )
             self.fields["unidade_orcamentaria_origem"].initial = uo_origem.pk
 
-        if possui_campo_uo_origem:
-            self.fields["unidade_orcamentaria_origem"].disabled = True
+        self.fields["unidade_orcamentaria_origem"].disabled = True
 
     def _get_user(self):
         if getattr(self, "request", None) and getattr(self.request, "user", None):

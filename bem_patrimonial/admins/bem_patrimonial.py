@@ -926,8 +926,6 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 qs = qs.filter(unidade_administrativa_id=ua_origem)
             elif uo_origem and str(uo_origem) != str(uo_referencia_id):
                 return qs.none(), use_distinct
-            else:
-                uo_origem = str(uo_referencia_id)
 
             qs = qs.annotate(
                 autocomplete_label_transferencia=Concat(

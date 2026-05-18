@@ -27,6 +27,7 @@ from bem_patrimonial import constants
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
+VERBOSE_CRIADO_EM = "Criado em"
 VERBOSE_ATUALIZADO_EM = "Atualizado em"
 
 
@@ -154,7 +155,7 @@ class BemPatrimonial(BaseModel):
         null=True,
         blank=True,
     )
-    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
+    criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
     atualizado_em = models.DateTimeField(
         VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
@@ -482,7 +483,7 @@ class MovimentacaoBemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
-    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
+    criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
     atualizado_em = models.DateTimeField(
         VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
@@ -653,7 +654,7 @@ class TransferenciaBemPatrimonial(models.Model):
         null=False,
         blank=False,
     )
-    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
+    criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
     atualizado_em = models.DateTimeField(
         VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
