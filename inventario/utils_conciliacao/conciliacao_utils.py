@@ -177,6 +177,7 @@ def criar_itens_conciliacao(conciliacao):
         status__in=[
             bem_constants.BAIXA_FISICA,
             bem_constants.AGUARDANDO_APROVACAO,
+            bem_constants.TRANSFERIDO,
         ]
     )
 

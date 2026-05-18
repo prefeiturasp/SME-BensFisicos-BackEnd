@@ -6,8 +6,8 @@ class BemPatrimonialPermission(BasePermission):
     """
     Espelha o admin:
     - Acesso ao módulo: gestor patrimônio OU operador inventário (ou superuser).
-    - Change: bloqueia se excluido ou BAIXA_FISICA (igual has_change_permission).
-    - Delete: só gestor, e bloqueia se excluido ou BAIXA_FISICA (igual has_delete_permission).
+    - Change: bloqueia se excluido ou status final (igual has_change_permission).
+    - Delete: só gestor, e bloqueia se excluido ou status final (igual has_delete_permission).
     """
 
     def _pode_acessar_modulo(self, user):
@@ -47,10 +47,11 @@ class BemPatrimonialPermission(BasePermission):
         if getattr(obj, "excluido", False):
             return False
 
-        if getattr(obj, "status", None) == getattr(
-            __import__("bem_patrimonial.constants", fromlist=["BAIXA_FISICA"]),
-            "BAIXA_FISICA",
-        ):
+        status_finais = getattr(
+            __import__("bem_patrimonial.constants", fromlist=["STATUS_FINAIS_BEM"]),
+            "STATUS_FINAIS_BEM",
+        )
+        if getattr(obj, "status", None) in status_finais:
             if getattr(view, "action", None) in ("retrieve", "list", "historico"):
                 return True
             return False

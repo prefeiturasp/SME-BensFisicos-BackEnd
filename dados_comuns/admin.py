@@ -12,7 +12,11 @@ from dados_comuns.forms.unidade_administrativa_admin_form import (
 )
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.resources import UnidadeAdministrativaResource
-from dados_comuns.formats import UnidadeAdministrativaPDFFormat
+from dados_comuns.formats import (
+    UnidadeAdministrativaPDFFormat,
+    UnidadeOrcamentariaPDFFormat,
+)
+from dados_comuns.utils import garantir_ua_ponto_central_externa
 
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
@@ -84,27 +88,51 @@ class UnidadeOrcamentariaAdmin(ImportExportModelAdmin):
     list_display = (
         "codigo",
         "nome",
+        "orgao",
+        "codigo_orgao",
         "ativa",
     )
     search_fields = (
         "codigo",
         "nome",
+        "orgao",
+        "codigo_orgao",
     )
-    search_help_text = "Pesquise por código ou nome."
+    search_help_text = "Pesquise por código, nome, órgão ou código do órgão."
     ordering = ("codigo", "nome")
 
     list_filter = (AtivaFilter,)
 
-    fields = ("codigo", "nome", "ativa", "sigla")
+    fields = (
+        "codigo",
+        "nome",
+        "sigla",
+        "codigo_orgao",
+        "sigla_orgao",
+        "orgao",
+        "ativa",
+    )
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
+        field_labels = {
+            "codigo_orgao": "Código do Orgão",
+            "sigla_orgao": "Sigla do Orgão",
+            "orgao": "Nome do Orgão",
+        }
+        for field_name, label in field_labels.items():
+            if field_name in form.base_fields:
+                form.base_fields[field_name].label = label
+
         original_clean = form.clean
 
         def custom_clean(form_self):
             cleaned_data = original_clean(form_self)
             codigo = (cleaned_data.get("codigo") or "").strip()
             nome = (cleaned_data.get("nome") or "").strip()
+            sigla_orgao = (cleaned_data.get("sigla_orgao") or "").strip()
+            orgao = (cleaned_data.get("orgao") or "").strip()
+            codigo_orgao = (cleaned_data.get("codigo_orgao") or "").strip()
 
             if not codigo:
                 raise ValidationError({"codigo": "Código é obrigatório."})
@@ -113,6 +141,9 @@ class UnidadeOrcamentariaAdmin(ImportExportModelAdmin):
 
             cleaned_data["codigo"] = codigo
             cleaned_data["nome"] = nome
+            cleaned_data["sigla_orgao"] = sigla_orgao
+            cleaned_data["orgao"] = orgao
+            cleaned_data["codigo_orgao"] = codigo_orgao
 
             return cleaned_data
 
@@ -122,13 +153,28 @@ class UnidadeOrcamentariaAdmin(ImportExportModelAdmin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
+        _, ua_criada = garantir_ua_ponto_central_externa(obj)
+
+        if ua_criada:
+            messages.success(
+                request,
+                "UA 001 'Ponto Central' criada automaticamente para a UO externa.",
+            )
+
         if change:
             messages.success(request, "Unidade Orçamentária atualizada com sucesso.")
         else:
             messages.success(request, "Unidade Orçamentária criada com sucesso.")
 
     def get_export_formats(self):
-        return [CSV, XLSX, XLS]
+        return [CSV, XLSX, XLS, UnidadeOrcamentariaPDFFormat]
+
+    def get_export_data(self, file_format, queryset, *args, **kwargs):
+        if isinstance(file_format, UnidadeOrcamentariaPDFFormat):
+            request = kwargs.get("request")
+            file_format._export_request = request
+            file_format._export_queryset = queryset
+        return super().get_export_data(file_format, queryset, *args, **kwargs)
 
 
 @admin.register(UnidadeAdministrativa)

@@ -29,15 +29,17 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
 
 from django.contrib.contenttypes.admin import GenericTabularInline
-from django.db.models.functions import Cast
+from django.db.models.functions import Cast, Concat
 from bem_patrimonial import constants
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     BaixadosMaisDeUmPeriodoFilter,
 )
 from dados_comuns.escopo import (
+    filtrar_queryset_bem_por_escopo_com_transferencia,
     filtrar_queryset_por_escopo,
     filtrar_ua_origem_por_escopo,
+    obter_unidade_orcamentaria_id_do_usuario,
     usuario_e_super_admin,
 )
 
@@ -384,7 +386,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         if obj and getattr(obj, "excluido", False):
             return False
 
-        if obj and obj.status == constants.BAIXA_FISICA:
+        if obj and obj.status in constants.STATUS_FINAIS_BEM:
             return False
 
         return True
@@ -399,7 +401,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         if not request.user.is_gestor_patrimonio:
             return False
 
-        if obj.status == constants.BAIXA_FISICA:
+        if obj.status in constants.STATUS_FINAIS_BEM:
             return False
 
         return True
@@ -537,9 +539,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def save_model(self, request, obj, form, change):
         if change and obj.pk:
             original = BemPatrimonial.objects.get(pk=obj.pk)
-            if original.status == constants.BAIXA_FISICA:
+            if original.status in constants.STATUS_FINAIS_BEM:
                 raise ValidationError(
-                    "Este bem está com status 'Baixa Física' e não pode ser editado."
+                    f"Este bem está com status '{original.get_status_display()}' e não pode ser editado."
                 )
         if obj.id is None:
             obj.criado_por = request.user
@@ -590,11 +592,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             .select_related("unidade_administrativa", "criado_por")
         )
 
-        qs = filtrar_queryset_por_escopo(
-            usuario=request.user,
-            queryset=qs,
-            campo_ua="unidade_administrativa",
-        )
+        qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
 
         qs = self._anotar_baixa_data(qs)
 
@@ -905,18 +903,47 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
         if not (
             app_label == "bem_patrimonial"
-            and model_name in ("movimentacaobensitem", "baixafisicabensitem")
+            and model_name
+            in ("movimentacaobensitem", "baixafisicabensitem", "transferenciabensitem")
             and field_name == "bem"
         ):
             return qs, use_distinct
 
-        ua_origem = request.GET.get("ua_origem")
-        if not ua_origem:
-            return qs.none(), use_distinct
+        qs = qs.filter(status=constants.APROVADO)
 
-        qs = qs.filter(status=constants.APROVADO).filter(
-            unidade_administrativa_id=ua_origem
-        )
+        if model_name == "transferenciabensitem":
+            uo_referencia_id = obter_unidade_orcamentaria_id_do_usuario(request.user)
+            if not uo_referencia_id:
+                return qs.none(), use_distinct
+
+            qs = qs.filter(
+                unidade_administrativa__unidade_orcamentaria_id=uo_referencia_id
+            )
+
+            ua_origem = request.GET.get("ua_origem")
+            uo_origem = request.GET.get("uo_origem")
+            if ua_origem:
+                qs = qs.filter(unidade_administrativa_id=ua_origem)
+            elif uo_origem and str(uo_origem) != str(uo_referencia_id):
+                return qs.none(), use_distinct
+
+            qs = qs.annotate(
+                autocomplete_label_transferencia=Concat(
+                    "unidade_administrativa__codigo",
+                    models.Value(" - "),
+                    "unidade_administrativa__sigla",
+                    models.Value(" | "),
+                    "numero_patrimonial",
+                    models.Value(" - "),
+                    "nome",
+                    output_field=models.CharField(),
+                )
+            )
+        else:
+            ua_origem = request.GET.get("ua_origem")
+            if not ua_origem:
+                return qs.none(), use_distinct
+            qs = qs.filter(unidade_administrativa_id=ua_origem)
 
         exclude_bens = request.GET.get("exclude_bens")
         if not exclude_bens:
@@ -942,16 +969,19 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         request._busca_com_baixados_antigos = False
 
         qs, use_distinct = super().get_search_results(request, queryset, search_term)
-        qs = filtrar_queryset_por_escopo(
-            usuario=request.user,
-            queryset=qs,
-            campo_ua="unidade_administrativa",
-        )
 
         if request.path.endswith("/autocomplete/"):
+            if request.GET.get("model_name") != "transferenciabensitem":
+                qs = filtrar_queryset_por_escopo(
+                    usuario=request.user,
+                    queryset=qs,
+                    campo_ua="unidade_administrativa",
+                )
             return self._aplicar_filtros_autocomplete_bem(
                 request, qs, use_distinct
             )
+
+        qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
 
         if (
             search_term

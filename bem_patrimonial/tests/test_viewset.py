@@ -2,11 +2,18 @@ from dados_comuns.tests.auth_test_utils import auth_kwargs
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from rest_framework.test import APIClient
 
 from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial.models import (
+    TransferenciaBemPatrimonial,
+    TransferenciaBensItem,
+)
 from bem_patrimonial import constants
+from dados_comuns.context import audit_as
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 
 
 class BemPatrimonialViewSetTest(TestCase):
@@ -336,3 +343,89 @@ class CreateMultiViewSetTest(TestCase):
         response = self.client.post(self._url(), payload, format="json")
         self.assertEqual(response.status_code, 400)
         self.assertIn("nome", response.data)
+
+
+class BemPatrimonialTransferidoHistoricoViewSetTest(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
+
+        self.uo_origem = criar_uo(codigo="410", nome="UO Origem")
+        self.ua_origem = criar_ua(nome="UA Origem", uo=self.uo_origem, codigo="410.001")
+
+        self.uo_destino = criar_uo(codigo="420", nome="UO Destino")
+        self.ua_destino_transferencia = criar_ua(
+            nome="UA Destino Transferencia",
+            uo=self.uo_destino,
+            codigo="420.001",
+        )
+        self.ua_destino_usuario = criar_ua(
+            nome="UA Destino Usuario",
+            uo=self.uo_destino,
+            codigo="420.002",
+        )
+
+        self.gestor_origem = user_model.objects.create_user(
+            username="gestor_origem_viewset",
+            email="gestor.origem.viewset@test.com",
+            **auth_kwargs("123456"),
+            unidade_orcamentaria=self.uo_origem,
+            unidade_administrativa=self.ua_origem,
+            is_staff=True,
+        )
+        self.gestor_origem.groups.add(grupo_gestor)
+
+        self.gestor_destino = user_model.objects.create_user(
+            username="gestor_destino_viewset",
+            email="gestor.destino.viewset@test.com",
+            **auth_kwargs("123456"),
+            unidade_orcamentaria=self.uo_destino,
+            unidade_administrativa=self.ua_destino_usuario,
+            is_staff=True,
+        )
+        self.gestor_destino.groups.add(grupo_gestor)
+
+        self.bem = BemPatrimonial.objects.create(
+            nome="Bem transferido API",
+            numero_patrimonial="000.000000901-0",
+            descricao="Desc",
+            valor_unitario=1.00,
+            marca="M",
+            modelo="X",
+            numero_processo="PROC-T",
+            numero_formato_antigo=False,
+            sem_numeracao=False,
+            criado_por=self.gestor_origem,
+            unidade_administrativa=self.ua_origem,
+            status=constants.APROVADO,
+        )
+        self.transferencia = TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino_transferencia,
+            numero_processo="SEI-VIEWSET",
+            criado_por=self.gestor_origem,
+        )
+        TransferenciaBensItem.objects.create(
+            transferencia=self.transferencia,
+            bem=self.bem,
+        )
+        with audit_as(self.gestor_origem):
+            self.transferencia.efetivar_transferencia(self.gestor_origem)
+
+    def test_origem_pode_consultar_detalhe_de_bem_transferido(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_origem)
+
+        response = client.get(reverse("bens-detail", args=[self.bem.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], self.bem.pk)
+
+    def test_destino_pode_consultar_historico_de_bem_transferido(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_destino)
+
+        response = client.get(reverse("bens-historico", args=[self.bem.pk]))
+
+        self.assertEqual(response.status_code, 200)

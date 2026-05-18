@@ -5,9 +5,15 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.utils import timezone
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 
 
 class UnidadeOrcamentaria(models.Model):
+    codigo_orgao_validator = RegexValidator(
+        regex=r"^\d{2}\.\d{2}$",
+        message="Código do Órgão deve seguir o padrão NN.NN.",
+    )
+
     codigo = models.CharField(
         "Código",
         max_length=20,
@@ -20,6 +26,22 @@ class UnidadeOrcamentaria(models.Model):
     )
 
     sigla = models.CharField("sigla", max_length=255, blank=True, default="")
+    sigla_orgao = models.CharField(
+        "Sigla do Órgão",
+        max_length=255,
+        blank=True,
+        default="",
+    )
+
+    orgao = models.CharField("Órgão", max_length=255, blank=True, default="")
+    codigo_orgao = models.CharField(
+        "Código do Órgão",
+        max_length=5,
+        blank=True,
+        default="",
+        validators=[codigo_orgao_validator],
+        help_text="Informe no padrão NN.NN.",
+    )
 
     ativa = models.BooleanField(
         "Ativa",

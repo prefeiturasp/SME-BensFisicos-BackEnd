@@ -15,6 +15,9 @@ class UnidadeOrcamentariaListSerializer(serializers.ModelSerializer):
             "codigo",
             "sigla",
             "nome",
+            "codigo_orgao",
+            "sigla_orgao",
+            "orgao",
             "ativa",
             "ativa_display",
         ]
@@ -30,6 +33,12 @@ class UnidadeOrcamentariaDetailSerializer(UnidadeOrcamentariaListSerializer):
         extra_kwargs = {
             "codigo": {
                 "help_text": "Código da Unidade Orçamentária no padrão do projeto (ex.: 01.16.10)."
+            },
+            "codigo_orgao": {
+                "help_text": "Código do Órgão no padrão NN.NN."
+            },
+            "sigla_orgao": {
+                "help_text": "Sigla do Orgão vinculada à Unidade Orçamentária."
             }
         }
 

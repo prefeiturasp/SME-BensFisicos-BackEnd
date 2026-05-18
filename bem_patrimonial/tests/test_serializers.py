@@ -74,6 +74,19 @@ class BemPatrimonialSerializerTest(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("Baixa Física", str(serializer.errors))
 
+    def test_nao_permite_editar_transferido(self):
+        bem = self._mk_bem(status=constants.TRANSFERIDO)
+
+        serializer = BemPatrimonialDetailSerializer(
+            instance=bem,
+            data={"nome": "Novo Nome"},
+            context={"request": self._get_request()},
+            partial=True,
+        )
+
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("Transferido", str(serializer.errors))
+
     def test_nao_permite_alterar_unidade(self):
         outra_uo = criar_uo(codigo="999", nome="UO 999")
         outra_ua = criar_ua(nome="Outra UA", uo=outra_uo)

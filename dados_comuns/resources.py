@@ -12,8 +12,22 @@ class UnidadeOrcamentariaResource(resources.ModelResource):
 
     class Meta:
         model = UnidadeOrcamentaria
-        fields = ("codigo", "sigla", "nome", "ativa_display")
-        export_order = ("codigo", "sigla", "nome", "ativa_display")
+        fields = (
+            "codigo",
+            "sigla",
+            "nome",
+            "orgao",
+            "codigo_orgao",
+            "ativa_display",
+        )
+        export_order = (
+            "codigo",
+            "sigla",
+            "nome",
+            "orgao",
+            "codigo_orgao",
+            "ativa_display",
+        )
 
     def dehydrate_ativa_display(self, uo):
         return "Ativa" if uo.ativa else "Inativa"
