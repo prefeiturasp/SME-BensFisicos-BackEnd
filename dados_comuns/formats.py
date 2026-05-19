@@ -284,7 +284,7 @@ class UnidadeOrcamentariaPDFFormat(BaseUnidadePDFFormat):
         "<i>Nenhuma unidade orçamentária encontrada com os filtros aplicados.</i>"
     )
     TABLE_FONT_SIZE = 6
-    TABLE_COL_WIDTHS = [2.1 * cm, 4.1 * cm, 4.7 * cm, 2.1 * cm, 4.7 * cm, 2.3 * cm]
+    TABLE_COL_WIDTHS = [1.9 * cm, 3.3 * cm, 3.9 * cm, 1.9 * cm, 2.9 * cm, 4.0 * cm, 2.1 * cm]
 
     def get_table_headers(self):
         return [
@@ -292,6 +292,7 @@ class UnidadeOrcamentariaPDFFormat(BaseUnidadePDFFormat):
             "Sigla UO",
             "Nome UO",
             "Código Órgão",
+            "Sigla Órgão",
             "Nome Órgão",
             "Status",
         ]
@@ -303,6 +304,10 @@ class UnidadeOrcamentariaPDFFormat(BaseUnidadePDFFormat):
             Paragraph(str(unidade.nome) if unidade.nome else "-", cell_style),
             Paragraph(
                 str(unidade.codigo_orgao) if unidade.codigo_orgao else "-",
+                cell_style_center,
+            ),
+            Paragraph(
+                str(unidade.sigla_orgao) if unidade.sigla_orgao else "-",
                 cell_style_center,
             ),
             Paragraph(str(unidade.orgao) if unidade.orgao else "-", cell_style),

@@ -16,16 +16,18 @@ class UnidadeOrcamentariaResource(resources.ModelResource):
             "codigo",
             "sigla",
             "nome",
-            "orgao",
             "codigo_orgao",
+            "sigla_orgao",
+            "orgao",
             "ativa_display",
         )
         export_order = (
             "codigo",
             "sigla",
             "nome",
-            "orgao",
             "codigo_orgao",
+            "sigla_orgao",
+            "orgao",
             "ativa_display",
         )
 

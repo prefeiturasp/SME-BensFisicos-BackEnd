@@ -326,7 +326,16 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["ativa"]
     search_fields = ["codigo", "sigla", "nome", "codigo_orgao", "sigla_orgao", "orgao"]
-    ordering_fields = ["id", "codigo", "sigla", "nome", "ativa"]
+    ordering_fields = [
+        "id",
+        "codigo",
+        "sigla",
+        "nome",
+        "codigo_orgao",
+        "sigla_orgao",
+        "orgao",
+        "ativa",
+    ]
     ordering = ["codigo", "nome"]
 
     AUDIT_TRACK_FIELDS = (

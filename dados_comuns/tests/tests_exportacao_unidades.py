@@ -202,16 +202,18 @@ class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
             codigo=codigo_uo(10, 10, 10),
             nome="UO Ativa",
             sigla="ATV",
-            orgao="Órgão Ativo",
             codigo_orgao="10.10",
+            sigla_orgao="ORGAT",
+            orgao="Órgão Ativo",
             ativa=True,
         )
         self.uo_inativa = criar_uo(
             codigo=codigo_uo(20, 20, 20),
             nome="UO Inativa",
             sigla="INA",
-            orgao="Órgão Inativo",
             codigo_orgao="20.20",
+            sigla_orgao="ORGIN",
+            orgao="Órgão Inativo",
             ativa=False,
         )
 
@@ -267,10 +269,36 @@ class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
         resource = UnidadeOrcamentariaResource()
         dataset = resource.export(UnidadeOrcamentaria.objects.all())
 
+        self.assertEqual(
+            dataset.headers,
+            [
+                "codigo",
+                "sigla",
+                "nome",
+                "codigo_orgao",
+                "sigla_orgao",
+                "orgao",
+                "Status",
+            ],
+        )
+
         status_index = dataset.headers.index("Status")
         status_values = [row[status_index] for row in dataset]
         self.assertIn("Ativa", status_values)
         self.assertIn("Inativa", status_values)
+
+        linha_uo_ativa = next(row for row in dataset if row[0] == self.uo_ativa.codigo)
+        self.assertEqual(
+            list(linha_uo_ativa[:6]),
+            [
+                self.uo_ativa.codigo,
+                self.uo_ativa.sigla,
+                self.uo_ativa.nome,
+                self.uo_ativa.codigo_orgao,
+                self.uo_ativa.sigla_orgao,
+                self.uo_ativa.orgao,
+            ],
+        )
 
     def test_pdf_uo_tabela_exibe_colunas_na_ordem_nova(self):
         pdf_format = UnidadeOrcamentariaPDFFormat()
@@ -287,6 +315,7 @@ class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
                 "Sigla UO",
                 "Nome UO",
                 "Código Órgão",
+                "Sigla Órgão",
                 "Nome Órgão",
                 "Status",
             ],
@@ -298,6 +327,7 @@ class ExportacaoUnidadeOrcamentariaTestCase(TestCase):
                 self.uo_ativa.sigla,
                 self.uo_ativa.nome,
                 self.uo_ativa.codigo_orgao,
+                self.uo_ativa.sigla_orgao,
                 self.uo_ativa.orgao,
                 "Ativa",
             ],
