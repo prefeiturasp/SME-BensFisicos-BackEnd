@@ -38,7 +38,7 @@ class UnidadeOrcamentariaDetailSerializer(UnidadeOrcamentariaListSerializer):
                 "help_text": "Código do Órgão no padrão NN.NN."
             },
             "sigla_orgao": {
-                "help_text": "Sigla do Orgão vinculada à Unidade Orçamentária."
+                "help_text": "Sigla do Órgão vinculada à Unidade Orçamentária."
             }
         }
 
