@@ -14,6 +14,7 @@ from bem_patrimonial import constants
 from dados_comuns.context import audit_as
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO
+from usuario.constants import GRUPO_OPERADOR_INVENTARIO
 
 
 class BemPatrimonialViewSetTest(TestCase):
@@ -34,6 +35,10 @@ class BemPatrimonialViewSetTest(TestCase):
 
         self.user.unidade_administrativa = self.ua
         self.user.save()
+
+        self.grupo_operador = Group.objects.get_or_create(
+            name=GRUPO_OPERADOR_INVENTARIO
+        )[0]
 
     def _mk_bem(self, **kwargs):
         count = BemPatrimonial.objects.count() + 1
@@ -68,6 +73,48 @@ class BemPatrimonialViewSetTest(TestCase):
         url = reverse("bens-list")
         response = self.client.get(url, {"baixados_mais_de_um_periodo": "1"})
         self.assertEqual(response.status_code, 200)
+
+    def test_list_bens_com_busca_geral_uos_exibe_uo_externa(self):
+        outra_uo = criar_uo(codigo="210", nome="UO Externa")
+        outra_ua = criar_ua(nome="UA Externa", uo=outra_uo)
+
+        operador = get_user_model().objects.create_user(
+            username="operador_uo_local",
+            email="operador_uo_local@test.com",
+            **auth_kwargs("test123"),
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+            is_staff=True,
+        )
+        operador.groups.add(self.grupo_operador)
+        operador.unidades_administrativas.add(self.ua)
+
+        BemPatrimonial.objects.create(
+            nome="Bem externo",
+            numero_patrimonial="000.000000999-0",
+            descricao="Desc",
+            valor_unitario=1.00,
+            marca="M",
+            modelo="X",
+            numero_processo="PROC-X",
+            numero_formato_antigo=False,
+            sem_numeracao=False,
+            criado_por=self.user,
+            unidade_administrativa=outra_ua,
+            status=constants.APROVADO,
+        )
+
+        client = APIClient()
+        client.force_authenticate(operador)
+
+        url = reverse("bens-list")
+        sem_busca_geral = client.get(url)
+        com_busca_geral = client.get(url, {"busca_geral_uos": "true"})
+
+        self.assertEqual(sem_busca_geral.status_code, 200)
+        self.assertEqual(com_busca_geral.status_code, 200)
+        self.assertEqual(sem_busca_geral.data["count"], 0)
+        self.assertEqual(com_busca_geral.data["count"], 1)
 
     def test_aprovar_bens_sucesso(self):
         bem1 = self._mk_bem()
