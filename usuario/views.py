@@ -15,6 +15,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
+from django.db.utils import ProgrammingError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy, reverse
 from urllib.parse import urlencode
@@ -172,10 +173,16 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
     VISAO_GERAL_VALUE = "__UO__"
 
     def _obter_uo_ativa(self, user):
-        if user.unidade_orcamentaria_id:
-            return user.unidade_orcamentaria
-        if user.unidade_administrativa_id and user.unidade_administrativa:
-            return user.unidade_administrativa.unidade_orcamentaria
+        try:
+            if user.unidade_orcamentaria_id:
+                return user.unidade_orcamentaria
+            if user.unidade_administrativa_id and user.unidade_administrativa:
+                return user.unidade_administrativa.unidade_orcamentaria
+        except ProgrammingError:
+            logger.warning(
+                "Falha ao carregar Unidade Orçamentária ativa no selecionar_ua. "
+                "Verifique migrações pendentes."
+            )
         return None
 
     def get_uas_disponiveis(self):
@@ -183,17 +190,17 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
         if user.is_superuser:
             return UnidadeAdministrativa.objects.filter(
                 status=UnidadeAdministrativa.ATIVA
-            ).select_related("unidade_orcamentaria")
+            )
         if user.is_gestor_patrimonio:
             uo_id = user.unidade_orcamentaria_id
             if uo_id:
                 return UnidadeAdministrativa.objects.filter(
                     unidade_orcamentaria_id=uo_id,
                     status=UnidadeAdministrativa.ATIVA,
-                ).select_related("unidade_orcamentaria")
+                )
         return user.unidades_administrativas.filter(
             status=UnidadeAdministrativa.ATIVA
-        ).select_related("unidade_orcamentaria")
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
