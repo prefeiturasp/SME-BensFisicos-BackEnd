@@ -642,11 +642,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_export_queryset(self, request):
         queryset = super().get_export_queryset(request)
-        queryset = filtrar_queryset_por_escopo(
-            usuario=request.user,
-            queryset=queryset,
-            campo_ua="unidade_administrativa",
-        )
+        if not self._deve_aplicar_busca_geral_todas_uos(request):
+            queryset = filtrar_queryset_por_escopo(
+                usuario=request.user,
+                queryset=queryset,
+                campo_ua="unidade_administrativa",
+            )
 
         queryset = self._anotar_baixa_data(queryset)
 
@@ -990,7 +991,8 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
                 request, qs, use_distinct
             )
 
-        qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
+        if not self._deve_aplicar_busca_geral_todas_uos(request):
+            qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
 
         if (
             search_term
