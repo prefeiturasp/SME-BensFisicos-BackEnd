@@ -347,15 +347,15 @@ class UnidadeOrcamentariaAdminTestCase(TestCase):
         )
         self.assertEqual(
             form_class.base_fields["codigo_orgao"].label,
-            "Código do Orgão",
+            "Código do Órgão",
         )
         self.assertEqual(
             form_class.base_fields["sigla_orgao"].label,
-            "Sigla do Orgão",
+            "Sigla do Órgão",
         )
         self.assertEqual(
             form_class.base_fields["orgao"].label,
-            "Nome do Orgão",
+            "Nome do Órgão",
         )
 
     def test_admin_uo_inclui_exportacao_pdf(self):

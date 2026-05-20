@@ -116,9 +116,9 @@ class UnidadeOrcamentariaAdmin(ImportExportModelAdmin):
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         field_labels = {
-            "codigo_orgao": "Código do Orgão",
-            "sigla_orgao": "Sigla do Orgão",
-            "orgao": "Nome do Orgão",
+            "codigo_orgao": "Código do Órgão",
+            "sigla_orgao": "Sigla do Órgão",
+            "orgao": "Nome do Órgão",
         }
         for field_name, label in field_labels.items():
             if field_name in form.base_fields:

@@ -31,20 +31,26 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             codigo=codigo_uo(10, 10, 10),
             nome="UO 1",
             sigla="UO1",
+            codigo_orgao="10.10",
             sigla_orgao="ORG1",
+            orgao="Órgão 1",
         )
         self.uo2 = criar_uo(
             codigo=codigo_uo(20, 20, 20),
             nome="UO 2",
             sigla="UO2",
+            codigo_orgao="20.20",
             sigla_orgao="ORG2",
+            orgao="Órgão 2",
             ativa=False,
         )
         self.uo3 = criar_uo(
             codigo=codigo_uo(30, 30, 30),
             nome="UO 3",
             sigla="UO3",
+            codigo_orgao="30.30",
             sigla_orgao="ORG3",
+            orgao="Órgão 3",
         )
 
         self.uo_com_ua = criar_uo(
@@ -183,6 +189,27 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         response_id = self.client.get(self.list_url, {"ordering": "-id"})
         ids = [row["id"] for row in response_id.data["results"]]
         self.assertEqual(ids, sorted(ids, reverse=True))
+
+        response_ord_sigla_orgao = self.client.get(
+            self.list_url,
+            {"search": "ORG", "ordering": "-sigla_orgao"},
+        )
+        ids_sigla_orgao = [row["id"] for row in response_ord_sigla_orgao.data["results"]]
+        self.assertEqual(ids_sigla_orgao[:3], [self.uo3.id, self.uo2.id, self.uo1.id])
+
+        response_ord_codigo_orgao = self.client.get(
+            self.list_url,
+            {"search": "ORG", "ordering": "codigo_orgao"},
+        )
+        ids_codigo_orgao = [row["id"] for row in response_ord_codigo_orgao.data["results"]]
+        self.assertEqual(ids_codigo_orgao[:3], [self.uo1.id, self.uo2.id, self.uo3.id])
+
+        response_ord_orgao = self.client.get(
+            self.list_url,
+            {"search": "Órgão", "ordering": "-orgao"},
+        )
+        ids_orgao = [row["id"] for row in response_ord_orgao.data["results"]]
+        self.assertEqual(ids_orgao[:3], [self.uo3.id, self.uo2.id, self.uo1.id])
 
     def test_retrieve_criacao_atualizacao_e_historico(self):
         self._auth(self.superuser)
