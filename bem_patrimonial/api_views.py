@@ -2,7 +2,7 @@ from rest_framework import viewsets, status, filters, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter, DateFilter, ChoiceFilter
 from django.http import HttpResponse
 from django.db import transaction
 from openpyxl import Workbook
@@ -10,6 +10,7 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 from drf_spectacular.utils import extend_schema, OpenApiResponse
+import django_filters
 
 from dados_comuns.models import HistoricoGeral
 from django.contrib.contenttypes.models import ContentType
@@ -63,6 +64,60 @@ class IsGestorPatrimonioOrOperadorInventario(IsAuthenticated):
         )
 
 
+class BaixaFisicaFilter(FilterSet):
+    """
+    FilterSet customizado para BaixaFisicaBemPatrimonial.
+
+    Suporta:
+    - status: filtro exato ou lista (via 'in' usando múltiplos valores separados por vírgula)
+    - unidade_administrativa_origem: filtro exato por ID
+    - data_aprovacao__gte / data_aprovacao__lte: range de data de aprovação (aceita date string yyyy-MM-dd)
+    - data_criacao__gte  / data_criacao__lte:  range de data de criação/solicitação
+    """
+
+    status = django_filters.CharFilter(method='filter_status')
+
+    unidade_administrativa_origem = django_filters.NumberFilter(
+        field_name='unidade_administrativa_origem__id'
+    )
+
+    # Filtros de data de aprovação
+    data_aprovacao__gte = django_filters.DateFilter(
+        field_name='data_aprovacao',
+        lookup_expr='date__gte',
+    )
+    data_aprovacao__lte = django_filters.DateFilter(
+        field_name='data_aprovacao',
+        lookup_expr='date__lte',
+    )
+
+    # Filtros de data de criação (= data de solicitação)
+    data_criacao__gte = django_filters.DateFilter(
+        field_name='data_criacao',
+        lookup_expr='date__gte',
+    )
+    data_criacao__lte = django_filters.DateFilter(
+        field_name='data_criacao',
+        lookup_expr='date__lte',
+    )
+
+    class Meta:
+        model = BaixaFisicaBemPatrimonial
+        fields = []
+
+    def filter_status(self, queryset, name, value):
+        """
+        Aceita um único valor ('solicitada') ou múltiplos separados por vírgula
+        ('solicitada,aguardando_envio'), mapeando para __in quando necessário.
+        """
+        if not value:
+            return queryset
+        values = [v.strip() for v in value.split(',') if v.strip()]
+        if len(values) == 1:
+            return queryset.filter(status=values[0])
+        return queryset.filter(status__in=values)
+
+
 class BaixaFisicaBemPatrimonialViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -89,13 +144,7 @@ class BaixaFisicaBemPatrimonialViewSet(
 
     permission_classes = [IsGestorPatrimonioOrOperadorInventario]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-
-    filterset_fields = {
-        'status': ['exact', 'in'],
-        'unidade_administrativa_origem': ['exact'],
-        'data_aprovacao': ['gte', 'lte', 'range'],
-        'data_criacao': ['gte', 'lte', 'range'],
-    }
+    filterset_class = BaixaFisicaFilter
 
     search_fields = (
         "numero_processo_baixa",
@@ -115,6 +164,8 @@ class BaixaFisicaBemPatrimonialViewSet(
         'data_aprovacao',
         'status',
         'numero_nbbpm',
+        'unidade_administrativa_origem__sigla',
+        'numero_processo_baixa',
     ]
     ordering = ['-data_criacao']
 
