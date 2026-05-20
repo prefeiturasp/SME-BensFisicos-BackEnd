@@ -34,6 +34,7 @@ from bem_patrimonial import constants
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     BaixadosMaisDeUmPeriodoFilter,
+    BuscaGeralTodasUOsFilter,
 )
 from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
@@ -244,6 +245,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "numero_formato_antigo",
         ("criado_em", DateRangeFilter),
         BaixadosMaisDeUmPeriodoFilter,
+        BuscaGeralTodasUOsFilter,
     )
 
     readonly_fields = (
@@ -585,14 +587,18 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             baixa_data__year__lt=ano_limite,
         )
 
-    def _get_queryset_com_auditoria(self, request):
+    def _deve_aplicar_busca_geral_todas_uos(self, request):
+        return request.GET.get("busca_geral_todas_uos") == "1"
+
+    def _get_queryset_com_auditoria(self, request, aplicar_escopo=True):
         qs = (
             super()
             .get_queryset(request)
             .select_related("unidade_administrativa", "criado_por")
         )
 
-        qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
+        if aplicar_escopo:
+            qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
 
         qs = self._anotar_baixa_data(qs)
 
@@ -624,7 +630,10 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         return qs, use_distinct
 
     def get_queryset(self, request):
-        qs = self._get_queryset_com_auditoria(request)
+        qs = self._get_queryset_com_auditoria(
+            request,
+            aplicar_escopo=not self._deve_aplicar_busca_geral_todas_uos(request),
+        )
 
         if self._deve_aplicar_filtro_padrao_baixados(request):
             qs = self._aplicar_filtro_padrao_baixados(qs)

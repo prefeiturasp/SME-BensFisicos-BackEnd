@@ -190,17 +190,17 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
         if user.is_superuser:
             return UnidadeAdministrativa.objects.filter(
                 status=UnidadeAdministrativa.ATIVA
-            )
+            ).select_related("unidade_orcamentaria")
         if user.is_gestor_patrimonio:
             uo_id = user.unidade_orcamentaria_id
             if uo_id:
                 return UnidadeAdministrativa.objects.filter(
                     unidade_orcamentaria_id=uo_id,
                     status=UnidadeAdministrativa.ATIVA,
-                )
+                ).select_related("unidade_orcamentaria")
         return user.unidades_administrativas.filter(
             status=UnidadeAdministrativa.ATIVA
-        )
+        ).select_related("unidade_orcamentaria")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
