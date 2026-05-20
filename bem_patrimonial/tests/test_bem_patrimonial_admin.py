@@ -827,6 +827,93 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         self.assertTrue(getattr(request, "_busca_com_baixados_antigos", False))
         self.assertIn(bem_antigo, resultado)
 
+    def test_get_queryset_com_busca_geral_todas_uos_inclui_bens_fora_do_escopo(self):
+        uo_2 = criar_uo(codigo="200", nome="UO 200")
+        ua_2 = criar_ua(
+            uo=uo_2,
+            codigo="002",
+            sigla="UA2",
+            nome="UA Teste 2",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem_ua_1 = self._criar_bem(nome="Bem UA 1", numero_processo="P-UA1")
+        bem_ua_2 = self._criar_bem(
+            nome="Bem UA 2",
+            numero_processo="P-UA2",
+            unidade_administrativa=ua_2,
+        )
+
+        request_sem_busca = self._request_changelist()
+        qs_sem_busca = self.admin.get_queryset(request_sem_busca)
+        self.assertIn(bem_ua_1, qs_sem_busca)
+        self.assertNotIn(bem_ua_2, qs_sem_busca)
+
+        request_com_busca = self._request_changelist({"busca_geral_todas_uos": "1"})
+        qs_com_busca = self.admin.get_queryset(request_com_busca)
+        self.assertIn(bem_ua_1, qs_com_busca)
+        self.assertIn(bem_ua_2, qs_com_busca)
+
+    def test_get_export_queryset_com_busca_geral_todas_uos_inclui_bens_fora_do_escopo(
+        self,
+    ):
+        uo_2 = criar_uo(codigo="201", nome="UO 201")
+        ua_2 = criar_ua(
+            uo=uo_2,
+            codigo="201",
+            sigla="UA201",
+            nome="UA Teste 201",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem_ua_1 = self._criar_bem(nome="Bem Export UA 1", numero_processo="P-EUA1")
+        bem_ua_2 = self._criar_bem(
+            nome="Bem Export UA 2",
+            numero_processo="P-EUA2",
+            unidade_administrativa=ua_2,
+        )
+
+        request_sem_busca = self._request_changelist()
+        qs_sem_busca = self.admin.get_export_queryset(request_sem_busca)
+        self.assertIn(bem_ua_1, qs_sem_busca)
+        self.assertNotIn(bem_ua_2, qs_sem_busca)
+
+        request_com_busca = self._request_changelist({"busca_geral_todas_uos": "1"})
+        qs_com_busca = self.admin.get_export_queryset(request_com_busca)
+        self.assertIn(bem_ua_1, qs_com_busca)
+        self.assertIn(bem_ua_2, qs_com_busca)
+
+    def test_get_search_results_com_busca_geral_todas_uos_inclui_bens_fora_do_escopo(
+        self,
+    ):
+        uo_2 = criar_uo(codigo="202", nome="UO 202")
+        ua_2 = criar_ua(
+            uo=uo_2,
+            codigo="202",
+            sigla="UA202",
+            nome="UA Teste 202",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem_ua_2 = self._criar_bem(
+            nome="Busca Geral Bem UA 2",
+            numero_processo="P-BGUA2",
+            unidade_administrativa=ua_2,
+        )
+
+        request_sem_busca = self._request_changelist({"q": "Busca Geral Bem UA 2"})
+        qs_base_sem_busca = self.admin.get_queryset(request_sem_busca)
+        qs_sem_busca, _ = self.admin.get_search_results(
+            request_sem_busca, qs_base_sem_busca, "Busca Geral Bem UA 2"
+        )
+        self.assertNotIn(bem_ua_2, qs_sem_busca)
+
+        request_com_busca = self._request_changelist(
+            {"q": "Busca Geral Bem UA 2", "busca_geral_todas_uos": "1"}
+        )
+        qs_base_com_busca = self.admin.get_queryset(request_com_busca)
+        qs_com_busca, _ = self.admin.get_search_results(
+            request_com_busca, qs_base_com_busca, "Busca Geral Bem UA 2"
+        )
+        self.assertIn(bem_ua_2, qs_com_busca)
+
     def test_changelist_view_redireciona_com_checkbox_marcado_no_fallback(self):
         request = self._request_changelist({"q": "bem inexistente"})
         request._busca_com_baixados_antigos = True

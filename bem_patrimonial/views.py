@@ -175,13 +175,17 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         return BemPatrimonialDetailSerializer
 
     def get_queryset(self):
+        busca_geral_uos = self.request.query_params.get("busca_geral_uos")
         qs = BemPatrimonial.objects.select_related(
             "unidade_administrativa",
             "unidade_administrativa__unidade_orcamentaria",
             "criado_por",
         )
 
-        qs = filtrar_queryset_bem_por_escopo_com_transferencia(self.request.user, qs)
+        if busca_geral_uos in {"1", "true", "True"}:
+            qs = qs.all()
+        else:
+            qs = filtrar_queryset_bem_por_escopo_com_transferencia(self.request.user, qs)
 
         baixa_data_sq = (
             BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
