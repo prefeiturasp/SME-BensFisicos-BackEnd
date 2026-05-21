@@ -1,12 +1,7 @@
-# /code/dados_comuns/tests/factories.py
-
 from dados_comuns.models import UnidadeOrcamentaria, UnidadeAdministrativa
 
 
 def criar_uo(codigo="200", nome="UO Teste", sigla="UO", **kwargs):
-    """
-    Factory simples para UnidadeOrcamentaria alinhada ao model atual.
-    """
     data = {
         "codigo": codigo,
         "nome": nome,
@@ -24,8 +19,13 @@ def criar_ua(
     status=UnidadeAdministrativa.ATIVA,
     **kwargs,
 ):
+    # Aceita unidade_orcamentaria tanto via parâmetro posicional `uo`
+    # quanto via kwargs (ex: criar_ua(unidade_orcamentaria=obj))
     if uo is None:
-        uo = criar_uo()
+        uo = kwargs.pop("unidade_orcamentaria", None) or criar_uo()
+    else:
+        # Remove do kwargs caso venha duplicado
+        kwargs.pop("unidade_orcamentaria", None)
 
     data = {
         "codigo": codigo if codigo else "200",

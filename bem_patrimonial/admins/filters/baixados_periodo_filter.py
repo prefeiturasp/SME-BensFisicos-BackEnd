@@ -30,3 +30,14 @@ class BaixadosMaisDeUmPeriodoFilter(admin.SimpleListFilter):
             status=constants.BAIXA_FISICA,
             baixa_data__year__lt=ano_limite,
         )
+
+class BuscaGeralTodasUOsFilter(admin.SimpleListFilter):
+    title = "Busca geral em todas as UOs"
+    parameter_name = "busca_geral_todas_uos"
+    template = "admin/bem_patrimonial/filters/checkbox_baixados_periodo.html"
+
+    def lookups(self, request, model_admin):
+        return (("1", "Marcado"),)
+
+    def queryset(self, request, queryset):
+        return queryset

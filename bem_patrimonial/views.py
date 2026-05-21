@@ -33,10 +33,16 @@ from bem_patrimonial.models import (
     BaixaFisicaBensItem,
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
+    TransferenciaBemPatrimonial,
 )
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.context import audit_as
-from dados_comuns.escopo import filtrar_queryset_por_escopo, validar_objeto_no_escopo
+from dados_comuns.escopo import (
+    filtrar_queryset_bem_por_escopo_com_transferencia,
+    filtrar_queryset_por_escopo,
+    filtrar_queryset_transferencia_por_escopo,
+    validar_bem_no_escopo_com_transferencia,
+)
 
 
 @login_required
@@ -77,6 +83,47 @@ def download_documento_cimbpm(request, pk):
         raise Http404(f"Erro ao gerar documento: {str(e)}")
 
     filename = f"CIMBPM_{movimentacao.numero_cimbpm.replace('.', '_')}.pdf"
+
+    return FileResponse(
+        pdf_buffer,
+        as_attachment=True,
+        filename=filename,
+        content_type="application/pdf",
+    )
+
+
+@login_required
+@require_GET
+def download_documento_ntbpm(request, pk):
+    if not request.user.is_gestor_patrimonio:
+        raise PermissionDenied(
+            "Você não tem permissão para acessar este documento. "
+            "Apenas Gestor de Patrimônio pode baixar documentos de transferência."
+        )
+
+    transferencia = get_object_or_404(
+        filtrar_queryset_transferencia_por_escopo(
+            request.user,
+            TransferenciaBemPatrimonial.objects.all(),
+        ),
+        pk=pk,
+    )
+
+    if not transferencia.numero_ntbpm:
+        raise Http404("Erro: Número NTBPM não foi gerado para esta transferência")
+
+    from bem_patrimonial.ntbpm import gerar_pdf_ntbpm
+
+    try:
+        pdf_buffer = gerar_pdf_ntbpm(
+            transferencia,
+            usuario_gerador=request.user,
+            data_geracao=timezone.now(),
+        )
+    except Exception as e:
+        raise Http404(f"Erro ao gerar documento: {str(e)}")
+
+    filename = f"NTBPM_{transferencia.numero_ntbpm.replace('.', '_')}.pdf"
 
     return FileResponse(
         pdf_buffer,
@@ -128,17 +175,17 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         return BemPatrimonialDetailSerializer
 
     def get_queryset(self):
+        busca_geral_uos = self.request.query_params.get("busca_geral_uos")
         qs = BemPatrimonial.objects.select_related(
             "unidade_administrativa",
             "unidade_administrativa__unidade_orcamentaria",
             "criado_por",
         )
 
-        qs = filtrar_queryset_por_escopo(
-            usuario=self.request.user,
-            queryset=qs,
-            campo_ua="unidade_administrativa",
-        )
+        if busca_geral_uos in {"1", "true", "True"}:
+            qs = qs.all()
+        else:
+            qs = filtrar_queryset_bem_por_escopo_com_transferencia(self.request.user, qs)
 
         baixa_data_sq = (
             BaixaFisicaBensItem.objects.filter(bem_id=OuterRef("pk"))
@@ -171,11 +218,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
     def get_object(self):
         obj = super().get_object()
 
-        if not validar_objeto_no_escopo(
-            usuario=self.request.user,
-            objeto=obj,
-            campo_ua="unidade_administrativa",
-        ):
+        if not validar_bem_no_escopo_com_transferencia(self.request.user, obj):
             from rest_framework.exceptions import NotFound
 
             raise NotFound()
@@ -375,6 +418,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                             "campo": i.campo,
                             "valor_antigo": i.valor_antigo,
                             "valor_novo": i.valor_novo,
+                            "justificativa": i.justificativa,
                         }
                         for i in itens
                     ],

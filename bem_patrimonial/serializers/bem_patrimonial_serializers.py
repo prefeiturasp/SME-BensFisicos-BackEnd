@@ -251,9 +251,21 @@ class BemPatrimonialListSerializer(
         read_only_fields = fields
 
 
+# Campos que disparam obrigatoriedade de justificativa
+_CAMPOS_QUE_EXIGEM_JUSTIFICATIVA = {"nome", "numero_patrimonial"}
+
+
 class BemPatrimonialDetailSerializer(
     _BemPatrimonialBaseMixin, serializers.ModelSerializer
 ):
+    # Write-only: nunca retorna ao frontend, só usado para salvar no histórico
+    justificativa = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        write_only=True,
+        default="",
+    )
+
     class Meta:
         model = BemPatrimonial
         fields = [
@@ -268,6 +280,7 @@ class BemPatrimonialDetailSerializer(
             "sem_numeracao",
             "nome",
             "descricao",
+            "observacao",
             "valor_unitario",
             "marca",
             "modelo",
@@ -282,6 +295,8 @@ class BemPatrimonialDetailSerializer(
             "baixa_data",
             "audit_last_at",
             "audit_last_by_id",
+            # justificativa declarada acima como write_only
+            "justificativa",
         ]
         read_only_fields = [
             "id",
@@ -302,9 +317,9 @@ class BemPatrimonialDetailSerializer(
             raise serializers.ValidationError(
                 "Este bem está excluído e não pode ser editado."
             )
-        if self.instance.status == constants.BAIXA_FISICA:
+        if self.instance.status in constants.STATUS_FINAIS_BEM:
             raise serializers.ValidationError(
-                "Este bem está com status 'Baixa Física' e não pode ser editado."
+                f"Este bem está com status '{self.instance.get_status_display()}' e não pode ser editado."
             )
         if "unidade_administrativa" in attrs and attrs["unidade_administrativa"] != self.instance.unidade_administrativa:
             raise serializers.ValidationError(
@@ -323,6 +338,35 @@ class BemPatrimonialDetailSerializer(
                 {"valor_unitario": "Informe o valor unitário (obrigatório)."}
             )
 
+    def _validate_justificativa(self, attrs):
+        """
+        Justificativa obrigatória quando nome ou numero_patrimonial mudam na edição.
+        Nunca obrigatória na criação.
+        """
+        if not self.instance:
+            return
+
+        campos_alterados = _CAMPOS_QUE_EXIGEM_JUSTIFICATIVA.intersection(attrs.keys())
+        if not campos_alterados:
+            return
+
+        mudou = any(
+            str(attrs[campo]) != str(getattr(self.instance, campo, ""))
+            for campo in campos_alterados
+        )
+        if not mudou:
+            return
+
+        justificativa = attrs.get("justificativa", "").strip()
+        if not justificativa:
+            raise serializers.ValidationError(
+                {
+                    "justificativa": (
+                        "Justificativa é obrigatória ao alterar nome ou número patrimonial."
+                    )
+                }
+            )
+
     def validate(self, attrs):
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -331,13 +375,35 @@ class BemPatrimonialDetailSerializer(
         self._validate_campos_editaveis(user, attrs)
         self._validate_valor_unitario_incoming(attrs)
 
+        erros_combinados = {}
+
         cleaned = dict(attrs)
         if self.instance:
             for k in ("numero_patrimonial", "sem_numeracao", "numero_formato_antigo"):
                 if k not in cleaned:
                     cleaned[k] = getattr(self.instance, k)
 
-        cleaned = self._validate_numero_patrimonial_form(cleaned)
+        try:
+            cleaned = self._validate_numero_patrimonial_form(cleaned)
+        except serializers.ValidationError as exc:
+            detail = exc.detail
+            if isinstance(detail, dict):
+                erros_combinados.update(detail)
+            else:
+                erros_combinados["numero_patrimonial"] = detail
+
+        try:
+            self._validate_justificativa(attrs)
+        except serializers.ValidationError as exc:
+            detail = exc.detail
+            if isinstance(detail, dict):
+                erros_combinados.update(detail)
+            else:
+                erros_combinados["justificativa"] = detail
+
+        if erros_combinados:
+            raise serializers.ValidationError(erros_combinados)
+
         attrs.update(
             {
                 "numero_patrimonial": cleaned.get("numero_patrimonial"),
@@ -351,6 +417,9 @@ class BemPatrimonialDetailSerializer(
         request = self.context.get("request")
         user = getattr(request, "user", None)
 
+        # justificativa não é campo do model — descarta silenciosamente na criação
+        validated_data.pop("justificativa", None)
+
         validated_data["criado_por"] = user
         validated_data["status"] = constants.AGUARDANDO_APROVACAO
 
@@ -360,19 +429,25 @@ class BemPatrimonialDetailSerializer(
             if "numero_patrimonial" in str(e).lower():
                 raise serializers.ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa: E501
+                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
                     }
                 )
             raise
 
     def update(self, instance, validated_data):
+        # Extrai justificativa antes de passar ao model (não é campo do DB)
+        justificativa = validated_data.pop("justificativa", "").strip() or None
+
+        # Injeta no instance para que o signal de auditoria do model a capture
+        instance._justificativa = justificativa
+
         try:
             return super().update(instance, validated_data)
         except IntegrityError as e:
             if "numero_patrimonial" in str(e).lower():
                 raise serializers.ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."  # noqa: E501
+                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
                     }
                 )
             raise
@@ -380,6 +455,10 @@ class BemPatrimonialDetailSerializer(
             if hasattr(e, "message_dict"):
                 raise serializers.ValidationError(e.message_dict)
             raise serializers.ValidationError(str(e))
+        finally:
+            # Limpa o atributo temporário independente do resultado
+            if hasattr(instance, "_justificativa"):
+                del instance._justificativa
 
 
 class BemItemCriacaoSerializer(serializers.Serializer):

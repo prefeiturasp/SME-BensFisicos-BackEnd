@@ -5,6 +5,7 @@ class HistoricoAcaoSerializer(serializers.Serializer):
     campo = serializers.CharField()
     valor_antigo = serializers.CharField(allow_null=True)
     valor_novo = serializers.CharField(allow_null=True)
+    justificativa = serializers.CharField(allow_null=True, required=False)
 
 
 class HistoricoGrupoSerializer(serializers.Serializer):

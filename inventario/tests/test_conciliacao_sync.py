@@ -243,6 +243,37 @@ class ConciliacaoSyncTest(TestCase):
             conciliacao_sync.sync_bem_pos_save(bem)
         self.assertEqual(ItemConciliacao.objects.count(), 0)
 
+    def test_sync_bem_transferido_remove_da_antiga_e_nao_inclui_na_nova(self):
+        ua2 = criar_ua(
+            uo=self.ua.unidade_orcamentaria,
+            codigo="001.0004",
+            sigla="UA4",
+            nome="Unidade 4",
+        )
+        conciliacao_antiga = self._criar_conciliacao_aberta()
+        conciliacao_nova = self._criar_conciliacao_aberta(ua=ua2)
+        bem = self._criar_bem(ua=self.ua, status=bem_constants.TRANSFERIDO)
+        ItemConciliacao.objects.create(
+            conciliacao=conciliacao_antiga,
+            bem=bem,
+            situacao=inv_constants.ENCONTRADO_SEM_DIVERGENCIA,
+        )
+
+        bem.unidade_administrativa = ua2
+        bem.unidade_administrativa_id = ua2.pk
+
+        with audit_as(self.usuario):
+            conciliacao_sync.sync_bem_pos_save(bem, old_ua_id=self.ua.pk)
+
+        self.assertEqual(
+            ItemConciliacao.objects.filter(conciliacao=conciliacao_antiga, bem=bem).count(),
+            0,
+        )
+        self.assertEqual(
+            ItemConciliacao.objects.filter(conciliacao=conciliacao_nova, bem=bem).count(),
+            0,
+        )
+
     # --- Cobertura de funções internas (linhas que só são atingidas por elas) ---
 
     def test_conciliacoes_em_aberto_retorna_none_quando_ua_id_vazio(self):

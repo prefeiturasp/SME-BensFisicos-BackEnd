@@ -14,7 +14,7 @@ from usuario.views import (
     PasswordRecoveryCompleteView,
     SelecionarUAView,
 )
-from bem_patrimonial.views import download_documento_cimbpm
+from bem_patrimonial.views import download_documento_cimbpm, download_documento_ntbpm
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.conf.urls.static import static
@@ -71,6 +71,11 @@ urlpatterns = [
         "documento-cimbpm/<int:pk>/download/",
         download_documento_cimbpm,
         name="download_documento_cimbpm",
+    ),
+    path(
+        "documento-ntbpm/<int:pk>/download/",
+        download_documento_ntbpm,
+        name="download_documento_ntbpm",
     ),
     path("", include("inventario.urls")),
     # Recuperação de senha

@@ -14,8 +14,8 @@ User = get_user_model()
 
 _STATUS_BEM_INVALIDOS_PARA_BAIXA = {
     constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
-    constants.BAIXA_FISICA,
     constants.BLOQUEADO,
+    *constants.STATUS_FINAIS_BEM,
 }
 
 

@@ -144,3 +144,75 @@ def filtrar_queryset_movimentacao_por_escopo(usuario, queryset):
         )
 
     return queryset.none()
+
+
+def filtrar_queryset_transferencia_por_escopo(usuario, queryset):
+    """
+    Transferências visíveis:
+    - Gestor vê registros em que sua UO participa como origem OU destino.
+    - Demais usuários não acessam esse módulo.
+    """
+    _is_super, is_gestor, _ua_id, uo_id = resolver_ids_escopo(usuario)
+
+    if not (is_gestor and uo_id):
+        return queryset.none()
+
+    return queryset.filter(
+        Q(unidade_orcamentaria_origem_id=uo_id)
+        | Q(unidade_orcamentaria_destino_id=uo_id)
+    )
+
+
+def filtrar_queryset_bem_por_escopo_com_transferencia(usuario, queryset):
+    """
+    Para bens patrimoniais:
+    - mantém o escopo atual por UA/UO;
+    - adiciona leitura de bens com status transferido quando a UO do gestor
+      participou da transferência como origem ou destino.
+    """
+    from bem_patrimonial import constants as bem_constants
+
+    _is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(usuario)
+
+    if ua_id:
+        filtro_base = Q(unidade_administrativa_id=ua_id)
+    elif is_gestor and uo_id:
+        filtro_base = Q(unidade_administrativa__unidade_orcamentaria_id=uo_id)
+    else:
+        return queryset.none()
+
+    if not (is_gestor and uo_id):
+        return queryset.filter(filtro_base)
+
+    filtro_transferencia = Q(
+        status=bem_constants.TRANSFERIDO,
+        transferencias__unidade_orcamentaria_origem_id=uo_id,
+    ) | Q(
+        status=bem_constants.TRANSFERIDO,
+        transferencias__unidade_orcamentaria_destino_id=uo_id,
+    )
+
+    return queryset.filter(filtro_base | filtro_transferencia).distinct()
+
+
+def validar_bem_no_escopo_com_transferencia(usuario, bem):
+    """
+    Validação objeto-a-objeto equivalente ao filtro de bens com transparência
+    para histórico de itens transferidos.
+    """
+    from bem_patrimonial import constants as bem_constants
+
+    if validar_objeto_no_escopo(usuario, bem, campo_ua="unidade_administrativa"):
+        return True
+
+    _is_super, is_gestor, _ua_id, uo_id = resolver_ids_escopo(usuario)
+    if not (is_gestor and uo_id):
+        return False
+
+    if getattr(bem, "status", None) != bem_constants.TRANSFERIDO:
+        return False
+
+    return bem.transferencias.filter(
+        Q(unidade_orcamentaria_origem_id=uo_id)
+        | Q(unidade_orcamentaria_destino_id=uo_id)
+    ).exists()

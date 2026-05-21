@@ -476,13 +476,58 @@ class UsuarioSerializer(serializers.ModelSerializer):
         groups, unidade_orcamentaria, unidade_administrativa = (
             self._resolver_valores_existentes(attrs, instance)
         )
+        unidades_administrativas = self._resolver_unidades_administrativas(attrs, instance)
 
+        self._validar_uo_create_obrigatoria_e_escopo(
+            user=user,
+            raw=raw,
+            instance=instance,
+            unidade_orcamentaria=unidade_orcamentaria,
+        )
         self._validar_coerencia_ua_uo(unidade_administrativa, unidade_orcamentaria)
         self._validar_escopo_uo_gestor(user, unidade_orcamentaria, instance)  # ✅ novo
         self._validar_senha(attrs)
-        self._validar_coerencia_grupo_unidade(groups, unidade_administrativa, unidade_orcamentaria)
+        self._validar_coerencia_grupo_unidade(
+            groups,
+            unidade_administrativa,
+            unidade_orcamentaria,
+            unidades_administrativas,
+        )
 
         return attrs
+
+
+    def _validar_uo_create_obrigatoria_e_escopo(
+        self,
+        user,
+        raw,
+        instance,
+        unidade_orcamentaria,
+    ):
+        if instance is not None:
+            return
+        if not user or getattr(user, "is_superuser", False):
+            return
+
+        if "unidade_orcamentaria" not in raw or raw.get("unidade_orcamentaria") in (None, ""):
+            raise serializers.ValidationError(
+                {"unidade_orcamentaria": "Unidade Orcamentaria obrigatoria."}
+            )
+
+        user_uo_id = getattr(user, "unidade_orcamentaria_id", None)
+        if not user_uo_id:
+            raise serializers.ValidationError(
+                {"unidade_orcamentaria": "Usuario autenticado sem Unidade Orcamentaria."}
+            )
+
+        if unidade_orcamentaria is not None and unidade_orcamentaria.id != user_uo_id:
+            raise serializers.ValidationError(
+                {
+                    "unidade_orcamentaria": (
+                        "Voce so pode criar usuarios na sua propria Unidade Orcamentaria."
+                    )
+                }
+            )
 
     def _validar_escopo_uo_gestor(self, user, unidade_orcamentaria, instance):
         """
@@ -586,6 +631,14 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
         return groups, unidade_orcamentaria, unidade_administrativa
 
+    def _resolver_unidades_administrativas(self, attrs, instance):
+        unidades_administrativas = attrs.get("unidades_administrativas")
+        if unidades_administrativas is None and instance is not None:
+            unidades_administrativas = list(instance.unidades_administrativas.all())
+        if unidades_administrativas is None:
+            unidades_administrativas = []
+        return unidades_administrativas
+
     def _validar_coerencia_ua_uo(self, unidade_administrativa, unidade_orcamentaria):
 
         if not (unidade_administrativa and unidade_orcamentaria):
@@ -630,7 +683,13 @@ class UsuarioSerializer(serializers.ModelSerializer):
                 {"password": "A senha deve conter caractere especial."}  # NOSONAR
             )
 
-    def _validar_coerencia_grupo_unidade(self, groups, unidade_administrativa, unidade_orcamentaria):
+    def _validar_coerencia_grupo_unidade(
+        self,
+        groups,
+        unidade_administrativa,
+        unidade_orcamentaria,
+        unidades_administrativas,
+    ):
 
         if not groups:
             return
@@ -640,6 +699,40 @@ class UsuarioSerializer(serializers.ModelSerializer):
         if GRUPO_OPERADOR_INVENTARIO in group_names and not unidade_administrativa:
             raise serializers.ValidationError(
                 "Operador deve possuir unidade administrativa."
+            )
+
+        if GRUPO_OPERADOR_INVENTARIO in group_names and not unidades_administrativas:
+            raise serializers.ValidationError(
+                {"unidades_administrativas": "Operador deve ter pelo menos uma UA."}
+            )
+
+        if unidades_administrativas and unidade_orcamentaria:
+            ua_fora_da_uo = [
+                ua.id
+                for ua in unidades_administrativas
+                if ua.unidade_orcamentaria_id != unidade_orcamentaria.id
+            ]
+            if ua_fora_da_uo:
+                raise serializers.ValidationError(
+                    {
+                        "unidades_administrativas": (
+                            "Todas as UAs devem pertencer à Unidade Orçamentária selecionada."
+                        )
+                    }
+                )
+
+        if (
+            GRUPO_OPERADOR_INVENTARIO in group_names
+            and unidade_administrativa
+            and unidades_administrativas
+            and all(ua.id != unidade_administrativa.id for ua in unidades_administrativas)
+        ):
+            raise serializers.ValidationError(
+                {
+                    "unidade_administrativa": (
+                        "A UA ativa deve estar entre as UAs selecionadas."
+                    )
+                }
             )
 
         if GRUPO_GESTOR_PATRIMONIO in group_names and not unidade_orcamentaria:

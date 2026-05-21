@@ -10,8 +10,12 @@ from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.context import get_user
-from dados_comuns.utils import dict_changes
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.utils import (
+    CODIGO_UA_PONTO_CENTRAL,
+    dict_changes,
+    unidade_orcamentaria_eh_externa,
+)
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.models import Usuario
 from bem_patrimonial.emails import (
     envia_email_nova_solicitacao_movimentacao,
@@ -23,6 +27,7 @@ from bem_patrimonial import constants
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
 
+VERBOSE_CRIADO_EM = "Criado em"
 VERBOSE_ATUALIZADO_EM = "Atualizado em"
 
 
@@ -150,7 +155,7 @@ class BemPatrimonial(BaseModel):
         null=True,
         blank=True,
     )
-    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
+    criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
     atualizado_em = models.DateTimeField(
         VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
@@ -175,6 +180,11 @@ class BemPatrimonial(BaseModel):
     AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
     def __str__(self):
+        label_autocomplete_transferencia = getattr(
+            self, "autocomplete_label_transferencia", None
+        )
+        if label_autocomplete_transferencia:
+            return label_autocomplete_transferencia
         return (
             f"{self.numero_patrimonial} - {self.nome}"
             if self.numero_patrimonial
@@ -473,7 +483,7 @@ class MovimentacaoBemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
-    criado_em = models.DateTimeField("Criado em", auto_now_add=True)
+    criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
     atualizado_em = models.DateTimeField(
         VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
     )
@@ -559,6 +569,229 @@ class MovimentacaoBemPatrimonial(models.Model):
             bem = item.bem
             bem.status = constants.APROVADO
             bem.save()
+
+
+class TransferenciaBensItem(models.Model):
+
+    bem = models.ForeignKey(
+        BemPatrimonial,
+        on_delete=models.CASCADE,
+        related_name="transferencias_itens",
+    )
+    transferencia = models.ForeignKey(
+        "TransferenciaBemPatrimonial",
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+
+    class Meta:
+        verbose_name = "item de transferência"
+        verbose_name_plural = "itens de transferência"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["transferencia", "bem"],
+                name="uniq_item_por_transferencia_bem",
+            )
+        ]
+
+    def __str__(self):
+        return f"Transf#{self.transferencia_id} • {self.bem}"
+
+
+class TransferenciaBemPatrimonial(models.Model):
+    unidade_orcamentaria_origem = models.ForeignKey(
+        UnidadeOrcamentaria,
+        related_name="transferencias_origem",
+        verbose_name="Unidade orçamentária de origem",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+    )
+    unidade_orcamentaria_destino = models.ForeignKey(
+        UnidadeOrcamentaria,
+        related_name="transferencias_destino",
+        verbose_name="Unidade orçamentária de destino",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+    )
+    unidade_administrativa_destino = models.ForeignKey(
+        UnidadeAdministrativa,
+        related_name="transferencias_recebidas",
+        verbose_name="Unidade administrativa de destino",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+    )
+    bens = models.ManyToManyField(
+        BemPatrimonial,
+        through="TransferenciaBensItem",
+        related_name="transferencias",
+        verbose_name="Bens patrimoniais",
+        blank=True,
+    )
+    numero_processo = models.CharField(
+        "Número do processo",
+        max_length=64,
+        unique=True,
+        null=False,
+        blank=False,
+    )
+    numero_ntbpm = models.CharField(
+        "Número NTBPM",
+        max_length=30,
+        unique=True,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    observacao = models.TextField("Observação", blank=True)
+    criado_por = models.ForeignKey(
+        Usuario,
+        verbose_name="Criado por",
+        related_name="transferencias_criadas",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+    )
+    criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
+    atualizado_em = models.DateTimeField(
+        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = "transferência de bem patrimonial"
+        verbose_name_plural = "transferências de bens patrimoniais"
+
+    def __str__(self):
+        return f"Transferência #{self.pk}"
+
+    def _validar_destino(self):
+        if not unidade_orcamentaria_eh_externa(self.unidade_orcamentaria_destino):
+            raise ValidationError(
+                {
+                    "unidade_orcamentaria_destino": (
+                        "A Unidade Orçamentária de destino deve ser externa à SME."
+                    )
+                }
+            )
+
+        if (
+            self.unidade_administrativa_destino.unidade_orcamentaria_id
+            != self.unidade_orcamentaria_destino_id
+        ):
+            raise ValidationError(
+                {
+                    "unidade_administrativa_destino": (
+                        "A Unidade Administrativa de destino não pertence à UO informada."
+                    )
+                }
+            )
+
+        codigo_destino = (self.unidade_administrativa_destino.codigo or "").strip()
+        if not (
+            codigo_destino == CODIGO_UA_PONTO_CENTRAL
+            or codigo_destino.endswith(f".{CODIGO_UA_PONTO_CENTRAL}")
+        ):
+            raise ValidationError(
+                {
+                    "unidade_administrativa_destino": (
+                        "A transferência deve usar a UA 001 da UO de destino."
+                    )
+                }
+            )
+
+        if not self.unidade_administrativa_destino.is_ativa:
+            raise ValidationError(
+                {
+                    "unidade_administrativa_destino": (
+                        "A Unidade Administrativa de destino está inativa."
+                    )
+                }
+            )
+
+    def _obter_itens_para_efetivar(self):
+        itens = list(self.itens.select_for_update().all())
+
+        if not itens:
+            raise ValidationError("Não é possível efetivar transferência sem bens.")
+
+        bens_por_id = BemPatrimonial.objects.select_for_update().in_bulk(
+            [item.bem_id for item in itens]
+        )
+        uas_por_id = UnidadeAdministrativa.objects.in_bulk(
+            {
+                bem.unidade_administrativa_id
+                for bem in bens_por_id.values()
+                if bem.unidade_administrativa_id
+            }
+        )
+
+        for item in itens:
+            bem = bens_por_id[item.bem_id]
+            bem.unidade_administrativa = uas_por_id.get(bem.unidade_administrativa_id)
+            item.bem = bem
+
+        return itens
+
+    def _validar_bens(self, itens):
+        for item in itens:
+            bem = item.bem
+            if bem.status != constants.APROVADO:
+                raise ValidationError(
+                    f"O bem '{bem.nome}' precisa estar com status 'Aprovado' para ser transferido."
+                )
+
+            unidade_administrativa = bem.unidade_administrativa
+            if (
+                not unidade_administrativa
+                or unidade_administrativa.unidade_orcamentaria_id
+                != self.unidade_orcamentaria_origem_id
+            ):
+                raise ValidationError(
+                    f"O bem '{bem.nome}' não pertence à UO de origem da transferência."
+                )
+
+    @transaction.atomic
+    def efetivar_transferencia(self, usuario):
+        transferencia = type(self).objects.select_for_update().get(pk=self.pk)
+
+        if transferencia.numero_ntbpm:
+            self.refresh_from_db()
+            return
+
+        transferencia._validar_destino()
+        itens = transferencia._obter_itens_para_efetivar()
+        transferencia._validar_bens(itens)
+
+        observacao_status = (
+            f"Transferência concluída para {transferencia.unidade_orcamentaria_destino} "
+            f"(processo {transferencia.numero_processo})."
+        )
+
+        for item in itens:
+            bem = item.bem
+            bem.unidade_administrativa = transferencia.unidade_administrativa_destino
+            bem.status = constants.TRANSFERIDO
+            bem.save(update_fields=["unidade_administrativa", "status", "atualizado_em"])
+
+            StatusBemPatrimonial.objects.create(
+                bem_patrimonial=bem,
+                status=constants.TRANSFERIDO,
+                atualizado_por=usuario,
+                observacao=observacao_status,
+            )
+        if not transferencia.numero_ntbpm:
+            from bem_patrimonial.ntbpm import gerar_numero_ntbpm
+
+            transferencia.numero_ntbpm = gerar_numero_ntbpm(transferencia)
+        transferencia.save(
+            update_fields=[
+                "numero_ntbpm",
+                "atualizado_em",
+            ]
+        )
+        self.refresh_from_db()
 
 
 @receiver(post_save, sender=BemPatrimonial)
