@@ -374,7 +374,8 @@ class BemPatrimonialDetailSerializer(
         self._validate_instance_edit_restrictions(attrs)
         self._validate_campos_editaveis(user, attrs)
         self._validate_valor_unitario_incoming(attrs)
-        self._validate_justificativa(attrs)
+
+        erros_combinados = {}
 
         cleaned = dict(attrs)
         if self.instance:
@@ -382,7 +383,27 @@ class BemPatrimonialDetailSerializer(
                 if k not in cleaned:
                     cleaned[k] = getattr(self.instance, k)
 
-        cleaned = self._validate_numero_patrimonial_form(cleaned)
+        try:
+            cleaned = self._validate_numero_patrimonial_form(cleaned)
+        except serializers.ValidationError as exc:
+            detail = exc.detail
+            if isinstance(detail, dict):
+                erros_combinados.update(detail)
+            else:
+                erros_combinados["numero_patrimonial"] = detail
+
+        try:
+            self._validate_justificativa(attrs)
+        except serializers.ValidationError as exc:
+            detail = exc.detail
+            if isinstance(detail, dict):
+                erros_combinados.update(detail)
+            else:
+                erros_combinados["justificativa"] = detail
+
+        if erros_combinados:
+            raise serializers.ValidationError(erros_combinados)
+
         attrs.update(
             {
                 "numero_patrimonial": cleaned.get("numero_patrimonial"),

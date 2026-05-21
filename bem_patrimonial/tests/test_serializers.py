@@ -145,6 +145,37 @@ class BemPatrimonialSerializerTest(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("valor_unitario", serializer.errors)
 
+    def test_numero_patrimonial_formato_invalido_quando_nao_antigo(self):
+        bem = self._mk_bem()
+        serializer = BemPatrimonialDetailSerializer(
+            instance=bem,
+            data={"numero_patrimonial": "123", "numero_formato_antigo": False},
+            context={"request": self._get_request()},
+            partial=True,
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("numero_patrimonial", serializer.errors)
+
+    def test_update_duplicidade_numero_patrimonial(self):
+        bem1 = self._mk_bem(numero_patrimonial="000.000000111-0")
+        bem2 = self._mk_bem(numero_patrimonial="000.000000222-0")
+
+        serializer = BemPatrimonialDetailSerializer(
+            instance=bem2,
+            data={
+                "numero_patrimonial": bem1.numero_patrimonial,
+                "numero_formato_antigo": False,
+                "justificativa": "Correção de número",
+            },
+            context={"request": self._get_request()},
+            partial=True,
+        )
+        if serializer.is_valid():
+            with self.assertRaises(Exception):
+                serializer.save()
+        else:
+            self.assertIn("numero_patrimonial", serializer.errors)
+
 
 class BemPatrimonialMultiCreateSerializerTest(TestCase):
     def setUp(self):
