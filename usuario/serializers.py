@@ -478,6 +478,12 @@ class UsuarioSerializer(serializers.ModelSerializer):
         )
         unidades_administrativas = self._resolver_unidades_administrativas(attrs, instance)
 
+        self._validar_uo_create_obrigatoria_e_escopo(
+            user=user,
+            raw=raw,
+            instance=instance,
+            unidade_orcamentaria=unidade_orcamentaria,
+        )
         self._validar_coerencia_ua_uo(unidade_administrativa, unidade_orcamentaria)
         self._validar_escopo_uo_gestor(user, unidade_orcamentaria, instance)  # ✅ novo
         self._validar_senha(attrs)
@@ -489,6 +495,39 @@ class UsuarioSerializer(serializers.ModelSerializer):
         )
 
         return attrs
+
+
+    def _validar_uo_create_obrigatoria_e_escopo(
+        self,
+        user,
+        raw,
+        instance,
+        unidade_orcamentaria,
+    ):
+        if instance is not None:
+            return
+        if not user or getattr(user, "is_superuser", False):
+            return
+
+        if "unidade_orcamentaria" not in raw or raw.get("unidade_orcamentaria") in (None, ""):
+            raise serializers.ValidationError(
+                {"unidade_orcamentaria": "Unidade Orcamentaria obrigatoria."}
+            )
+
+        user_uo_id = getattr(user, "unidade_orcamentaria_id", None)
+        if not user_uo_id:
+            raise serializers.ValidationError(
+                {"unidade_orcamentaria": "Usuario autenticado sem Unidade Orcamentaria."}
+            )
+
+        if unidade_orcamentaria is not None and unidade_orcamentaria.id != user_uo_id:
+            raise serializers.ValidationError(
+                {
+                    "unidade_orcamentaria": (
+                        "Voce so pode criar usuarios na sua propria Unidade Orcamentaria."
+                    )
+                }
+            )
 
     def _validar_escopo_uo_gestor(self, user, unidade_orcamentaria, instance):
         """
