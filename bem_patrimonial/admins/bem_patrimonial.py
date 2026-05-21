@@ -619,7 +619,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
     def _deve_aplicar_filtro_padrao_baixados(self, request):
-        return False
+        return "baixados_mais_de_um_periodo" not in request.GET
 
     def _aplicar_filtro_padrao_baixados(self, queryset):
         ano_corrente = timezone.localdate().year
