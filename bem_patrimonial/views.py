@@ -181,8 +181,16 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             "unidade_administrativa__unidade_orcamentaria",
             "criado_por",
         )
+        action = getattr(self, "action", None)
+        pode_visualizar_fora_escopo = action in {"retrieve", "historico"} and (
+            getattr(self.request.user, "is_gestor_patrimonio", False)
+            or getattr(self.request.user, "is_operador_inventario", False)
+            or getattr(self.request.user, "is_superuser", False)
+        )
 
-        if busca_geral_uos in {"1", "true", "True"}:
+        if pode_visualizar_fora_escopo:
+            qs = qs.all()
+        elif busca_geral_uos in {"1", "true", "True"}:
             qs = qs.all()
         else:
             qs = filtrar_queryset_bem_por_escopo_com_transferencia(self.request.user, qs)
@@ -218,7 +226,17 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
     def get_object(self):
         obj = super().get_object()
 
-        if not validar_bem_no_escopo_com_transferencia(self.request.user, obj):
+        action = getattr(self, "action", None)
+        pode_visualizar_fora_escopo = action in {"retrieve", "historico"} and (
+            getattr(self.request.user, "is_gestor_patrimonio", False)
+            or getattr(self.request.user, "is_operador_inventario", False)
+            or getattr(self.request.user, "is_superuser", False)
+        )
+
+        if (
+            not pode_visualizar_fora_escopo
+            and not validar_bem_no_escopo_com_transferencia(self.request.user, obj)
+        ):
             from rest_framework.exceptions import NotFound
 
             raise NotFound()

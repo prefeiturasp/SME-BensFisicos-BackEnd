@@ -380,9 +380,56 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     inlines = [HistoricoGeralInline]
 
+    def _usuario_pode_editar_obj(self, user, obj):
+        if user.is_superuser:
+            return True
+        qs = BemPatrimonial.objects.filter(pk=obj.pk)
+        qs = filtrar_queryset_bem_por_escopo_com_transferencia(user, qs)
+        return qs.exists()
+
+    def has_view_permission(self, request, obj=None):
+        perm = super().has_view_permission(request, obj)
+        if not perm:
+            return False
+
+        if obj is None:
+            return True
+
+        if request.user.is_superuser:
+            return True
+
+        if request.user.is_gestor_patrimonio or request.user.is_operador_inventario:
+            return True
+
+        return self._usuario_pode_editar_obj(request.user, obj)
+
+    def get_object(self, request, object_id, from_field=None):
+        obj = super().get_object(request, object_id, from_field)
+        if obj is not None:
+            return obj
+
+        if (
+            request.user.is_superuser
+            or request.user.is_gestor_patrimonio
+            or request.user.is_operador_inventario
+        ):
+            base_qs = self.model._default_manager.all()
+            model_field = from_field or self.model._meta.pk.attname
+            try:
+                return base_qs.get(**{model_field: object_id})
+            except self.model.DoesNotExist:
+                return None
+            except (ValueError, ValidationError):
+                return None
+
+        return None
+
     def has_change_permission(self, request, obj=None):
         perm = super().has_change_permission(request, obj)
         if not perm:
+            return False
+
+        if obj and not self._usuario_pode_editar_obj(request.user, obj):
             return False
 
         if obj and getattr(obj, "excluido", False):
@@ -572,11 +619,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
     def _deve_aplicar_filtro_padrao_baixados(self, request):
-        is_changelist = (
-            request.resolver_match
-            and request.resolver_match.url_name.endswith("_changelist")
-        )
-        return is_changelist and "baixados_mais_de_um_periodo" not in request.GET
+        return False
 
     def _aplicar_filtro_padrao_baixados(self, queryset):
         ano_corrente = timezone.localdate().year
