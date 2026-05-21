@@ -679,3 +679,114 @@ class UsuarioPermissionNegativeTests(APITestCase):
         )
 
         self.assertIn(resp.status_code, [400, 403])
+
+
+class UsuarioCreateUoScopeValidationTests(APITestCase):
+
+    def setUp(self):
+        self.client = APIClient()
+        self.senha = "T3st@123"
+
+        self.grupo_gestor = Group.objects.get_or_create(
+            name=GRUPO_GESTOR_PATRIMONIO
+        )[0]
+        self.grupo_operador = Group.objects.get_or_create(
+            name=GRUPO_OPERADOR_INVENTARIO
+        )[0]
+
+        self.uo1 = criar_uo(codigo="101", sigla="UO1", nome="UO 1")
+        self.uo2 = criar_uo(codigo="102", sigla="UO2", nome="UO 2")
+        self.ua1_uo1 = criar_ua(uo=self.uo1, codigo="001", sigla="A1", nome="UA 1/UO1")
+        self.ua2_uo1 = criar_ua(uo=self.uo1, codigo="002", sigla="A2", nome="UA 2/UO1")
+        self.ua1_uo2 = criar_ua(uo=self.uo2, codigo="003", sigla="B1", nome="UA 1/UO2")
+
+        self.gestor_uo1 = User.objects.create_user(
+            username="gestor_uo1",
+            password=self.senha,
+            unidade_orcamentaria=self.uo1,
+            unidade_administrativa=self.ua1_uo1,
+            is_staff=True,
+        )
+        self.gestor_uo1.groups.add(self.grupo_gestor)
+
+        self.list_url = reverse("usuario-list")
+
+    def _payload_base(self):
+        return {
+            "username": f"op_{uuid.uuid4().hex[:8]}",
+            "nome": "Operador Teste",
+            "rf": "A12345",
+            "email": f"{uuid.uuid4().hex[:8]}@teste.com",
+            "password": self.senha,
+            "password_confirm": self.senha,
+            "group_name": GRUPO_OPERADOR_INVENTARIO,
+            "is_active": True,
+        }
+
+    def test_create_sem_unidade_orcamentaria_retorna_erro(self):
+        self.client.force_authenticate(user=self.gestor_uo1)
+        payload = self._payload_base()
+        payload.update(
+            {
+                "unidade_administrativa": self.ua1_uo1.id,
+                "unidades_administrativas": [self.ua1_uo1.id],
+            }
+        )
+
+        response = self.client.post(self.list_url, payload, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unidade_orcamentaria", response.data)
+
+    def test_create_operador_com_unidades_vazias_retorna_erro(self):
+        self.client.force_authenticate(user=self.gestor_uo1)
+        payload = self._payload_base()
+        payload.update(
+            {
+                "unidade_orcamentaria": self.uo1.id,
+                "unidade_administrativa": self.ua1_uo1.id,
+                "unidades_administrativas": [],
+            }
+        )
+
+        response = self.client.post(self.list_url, payload, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unidades_administrativas", response.data)
+
+    def test_create_com_ua_fora_do_escopo_retorna_erro(self):
+        self.client.force_authenticate(user=self.gestor_uo1)
+        payload = self._payload_base()
+        payload.update(
+            {
+                "unidade_orcamentaria": self.uo1.id,
+                "unidade_administrativa": self.ua1_uo1.id,
+                "unidades_administrativas": [self.ua1_uo2.id],
+            }
+        )
+
+        response = self.client.post(self.list_url, payload, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unidades_administrativas", response.data)
+
+    def test_create_valido_no_escopo_do_gestor(self):
+        self.client.force_authenticate(user=self.gestor_uo1)
+        payload = self._payload_base()
+        payload.update(
+            {
+                "unidade_orcamentaria": self.uo1.id,
+                "unidade_administrativa": self.ua1_uo1.id,
+                "unidades_administrativas": [self.ua1_uo1.id, self.ua2_uo1.id],
+            }
+        )
+
+        response = self.client.post(self.list_url, payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        criado = User.objects.get(username=payload["username"])
+        self.assertEqual(criado.unidade_orcamentaria_id, self.uo1.id)
+        self.assertEqual(
+            set(criado.unidades_administrativas.values_list("id", flat=True)),
+            {self.ua1_uo1.id, self.ua2_uo1.id},
+        )
