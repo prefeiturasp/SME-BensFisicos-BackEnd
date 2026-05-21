@@ -418,6 +418,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                             "campo": i.campo,
                             "valor_antigo": i.valor_antigo,
                             "valor_novo": i.valor_novo,
+                            "justificativa": i.justificativa,
                         }
                         for i in itens
                     ],

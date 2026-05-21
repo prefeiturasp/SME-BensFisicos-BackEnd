@@ -165,6 +165,7 @@ class BemPatrimonialSerializerTest(TestCase):
             data={
                 "numero_patrimonial": bem1.numero_patrimonial,
                 "numero_formato_antigo": False,
+                "justificativa": "Correção de número",
             },
             context={"request": self._get_request()},
             partial=True,
