@@ -26,6 +26,10 @@ class UsuarioFilter(django_filters.FilterSet):
         method="filter_unidade"
     )
 
+    unidade_orcamentaria = django_filters.NumberFilter(
+        field_name="unidade_orcamentaria_id"
+    )
+
     # data inicial
     date_joined_after = django_filters.DateFilter(
         field_name="date_joined",
@@ -46,6 +50,7 @@ class UsuarioFilter(django_filters.FilterSet):
             "is_active",
             "group_name",
             "unidade",
+            "unidade_orcamentaria",
         ]
 
     def filter_unidade(self, queryset, name, value):
