@@ -27,7 +27,6 @@ from bem_patrimonial.pdf_utils import (
     criar_estilo_base,
     extrair_codigo_ua,
     formatar_data,
-    obter_rf_usuario,
 )
 from bem_patrimonial.documentos_pdf_utils import (
     aplicar_estilo_tabela_info,
@@ -392,13 +391,10 @@ def _criar_informacoes_complementares(transferencia):
 
 
 def _criar_rodape_ntbpm(transferencia):
-    responsavel_transferencia = obter_rf_usuario(getattr(transferencia, "criado_por", None))
-    responsavel_recebimento = obter_rf_usuario(getattr(transferencia, "criado_por", None))
-
     return criar_tabela_rodape_responsaveis(
         label_esquerda="RESPONSÁVEL DA UNIDADE ORÇAMENTÁRIA QUE TRANSFERE",
         label_direita="RESPONSÁVEL DA UNIDADE ORÇAMENTÁRIA QUE RECEBE",
-        valor_esquerda=responsavel_transferencia,
-        valor_direita=responsavel_recebimento,
+        valor_esquerda="",
+        valor_direita="",
         config_cls=PDFConfig,
     )
