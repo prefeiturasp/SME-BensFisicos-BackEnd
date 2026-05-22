@@ -487,6 +487,7 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
     marca = serializers.CharField()
     modelo = serializers.CharField()
     numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
+    observacao = serializers.CharField(required=False, allow_blank=True, default="")
     multi_payload = BemItemCriacaoSerializer(many=True)
 
     def _validate_item_multi_payload(self, item, numeros_vistos):
