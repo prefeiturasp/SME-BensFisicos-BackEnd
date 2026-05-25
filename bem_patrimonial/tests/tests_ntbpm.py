@@ -259,12 +259,12 @@ class NTBPMTestCase(TestCase):
         self.assertEqual(linhas[1][0], "SEI-987654/2026")
         self.assertEqual(linhas[1][2], "TRANSFERIDO")
 
-    def test_rodape_ntbpm_exibe_usuario_como_responsavel_do_recebimento(self):
+    def test_rodape_ntbpm_deixa_campos_de_responsaveis_em_branco(self):
         tabela = _criar_rodape_ntbpm(self.transferencia)[0]
         linhas = [
             [celula.getPlainText() for celula in linha]
             for linha in tabela._cellvalues
         ]
 
-        self.assertEqual(linhas[1][0], "123456")
-        self.assertEqual(linhas[1][1], "123456")
+        self.assertEqual(linhas[1][0], "")
+        self.assertEqual(linhas[1][1], "")
