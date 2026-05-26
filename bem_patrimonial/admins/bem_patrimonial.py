@@ -40,6 +40,7 @@ from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
     filtrar_queryset_por_escopo,
     filtrar_ua_origem_por_escopo,
+    validar_objeto_no_escopo,
     obter_unidade_orcamentaria_id_do_usuario,
     usuario_e_super_admin,
 )
@@ -451,6 +452,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             return False
 
         if obj.status in constants.STATUS_FINAIS_BEM:
+            return False
+
+        if not validar_objeto_no_escopo(
+            request.user, obj, campo_ua="unidade_administrativa"
+        ):
             return False
 
         return True
