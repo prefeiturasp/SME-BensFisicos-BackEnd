@@ -193,6 +193,43 @@ class BemPatrimonialAdminCoberturaTest(TestCase):
         with self.assertRaises(PermissionDenied):
             self.admin.delete_view(request, str(bem.pk), None)
 
+    def test_delete_view_bloqueia_bem_fora_do_escopo_do_gestor(self):
+        outra_uo = criar_uo(codigo="200", nome="UO 200")
+        outra_ua = criar_ua(
+            uo=outra_uo,
+            codigo="010",
+            sigla="UA2",
+            nome="UA 2",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem = self._criar_bem(unidade_administrativa=outra_ua)
+        request = _request_with_messages(self.factory, self.gestor)
+        request.resolver_match = MagicMock()
+        request.resolver_match.url_name = "bempatrimonial_delete"
+
+        with patch.object(self.admin, "get_object", return_value=bem):
+            with self.assertRaises(PermissionDenied):
+                self.admin.delete_view(request, str(bem.pk), None)
+
+    def test_delete_view_bloqueia_gestor_mesma_uo_em_ua_diferente(self):
+        ua_outra_da_mesma_uo = criar_ua(
+            uo=self.uo,
+            codigo="011",
+            sigla="UA3",
+            nome="UA 3",
+            status=UnidadeAdministrativa.ATIVA,
+        )
+        bem = self._criar_bem(unidade_administrativa=ua_outra_da_mesma_uo)
+        request = _request_with_messages(self.factory, self.gestor)
+        request.resolver_match = MagicMock()
+        request.resolver_match.url_name = "bempatrimonial_delete"
+
+        self.assertFalse(self.admin.has_delete_permission(request, obj=bem))
+
+        with patch.object(self.admin, "get_object", return_value=bem):
+            with self.assertRaises(PermissionDenied):
+                self.admin.delete_view(request, str(bem.pk), None)
+
     def test_delete_view_post_deleta_e_redireciona(self):
         bem = self._criar_bem()
         request = _request_with_messages(self.factory, self.gestor, method="POST")

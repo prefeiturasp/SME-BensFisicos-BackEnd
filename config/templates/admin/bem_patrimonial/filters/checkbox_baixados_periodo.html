@@ -1,18 +1,24 @@
 <form method="get" class="filtro-baixados-periodo-form">
-  {% for chave, valor in cl.params.items %}
-    {% if chave != spec.parameter_name %}
-      <input type="hidden" name="{{ chave }}" value="{{ valor }}">
-    {% endif %}
-  {% endfor %}
-
-  <label class="filtro-baixados-periodo-label">
+  {% with current_value=spec.value %}
     <input
-      type="checkbox"
-      name="{{ spec.parameter_name }}"
-      value="1"
-      {% if spec.value == '1' %}checked{% endif %}
-      onchange="this.form.submit()"
+      type="hidden"
+      name="{{ spec.other_parameter_name }}"
+      value="{{ spec.other_parameter_value|default:'0' }}"
     >
-    <span>{{ title }}</span>
-  </label>
+
+    <input
+      type="hidden"
+      name="{{ spec.parameter_name }}"
+      value="{% if current_value == '1' or current_value == 1 or current_value == 'true' or current_value == True %}1{% else %}0{% endif %}"
+    >
+
+    <label class="filtro-baixados-periodo-label">
+      <input
+        type="checkbox"
+        {% if current_value == '1' or current_value == 1 or current_value == 'true' or current_value == True %}checked{% endif %}
+        onchange="(function(el){var hidden=el.form.querySelector('input[type=hidden][name=&quot;{{ spec.parameter_name }}&quot;]');if(hidden){hidden.value=el.checked?'1':'0';}el.form.submit();})(this)"
+      >
+      <span>{{ title }}</span>
+    </label>
+  {% endwith %}
 </form>
