@@ -116,6 +116,82 @@ class BemPatrimonialViewSetTest(TestCase):
         self.assertEqual(sem_busca_geral.data["count"], 0)
         self.assertEqual(com_busca_geral.data["count"], 1)
 
+    def test_operador_pode_visualizar_detalhe_de_bem_externo(self):
+        outra_uo = criar_uo(codigo="211", nome="UO Externa 2")
+        outra_ua = criar_ua(nome="UA Externa 2", uo=outra_uo)
+
+        operador = get_user_model().objects.create_user(
+            username="operador_view_externo",
+            email="operador_view_externo@test.com",
+            **auth_kwargs("test123"),
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+            is_staff=True,
+        )
+        operador.groups.add(self.grupo_operador)
+        operador.unidades_administrativas.add(self.ua)
+
+        bem_externo = BemPatrimonial.objects.create(
+            nome="Bem externo detalhe",
+            numero_patrimonial="000.000000998-0",
+            descricao="Desc",
+            valor_unitario=1.00,
+            marca="M",
+            modelo="X",
+            numero_processo="PROC-Y",
+            numero_formato_antigo=False,
+            sem_numeracao=False,
+            criado_por=self.user,
+            unidade_administrativa=outra_ua,
+            status=constants.APROVADO,
+        )
+
+        client = APIClient()
+        client.force_authenticate(operador)
+
+        response = client.get(reverse("bens-detail", args=[bem_externo.id]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_operador_nao_pode_editar_bem_externo(self):
+        outra_uo = criar_uo(codigo="212", nome="UO Externa 3")
+        outra_ua = criar_ua(nome="UA Externa 3", uo=outra_uo)
+
+        operador = get_user_model().objects.create_user(
+            username="operador_edit_externo",
+            email="operador_edit_externo@test.com",
+            **auth_kwargs("test123"),
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+            is_staff=True,
+        )
+        operador.groups.add(self.grupo_operador)
+        operador.unidades_administrativas.add(self.ua)
+
+        bem_externo = BemPatrimonial.objects.create(
+            nome="Bem externo sem edição",
+            numero_patrimonial="000.000000997-0",
+            descricao="Desc",
+            valor_unitario=1.00,
+            marca="M",
+            modelo="X",
+            numero_processo="PROC-Z",
+            numero_formato_antigo=False,
+            sem_numeracao=False,
+            criado_por=self.user,
+            unidade_administrativa=outra_ua,
+            status=constants.APROVADO,
+        )
+
+        client = APIClient()
+        client.force_authenticate(operador)
+
+        response = client.patch(
+            reverse("bens-detail", args=[bem_externo.id]),
+            {"nome": "Novo nome"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_aprovar_bens_sucesso(self):
         bem1 = self._mk_bem()
         bem2 = self._mk_bem()
