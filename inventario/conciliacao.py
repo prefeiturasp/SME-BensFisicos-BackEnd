@@ -18,7 +18,7 @@ def _recalcular_bloqueio_bem_por_inventario(bem: BemPatrimonial):
 
     novo_valor = bool(existe_bloqueio_em_aberto)
 
-    if bem.status == bem_constants.BAIXA_FISICA:
+    if bem.status in bem_constants.STATUS_FINAIS_BEM:
         novo_valor = False
 
     if bem.bloqueado_conciliacao != novo_valor:

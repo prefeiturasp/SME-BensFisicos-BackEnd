@@ -76,6 +76,14 @@ class PermissionsAPITestCase(SimpleTestCase):
             perm.has_object_permission(self._request(user_gestor), self._view("update"), baixa)
         )
 
+        transferido = SimpleNamespace(excluido=False, status=bem_constants.TRANSFERIDO)
+        self.assertTrue(
+            perm.has_object_permission(self._request(user_gestor), self._view("retrieve"), transferido)
+        )
+        self.assertFalse(
+            perm.has_object_permission(self._request(user_gestor), self._view("update"), transferido)
+        )
+
         normal = SimpleNamespace(excluido=False, status="ativo")
         self.assertFalse(
             perm.has_object_permission(self._request(user_operador), self._view("destroy"), normal)

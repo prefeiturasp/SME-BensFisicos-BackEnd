@@ -103,6 +103,13 @@ def sync_bem_pos_save(bem, old_ua_id=None):
         remover_bem_de_conciliacoes_em_aberto(bem.pk, new_ua_id)
         return
 
+    if bem.status == bem_constants.TRANSFERIDO:
+        if old_ua_id and old_ua_id != new_ua_id:
+            remover_bem_de_conciliacoes_em_aberto(bem.pk, old_ua_id)
+        remover_bem_de_conciliacoes_em_aberto(bem.pk, new_ua_id)
+        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=False)
+        return
+
     if old_ua_id and old_ua_id != new_ua_id:
         remover_bem_de_conciliacoes_em_aberto(bem.pk, old_ua_id)
 

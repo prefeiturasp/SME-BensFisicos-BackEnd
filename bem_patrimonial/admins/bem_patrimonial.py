@@ -29,15 +29,19 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.auth import get_user_model
 
 from django.contrib.contenttypes.admin import GenericTabularInline
-from django.db.models.functions import Cast
+from django.db.models.functions import Cast, Concat
 from bem_patrimonial import constants
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     BaixadosMaisDeUmPeriodoFilter,
+    BuscaGeralTodasUOsFilter,
 )
 from dados_comuns.escopo import (
+    filtrar_queryset_bem_por_escopo_com_transferencia,
     filtrar_queryset_por_escopo,
     filtrar_ua_origem_por_escopo,
+    validar_objeto_no_escopo,
+    obter_unidade_orcamentaria_id_do_usuario,
     usuario_e_super_admin,
 )
 
@@ -242,6 +246,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "numero_formato_antigo",
         ("criado_em", DateRangeFilter),
         BaixadosMaisDeUmPeriodoFilter,
+        BuscaGeralTodasUOsFilter,
     )
 
     readonly_fields = (
@@ -376,15 +381,62 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     inlines = [HistoricoGeralInline]
 
+    def _usuario_pode_editar_obj(self, user, obj):
+        if user.is_superuser:
+            return True
+        qs = BemPatrimonial.objects.filter(pk=obj.pk)
+        qs = filtrar_queryset_bem_por_escopo_com_transferencia(user, qs)
+        return qs.exists()
+
+    def has_view_permission(self, request, obj=None):
+        perm = super().has_view_permission(request, obj)
+        if not perm:
+            return False
+
+        if obj is None:
+            return True
+
+        if request.user.is_superuser:
+            return True
+
+        if request.user.is_gestor_patrimonio or request.user.is_operador_inventario:
+            return True
+
+        return self._usuario_pode_editar_obj(request.user, obj)
+
+    def get_object(self, request, object_id, from_field=None):
+        obj = super().get_object(request, object_id, from_field)
+        if obj is not None:
+            return obj
+
+        if (
+            request.user.is_superuser
+            or request.user.is_gestor_patrimonio
+            or request.user.is_operador_inventario
+        ):
+            base_qs = self.model._default_manager.all()
+            model_field = from_field or self.model._meta.pk.attname
+            try:
+                return base_qs.get(**{model_field: object_id})
+            except self.model.DoesNotExist:
+                return None
+            except (ValueError, ValidationError):
+                return None
+
+        return None
+
     def has_change_permission(self, request, obj=None):
         perm = super().has_change_permission(request, obj)
         if not perm:
             return False
 
+        if obj and not self._usuario_pode_editar_obj(request.user, obj):
+            return False
+
         if obj and getattr(obj, "excluido", False):
             return False
 
-        if obj and obj.status == constants.BAIXA_FISICA:
+        if obj and obj.status in constants.STATUS_FINAIS_BEM:
             return False
 
         return True
@@ -399,7 +451,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         if not request.user.is_gestor_patrimonio:
             return False
 
-        if obj.status == constants.BAIXA_FISICA:
+        if obj.status in constants.STATUS_FINAIS_BEM:
+            return False
+
+        if not validar_objeto_no_escopo(
+            request.user, obj, campo_ua="unidade_administrativa"
+        ):
             return False
 
         return True
@@ -537,9 +594,9 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     def save_model(self, request, obj, form, change):
         if change and obj.pk:
             original = BemPatrimonial.objects.get(pk=obj.pk)
-            if original.status == constants.BAIXA_FISICA:
+            if original.status in constants.STATUS_FINAIS_BEM:
                 raise ValidationError(
-                    "Este bem está com status 'Baixa Física' e não pode ser editado."
+                    f"Este bem está com status '{original.get_status_display()}' e não pode ser editado."
                 )
         if obj.id is None:
             obj.criado_por = request.user
@@ -568,11 +625,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         )
 
     def _deve_aplicar_filtro_padrao_baixados(self, request):
-        is_changelist = (
-            request.resolver_match
-            and request.resolver_match.url_name.endswith("_changelist")
-        )
-        return is_changelist and "baixados_mais_de_um_periodo" not in request.GET
+        return "baixados_mais_de_um_periodo" not in request.GET
 
     def _aplicar_filtro_padrao_baixados(self, queryset):
         ano_corrente = timezone.localdate().year
@@ -583,18 +636,18 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             baixa_data__year__lt=ano_limite,
         )
 
-    def _get_queryset_com_auditoria(self, request):
+    def _deve_aplicar_busca_geral_todas_uos(self, request):
+        return request.GET.get("busca_geral_todas_uos") == "1"
+
+    def _get_queryset_com_auditoria(self, request, aplicar_escopo=True):
         qs = (
             super()
             .get_queryset(request)
             .select_related("unidade_administrativa", "criado_por")
         )
 
-        qs = filtrar_queryset_por_escopo(
-            usuario=request.user,
-            queryset=qs,
-            campo_ua="unidade_administrativa",
-        )
+        if aplicar_escopo:
+            qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
 
         qs = self._anotar_baixa_data(qs)
 
@@ -626,7 +679,10 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         return qs, use_distinct
 
     def get_queryset(self, request):
-        qs = self._get_queryset_com_auditoria(request)
+        qs = self._get_queryset_com_auditoria(
+            request,
+            aplicar_escopo=not self._deve_aplicar_busca_geral_todas_uos(request),
+        )
 
         if self._deve_aplicar_filtro_padrao_baixados(request):
             qs = self._aplicar_filtro_padrao_baixados(qs)
@@ -635,11 +691,12 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def get_export_queryset(self, request):
         queryset = super().get_export_queryset(request)
-        queryset = filtrar_queryset_por_escopo(
-            usuario=request.user,
-            queryset=queryset,
-            campo_ua="unidade_administrativa",
-        )
+        if not self._deve_aplicar_busca_geral_todas_uos(request):
+            queryset = filtrar_queryset_por_escopo(
+                usuario=request.user,
+                queryset=queryset,
+                campo_ua="unidade_administrativa",
+            )
 
         queryset = self._anotar_baixa_data(queryset)
 
@@ -905,18 +962,47 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
         if not (
             app_label == "bem_patrimonial"
-            and model_name in ("movimentacaobensitem", "baixafisicabensitem")
+            and model_name
+            in ("movimentacaobensitem", "baixafisicabensitem", "transferenciabensitem")
             and field_name == "bem"
         ):
             return qs, use_distinct
 
-        ua_origem = request.GET.get("ua_origem")
-        if not ua_origem:
-            return qs.none(), use_distinct
+        qs = qs.filter(status=constants.APROVADO)
 
-        qs = qs.filter(status=constants.APROVADO).filter(
-            unidade_administrativa_id=ua_origem
-        )
+        if model_name == "transferenciabensitem":
+            uo_referencia_id = obter_unidade_orcamentaria_id_do_usuario(request.user)
+            if not uo_referencia_id:
+                return qs.none(), use_distinct
+
+            qs = qs.filter(
+                unidade_administrativa__unidade_orcamentaria_id=uo_referencia_id
+            )
+
+            ua_origem = request.GET.get("ua_origem")
+            uo_origem = request.GET.get("uo_origem")
+            if ua_origem:
+                qs = qs.filter(unidade_administrativa_id=ua_origem)
+            elif uo_origem and str(uo_origem) != str(uo_referencia_id):
+                return qs.none(), use_distinct
+
+            qs = qs.annotate(
+                autocomplete_label_transferencia=Concat(
+                    "unidade_administrativa__codigo",
+                    models.Value(" - "),
+                    "unidade_administrativa__sigla",
+                    models.Value(" | "),
+                    "numero_patrimonial",
+                    models.Value(" - "),
+                    "nome",
+                    output_field=models.CharField(),
+                )
+            )
+        else:
+            ua_origem = request.GET.get("ua_origem")
+            if not ua_origem:
+                return qs.none(), use_distinct
+            qs = qs.filter(unidade_administrativa_id=ua_origem)
 
         exclude_bens = request.GET.get("exclude_bens")
         if not exclude_bens:
@@ -942,16 +1028,20 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         request._busca_com_baixados_antigos = False
 
         qs, use_distinct = super().get_search_results(request, queryset, search_term)
-        qs = filtrar_queryset_por_escopo(
-            usuario=request.user,
-            queryset=qs,
-            campo_ua="unidade_administrativa",
-        )
 
         if request.path.endswith("/autocomplete/"):
+            if request.GET.get("model_name") != "transferenciabensitem":
+                qs = filtrar_queryset_por_escopo(
+                    usuario=request.user,
+                    queryset=qs,
+                    campo_ua="unidade_administrativa",
+                )
             return self._aplicar_filtros_autocomplete_bem(
                 request, qs, use_distinct
             )
+
+        if not self._deve_aplicar_busca_geral_todas_uos(request):
+            qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
 
         if (
             search_term
