@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import FileResponse
 from django.utils import timezone
+from django.db.models import Exists, OuterRef
 
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
@@ -30,6 +31,7 @@ from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_rejeitada,
 )
 from bem_patrimonial.models import MovimentacaoBemPatrimonial
+from bem_patrimonial.models import MovimentacaoBensItem
 from bem_patrimonial.serializers.movimentacao_serializers import (
     MovimentacaoBemPatrimonialCreateSerializer,
     MovimentacaoBemPatrimonialDetailSerializer,
@@ -174,12 +176,35 @@ class MovimentacaoBemPatrimonialFilter(django_filters.FilterSet):
     def filter_numero_patrimonial_inicial(self, queryset, name, value):
         if not value:
             return queryset
-        return queryset.filter(itens__bem__numero_patrimonial__gte=value)
+        return self._filtrar_por_intervalo_numero_patrimonial(
+            queryset,
+            numero_patrimonial_inicial=value,
+            numero_patrimonial_final=self.data.get("numero_patrimonial_final"),
+        )
 
     def filter_numero_patrimonial_final(self, queryset, name, value):
         if not value:
             return queryset
-        return queryset.filter(itens__bem__numero_patrimonial__lte=value)
+        return self._filtrar_por_intervalo_numero_patrimonial(
+            queryset,
+            numero_patrimonial_inicial=self.data.get("numero_patrimonial_inicial"),
+            numero_patrimonial_final=value,
+        )
+
+    def _filtrar_por_intervalo_numero_patrimonial(
+        self,
+        queryset,
+        numero_patrimonial_inicial=None,
+        numero_patrimonial_final=None,
+    ):
+        itens = MovimentacaoBensItem.objects.filter(movimentacao_id=OuterRef("pk"))
+
+        if numero_patrimonial_inicial:
+            itens = itens.filter(bem__numero_patrimonial__gte=numero_patrimonial_inicial)
+        if numero_patrimonial_final:
+            itens = itens.filter(bem__numero_patrimonial__lte=numero_patrimonial_final)
+
+        return queryset.filter(Exists(itens))
 
 
 @extend_schema_view(

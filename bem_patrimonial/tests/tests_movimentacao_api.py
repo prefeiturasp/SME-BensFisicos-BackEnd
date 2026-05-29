@@ -157,7 +157,13 @@ class MovimentacaoApiTestCase(TestCase):
         )
 
     def _criar_movimentacao(
-        self, bem, ua_origem, ua_destino, solicitado_por, com_item=True
+        self,
+        bem=None,
+        ua_origem=None,
+        ua_destino=None,
+        solicitado_por=None,
+        com_item=True,
+        bens=None,
     ):
         movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=bem,
@@ -167,7 +173,17 @@ class MovimentacaoApiTestCase(TestCase):
             status=constants.ENVIADA,
         )
         if com_item:
-            MovimentacaoBensItem.objects.create(movimentacao=movimentacao, bem=bem)
+            if bens is not None:
+                itens = bens
+            elif bem is not None:
+                itens = [bem]
+            else:
+                itens = []
+            for bem_item in itens:
+                MovimentacaoBensItem.objects.create(
+                    movimentacao=movimentacao,
+                    bem=bem_item,
+                )
         movimentacao.refresh_from_db()
         return movimentacao
 
@@ -270,6 +286,176 @@ class MovimentacaoApiTestCase(TestCase):
         movimentacao.refresh_from_db()
         self.assertEqual(movimentacao.status, constants.CANCELADA)
         self.assertEqual(movimentacao.cancelado_por_id, gestor_sem_ua_origem.pk)
+
+    def test_gestor_da_uo_destino_tambem_pode_cancelar_movimentacao_entre_uos(self):
+        movimentacao = self._criar_movimentacao(
+            bem=self.bem_api,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_outra_destino,
+            solicitado_por=self.operador_origem,
+        )
+        gestor_sem_ua_destino = self._criar_usuario(
+            "gestor_sem_ua_destino",
+            self.uo_outra,
+            None,
+            self.grupo_gestor,
+            is_staff=True,
+        )
+
+        self._autenticar(gestor_sem_ua_destino)
+        response = self.client.post(
+            reverse("movimentacoes-cancelar", kwargs={"pk": movimentacao.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        movimentacao.refresh_from_db()
+        self.assertEqual(movimentacao.status, constants.CANCELADA)
+        self.assertEqual(movimentacao.cancelado_por_id, gestor_sem_ua_destino.pk)
+
+    def test_operador_nao_autor_nao_pode_cancelar_solicitacao_de_outra_pessoa(self):
+        outro_operador = self._criar_usuario(
+            "outro_operador",
+            self.uo_origem,
+            self.ua_origem,
+            self.grupo_operador,
+        )
+
+        self._autenticar(outro_operador)
+        response = self.client.post(
+            reverse("movimentacoes-cancelar", kwargs={"pk": self.mov_visivel.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "você só pode cancelar movimentações criadas por você",
+            str(response.data),
+        )
+
+    def test_filtro_por_intervalo_nao_retorna_movimentacao_quando_faixa_fica_dividida(self):
+        bem_abaixo = self._criar_bem("100.000000000-0", self.ua_origem, self.operador_origem)
+        bem_acima = self._criar_bem("900.000000000-0", self.ua_origem, self.operador_origem)
+        movimentacao = self._criar_movimentacao(
+            bem=bem_abaixo,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+            bens=[bem_abaixo, bem_acima],
+        )
+
+        self._autenticar(self.gestor_origem)
+        response = self.client.get(
+            reverse("movimentacoes-list"),
+            {
+                "numero_patrimonial_inicial": "500.000000000-0",
+                "numero_patrimonial_final": "600.000000000-0",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in self._lista_movimentacoes(response)}
+        self.assertNotIn(movimentacao.id, ids)
+
+    def test_filtro_por_intervalo_retornando_um_item_dentro_da_faixa(self):
+        bem_abaixo = self._criar_bem("100.000000001-1", self.ua_origem, self.operador_origem)
+        bem_dentro = self._criar_bem("550.000000000-0", self.ua_origem, self.operador_origem)
+        movimentacao = self._criar_movimentacao(
+            bem=bem_abaixo,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+            bens=[bem_abaixo, bem_dentro],
+        )
+
+        self._autenticar(self.gestor_origem)
+        response = self.client.get(
+            reverse("movimentacoes-list"),
+            {
+                "numero_patrimonial_inicial": "500.000000000-0",
+                "numero_patrimonial_final": "600.000000000-0",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in self._lista_movimentacoes(response)}
+        self.assertIn(movimentacao.id, ids)
+
+    def test_filtro_por_intervalo_inclui_limites_inicial_e_final(self):
+        movimentacao_inicial = self._criar_movimentacao(
+            bem=self._criar_bem("500.000000000-0", self.ua_origem, self.operador_origem),
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+        movimentacao_final = self._criar_movimentacao(
+            bem=self._criar_bem("600.000000000-0", self.ua_origem, self.operador_origem),
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+
+        self._autenticar(self.gestor_origem)
+        response = self.client.get(
+            reverse("movimentacoes-list"),
+            {
+                "numero_patrimonial_inicial": "500.000000000-0",
+                "numero_patrimonial_final": "600.000000000-0",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in self._lista_movimentacoes(response)}
+        self.assertIn(movimentacao_inicial.id, ids)
+        self.assertIn(movimentacao_final.id, ids)
+
+    def test_filtro_por_intervalo_com_apenas_limite_inicial(self):
+        movimentacao_dentro = self._criar_movimentacao(
+            bem=self._criar_bem("550.000000000-0", self.ua_origem, self.operador_origem),
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+        movimentacao_fora = self._criar_movimentacao(
+            bem=self._criar_bem("450.000000000-0", self.ua_origem, self.operador_origem),
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+
+        self._autenticar(self.gestor_origem)
+        response = self.client.get(
+            reverse("movimentacoes-list"),
+            {"numero_patrimonial_inicial": "500.000000000-0"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in self._lista_movimentacoes(response)}
+        self.assertIn(movimentacao_dentro.id, ids)
+        self.assertNotIn(movimentacao_fora.id, ids)
+
+    def test_filtro_por_intervalo_com_apenas_limite_final(self):
+        movimentacao_dentro = self._criar_movimentacao(
+            bem=self._criar_bem("550.000000000-0", self.ua_origem, self.operador_origem),
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+        movimentacao_fora = self._criar_movimentacao(
+            bem=self._criar_bem("650.000000000-0", self.ua_origem, self.operador_origem),
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+
+        self._autenticar(self.gestor_origem)
+        response = self.client.get(
+            reverse("movimentacoes-list"),
+            {"numero_patrimonial_final": "600.000000000-0"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in self._lista_movimentacoes(response)}
+        self.assertIn(movimentacao_dentro.id, ids)
+        self.assertNotIn(movimentacao_fora.id, ids)
 
     def test_aprovar_e_rejeitar_exigem_itens_na_movimentacao(self):
         movimentacao = self._criar_movimentacao(
