@@ -113,6 +113,18 @@ MOVIMENTACAO_LIST_QUERY_PARAMETERS = [
         description="Filtra pelo número CIMBPM.",
     ),
     OpenApiParameter(
+        name="numero_patrimonial_inicial",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        description="Filtra movimentações com bens cujo número patrimonial seja maior ou igual ao valor informado.",
+    ),
+    OpenApiParameter(
+        name="numero_patrimonial_final",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        description="Filtra movimentações com bens cujo número patrimonial seja menor ou igual ao valor informado.",
+    ),
+    OpenApiParameter(
         name="atrasada",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
@@ -129,6 +141,12 @@ JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API = "Movimentação criada via API"
 class MovimentacaoBemPatrimonialFilter(django_filters.FilterSet):
     status = django_filters.CharFilter(method="filter_status")
     atrasada = django_filters.CharFilter(method="filter_atrasada")
+    numero_patrimonial_inicial = django_filters.CharFilter(
+        method="filter_numero_patrimonial_inicial"
+    )
+    numero_patrimonial_final = django_filters.CharFilter(
+        method="filter_numero_patrimonial_final"
+    )
 
     class Meta:
         model = MovimentacaoBemPatrimonial
@@ -152,6 +170,16 @@ class MovimentacaoBemPatrimonialFilter(django_filters.FilterSet):
             return queryset
         limite = timezone.now() - timedelta(days=7)
         return queryset.filter(status=constants.ENVIADA, criado_em__lte=limite)
+
+    def filter_numero_patrimonial_inicial(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(itens__bem__numero_patrimonial__gte=value)
+
+    def filter_numero_patrimonial_final(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(itens__bem__numero_patrimonial__lte=value)
 
 
 @extend_schema_view(
@@ -385,6 +413,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
     def _validar_acao(self, mov, user, acao):
         self._validar_status_movimentacao_para_acao(mov, acao)
+        self._validar_tem_itens_para_acao(mov)
         self._validar_unidades_ativas_para_acao(mov)
 
         if self._movimentacao_entre_uos_diferentes(mov):
@@ -392,6 +421,67 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             return
 
         self._validar_acao_na_mesma_uo(mov, user, acao)
+
+    def _validar_tem_itens_para_acao(self, mov):
+        if not mov.itens.exists():
+            raise ValidationError(
+                {"itens": f"Movimentação #{mov.pk} não possui bens associados."}
+            )
+
+    def _validar_cancelamento_por_operador(self, mov, user):
+        if mov.solicitado_por_id != user.pk:
+            raise ValidationError(
+                f"Movimentação #{mov.pk}: você só pode cancelar movimentações criadas por você."
+            )
+
+    def _validar_cancelamento_por_gestor(self, mov, user):
+        usuario_uo_id = self._obter_uo_id_do_usuario(user)
+        origem_uo_id = mov.unidade_administrativa_origem.unidade_orcamentaria_id
+        destino_uo_id = mov.unidade_administrativa_destino.unidade_orcamentaria_id
+        if usuario_uo_id not in (origem_uo_id, destino_uo_id):
+            raise PermissionDenied(
+                f"Movimentação #{mov.pk}: apenas gestores da UO de origem ou destino podem cancelar esta movimentação entre UOs."
+            )
+
+    def _validar_cancelamento_em_uos_diferentes(self, mov, user):
+        if getattr(user, "is_operador_inventario", False) and not getattr(
+            user, "is_gestor_patrimonio", False
+        ):
+            self._validar_cancelamento_por_operador(mov, user)
+            return
+
+        if getattr(user, "is_gestor_patrimonio", False):
+            self._validar_cancelamento_por_gestor(mov, user)
+
+    def _validar_cancelamento_na_mesma_uo(self, mov, user):
+        if getattr(user, "is_operador_inventario", False) and not getattr(
+            user, "is_gestor_patrimonio", False
+        ):
+            self._validar_cancelamento_por_operador(mov, user)
+
+    def _validar_cancelamento(self, mov, user):
+        if getattr(mov, "status", None) != constants.ENVIADA:
+            raise ValidationError(
+                f"Movimentação #{mov.pk}: apenas movimentações enviadas podem ser canceladas."
+            )
+        if mov.aceita:
+            raise ValidationError(
+                f"Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada."
+            )
+        if mov.rejeitada:
+            raise ValidationError(
+                f"Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada."
+            )
+        if mov.cancelada:
+            raise ValidationError(
+                f"Movimentação #{mov.pk} já foi cancelada anteriormente."
+            )
+
+        if self._movimentacao_entre_uos_diferentes(mov):
+            self._validar_cancelamento_em_uos_diferentes(mov, user)
+            return
+
+        self._validar_cancelamento_na_mesma_uo(mov, user)
 
     def _registrar_evento(self, mov, usuario, acao, status_anterior):
         campo_usuario = {
@@ -619,7 +709,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def cancelar(self, request, pk=None):
         mov = self.get_object()
-        self._validar_acao(mov, request.user, "cancelar")
+        self._validar_cancelamento(mov, request.user)
 
         with audit_as(request.user):
             with transaction.atomic():

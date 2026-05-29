@@ -156,7 +156,9 @@ class MovimentacaoApiTestCase(TestCase):
             unidade_administrativa=ua,
         )
 
-    def _criar_movimentacao(self, bem, ua_origem, ua_destino, solicitado_por):
+    def _criar_movimentacao(
+        self, bem, ua_origem, ua_destino, solicitado_por, com_item=True
+    ):
         movimentacao = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=bem,
             unidade_administrativa_origem=ua_origem,
@@ -164,7 +166,8 @@ class MovimentacaoApiTestCase(TestCase):
             solicitado_por=solicitado_por,
             status=constants.ENVIADA,
         )
-        MovimentacaoBensItem.objects.create(movimentacao=movimentacao, bem=bem)
+        if com_item:
+            MovimentacaoBensItem.objects.create(movimentacao=movimentacao, bem=bem)
         movimentacao.refresh_from_db()
         return movimentacao
 
@@ -228,6 +231,89 @@ class MovimentacaoApiTestCase(TestCase):
 
         self.assertEqual(rejeitar.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(cancelar.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_operador_pode_cancelar_sua_propria_movimentacao_pendente(self):
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-cancelar", kwargs={"pk": self.mov_visivel.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.mov_visivel.refresh_from_db()
+        self.assertEqual(self.mov_visivel.status, constants.CANCELADA)
+        self.assertEqual(self.mov_visivel.cancelado_por_id, self.operador_origem.pk)
+
+    def test_gestor_pode_cancelar_movimentacao_entre_uos_mesmo_com_unidade_inativa(self):
+        movimentacao = self._criar_movimentacao(
+            bem=self.bem_api,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_outra_destino,
+            solicitado_por=self.operador_origem,
+        )
+        self.ua_outra_destino.status = self.ua_outra_destino.INATIVA
+        self.ua_outra_destino.save(update_fields=["status"])
+
+        gestor_sem_ua_origem = self._criar_usuario(
+            "gestor_sem_ua_origem",
+            self.uo_origem,
+            None,
+            self.grupo_gestor,
+            is_staff=True,
+        )
+        self._autenticar(gestor_sem_ua_origem)
+        response = self.client.post(
+            reverse("movimentacoes-cancelar", kwargs={"pk": movimentacao.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        movimentacao.refresh_from_db()
+        self.assertEqual(movimentacao.status, constants.CANCELADA)
+        self.assertEqual(movimentacao.cancelado_por_id, gestor_sem_ua_origem.pk)
+
+    def test_aprovar_e_rejeitar_exigem_itens_na_movimentacao(self):
+        movimentacao = self._criar_movimentacao(
+            bem=self.bem_api,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+            com_item=False,
+        )
+
+        self._autenticar(self.gestor_origem)
+        aprovar = self.client.post(
+            reverse("movimentacoes-aprovar", kwargs={"pk": movimentacao.pk})
+        )
+        rejeitar = self.client.post(
+            reverse("movimentacoes-rejeitar", kwargs={"pk": movimentacao.pk})
+        )
+
+        self.assertEqual(aprovar.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(rejeitar.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("itens", aprovar.data)
+        self.assertIn("itens", rejeitar.data)
+
+    def test_listagem_filtra_por_intervalo_de_numero_patrimonial(self):
+        movimentacao_intervalo = self._criar_movimentacao(
+            bem=self.bem_api,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+
+        self._autenticar(self.gestor_origem)
+        response = self.client.get(
+            reverse("movimentacoes-list"),
+            {
+                "numero_patrimonial_inicial": self.bem_api.numero_patrimonial,
+                "numero_patrimonial_final": self.bem_api.numero_patrimonial,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in self._lista_movimentacoes(response)}
+        self.assertIn(movimentacao_intervalo.id, ids)
+        self.assertNotIn(self.mov_visivel.id, ids)
 
     def test_criacao_aprovacao_historico_e_documento_cimbpm(self):
         self._autenticar(self.operador_origem)
