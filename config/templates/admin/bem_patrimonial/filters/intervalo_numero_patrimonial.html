@@ -1,0 +1,99 @@
+{% load i18n %}
+
+<h3>{% trans "Por Intervalo" %}</h3>
+
+<form method="get" class="filtro-intervalo-np-form">
+
+  {# Preserva todos os parâmetros ativos (busca, outros filtros, paginação) #}
+  {% for key, value in request.GET.items %}
+    {% if key != "np_de" and key != "np_ate" %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endif %}
+  {% endfor %}
+
+  <ul class="admin-filter-content" id="filtro-intervalo-np-list">
+
+    <li class="filtro-intervalo-np-field">
+      <label for="np_de">{% trans "De:" %}</label>
+      <input
+        type="text"
+        id="np_de"
+        name="np_de"
+        value="{{ request.GET.np_de|default:'' }}"
+        placeholder="ex.: 003.000000035-9"
+        maxlength="16"
+        autocomplete="off"
+      >
+    </li>
+
+    <li class="filtro-intervalo-np-field">
+      <label for="np_ate">{% trans "Até:" %}</label>
+      <input
+        type="text"
+        id="np_ate"
+        name="np_ate"
+        value="{{ request.GET.np_ate|default:'' }}"
+        placeholder="ex.: 003.000000035-9"
+        maxlength="16"
+        autocomplete="off"
+      >
+    </li>
+
+    <li class="filtro-intervalo-np-actions">
+      <button type="submit">{% trans "Aplicar" %}</button>
+      {% if request.GET.np_de or request.GET.np_ate %}
+        <a class="filtro-intervalo-np-limpar"
+           href="?{% for key, value in request.GET.items %}{% if key != 'np_de' and key != 'np_ate' %}{{ key }}={{ value }}&{% endif %}{% endfor %}">
+          {% trans "Limpar" %}
+        </a>
+      {% endif %}
+    </li>
+
+  </ul>
+
+</form>
+
+<script>
+(function () {
+  // Máscara: xxx.xxxxxxxxx-x
+  // 3 dígitos + ponto + 9 dígitos + hífen + 1 dígito = 13 dígitos / 16 chars
+  function aplicarMascara(valor) {
+    var apenas = valor.replace(/\D/g, '').slice(0, 13);
+
+    if (apenas.length <= 3) {
+      return apenas;
+    }
+    if (apenas.length <= 12) {
+      return apenas.slice(0, 3) + '.' + apenas.slice(3);
+    }
+    // 13 dígitos: xxx.xxxxxxxxx-x
+    return apenas.slice(0, 3) + '.' + apenas.slice(3, 12) + '-' + apenas.slice(12);
+  }
+
+  function onInput(event) {
+    var input = event.target;
+    var pos = input.selectionStart;
+    var valorAntes = input.value;
+    var valorNovo = aplicarMascara(valorAntes);
+    input.value = valorNovo;
+
+    var diff = valorNovo.length - valorAntes.length;
+    input.setSelectionRange(pos + diff, pos + diff);
+  }
+
+  function init() {
+    ['np_de', 'np_ate'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', onInput);
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
