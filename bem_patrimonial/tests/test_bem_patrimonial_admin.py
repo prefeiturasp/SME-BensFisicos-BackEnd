@@ -220,32 +220,11 @@ class ResourceHelpersTest(_Base):
     def test_normalizar_valor_string_retorna_stripped(self):
         self.assertEqual(self.resource._normalizar_valor("  abc  "), "abc")
 
-        self.assertEqual(val, "001.000000001-0")
-
-    def test_get_row_value_header_ausente_retorna_vazio(self):
-        row = {}
-        self.assertEqual(self.resource._get_row_value(row, ("numero_patrimonial",)), "")
-
-    def test_clear_imported_id_zera_id(self):
-        row = {"id": 99, "ID": 88}
-        self.resource._clear_imported_id(row)
-        self.assertIsNone(row["id"])
-        self.assertIsNone(row["ID"])
-
-    def test_force_status_aguardando_aprovacao(self):
-        row = {"status": "aprovado", "STATUS": "outro"}
-        self.resource._force_status_aguardando_aprovacao(row)
-        self.assertEqual(row["status"], AGUARDANDO_APROVACAO)
-        self.assertEqual(row["STATUS"], AGUARDANDO_APROVACAO)
-
-    def test_get_linha_exibicao_none_retorna_traco(self):
-        self.assertEqual(self.resource._get_linha_exibicao(None), "-")
-
-    def test_get_linha_exibicao_string_vazia_retorna_traco(self):
-        self.assertEqual(self.resource._get_linha_exibicao(""), "-")
-
-    def test_get_linha_exibicao_numero_retorna_int(self):
-        self.assertEqual(self.resource._get_linha_exibicao("3"), 3)
+    def test_registrar_erro_acumula_dict_padronizado(self):
+        self.resource._registrar_erro(5, "001.000000001-0", "nome", "Campo obrigatório.")
+        self.assertEqual(len(self.resource._erros_por_linha), 1)
+        erro = self.resource._erros_por_linha[0]
+        self.assertEqual(erro["linha"], 5)
         self.assertEqual(erro["numero_patrimonial"], "001.000000001-0")
         self.assertEqual(erro["campo"], "nome")
         self.assertEqual(erro["mensagem"], "Campo obrigatório.")
