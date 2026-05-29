@@ -1,7 +1,6 @@
 # Cobertura do bem_patrimonial/admins/bem_patrimonial.py
 # Complementa tests_admin.py, tests_aprovacao_lote.py, tests_admin_list_display.py,
 # test_edicao_restrita_operador.py e tests_export_pdf.py
-
 from io import BytesIO
 from unittest.mock import MagicMock, patch, PropertyMock
 
@@ -55,6 +54,37 @@ def _make_dataset(*rows, headers=None):
     for row in rows:
         ds.append(row)
     return ds
+
+
+# Colunas do modelo de importação (6 colunas exatas)
+_COLUNAS_IMPORTACAO = (
+    "numero_patrimonial",
+    "nome",
+    "descricao",
+    "valor_unitario",
+    "marca",
+    "modelo",
+)
+
+
+def _dataset_importacao(*rows, headers=None):
+    """Cria um tablib.Dataset com as 6 colunas do modelo de importação."""
+    ds = tablib.Dataset(headers=headers or list(_COLUNAS_IMPORTACAO))
+    for row in rows:
+        ds.append(row)
+    return ds
+
+
+def _linha_valida(
+    numero_patrimonial="001.000000001-0",
+    nome="Caneta Azul",
+    descricao="Caneta esferográfica azul",
+    valor_unitario="2,50",
+    marca="BIC",
+    modelo="Cristal",
+):
+    """Tupla de linha válida na ordem das 6 colunas do modelo."""
+    return (numero_patrimonial, nome, descricao, valor_unitario, marca, modelo)
 
 
 # ---------------------------------------------------------------------------
@@ -174,16 +204,14 @@ class ReprovarBensCountZeroTest(_Base):
 
 
 # ===========================================================================
-# 2. BemPatrimonialResource — helpers internos  (linhas 264-308)
+# 2. BemPatrimonialResource — helpers internos
 # ===========================================================================
 
 class ResourceHelpersTest(_Base):
     def setUp(self):
         super().setUp()
         self.resource = BemPatrimonialResource(request=None)
-        # before_import inicializa os atributos
-        self.resource._numeros_patrimoniais_no_arquivo = {}
-        self.resource._erros_importacao = []
+        self.resource._erros_por_linha = []
         self.resource._mensagens_exibidas = False
 
     def test_normalizar_valor_none_retorna_string_vazia(self):
@@ -192,9 +220,6 @@ class ResourceHelpersTest(_Base):
     def test_normalizar_valor_string_retorna_stripped(self):
         self.assertEqual(self.resource._normalizar_valor("  abc  "), "abc")
 
-    def test_get_row_value_header_presente(self):
-        row = {"numero_patrimonial": "001.000000001-0"}
-        val = self.resource._get_row_value(row, ("numero_patrimonial",))
         self.assertEqual(val, "001.000000001-0")
 
     def test_get_row_value_header_ausente_retorna_vazio(self):
@@ -221,58 +246,80 @@ class ResourceHelpersTest(_Base):
 
     def test_get_linha_exibicao_numero_retorna_int(self):
         self.assertEqual(self.resource._get_linha_exibicao("3"), 3)
+        self.assertEqual(erro["numero_patrimonial"], "001.000000001-0")
+        self.assertEqual(erro["campo"], "nome")
+        self.assertEqual(erro["mensagem"], "Campo obrigatório.")
 
-    def test_get_linha_exibicao_invalido_retorna_original(self):
-        self.assertEqual(self.resource._get_linha_exibicao("abc"), "abc")
+    def test_registrar_erro_sem_numero_usa_traco(self):
+        self.resource._registrar_erro(1, "", "nome", "Erro X")
+        self.assertEqual(self.resource._erros_por_linha[0]["numero_patrimonial"], "-")
 
-    def test_registrar_erro_linha_marca_row_e_acumula(self):
-        row = {}
-        self.resource._registrar_erro_linha(row, 5, "001.000000001-0", "Duplicado")
-        self.assertIn(self.resource.SKIP_REASON_KEY, row)
-        self.assertEqual(len(self.resource._erros_importacao), 1)
-        self.assertIn("001.000000001-0", self.resource._erros_importacao[0])
+    def test_registrar_erro_none_numero_usa_traco(self):
+        self.resource._registrar_erro(1, None, "nome", "Erro X")
+        self.assertEqual(self.resource._erros_por_linha[0]["numero_patrimonial"], "-")
 
-    def test_registrar_erro_linha_sem_numero_usa_traco(self):
-        row = {}
-        self.resource._registrar_erro_linha(row, 1, "", "Erro X")
-        self.assertIn("Número Patrimonial: -", self.resource._erros_importacao[0])
+    def test_parse_valor_unitario_vazio_registra_erro(self):
+        resultado = self.resource._parse_valor_unitario("", 1, "001.000000001-0")
+        self.assertIsNone(resultado)
+        self.assertEqual(len(self.resource._erros_por_linha), 1)
+        self.assertEqual(self.resource._erros_por_linha[0]["campo"], "valor_unitario")
+
+    def test_parse_valor_unitario_negativo_registra_erro(self):
+        resultado = self.resource._parse_valor_unitario("-1,00", 1, "001.000000001-0")
+        self.assertIsNone(resultado)
+        campos = [e["campo"] for e in self.resource._erros_por_linha]
+        self.assertIn("valor_unitario", campos)
+
+    def test_parse_valor_unitario_invalido_registra_erro(self):
+        resultado = self.resource._parse_valor_unitario("abc", 1, "001.000000001-0")
+        self.assertIsNone(resultado)
+        campos = [e["campo"] for e in self.resource._erros_por_linha]
+        self.assertIn("valor_unitario", campos)
+
+    def test_parse_valor_unitario_virgula_retorna_decimal(self):
+        from decimal import Decimal
+        resultado = self.resource._parse_valor_unitario("2,50", 1, "001.000000001-0")
+        self.assertEqual(resultado, Decimal("2.50"))
+        self.assertEqual(len(self.resource._erros_por_linha), 0)
 
 
 # ===========================================================================
-# 3. _validar_numero_patrimonial_para_skip  (linhas 320-355)
+# 3. _validar_dataset_completo — duplicidade
 # ===========================================================================
 
-class ValidarNumeroPatrimonialParaSkipTest(_Base):
+class ValidarDatasetCompletoTest(_Base):
     def setUp(self):
         super().setUp()
-        self.resource = BemPatrimonialResource(request=None)
-        self.resource._numeros_patrimoniais_no_arquivo = {}
-        self.resource._erros_importacao = []
-        self.resource._mensagens_exibidas = False
+        req = _request_with_messages(self.factory, self.gestor)
+        self.resource = BemPatrimonialResource(request=req)
 
-    def test_numero_branco_nao_registra_erro(self):
-        row = {"numero_patrimonial": ""}
-        self.resource._validar_numero_patrimonial_para_skip(row, 1)
-        self.assertEqual(len(self.resource._erros_importacao), 0)
+    def test_numero_branco_nao_registra_erro_de_duplicidade(self):
+        ds = _dataset_importacao(("", "Nome", "Desc", "2,50", "BIC", "Cristal"))
+        erros = self.resource._validar_dataset_completo(ds)
+        campos = [e["campo"] for e in erros]
+        self.assertNotIn("numero_patrimonial", campos)
 
     def test_duplicado_no_arquivo_registra_erro(self):
-        row1 = {"numero_patrimonial": "001.000000001-0"}
-        row2 = {"numero_patrimonial": "001.000000001-0"}
-        self.resource._validar_numero_patrimonial_para_skip(row1, 1)
-        self.resource._validar_numero_patrimonial_para_skip(row2, 2)
-        self.assertEqual(len(self.resource._erros_importacao), 1)
-        self.assertIn("duplicado no arquivo", self.resource._erros_importacao[0])
+        ds = _dataset_importacao(
+            ("001.000000001-0", "Nome", "Desc", "2,50", "BIC", "Cristal"),
+            ("001.000000001-0", "Outro", "Desc", "2,50", "BIC", "Cristal"),
+        )
+        erros = self.resource._validar_dataset_completo(ds)
+        campos = [e["campo"] for e in erros]
+        self.assertIn("numero_patrimonial", campos)
+        self.assertTrue(any("duplicado" in e["mensagem"].lower() for e in erros))
 
     def test_duplicado_no_banco_registra_erro(self):
         self._criar_bem(numero_patrimonial="001.000000099-0", sem_numeracao=False)
-        row = {"numero_patrimonial": "001.000000099-0"}
-        self.resource._validar_numero_patrimonial_para_skip(row, 1)
-        self.assertEqual(len(self.resource._erros_importacao), 1)
-        self.assertIn("já cadastrado", self.resource._erros_importacao[0])
+        ds = _dataset_importacao(("001.000000099-0", "Nome", "Desc", "2,50", "BIC", "Cristal"))
+        erros = self.resource._validar_dataset_completo(ds)
+        campos = [e["campo"] for e in erros]
+        self.assertIn("numero_patrimonial", campos)
+        self.assertTrue(any("já cadastrado" in e["mensagem"] for e in erros))
 
 
 # ===========================================================================
-# 4. before_import  (linhas 374-395)
+# 4. before_import
 # ===========================================================================
 
 class BeforeImportTest(_Base):
@@ -284,13 +331,13 @@ class BeforeImportTest(_Base):
 
     def test_before_import_sem_request_nao_levanta(self):
         resource = self._make_resource(user=None)
-        ds = _make_dataset()
+        ds = _dataset_importacao(_linha_valida())
         resource.before_import(ds)  # não deve levantar
-        self.assertEqual(resource._erros_importacao, [])
+        self.assertEqual(resource._erros_por_linha, [])
 
     def test_before_import_usuario_sem_ua_levanta_validation_error(self):
         resource = self._make_resource(user=self.user_sem_ua)
-        ds = _make_dataset()
+        ds = _dataset_importacao(_linha_valida())
         with self.assertRaises(ValidationError) as ctx:
             resource.before_import(ds)
         self.assertIn("Unidade Administrativa", str(ctx.exception))
@@ -300,7 +347,7 @@ class BeforeImportTest(_Base):
         self.ua.save(update_fields=["status"])
         try:
             resource = self._make_resource(user=self.gestor)
-            ds = _make_dataset()
+            ds = _dataset_importacao(_linha_valida())
             with self.assertRaises(ValidationError) as ctx:
                 resource.before_import(ds)
             self.assertIn("inativa", str(ctx.exception))
@@ -310,38 +357,25 @@ class BeforeImportTest(_Base):
 
     def test_before_import_reinicia_estado(self):
         resource = self._make_resource(user=self.gestor)
-        resource._erros_importacao = ["lixo anterior"]
+        # Seta estado sujo simulando uma execução anterior
+        resource._erros_por_linha = [{"linha": 1, "numero_patrimonial": "-",
+                                      "campo": "nome", "mensagem": "lixo"}]
         resource._mensagens_exibidas = True
-        ds = _make_dataset()
+        ds = _dataset_importacao(_linha_valida())
         resource.before_import(ds)
-        self.assertEqual(resource._erros_importacao, [])
+        # Estado deve ter sido reiniciado — e dataset válido não gera erros
+        self.assertEqual(resource._erros_por_linha, [])
         self.assertFalse(resource._mensagens_exibidas)
 
 
 # ===========================================================================
-# 5. skip_row e get_instance  (linhas 413-416, 428)
+# 5. get_instance
 # ===========================================================================
 
-class SkipRowGetInstanceTest(_Base):
+class GetInstanceTest(_Base):
     def setUp(self):
         super().setUp()
         self.resource = BemPatrimonialResource(request=None)
-        self.resource._numeros_patrimoniais_no_arquivo = {}
-        self.resource._erros_importacao = []
-
-    def test_skip_row_com_chave_retorna_true(self):
-        row = {self.resource.SKIP_REASON_KEY: "erro qualquer"}
-        instance = MagicMock()
-        original = MagicMock()
-        self.assertTrue(self.resource.skip_row(instance, original, row))
-
-    def test_skip_row_sem_chave_delega_para_super(self):
-        row = {}
-        instance = MagicMock()
-        original = MagicMock()
-        # super().skip_row retorna False por padrão quando unchanged=False
-        result = self.resource.skip_row(instance, original, row)
-        self.assertFalse(result)
 
     def test_get_instance_sempre_retorna_none(self):
         loader = MagicMock()
@@ -404,58 +438,38 @@ class BeforeSaveInstanceTest(_Base):
 
 
 # ===========================================================================
-# 7. after_import  (linhas 477-498)
+# 7. after_import — delega ao super sem emitir mensagens próprias
 # ===========================================================================
 
 class AfterImportTest(_Base):
-    def _resource_com_request(self):
-        req = _request_with_messages(self.factory, self.gestor)
-        return BemPatrimonialResource(request=req)
-
-    # A versão 3.0.2 do django-import-export exige os positional args
-    # using_transactions e dry_run em after_import.
     _AFTER_IMPORT_EXTRA = (True, False)
 
-    def test_after_import_sem_erros_nao_emite_mensagens(self):
-        resource = self._resource_com_request()
-        resource._erros_importacao = []
+    def test_after_import_nao_emite_mensagens_proprias(self):
+        """after_import foi simplificado — mensagens de erro são emitidas no before_import."""
+        req = _request_with_messages(self.factory, self.gestor)
+        resource = BemPatrimonialResource(request=req)
+        resource._erros_por_linha = []
         resource._mensagens_exibidas = False
         result = MagicMock()
         result.totals = {}
-        resource.after_import(_make_dataset(), result, *self._AFTER_IMPORT_EXTRA)
-        msgs = list(resource.request._messages)
+        resource.after_import(_dataset_importacao(), result, *self._AFTER_IMPORT_EXTRA)
+        msgs = list(req._messages)
         self.assertEqual(len(msgs), 0)
 
-    def test_after_import_mensagens_exibidas_nao_duplica(self):
-        resource = self._resource_com_request()
-        resource._erros_importacao = ["erro1"]
+    def test_after_import_com_erros_acumulados_nao_duplica_mensagens(self):
+        """Erros do before_import foram emitidos lá — after_import não deve duplicar."""
+        req = _request_with_messages(self.factory, self.gestor)
+        resource = BemPatrimonialResource(request=req)
+        # Simula que before_import já emitiu mensagens e acumulou erros
+        resource._erros_por_linha = [
+            {"linha": 1, "numero_patrimonial": "-", "campo": "nome", "mensagem": "Obrigatório."}
+        ]
         resource._mensagens_exibidas = True
         result = MagicMock()
         result.totals = {}
-        resource.after_import(_make_dataset(), result, *self._AFTER_IMPORT_EXTRA)
-        msgs = list(resource.request._messages)
+        resource.after_import(_dataset_importacao(), result, *self._AFTER_IMPORT_EXTRA)
+        msgs = list(req._messages)
         self.assertEqual(len(msgs), 0)
-
-    def test_after_import_com_erros_emite_warning_resumo_e_detalhe(self):
-        resource = self._resource_com_request()
-        resource._erros_importacao = ["Linha 1 | erro"]
-        resource._mensagens_exibidas = False
-        result = MagicMock()
-        result.totals = {}
-        resource.after_import(_make_dataset(), result, *self._AFTER_IMPORT_EXTRA)
-        msgs = [str(m) for m in resource.request._messages]
-        self.assertTrue(any("1 linha(s)" in m for m in msgs))
-        self.assertTrue(any("Linha 1" in m for m in msgs))
-
-    def test_after_import_mais_de_20_erros_emite_aviso_extra(self):
-        resource = self._resource_com_request()
-        resource._erros_importacao = [f"Linha {i} | erro" for i in range(25)]
-        resource._mensagens_exibidas = False
-        result = MagicMock()
-        result.totals = {}
-        resource.after_import(_make_dataset(), result, *self._AFTER_IMPORT_EXTRA)
-        msgs = [str(m) for m in resource.request._messages]
-        self.assertTrue(any("mais 5" in m for m in msgs))
 
 
 # ===========================================================================
@@ -708,6 +722,11 @@ class SaveModelIntegrityErrorTest(_Base):
 class SaveStatusTest(_Base):
     def test_save_status_deleta_e_salva_com_atualizado_por(self):
         bem = self._criar_bem()
+        _ = StatusBemPatrimonial.objects.create(
+            bem_patrimonial=bem,
+            status=APROVADO,
+            atualizado_por=self.gestor,
+        )
 
         novo_status = StatusBemPatrimonial(bem_patrimonial=bem, status=AGUARDANDO_APROVACAO)
         deletado = MagicMock()
@@ -1074,3 +1093,394 @@ class ChangelistViewSemFlagTest(_Base):
 
         self.assertNotIsInstance(resp, type(None))
         self.assertEqual(resp.status_code, 200)
+
+
+# ===========================================================================
+# 29. COLUNAS_MODELO — metadados do Resource
+# ===========================================================================
+
+class ColunasModeloMetadadosTest(_Base):
+    def test_colunas_modelo_tem_exatamente_6_campos(self):
+        from bem_patrimonial.admins.bem_patrimonial import COLUNAS_MODELO
+        self.assertEqual(len(COLUNAS_MODELO), 6)
+
+    def test_colunas_modelo_contem_campos_esperados(self):
+        from bem_patrimonial.admins.bem_patrimonial import COLUNAS_MODELO
+        for campo in ("numero_patrimonial", "nome", "descricao", "valor_unitario", "marca", "modelo"):
+            self.assertIn(campo, COLUNAS_MODELO)
+
+    def test_meta_fields_alinhados_com_colunas_modelo(self):
+        from bem_patrimonial.admins.bem_patrimonial import COLUNAS_MODELO
+        resource = BemPatrimonialResource()
+        meta_fields = set(resource._meta.fields)
+        for campo in COLUNAS_MODELO:
+            self.assertIn(campo, meta_fields)
+
+    def test_get_instance_sempre_retorna_none(self):
+        resource = BemPatrimonialResource(request=None)
+        self.assertIsNone(resource.get_instance(MagicMock(), {}))
+
+
+# ===========================================================================
+# 30. Contexto do usuário na importação
+# ===========================================================================
+
+class ImportacaoContextoUsuarioTest(_Base):
+    def _resource(self, user):
+        req = _request_with_messages(self.factory, user)
+        return BemPatrimonialResource(request=req)
+
+    def test_usuario_sem_ua_levanta_validation_error(self):
+        resource = self._resource(self.user_sem_ua)
+        ds = _dataset_importacao(_linha_valida())
+        with self.assertRaises(ValidationError) as ctx:
+            resource.before_import(ds)
+        self.assertIn("Unidade Administrativa", str(ctx.exception))
+
+    def test_ua_inativa_levanta_validation_error(self):
+        ua_inativa = criar_ua(
+            uo=self.uo, codigo="802", sigla="UA802", nome="UA 802 Inativa",
+            status=UnidadeAdministrativa.INATIVA,
+        )
+        gestor_inativo = Usuario.objects.create_user(
+            username="gestor_ua_inativa_cob2",
+            **auth_kwargs("x"),
+            unidade_administrativa=ua_inativa,
+            unidade_orcamentaria=self.uo,
+        )
+        gestor_inativo.must_change_password = False
+        gestor_inativo.save(update_fields=["must_change_password"])
+
+        resource = self._resource(gestor_inativo)
+        ds = _dataset_importacao(_linha_valida())
+        with self.assertRaises(ValidationError) as ctx:
+            resource.before_import(ds)
+        self.assertIn("inativa", str(ctx.exception))
+
+    def test_sem_request_nao_levanta(self):
+        resource = BemPatrimonialResource(request=None)
+        ds = _dataset_importacao(_linha_valida())
+        resource.before_import(ds)  # não deve levantar
+
+
+# ===========================================================================
+# 31. Planilha vazia e cabeçalho inválido
+# ===========================================================================
+
+class ImportacaoCabecalhoTest(_Base):
+    def _resource(self):
+        req = _request_with_messages(self.factory, self.gestor)
+        return BemPatrimonialResource(request=req)
+
+    def test_planilha_vazia_levanta(self):
+        ds = _dataset_importacao()  # sem linhas
+        with self.assertRaises(ValidationError) as ctx:
+            self._resource().before_import(ds)
+        self.assertIn("vazia", str(ctx.exception))
+
+    def test_cabecalho_com_coluna_faltando_levanta(self):
+        headers = [c for c in _COLUNAS_IMPORTACAO if c != "descricao"]
+        ds = tablib.Dataset(headers=headers)
+        ds.append(("001.000000001-0", "Nome", "2,50", "BIC", "Cristal"))
+        with self.assertRaises(ValidationError) as ctx:
+            self._resource().before_import(ds)
+        self.assertIn("descricao", str(ctx.exception))
+
+    def test_cabecalho_com_coluna_extra_levanta(self):
+        headers = list(_COLUNAS_IMPORTACAO) + ["coluna_extra"]
+        ds = tablib.Dataset(headers=headers)
+        ds.append(_linha_valida() + ("valor_extra",))
+        with self.assertRaises(ValidationError) as ctx:
+            self._resource().before_import(ds)
+        self.assertIn("coluna_extra", str(ctx.exception))
+
+    def test_cabecalho_correto_retorna_none(self):
+        ds = _dataset_importacao(_linha_valida())
+        self.assertIsNone(self._resource()._validar_cabecalho(ds))
+
+
+# ===========================================================================
+# 32. Validações obrigatórias de campos — tudo ou nada
+# ===========================================================================
+
+class ImportacaoValidacaoCamposTest(_Base):
+    def _resource(self):
+        req = _request_with_messages(self.factory, self.gestor)
+        return BemPatrimonialResource(request=req)
+
+    def _assert_rejeita_campo(self, dataset, campo_esperado):
+        resource = self._resource()
+        count_antes = BemPatrimonial.objects.count()
+        with self.assertRaises(ValidationError):
+            resource.before_import(dataset)
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+        campos = [e["campo"] for e in resource._erros_por_linha]
+        self.assertIn(campo_esperado, campos)
+
+    def test_nome_em_branco_rejeita(self):
+        ds = _dataset_importacao(("001.000000010-0", "", "Desc", "2,50", "BIC", "Cristal"))
+        self._assert_rejeita_campo(ds, "nome")
+
+    def test_descricao_em_branco_rejeita(self):
+        ds = _dataset_importacao(("001.000000011-0", "Nome", "", "2,50", "BIC", "Cristal"))
+        self._assert_rejeita_campo(ds, "descricao")
+
+    def test_valor_unitario_em_branco_rejeita(self):
+        ds = _dataset_importacao(("001.000000012-0", "Nome", "Desc", "", "BIC", "Cristal"))
+        self._assert_rejeita_campo(ds, "valor_unitario")
+
+    def test_valor_unitario_negativo_rejeita(self):
+        ds = _dataset_importacao(("001.000000013-0", "Nome", "Desc", "-1,00", "BIC", "Cristal"))
+        self._assert_rejeita_campo(ds, "valor_unitario")
+
+    def test_valor_unitario_invalido_rejeita(self):
+        ds = _dataset_importacao(("001.000000014-0", "Nome", "Desc", "abc", "BIC", "Cristal"))
+        self._assert_rejeita_campo(ds, "valor_unitario")
+
+    def test_valor_unitario_formato_virgula_aceito(self):
+        resource = self._resource()
+        erros = resource._validar_dataset_completo(
+            _dataset_importacao(("001.000000015-0", "Nome", "Desc", "1.234,56", "BIC", "Cristal"))
+        )
+        self.assertNotIn("valor_unitario", [e["campo"] for e in erros])
+
+    def test_marca_em_branco_rejeita(self):
+        ds = _dataset_importacao(("001.000000021-0", "Nome", "Desc", "2,50", "", "Cristal"))
+        self._assert_rejeita_campo(ds, "marca")
+
+    def test_modelo_em_branco_rejeita(self):
+        ds = _dataset_importacao(("001.000000022-0", "Nome", "Desc", "2,50", "BIC", ""))
+        self._assert_rejeita_campo(ds, "modelo")
+
+    def test_multiplos_erros_mesma_linha_todos_acumulados(self):
+        ds = _dataset_importacao(("001.000000016-0", "", "", "", "BIC", "Cristal"))
+        resource = self._resource()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        campos = [e["campo"] for e in resource._erros_por_linha]
+        self.assertIn("nome", campos)
+        self.assertIn("descricao", campos)
+        self.assertIn("valor_unitario", campos)
+
+    def test_erros_em_linhas_diferentes_todos_acumulados(self):
+        ds = _dataset_importacao(
+            ("001.000000017-0", "", "Desc", "2,50", "BIC", "Cristal"),
+            ("001.000000018-0", "Nome", "", "2,50", "BIC", "Cristal"),
+        )
+        resource = self._resource()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        linhas = {e["linha"] for e in resource._erros_por_linha}
+        self.assertIn(1, linhas)
+        self.assertIn(2, linhas)
+
+    def test_tudo_ou_nada_linha_valida_nao_salva_quando_outra_tem_erro(self):
+        """Regra crítica: nem a linha válida é salva se outra tiver erro."""
+        ds = _dataset_importacao(
+            _linha_valida(numero_patrimonial="001.000000019-0"),
+            ("001.000000020-0", "", "Desc", "2,50", "BIC", "Cristal"),
+        )
+        count_antes = BemPatrimonial.objects.count()
+        resource = self._resource()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+
+
+# ===========================================================================
+# 33. Duplicidade no arquivo e no banco
+# ===========================================================================
+
+class ImportacaoDuplicidadeTest(_Base):
+    def _resource(self):
+        req = _request_with_messages(self.factory, self.gestor)
+        return BemPatrimonialResource(request=req)
+
+    def test_duplicidade_no_arquivo_rejeita(self):
+        numero = "001.000000030-0"
+        ds = _dataset_importacao(
+            _linha_valida(numero_patrimonial=numero),
+            _linha_valida(numero_patrimonial=numero, nome="Outro nome"),
+        )
+        resource = self._resource()
+        count_antes = BemPatrimonial.objects.count()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+        campos = [e["campo"] for e in resource._erros_por_linha]
+        self.assertIn("numero_patrimonial", campos)
+
+    def test_duplicidade_no_banco_rejeita(self):
+        numero = "001.000000031-0"
+        self._criar_bem(numero_patrimonial=numero, sem_numeracao=False)
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial=numero))
+        resource = self._resource()
+        count_antes = BemPatrimonial.objects.count()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+
+
+# ===========================================================================
+# 34. Normalização de marca e modelo (Ponto 4) — apenas quando preenchidos
+# ===========================================================================
+
+class ImportacaoNormalizacaoMarcaModeloTest(_Base):
+    def _resource(self):
+        req = _request_with_messages(self.factory, self.gestor)
+        return BemPatrimonialResource(request=req)
+
+    def _row(self, numero="001.000000040-0", marca="BIC", modelo="Cristal"):
+        return dict(zip(_COLUNAS_IMPORTACAO, _linha_valida(
+            numero_patrimonial=numero, marca=marca, modelo=modelo
+        )))
+
+    def test_marca_vazia_registra_erro_na_validacao(self):
+        """Marca vazia deve ser rejeitada como erro, não normalizada."""
+        resource = self._resource()
+        erros = resource._validar_dataset_completo(
+            _dataset_importacao(("001.000000040-0", "Nome", "Desc", "2,50", "", "Cristal"))
+        )
+        campos = [e["campo"] for e in erros]
+        self.assertIn("marca", campos)
+
+    def test_modelo_vazio_registra_erro_na_validacao(self):
+        """Modelo vazio deve ser rejeitado como erro, não normalizado."""
+        resource = self._resource()
+        erros = resource._validar_dataset_completo(
+            _dataset_importacao(("001.000000041-0", "Nome", "Desc", "2,50", "BIC", ""))
+        )
+        campos = [e["campo"] for e in erros]
+        self.assertIn("modelo", campos)
+
+    def test_marca_so_espacos_registra_erro_na_validacao(self):
+        resource = self._resource()
+        erros = resource._validar_dataset_completo(
+            _dataset_importacao(("001.000000042-0", "Nome", "Desc", "2,50", "   ", "Cristal"))
+        )
+        campos = [e["campo"] for e in erros]
+        self.assertIn("marca", campos)
+
+    def test_marca_preenchida_nao_gera_erro(self):
+        resource = self._resource()
+        erros = resource._validar_dataset_completo(
+            _dataset_importacao(_linha_valida(numero_patrimonial="001.000000043-0"))
+        )
+        campos = [e["campo"] for e in erros]
+        self.assertNotIn("marca", campos)
+        self.assertNotIn("modelo", campos)
+
+    def test_before_import_row_normaliza_marca_vazia_para_traco(self):
+        """before_import_row ainda normaliza como fallback de segurança."""
+        resource = self._resource()
+        row = self._row(marca="")
+        resource.before_import_row(row, row_number=1)
+        self.assertEqual(row["marca"], "-")
+
+    def test_before_import_row_normaliza_modelo_vazio_para_traco(self):
+        resource = self._resource()
+        row = self._row(modelo="")
+        resource.before_import_row(row, row_number=1)
+        self.assertEqual(row["modelo"], "-")
+
+
+# ===========================================================================
+# 35. Retorno de erros padronizado (Ponto 5)
+# ===========================================================================
+
+class ImportacaoRetornoPadronizadoTest(_Base):
+    def _resource(self):
+        req = _request_with_messages(self.factory, self.gestor)
+        return BemPatrimonialResource(request=req)
+
+    def test_estrutura_erro_tem_todos_os_campos(self):
+        ds = _dataset_importacao(("001.000000050-0", "", "Desc", "2,50", "BIC", "Cristal"))
+        resource = self._resource()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        for erro in resource._erros_por_linha:
+            self.assertIn("linha", erro)
+            self.assertIn("numero_patrimonial", erro)
+            self.assertIn("campo", erro)
+            self.assertIn("mensagem", erro)
+
+    def test_numero_patrimonial_ausente_usa_traco(self):
+        ds = _dataset_importacao(("", "", "Desc", "2,50", "BIC", "Cristal"))
+        resource = self._resource()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        erros_nome = [e for e in resource._erros_por_linha if e["campo"] == "nome"]
+        self.assertTrue(len(erros_nome) > 0)
+        self.assertEqual(erros_nome[0]["numero_patrimonial"], "-")
+
+    def test_linha_correta_no_erro(self):
+        ds = _dataset_importacao(
+            _linha_valida(numero_patrimonial="001.000000051-0"),
+            ("001.000000052-0", "", "Desc", "2,50", "BIC", "Cristal"),
+        )
+        resource = self._resource()
+        with self.assertRaises(ValidationError):
+            resource.before_import(ds)
+        erros_nome = [e for e in resource._erros_por_linha if e["campo"] == "nome"]
+        self.assertEqual(erros_nome[0]["linha"], 2)
+
+
+# ===========================================================================
+# 36. Importação bem-sucedida — fluxo completo de integração
+# ===========================================================================
+
+class ImportacaoSucessoIntegracaoTest(_Base):
+    def _importar(self, dataset):
+        req = _request_with_messages(self.factory, self.gestor)
+        resource = BemPatrimonialResource(request=req)
+        resource.import_data(dataset, dry_run=False, raise_errors=True, use_transactions=True)
+        return resource
+
+    def test_importacao_valida_cria_bens(self):
+        ds = _dataset_importacao(
+            _linha_valida(numero_patrimonial="001.000000060-0"),
+            _linha_valida(numero_patrimonial="001.000000061-0", nome="Lápis"),
+        )
+        count_antes = BemPatrimonial.objects.count()
+        self._importar(ds)
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes + 2)
+
+    def test_importacao_usa_ua_do_usuario_nao_da_planilha(self):
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000062-0"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000062-0")
+        self.assertEqual(bem.unidade_administrativa, self.ua)
+
+    def test_importacao_define_status_aguardando_aprovacao(self):
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000063-0"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000063-0")
+        self.assertEqual(bem.status, AGUARDANDO_APROVACAO)
+
+    def test_importacao_define_criado_por_como_usuario_logado(self):
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000064-0"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000064-0")
+        self.assertEqual(bem.criado_por, self.gestor)
+
+    def test_importacao_numero_branco_cria_sem_numeracao(self):
+        ds = _dataset_importacao(("", "Caneta sem número", "Descrição", "1,00", "BIC", "Cristal"))
+        count_sem_num = BemPatrimonial.objects.filter(sem_numeracao=True).count()
+        self._importar(ds)
+        self.assertEqual(
+            BemPatrimonial.objects.filter(sem_numeracao=True).count(),
+            count_sem_num + 1,
+        )
+
+    def test_importacao_numero_formato_novo_define_numero_formato_antigo_false(self):
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000065-0"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000065-0")
+        self.assertFalse(bem.numero_formato_antigo)
+
+    def test_importacao_numero_formato_antigo_define_flag_true(self):
+        ds = _dataset_importacao(("12345antigo", "Caneta antiga", "Descrição", "1,00", "BIC", "Cristal"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.filter(numero_patrimonial="12345antigo").first()
+        self.assertIsNotNone(bem)
+        self.assertTrue(bem.numero_formato_antigo)

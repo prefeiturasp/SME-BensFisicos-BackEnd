@@ -517,49 +517,28 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
     def _montar_resposta_importacao(self, result, resource: BemPatrimonialResource) -> Response:
         """
-        Constrói o payload de resposta a partir do Result do django-import-export
-        e dos erros acumulados pelo Resource.
+        Constrói o payload de resposta.
 
-        Contadores usados do Result:
-          result.totals["new"]     → criados com sucesso
-          result.totals["skip"]    → ignorados (linhas com erro + inalteradas)
-          result.totals["invalid"] → inválidos por erro de campo/model
-          result.totals["error"]   → erros inesperados de execução
+        Com a regra tudo-ou-nada, se houve ValidationError no before_import,
+        o importar() já captura e retorna 403/422 antes de chegar aqui.
+        Este método cobre apenas o caso de sucesso total (201).
+
+        Erros padronizados: lista de {linha, numero_patrimonial, campo, mensagem}
+        acumulada em resource._erros_por_linha.
         """
         totais = result.totals
         criados = totais.get("new", 0)
-        invalidos = totais.get("invalid", 0)
-        erros_execucao = totais.get("error", 0)
 
-        # Erros de validação linha-a-linha acumulados pelo Resource (duplicidade, etc.)
-        erros_linhas: list[str] = resource._erros_importacao or []
-
-        # Erros de campo reportados pelo django-import-export (invalid rows)
-        erros_invalidos: list[dict] = []
-        for row_result in result.invalid_rows:
-            erros_invalidos.append(
-                {
-                    "linha": row_result.number,
-                    "erros": (
-                        {
-                            campo: list(msgs)
-                            for campo, msgs in row_result.error.message_dict.items()
-                        }
-                        if hasattr(row_result.error, "message_dict")
-                        else {"detalhe": str(row_result.error)}
-                    ),
-                }
-            )
-
-        total_com_erro = len(erros_linhas) + invalidos + erros_execucao
+        # Com tudo-ou-nada, _erros_por_linha estará vazio aqui (erros bloqueiam no before_import)
+        erros: list[dict] = resource._erros_por_linha or []
+        total_com_erro = len(erros)
         tem_erros = total_com_erro > 0
 
-        # total_linhas = new + skip (já inclui os skips por erro do Resource) + invalid + error
         total_linhas = (
             totais.get("new", 0)
             + totais.get("skip", 0)
-            + invalidos
-            + erros_execucao
+            + totais.get("invalid", 0)
+            + totais.get("error", 0)
         )
 
         payload = {
@@ -568,27 +547,16 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             "total_linhas": total_linhas,
         }
 
-        if erros_linhas:
-            payload["erros_por_linha"] = erros_linhas
+        if erros:
+            payload["erros_por_linha"] = erros
 
-        if erros_invalidos:
-            payload["erros_campos"] = erros_invalidos
-
-        # 422: nada foi criado e há erros
+        # 422: nada criado (não deveria chegar aqui com tudo-ou-nada, mas mantido por segurança)
         if criados == 0 and tem_erros:
             payload["detail"] = (
                 "Nenhum bem foi importado. Todas as linhas contêm erros. "
                 "Corrija o arquivo e tente novamente."
             )
             return Response(payload, status=http_status.HTTP_422_UNPROCESSABLE_ENTITY)
-
-        # 207: importação parcial — bens válidos já persistidos, linhas com erro ignoradas
-        if criados > 0 and tem_erros:
-            payload["detail"] = (
-                f"{criados} bem(ns) importado(s) com sucesso. "
-                f"{total_com_erro} linha(s) com erro foram ignoradas."
-            )
-            return Response(payload, status=http_status.HTTP_207_MULTI_STATUS)
 
         # 201: tudo criado sem erros
         payload["detail"] = f"{criados} bem(ns) importado(s) com sucesso."
@@ -597,9 +565,6 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="historico")
     def historico(self, request, pk=None):
         bem = self.get_object()
-
-        from django.contrib.contenttypes.models import ContentType
-        from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
 
