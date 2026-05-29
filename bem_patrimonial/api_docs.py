@@ -225,3 +225,128 @@ O nome do arquivo segue o padrão: `baixas_fisicas_{data}_{hora}.xlsx`
 **Importante:** A exportação respeita o filtro de escopo - apenas baixas das UAs
 do usuário serão incluídas.
 """)
+
+IMPORTAR_BENS_DOC = dedent("""
+Importa bens patrimoniais em lote a partir de uma planilha.
+ 
+O arquivo deve ser enviado como `multipart/form-data` no campo `arquivo`.
+ 
+### Formatos aceitos
+ 
+- **XLSX** (recomendado)
+- **XLS**
+- **CSV** (UTF-8 ou Latin-1)
+ 
+Tamanho máximo: **10 MB**.
+ 
+---
+ 
+### Colunas esperadas na planilha
+ 
+O cabeçalho aceita variações de caixa e acentuação
+(ex: `Número Patrimonial`, `NUMERO PATRIMONIAL`, `numero_patrimonial`).
+ 
+| Coluna | Observações |
+|---|---|
+| `numero_patrimonial` | Vazio = bem sem numeração |
+| `nome` | |
+| `descricao` | |
+| `marca` | |
+| `modelo` | |
+| `valor_unitario` | Formato: `0,00` ou `0.000,00` |
+| `numero_processo` | |
+| `localizacao` | |
+ 
+---
+ 
+### Regras de negócio
+ 
+- A **Unidade Administrativa** e a **Unidade Orçamentária** dos bens importados
+  são sempre as do usuário autenticado. Qualquer coluna UA na planilha é ignorada.
+- O usuário deve ter uma UA ativa vinculada ao perfil. Caso contrário,
+  a carga inteira é rejeitada com `403` antes de processar qualquer linha.
+- Todos os bens criados entram com status **Aguardando Aprovação**.
+- Linhas com `numero_patrimonial` duplicado (dentro do arquivo ou já no banco)
+  são **ignoradas individualmente** — as demais linhas são salvas normalmente.
+- `sem_numeracao` e `numero_formato_antigo` são inferidos automaticamente.
+ 
+---
+ 
+### Retornos HTTP
+ 
+#### `201 Created` — todos os bens importados sem erros
+ 
+```json
+{
+  "detail": "42 bem(ns) importado(s) com sucesso.",
+  "importados": 42,
+  "ignorados_com_erro": 0,
+  "total_linhas": 42
+}
+```
+ 
+#### `207 Multi-Status` — importação parcial (alguns importados, alguns com erro)
+ 
+```json
+{
+  "detail": "38 bem(ns) importado(s) com sucesso. 4 linha(s) com erro foram ignoradas.",
+  "importados": 38,
+  "ignorados_com_erro": 4,
+  "total_linhas": 42,
+  "erros_por_linha": [
+    "Linha 5 | Número Patrimonial: 001.000000001-0 | Erro: Número patrimonial já cadastrado no sistema.",
+    "Linha 12 | Número Patrimonial: 001.000000002-0 | Erro: Número patrimonial duplicado no arquivo. Primeira ocorrência na linha 3."
+  ]
+}
+```
+ 
+#### `400 Bad Request` — arquivo ausente, formato inválido ou tamanho excedido
+ 
+```json
+{
+  "detail": "Arquivo inválido.",
+  "erros": {
+    "arquivo": ["Formato de arquivo não suportado: 'planilha.txt'. Use XLSX, XLS ou CSV."]
+  }
+}
+```
+ 
+#### `403 Forbidden` — usuário sem UA vinculada ou UA inativa
+ 
+```json
+{
+  "detail": "Não é possível importar bens: seu usuário não possui uma Unidade Administrativa vinculada. Entre em contato com o gestor de patrimônio."
+}
+```
+ 
+#### `422 Unprocessable Entity` — planilha vazia, ilegível ou todas as linhas com erro
+ 
+```json
+{
+  "detail": "Nenhum bem foi importado. Todas as linhas contêm erros. Corrija o arquivo e tente novamente.",
+  "importados": 0,
+  "ignorados_com_erro": 42,
+  "total_linhas": 42,
+  "erros_por_linha": ["Linha 1 | Número Patrimonial: 001.000000001-0 | Erro: ..."]
+}
+```
+ 
+#### `500 Internal Server Error` — erro inesperado durante o processamento
+ 
+```json
+{
+  "detail": "Erro inesperado durante a importação.",
+  "erro": "descrição técnica do erro"
+}
+```
+ 
+---
+ 
+### Observações
+ 
+- Mesmo com erros parciais (`207`), os bens válidos **já foram persistidos**.
+  Não há rollback das linhas bem-sucedidas.
+- A rota não suporta dry-run via API. Use o Admin Django para pré-visualizar.
+ 
+Somente usuários com permissão de criação de bens patrimoniais podem usar este endpoint.
+""")

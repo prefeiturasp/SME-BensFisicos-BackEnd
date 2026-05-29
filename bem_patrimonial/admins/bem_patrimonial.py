@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html
 from django.utils import timezone
 from django.template.response import TemplateResponse
+import re
 
 from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
@@ -188,6 +189,40 @@ class HistoricoGeralInline(GenericTabularInline):
 
 
 class BemPatrimonialResource(resources.ModelResource):
+    """
+    Resource usado pelo django-import-export no Django Admin.
+
+    Comportamento aplicado na importação:
+    - Ignora o ID informado na planilha; o banco atribui o ID automaticamente.
+    - Nunca atualiza bens existentes — importação é sempre criação.
+    - Linhas com erro são marcadas como ignoradas/skipped na prévia,
+      mas NÃO bloqueiam a importação das linhas válidas.
+    - Após a importação, exibe warnings detalhados por linha com erro.
+    - Todos os bens importados entram com status Aguardando Aprovação.
+    - A Unidade Administrativa usada é sempre a do usuário logado.
+    - Infere automaticamente `sem_numeracao` e `numero_formato_antigo`
+      a partir do valor de `numero_patrimonial`.
+    """
+
+    NUMERO_PATRIMONIAL_HEADERS = (
+        "numero_patrimonial",
+        "Número Patrimonial",
+        "NÚMERO PATRIMONIAL",
+        "Numero Patrimonial",
+        "NUMERO PATRIMONIAL",
+        "NUMERO_PATRIMONIAL",
+    )
+
+    ID_HEADERS = ("id", "ID", "Id")
+    STATUS_HEADERS = ("status", "STATUS", "Status")
+
+    # Chave usada para marcar linhas com erro sem lançar exceção.
+    # Linhas marcadas são exibidas como skipped na prévia e ignoradas no save.
+    SKIP_REASON_KEY = "__skip_import_reason"
+
+    # Regex do formato patrimonial novo: NNN.NNNNNNNNN-N
+    NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
+
     class Meta:
         model = BemPatrimonial
         fields = (
@@ -205,6 +240,262 @@ class BemPatrimonialResource(resources.ModelResource):
             "criado_em",
         )
         export_order = fields
+
+        # O ID da planilha não deve ser usado para update.
+        # A importação deve criar novos bens e o banco atribui o ID.
+        import_id_fields = ()
+
+        # Necessário para o preview exibir também as linhas ignoradas/skipped.
+        skip_unchanged = False
+        report_skipped = True
+
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop("request", None)
+        super().__init__(*args, **kwargs)
+        self._numeros_patrimoniais_no_arquivo = {}
+        self._erros_importacao = []
+        self._mensagens_exibidas = False
+
+    # ------------------------------------------------------------------
+    # Helpers internos
+    # ------------------------------------------------------------------
+
+    def _normalizar_valor(self, value):
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def _get_row_value(self, row, possible_headers):
+        for header in possible_headers:
+            if header in row:
+                return self._normalizar_valor(row.get(header))
+        return ""
+
+    def _clear_imported_id(self, row):
+        """Remove qualquer ID vindo da planilha para evitar update indevido."""
+        for header in self.ID_HEADERS:
+            if header in row:
+                row[header] = None
+
+    def _force_status_aguardando_aprovacao(self, row):
+        """Garante que o status importado seja sempre Aguardando Aprovação."""
+        for header in self.STATUS_HEADERS:
+            if header in row:
+                row[header] = constants.AGUARDANDO_APROVACAO
+
+    def _get_linha_exibicao(self, row_number):
+        """
+        Retorna o número de linha no mesmo padrão do django-import-export:
+        primeira linha de dados = 1.
+        """
+        if row_number in (None, ""):
+            return "-"
+        try:
+            return int(row_number)
+        except Exception:
+            return row_number
+
+    def _registrar_erro_linha(self, row, linha, numero_patrimonial, tipo_erro):
+        """
+        Marca a linha para ser ignorada (skip) e registra o erro para exibição
+        posterior via after_import. Não lança exceção — o fluxo continua.
+        """
+        numero_exibicao = numero_patrimonial or "-"
+        mensagem = (
+            f"Linha {linha} | Número Patrimonial: {numero_exibicao} | Erro: {tipo_erro}"
+        )
+        row[self.SKIP_REASON_KEY] = mensagem
+        self._erros_importacao.append(mensagem)
+
+    # ------------------------------------------------------------------
+    # Validações de número patrimonial
+    # ------------------------------------------------------------------
+
+    def _validar_numero_patrimonial_para_skip(self, row, row_number):
+        """
+        Valida duplicidade dentro do arquivo e no banco.
+        Em caso de erro, marca a linha para skip — não lança exceção.
+        Bens sem número patrimonial seguem sem essa validação (tratados como sem_numeracao).
+        """
+        numero_patrimonial = self._get_row_value(row, self.NUMERO_PATRIMONIAL_HEADERS)
+
+        # Número em branco: segue como sem_numeracao, sem validação aqui.
+        if not numero_patrimonial:
+            return
+
+        linha = self._get_linha_exibicao(row_number)
+        numero_normalizado = numero_patrimonial.strip()
+        numero_key = numero_normalizado.lower()
+
+        # Duplicidade dentro do próprio arquivo
+        linha_duplicada = self._numeros_patrimoniais_no_arquivo.get(numero_key)
+        if linha_duplicada:
+            self._registrar_erro_linha(
+                row=row,
+                linha=linha,
+                numero_patrimonial=numero_normalizado,
+                tipo_erro=(
+                    "Número patrimonial duplicado no arquivo. "
+                    f"Primeira ocorrência na linha {linha_duplicada}."
+                ),
+            )
+            return
+
+        self._numeros_patrimoniais_no_arquivo[numero_key] = linha
+
+        # Duplicidade no banco
+        if BemPatrimonial.objects.filter(
+            numero_patrimonial__iexact=numero_normalizado
+        ).exists():
+            self._registrar_erro_linha(
+                row=row,
+                linha=linha,
+                numero_patrimonial=numero_normalizado,
+                tipo_erro="Número patrimonial já cadastrado no sistema.",
+            )
+
+    # ------------------------------------------------------------------
+    # Hooks do django-import-export
+    # ------------------------------------------------------------------
+
+    def before_import(self, dataset, *args, **kwargs):
+        """
+        Inicializa o controle de erros a cada nova carga e valida o contexto
+        do usuário antes de processar qualquer linha.
+
+        A importação exige que o usuário tenha uma Unidade Administrativa ativa
+        vinculada ao seu perfil — sem isso não há como determinar onde alocar os
+        bens e a carga inteira é rejeitada com mensagem clara.
+
+        Não removemos linhas do dataset aqui: linhas com erro são marcadas
+        em before_import_row e ignoradas em skip_row, mantendo-as visíveis
+        na prévia sem bloquear a confirmação das linhas válidas.
+        """
+        self._numeros_patrimoniais_no_arquivo = {}
+        self._erros_importacao = []
+        self._mensagens_exibidas = False
+
+        if not self.request:
+            return
+
+        ua_usuario = getattr(self.request.user, "unidade_administrativa", None)
+
+        if not ua_usuario:
+            raise ValidationError(
+                "Não é possível importar bens: seu usuário não possui uma "
+                "Unidade Administrativa vinculada. "
+                "Entre em contato com o gestor de patrimônio."
+            )
+
+        if not ua_usuario.is_ativa:
+            raise ValidationError(
+                f"Não é possível importar bens: sua Unidade Administrativa "
+                f"'{ua_usuario.nome}' está inativa. "
+                "Entre em contato com o gestor de patrimônio."
+            )
+
+    def before_import_row(self, row, row_number=None, **kwargs):
+        """
+        Saneia e valida cada linha antes do import.
+
+        Erros são marcados via _registrar_erro_linha — nunca lança ValidationError,
+        para que linhas com erro não bloqueiem as demais.
+        """
+        self._clear_imported_id(row)
+        self._force_status_aguardando_aprovacao(row)
+        self._validar_numero_patrimonial_para_skip(row, row_number)
+
+    def skip_row(self, instance, original, row, import_validation_errors=None):
+        """
+        Linhas marcadas com SKIP_REASON_KEY são exibidas na prévia como skipped
+        e não são salvas, sem interromper a importação das linhas válidas.
+        """
+        if row.get(self.SKIP_REASON_KEY):
+            return True
+
+        return super().skip_row(
+            instance,
+            original,
+            row,
+            import_validation_errors=import_validation_errors,
+        )
+
+    def get_instance(self, instance_loader, row):
+        """
+        Força a importação sempre como criação.
+        Mesmo que venha ID na planilha, nunca atualiza bem existente.
+        """
+        return None
+
+    def before_save_instance(self, instance, *args, **kwargs):
+        """
+        Aplica dados de contexto antes de salvar o bem importado.
+
+        Compatível com versões diferentes do django-import-export que chamam
+        este hook com assinaturas distintas (por isso usa *args).
+
+        A UA do usuário é garantida pelo before_import: se chegarmos aqui,
+        self.request.user.unidade_administrativa existe e está ativa.
+        A atribuição é incondicional — qualquer UA presente na planilha é ignorada.
+        """
+        # Garante criação, nunca update por ID vindo da planilha.
+        instance.pk = None
+        instance.id = None
+
+        if self.request:
+            if not instance.criado_por_id:
+                instance.criado_por = self.request.user
+
+            # Sempre sobrescreve com a UA do usuário logado, sem exceção.
+            # A planilha não tem autoridade para determinar onde o bem será alocado.
+            instance.unidade_administrativa = self.request.user.unidade_administrativa
+
+        # Importação segue o mesmo fluxo de novo cadastro.
+        instance.status = constants.AGUARDANDO_APROVACAO
+
+        numero_patrimonial = self._normalizar_valor(instance.numero_patrimonial)
+
+        if not numero_patrimonial:
+            instance.numero_patrimonial = None
+            instance.sem_numeracao = True
+            instance.numero_formato_antigo = False
+            return
+
+        instance.sem_numeracao = False
+        instance.numero_formato_antigo = not bool(
+            re.fullmatch(self.NEW_FMT_RE, numero_patrimonial)
+        )
+
+    def after_import(self, dataset, result, *args, **kwargs):
+        """
+        Exibe na prévia e na confirmação quais linhas foram ignoradas e por quê.
+
+        O botão de confirmar importação permanece disponível para os bens válidos.
+        Exibe no máximo 20 mensagens de erro individuais para não poluir a tela;
+        se houver mais, informa a quantidade restante.
+        """
+        super().after_import(dataset, result, *args, **kwargs)
+
+        if not self.request or not self._erros_importacao or self._mensagens_exibidas:
+            return
+
+        self._mensagens_exibidas = True
+        qtd = len(self._erros_importacao)
+
+        messages.warning(
+            self.request,
+            f"{qtd} linha(s) possuem erro e serão ignoradas. "
+            "Os demais bens válidos podem ser importados normalmente.",
+        )
+
+        for mensagem in self._erros_importacao[:20]:
+            messages.warning(self.request, mensagem)
+
+        if qtd > 20:
+            messages.warning(
+                self.request,
+                f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima.",
+            )
 
 
 class BemPatrimonialAdmin(ImportExportModelAdmin):
@@ -954,7 +1245,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         except Exception:
             pass
         return "—"
-    
+
     def _aplicar_filtros_autocomplete_bem(self, request, qs, use_distinct):
         app_label = request.GET.get("app_label")
         model_name = request.GET.get("model_name")
@@ -1013,7 +1304,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             qs = qs.exclude(pk__in=ids)
 
         return qs, use_distinct
-    
+
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context=extra_context)
 
