@@ -1,6 +1,66 @@
-# Cobertura do bem_patrimonial/admins/bem_patrimonial.py
-# Complementa tests_admin.py, tests_aprovacao_lote.py, tests_admin_list_display.py,
-# test_edicao_restrita_operador.py e tests_export_pdf.py
+"""
+Cobertura complementar para bem_patrimonial/admins/bem_patrimonial.py.
+
+Linhas alvo (testes originais):
+  118-122  reprovar_bens: count_aguardando == 0
+  264-296  BemPatrimonialResource: helpers internos (_normalizar_valor, _get_row_value,
+           _clear_imported_id, _force_status_aguardando_aprovacao, _get_linha_exibicao)
+  303-308  _registrar_erro_linha
+  320-355  _validar_numero_patrimonial_para_skip (branco, duplicado no arquivo, duplicado no banco)
+  374-395  before_import: sem request, sem UA, UA inativa
+  404-406  before_import_row
+  413-416  skip_row marcado
+  428      get_instance retorna None
+  442-465  before_save_instance: com e sem request, numero em branco, formato antigo
+  477-498  after_import: erros, mensagens_exibidas, qtd > 20
+  598      delete_view: extra_context atualiza context
+  676-680  _usuario_pode_editar_obj: superuser e não-superuser
+  690-696  has_view_permission: superuser, gestor/operador, usuario_pode_editar
+  703-717  get_object: fallback gestor/operador/superuser; DoesNotExist; ValueError
+  725      has_change_permission: obj fora do escopo
+  728      has_change_permission: obj excluido
+  757      _setup_create_form_ua_field: campo UA ausente
+  778      _validate_create_form_ua: ua_form ausente
+  782-784  _validate_create_form_ua: ua inativa
+  792      _validate_create_form_ua: ua fora do escopo
+  799-802  _validate_create_form_ua: ua_user inativa
+  806      _validate_edit_form_ua: instance sem pk
+  810      _validate_edit_form_ua: UA alterada
+  816      _validate_edit_form_ua: ua_post vazio
+  895      save_model: IntegrityError sem "numero_patrimonial" no str
+  899-906  save_model: IntegrityError com "numero_patrimonial"
+  1022     save_status: deleted_objects
+  1024-1025 save_status: instance.atualizado_por / save
+  1029-1047 _add_view_multi_base_data: status None / fallback choices
+  1055-1056 _add_view_multi_parse_payload: JSON inválido
+  1059-1063 _add_view_multi_to_bool: bool, None, strings
+  1067-1081 _add_view_multi_process_row_validate_save: ValidationError sem dict, IntegrityError, Exception
+  1084-1102 _add_view_multi_process_row: sem localizacao; com sem_numeracao
+  1105-1115 _add_view_multi_process_linhas: com e sem erros
+  1126     _add_view_handle_multi_post: form inválido
+  1131-1145 _add_view_handle_multi_post: payload com erro de linha; sucesso
+  1181     render_change_form: HTML_END_FORM_CONTAINER presente
+  1188-1189 render_change_form: exception silenciada
+  1208     alterado_por_ultimo: retorna nome/username
+  1215     get_inline_instances: obj não None retorna instâncias do super
+  1238-1246 foto_preview: com foto
+  1260     _aplicar_filtros_autocomplete_bem: app_label/model_name/field_name não batem
+  1267     _aplicar_filtros_autocomplete_bem: transferencia sem UO
+  1278     _aplicar_filtros_autocomplete_bem: uo_origem diferente da referência
+  1316     changelist_view: _busca_com_baixados_antigos False — retorna response normal
+
+Seções adicionadas (revisão de importação):
+  29. COLUNAS_MODELO — metadados do Resource
+  30. Contexto do usuário — sem UA, UA inativa, sem request
+  31. Planilha vazia e cabeçalho inválido
+  32. Validações obrigatórias de campos (tudo ou nada)
+  33. Duplicidade no arquivo e no banco
+  34. Normalização de marca e modelo (Ponto 4)
+  35. Retorno de erros padronizado (Ponto 5)
+  36. Importação bem-sucedida — fluxo completo de integração
+"""
+
+from rest_framework.test import APIClient
 from io import BytesIO
 from unittest.mock import MagicMock, patch, PropertyMock
 
@@ -174,18 +234,18 @@ class _Base(TestCase):
                     delattr(user, attr)
 
     def _criar_bem(self, **kwargs):
-        defaults = {
-            "nome": "Bem",
-            "descricao": "D",
-            "valor_unitario": 1,
-            "marca": "M",
-            "modelo": "X",
-            "numero_processo": "P",
-            "unidade_administrativa": self.ua,
-            "criado_por": self.gestor,
-            "status": APROVADO,
-            "sem_numeracao": True,
-        }
+        defaults = dict(
+            nome="Bem",
+            descricao="D",
+            valor_unitario=1,
+            marca="M",
+            modelo="X",
+            numero_processo="P",
+            unidade_administrativa=self.ua,
+            criado_por=self.gestor,
+            status=APROVADO,
+            sem_numeracao=True,
+        )
         defaults.update(kwargs)
         return BemPatrimonial.objects.create(**defaults)
 
@@ -701,7 +761,7 @@ class SaveModelIntegrityErrorTest(_Base):
 class SaveStatusTest(_Base):
     def test_save_status_deleta_e_salva_com_atualizado_por(self):
         bem = self._criar_bem()
-        _ = StatusBemPatrimonial.objects.create(
+        status_obj = StatusBemPatrimonial.objects.create(
             bem_patrimonial=bem,
             status=APROVADO,
             atualizado_por=self.gestor,
@@ -850,7 +910,7 @@ class AddViewMultiProcessRowTest(_Base):
             "sem_numeracao": "1",
             "numero_formato_antigo": "0",
         }
-        result_bem, _ = self.admin._add_view_multi_process_row(request, 1, row, self._base())
+        result_bem, erro = self.admin._add_view_multi_process_row(request, 1, row, self._base())
         # sem_numeracao=True faz o número patrimonial vir de SEM-NUMERO-X (atribuído pelo model)
         # ou None — em todo caso NÃO deve ser o número da planilha
         if result_bem:
@@ -883,7 +943,7 @@ class AddViewMultiProcessLinhasTest(_Base):
         # linha sem localizacao → gera erro
         linhas = [{"localizacao": ""}]
         count_antes = BemPatrimonial.objects.count()
-        _, errors = self.admin._add_view_multi_process_linhas(request, linhas, self._base())
+        criados, errors = self.admin._add_view_multi_process_linhas(request, linhas, self._base())
         self.assertEqual(len(errors), 1)
         self.assertEqual(BemPatrimonial.objects.count(), count_antes)
 
@@ -896,7 +956,7 @@ class AddViewMultiProcessLinhasTest(_Base):
             "numero_formato_antigo": "0",
         }]
         count_antes = BemPatrimonial.objects.count()
-        _, errors = self.admin._add_view_multi_process_linhas(request, linhas, self._base())
+        criados, errors = self.admin._add_view_multi_process_linhas(request, linhas, self._base())
         self.assertEqual(len(errors), 0)
         self.assertEqual(BemPatrimonial.objects.count(), count_antes + 1)
 
@@ -1180,6 +1240,7 @@ class ImportacaoCabecalhoTest(_Base):
 
 # ===========================================================================
 # 32. Validações obrigatórias de campos — tudo ou nada
+# (marca e modelo vazios são NORMALIZADOS para "-", não rejeitados)
 # ===========================================================================
 
 class ImportacaoValidacaoCamposTest(_Base):
@@ -1223,13 +1284,23 @@ class ImportacaoValidacaoCamposTest(_Base):
         )
         self.assertNotIn("valor_unitario", [e["campo"] for e in erros])
 
-    def test_marca_em_branco_rejeita(self):
-        ds = _dataset_importacao(("001.000000021-0", "Nome", "Desc", "2,50", "", "Cristal"))
-        self._assert_rejeita_campo(ds, "marca")
+    def test_marca_em_branco_nao_gera_erro_de_validacao(self):
+        """marca vazia é normalizada para "-", não rejeita a linha."""
+        resource = self._resource()
+        erros = resource._validar_dataset_completo(
+            _dataset_importacao(("001.000000021-0", "Nome", "Desc", "2,50", "", "Cristal"))
+        )
+        campos = [e["campo"] for e in erros]
+        self.assertNotIn("marca", campos)
 
-    def test_modelo_em_branco_rejeita(self):
-        ds = _dataset_importacao(("001.000000022-0", "Nome", "Desc", "2,50", "BIC", ""))
-        self._assert_rejeita_campo(ds, "modelo")
+    def test_modelo_em_branco_nao_gera_erro_de_validacao(self):
+        """modelo vazio é normalizado para "-", não rejeita a linha."""
+        resource = self._resource()
+        erros = resource._validar_dataset_completo(
+            _dataset_importacao(("001.000000022-0", "Nome", "Desc", "2,50", "BIC", ""))
+        )
+        campos = [e["campo"] for e in erros]
+        self.assertNotIn("modelo", campos)
 
     def test_multiplos_erros_mesma_linha_todos_acumulados(self):
         ds = _dataset_importacao(("001.000000016-0", "", "", "", "BIC", "Cristal"))
@@ -1301,7 +1372,7 @@ class ImportacaoDuplicidadeTest(_Base):
 
 
 # ===========================================================================
-# 34. Normalização de marca e modelo (Ponto 4) — apenas quando preenchidos
+# 34. Normalização de marca e modelo — vazios persistem como "-"
 # ===========================================================================
 
 class ImportacaoNormalizacaoMarcaModeloTest(_Base):
@@ -1314,31 +1385,32 @@ class ImportacaoNormalizacaoMarcaModeloTest(_Base):
             numero_patrimonial=numero, marca=marca, modelo=modelo
         )))
 
-    def test_marca_vazia_registra_erro_na_validacao(self):
-        """Marca vazia deve ser rejeitada como erro, não normalizada."""
+    def test_marca_vazia_nao_registra_erro(self):
+        """marca vazia é normalizada para "-", não gera erro de validação."""
         resource = self._resource()
         erros = resource._validar_dataset_completo(
             _dataset_importacao(("001.000000040-0", "Nome", "Desc", "2,50", "", "Cristal"))
         )
         campos = [e["campo"] for e in erros]
-        self.assertIn("marca", campos)
+        self.assertNotIn("marca", campos)
 
-    def test_modelo_vazio_registra_erro_na_validacao(self):
-        """Modelo vazio deve ser rejeitado como erro, não normalizado."""
+    def test_modelo_vazio_nao_registra_erro(self):
+        """modelo vazio é normalizado para "-", não gera erro de validação."""
         resource = self._resource()
         erros = resource._validar_dataset_completo(
             _dataset_importacao(("001.000000041-0", "Nome", "Desc", "2,50", "BIC", ""))
         )
         campos = [e["campo"] for e in erros]
-        self.assertIn("modelo", campos)
+        self.assertNotIn("modelo", campos)
 
-    def test_marca_so_espacos_registra_erro_na_validacao(self):
+    def test_marca_so_espacos_nao_registra_erro(self):
+        """marca com só espaços é normalizada para "-", não gera erro."""
         resource = self._resource()
         erros = resource._validar_dataset_completo(
             _dataset_importacao(("001.000000042-0", "Nome", "Desc", "2,50", "   ", "Cristal"))
         )
         campos = [e["campo"] for e in erros]
-        self.assertIn("marca", campos)
+        self.assertNotIn("marca", campos)
 
     def test_marca_preenchida_nao_gera_erro(self):
         resource = self._resource()
@@ -1350,7 +1422,6 @@ class ImportacaoNormalizacaoMarcaModeloTest(_Base):
         self.assertNotIn("modelo", campos)
 
     def test_before_import_row_normaliza_marca_vazia_para_traco(self):
-        """before_import_row ainda normaliza como fallback de segurança."""
         resource = self._resource()
         row = self._row(marca="")
         resource.before_import_row(row, row_number=1)
@@ -1361,6 +1432,12 @@ class ImportacaoNormalizacaoMarcaModeloTest(_Base):
         row = self._row(modelo="")
         resource.before_import_row(row, row_number=1)
         self.assertEqual(row["modelo"], "-")
+
+    def test_before_import_row_normaliza_marca_espacos_para_traco(self):
+        resource = self._resource()
+        row = self._row(marca="   ")
+        resource.before_import_row(row, row_number=1)
+        self.assertEqual(row["marca"], "-")
 
 
 # ===========================================================================
@@ -1463,3 +1540,214 @@ class ImportacaoSucessoIntegracaoTest(_Base):
         bem = BemPatrimonial.objects.filter(numero_patrimonial="12345antigo").first()
         self.assertIsNotNone(bem)
         self.assertTrue(bem.numero_formato_antigo)
+
+
+# ===========================================================================
+# 37. Integração: marca e modelo vazios persistem como "-" no banco
+# ===========================================================================
+
+class ImportacaoMarcaModeloIntegracaoTest(_Base):
+    def _importar(self, dataset):
+        req = _request_with_messages(self.factory, self.gestor)
+        resource = BemPatrimonialResource(request=req)
+        resource.import_data(dataset, dry_run=False, raise_errors=True, use_transactions=True)
+        return resource
+
+    def test_marca_vazia_salva_como_traco(self):
+        ds = _dataset_importacao(("001.000000070-0", "Nome", "Desc", "2,50", "", "Cristal"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000070-0")
+        self.assertEqual(bem.marca, "-")
+
+    def test_modelo_vazio_salva_como_traco(self):
+        ds = _dataset_importacao(("001.000000071-0", "Nome", "Desc", "2,50", "BIC", ""))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000071-0")
+        self.assertEqual(bem.modelo, "-")
+
+    def test_marca_so_espacos_salva_como_traco(self):
+        ds = _dataset_importacao(("001.000000072-0", "Nome", "Desc", "2,50", "   ", "Cristal"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000072-0")
+        self.assertEqual(bem.marca, "-")
+
+    def test_marca_e_modelo_preenchidos_preservados(self):
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000073-0"))
+        self._importar(ds)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000073-0")
+        self.assertEqual(bem.marca, "BIC")
+        self.assertEqual(bem.modelo, "Cristal")
+
+    def test_marca_e_modelo_vazios_nao_bloqueiam_importacao(self):
+        """Com marca e modelo vazios, a carga deve ser aceita e persistida."""
+        ds = _dataset_importacao(
+            ("001.000000074-0", "Nome 1", "Desc 1", "1,00", "", ""),
+            ("001.000000075-0", "Nome 2", "Desc 2", "2,00", "", ""),
+        )
+        count_antes = BemPatrimonial.objects.count()
+        self._importar(ds)
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes + 2)
+
+
+# ===========================================================================
+# 38. Admin: get_import_formats restringe a CSV, XLS e XLSX
+# ===========================================================================
+
+class AdminImportFormatsTest(_Base):
+    def test_get_import_formats_retorna_apenas_3_formatos(self):
+        from import_export.formats.base_formats import CSV, XLS, XLSX
+        formatos = self.admin.get_import_formats()
+        self.assertEqual(len(formatos), 3)
+        classes = [type(f) if not isinstance(f, type) else f for f in formatos]
+        nomes = [f.__name__ if isinstance(f, type) else type(f).__name__ for f in formatos]
+        self.assertIn("CSV", nomes)
+        self.assertIn("XLS", nomes)
+        self.assertIn("XLSX", nomes)
+
+    def test_get_import_formats_nao_inclui_tsv_json_yaml(self):
+        formatos = self.admin.get_import_formats()
+        nomes = [f.__name__ if isinstance(f, type) else type(f).__name__ for f in formatos]
+        for formato_indesejado in ("TSV", "JSON", "YAML", "HTML"):
+            self.assertNotIn(formato_indesejado, nomes)
+
+
+# ===========================================================================
+# 39. Endpoint API: testes de integração via APIClient
+# ===========================================================================
+
+
+class ImportacaoEndpointTest(_Base):
+    """Testes de integração do endpoint POST /api/bens/importar/."""
+
+    def _client(self, user=None):
+        client = APIClient()
+        client.force_authenticate(user=user or self.gestor)
+        return client
+
+    def _xlsx_bytes(self, rows, headers=None):
+        """Gera bytes de um XLSX em memória para upload."""
+        import openpyxl
+        from openpyxl.styles import PatternFill, Font
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        cols = list(headers or _COLUNAS_IMPORTACAO)
+        green = PatternFill(start_color="2F7D57", end_color="2F7D57", fill_type="solid")
+        for i, h in enumerate(cols, start=1):
+            c = ws.cell(row=1, column=i, value=h)
+            c.fill = green
+            c.font = Font(color="FFFFFF", bold=True)
+        for row in rows:
+            ws.append(list(row))
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf.read()
+
+    def _upload(self, client, xlsx_bytes, filename="planilha.xlsx"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        f = SimpleUploadedFile(filename, xlsx_bytes,
+                               content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        return client.post("/api/bens/importar/", {"arquivo": f}, format="multipart")
+
+    # ------------------------------------------------------------------
+    # 201 — sucesso
+    # ------------------------------------------------------------------
+
+    def test_201_importacao_valida(self):
+        data = self._xlsx_bytes([_linha_valida(numero_patrimonial="001.000000080-0")])
+        resp = self._upload(self._client(), data)
+        self.assertEqual(resp.status_code, 201)
+        self.assertIn("importados", resp.data)
+        self.assertEqual(resp.data["importados"], 1)
+
+    def test_201_marca_e_modelo_vazios_aceitos(self):
+        data = self._xlsx_bytes([("001.000000081-0", "Nome", "Desc", "1,00", "", "")])
+        resp = self._upload(self._client(), data)
+        self.assertEqual(resp.status_code, 201)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000081-0")
+        self.assertEqual(bem.marca, "-")
+        self.assertEqual(bem.modelo, "-")
+
+    # ------------------------------------------------------------------
+    # 422 — erros de planilha
+    # ------------------------------------------------------------------
+
+    def test_422_planilha_vazia(self):
+        data = self._xlsx_bytes([])
+        resp = self._upload(self._client(), data)
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("vazia", resp.data.get("detail", "").lower())
+
+    def test_422_cabecalho_invalido(self):
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["numero_patrimonial", "nome", "coluna_errada"])
+        ws.append(["001.000000082-0", "Nome", "Valor"])
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        data = buf.read()
+        resp = self._upload(self._client(), data)
+        self.assertEqual(resp.status_code, 422)
+
+    def test_422_com_erros_por_linha_retorna_estrutura_padronizada(self):
+        data = self._xlsx_bytes([
+            ("001.000000083-0", "", "Desc", "2,50", "BIC", "Cristal"),  # nome vazio
+        ])
+        resp = self._upload(self._client(), data)
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("erros_por_linha", resp.data)
+        erros = resp.data["erros_por_linha"]
+        self.assertTrue(len(erros) > 0)
+        primeiro = erros[0]
+        self.assertIn("linha", primeiro)
+        self.assertIn("numero_patrimonial", primeiro)
+        self.assertIn("campo", primeiro)
+        self.assertIn("mensagem", primeiro)
+
+    def test_422_duplicidade_no_arquivo(self):
+        numero = "001.000000084-0"
+        data = self._xlsx_bytes([
+            _linha_valida(numero_patrimonial=numero),
+            _linha_valida(numero_patrimonial=numero, nome="Outro"),
+        ])
+        resp = self._upload(self._client(), data)
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("erros_por_linha", resp.data)
+
+    def test_422_valor_unitario_invalido(self):
+        data = self._xlsx_bytes([
+            ("001.000000085-0", "Nome", "Desc", "abc", "BIC", "Cristal"),
+        ])
+        resp = self._upload(self._client(), data)
+        self.assertEqual(resp.status_code, 422)
+
+    # ------------------------------------------------------------------
+    # 403 — falta de permissão
+    # ------------------------------------------------------------------
+
+    def test_403_usuario_sem_ua(self):
+        data = self._xlsx_bytes([_linha_valida(numero_patrimonial="001.000000086-0")])
+        resp = self._upload(self._client(self.user_sem_ua), data)
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("Unidade Administrativa", resp.data.get("detail", ""))
+
+    def test_403_ua_inativa(self):
+        ua_inativa = criar_ua(
+            uo=self.uo, codigo="803", sigla="UA803", nome="UA 803 Inativa",
+            status=UnidadeAdministrativa.INATIVA,
+        )
+        gestor_inativo = Usuario.objects.create_user(
+            username="gestor_inativo_endpoint",
+            **auth_kwargs("x"),
+            unidade_administrativa=ua_inativa,
+            unidade_orcamentaria=self.uo,
+        )
+        gestor_inativo.must_change_password = False
+        gestor_inativo.save(update_fields=["must_change_password"])
+
+        data = self._xlsx_bytes([_linha_valida(numero_patrimonial="001.000000087-0")])
+        resp = self._upload(self._client(gestor_inativo), data)
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("inativa", resp.data.get("detail", ""))

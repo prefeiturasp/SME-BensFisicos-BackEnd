@@ -308,9 +308,13 @@ class BemPatrimonialResource(resources.ModelResource):
         return None
 
     def _validar_campos_obrigatorios(self, idx, numero_patrimonial, row):
-        """Valida campos obrigatórios de texto de uma linha."""
+        """Valida campos obrigatórios de texto de uma linha.
+
+        marca e modelo NÃO são validados aqui — valores vazios são normalizados
+        para "-" no before_import_row (regra de negócio definida na história).
+        """
         msg = "Campo obrigatório."
-        for campo in ("nome", "descricao", "marca", "modelo"):
+        for campo in ("nome", "descricao"):
             if not self._normalizar_valor(row.get(campo)):
                 self._registrar_erro(idx, numero_patrimonial, campo, msg)
 
@@ -959,6 +963,10 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             queryset = self._aplicar_filtro_padrao_baixados(queryset)
 
         return queryset
+
+    def get_import_formats(self):
+        """Restringe a importação a CSV, XLS e XLSX — alinhado com a API."""
+        return [CSV, XLS, XLSX]
 
     def get_export_formats(self):
         return [CSV, XLSX, XLS, HTML, PDFFormat]
