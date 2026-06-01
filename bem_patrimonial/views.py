@@ -253,7 +253,6 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             not pode_visualizar_fora_escopo
             and not validar_bem_no_escopo_com_transferencia(self.request.user, obj)
         ):
-
             raise NotFound()
 
         return obj
@@ -429,10 +428,13 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         Importa bens patrimoniais em lote a partir de uma planilha XLSX, XLS ou CSV.
         Envia o arquivo no campo `arquivo` via multipart/form-data.
 
-        Regras idênticas ao Admin:
-        - UA/UO sempre a do usuário autenticado
-        - Linhas com erro ignoradas individualmente (não bloqueiam as válidas)
-        - Todos os bens criados entram com status Aguardando Aprovação
+        Regras (Pontos 1-5):
+        - Planilha deve ter exatamente 6 colunas: numero_patrimonial, nome, descricao,
+          valor_unitario, marca, modelo.
+        - Tudo ou nada: qualquer erro na planilha rejeita a carga inteira (HTTP 422).
+        - UA/UO sempre a do usuário autenticado.
+        - Todos os bens criados entram com status Aguardando Aprovação.
+        - Erros padronizados: {linha, numero_patrimonial, campo, mensagem}.
         """
         input_serializer = ImportacaoBemPatrimonialSerializer(data=request.data)
         if not input_serializer.is_valid():
@@ -446,11 +448,9 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         arquivo = input_serializer.validated_data["arquivo"]
 
-        # Detecta o formato a partir da extensão validada pelo serializer
         _, ext = os.path.splitext((arquivo.name or "").lower())
         formato = _EXTENSAO_PARA_FORMATO[ext]
 
-        # Lê o arquivo em um Dataset tablib
         try:
             dataset = self._ler_planilha(arquivo, formato)
         except Exception as exc:
@@ -462,13 +462,15 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                 status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
+        # Validação de planilha vazia feita aqui para retornar 422 limpo
+        # antes de instanciar o resource (before_import também verifica,
+        # mas a mensagem fica mais clara retornando aqui).
         if len(dataset) == 0:
             return Response(
                 {"detail": "A planilha está vazia ou não contém linhas de dados."},
                 status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        # Executa a importação via BemPatrimonialResource (mesma lógica do Admin)
         resource = BemPatrimonialResource(request=request)
 
         try:
@@ -479,16 +481,29 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                 use_transactions=True,
             )
         except DjangoValidationError as exc:
-            # ValidationError lançado pelo before_import (ex: usuário sem UA ou UA inativa)
+            # Ponto 2/3: before_import levanta ValidationError quando:
+            # - usuário sem UA ou UA inativa → 403
+            # - cabeçalho inválido, planilha vazia, ou erros em linhas → 422
             mensagem = (
                 exc.message
                 if hasattr(exc, "message") and isinstance(exc.message, str)
                 else "; ".join(exc.messages)
             )
-            return Response(
-                {"detail": mensagem},
-                status=http_status.HTTP_403_FORBIDDEN,
-            )
+
+            # Erros de contexto do usuário (sem UA / UA inativa) → 403
+            if "Unidade Administrativa" in mensagem or "inativa" in mensagem:
+                return Response(
+                    {"detail": mensagem},
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
+            # Erros de validação da planilha → 422 com lista padronizada (Ponto 5)
+            erros = resource._erros_por_linha or []
+            payload: dict = {"detail": mensagem}
+            if erros:
+                payload["erros_por_linha"] = erros
+            return Response(payload, status=http_status.HTTP_422_UNPROCESSABLE_ENTITY)
+
         except Exception as exc:
             return Response(
                 {
@@ -505,34 +520,27 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         conteudo = arquivo.read()
 
         if formato == "csv":
-            # tablib espera string para CSV; tenta UTF-8 e cai em latin-1
             try:
                 texto = conteudo.decode("utf-8")
             except UnicodeDecodeError:
                 texto = conteudo.decode("latin-1")
             return tablib.Dataset().load(texto, headers=True)
 
-        # xlsx / xls: tablib aceita bytes diretamente
         return tablib.Dataset().load(conteudo, headers=True)
 
     def _montar_resposta_importacao(self, result, resource: BemPatrimonialResource) -> Response:
         """
-        Constrói o payload de resposta.
+        Constrói o payload de resposta para o caso de sucesso (201).
 
-        Com a regra tudo-ou-nada, se houve ValidationError no before_import,
-        o importar() já captura e retorna 403/422 antes de chegar aqui.
-        Este método cobre apenas o caso de sucesso total (201).
+        Com a regra tudo-ou-nada (Ponto 2), qualquer erro é capturado no
+        before_import via ValidationError e tratado em importar() antes de
+        chegar aqui. Este método cobre exclusivamente o caminho feliz.
 
-        Erros padronizados: lista de {linha, numero_patrimonial, campo, mensagem}
-        acumulada em resource._erros_por_linha.
+        Erros padronizados (Ponto 5): {linha, numero_patrimonial, campo, mensagem}
+        acumulados em resource._erros_por_linha.
         """
         totais = result.totals
         criados = totais.get("new", 0)
-
-        # Com tudo-ou-nada, _erros_por_linha estará vazio aqui (erros bloqueiam no before_import)
-        erros: list[dict] = resource._erros_por_linha or []
-        total_com_erro = len(erros)
-        tem_erros = total_com_erro > 0
 
         total_linhas = (
             totais.get("new", 0)
@@ -541,26 +549,15 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             + totais.get("error", 0)
         )
 
-        payload = {
-            "importados": criados,
-            "ignorados_com_erro": total_com_erro,
-            "total_linhas": total_linhas,
-        }
-
-        if erros:
-            payload["erros_por_linha"] = erros
-
-        # 422: nada criado (não deveria chegar aqui com tudo-ou-nada, mas mantido por segurança)
-        if criados == 0 and tem_erros:
-            payload["detail"] = (
-                "Nenhum bem foi importado. Todas as linhas contêm erros. "
-                "Corrija o arquivo e tente novamente."
-            )
-            return Response(payload, status=http_status.HTTP_422_UNPROCESSABLE_ENTITY)
-
-        # 201: tudo criado sem erros
-        payload["detail"] = f"{criados} bem(ns) importado(s) com sucesso."
-        return Response(payload, status=http_status.HTTP_201_CREATED)
+        return Response(
+            {
+                "detail": f"{criados} bem(ns) importado(s) com sucesso.",
+                "importados": criados,
+                "ignorados_com_erro": 0,
+                "total_linhas": total_linhas,
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["get"], url_path="historico")
     def historico(self, request, pk=None):
