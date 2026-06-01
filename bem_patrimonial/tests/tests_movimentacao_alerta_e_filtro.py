@@ -10,9 +10,15 @@ from django.utils import timezone
 
 from bem_patrimonial.admins.filters.movimentacao_filters import (
     MovimentacaoAtrasadaFilter,
+    IntervaloNpDeFilter,
+    IntervaloNpAteFilter,
 )
 from bem_patrimonial import constants
-from bem_patrimonial.models import MovimentacaoBemPatrimonial
+from bem_patrimonial.models import (
+    MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
+    BemPatrimonial,
+)
 from bem_patrimonial.templatetags.movimentacoes_pendentes_tags import (
     alerta_movimentacoes_pendentes,
 )
@@ -189,3 +195,254 @@ class MovimentacaoAtrasadaFilterTestCase(TestCase):
         )
         qs = filtro.queryset(request, MovimentacaoBemPatrimonial.objects.all())
         self.assertEqual(qs.count(), 1)
+
+
+# ---------------------------------------------------------------------------
+# Helpers compartilhados pelos testes do filtro de intervalo
+# ---------------------------------------------------------------------------
+
+class IntervaloFilterBaseTestCase(TestCase):
+    """
+    Base com setUp completo: duas UAs, um usuário, duas movimentações
+    com bens de números patrimoniais distintos.
+    """
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.ua_origem = criar_ua(
+            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 102), sigla="UA-O"
+        )
+        self.ua_destino = criar_ua(
+            uo=self.ua_origem.unidade_orcamentaria,
+            nome="UA Destino",
+            codigo=codigo_ua(0, 0, 0, 202),
+            sigla="UA-D",
+        )
+        self.usuario = Usuario.objects.create_user(
+            username="operador3",
+            **auth_kwargs("test123"),
+            unidade_administrativa=self.ua_origem,
+            unidade_orcamentaria=self.ua_origem.unidade_orcamentaria,
+        )
+        self.model_admin = admin.ModelAdmin(MovimentacaoBemPatrimonial, AdminSite())
+
+        # Bem com número baixo — vinculado à movimentação A
+        self.bem_baixo = BemPatrimonial.objects.create(
+            nome="Bem Baixo",
+            numero_patrimonial="003.000000034-8",
+            unidade_administrativa=self.ua_origem,
+            status=constants.APROVADO,
+            valor_unitario="1.00",
+        )
+        # Bem com número alto — vinculado à movimentação B
+        self.bem_alto = BemPatrimonial.objects.create(
+            nome="Bem Alto",
+            numero_patrimonial="480.299999996-9",
+            unidade_administrativa=self.ua_origem,
+            status=constants.APROVADO,
+            valor_unitario="1.00",
+        )
+
+        self.mov_a = MovimentacaoBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.usuario,
+            status=constants.ENVIADA,
+        )
+        MovimentacaoBensItem.objects.create(movimentacao=self.mov_a, bem=self.bem_baixo)
+
+        self.mov_b = MovimentacaoBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.usuario,
+            status=constants.ENVIADA,
+        )
+        MovimentacaoBensItem.objects.create(movimentacao=self.mov_b, bem=self.bem_alto)
+
+    def _filtro_de(self, np_de="", np_ate=""):
+        params = {}
+        if np_de:
+            params["np_de"] = np_de
+        if np_ate:
+            params["np_ate"] = np_ate
+        request = self.factory.get("/admin", params)
+        return IntervaloNpDeFilter(
+            request, params, MovimentacaoBemPatrimonial, self.model_admin
+        ), request
+
+    def _qs(self):
+        return MovimentacaoBemPatrimonial.objects.all()
+
+
+# ---------------------------------------------------------------------------
+# Testes de IntervaloNpDeFilter
+# ---------------------------------------------------------------------------
+
+class IntervaloNpDeFiltroQuerysetTestCase(IntervaloFilterBaseTestCase):
+
+    def test_sem_parametros_retorna_tudo(self):
+        filtro, request = self._filtro_de()
+        qs = filtro.queryset(request, self._qs())
+        self.assertIn(self.mov_a, qs)
+        self.assertIn(self.mov_b, qs)
+
+    def test_apenas_np_de_exclui_abaixo(self):
+        # De: 100... → exclui 003..., mantém 480...
+        filtro, request = self._filtro_de(np_de="100.000000000-0")
+        qs = filtro.queryset(request, self._qs())
+        self.assertNotIn(self.mov_a, qs)
+        self.assertIn(self.mov_b, qs)
+
+    def test_apenas_np_ate_exclui_acima(self):
+        # Até: 200... → mantém 003..., exclui 480...
+        filtro, request = self._filtro_de(np_ate="200.000000000-0")
+        qs = filtro.queryset(request, self._qs())
+        self.assertIn(self.mov_a, qs)
+        self.assertNotIn(self.mov_b, qs)
+
+    def test_range_pega_apenas_mov_a(self):
+        # De: 003... Até: 003... → só mov_a
+        filtro, request = self._filtro_de(
+            np_de="003.000000034-8",
+            np_ate="003.000000034-8",
+        )
+        qs = filtro.queryset(request, self._qs())
+        self.assertIn(self.mov_a, qs)
+        self.assertNotIn(self.mov_b, qs)
+
+    def test_range_pega_apenas_mov_b(self):
+        # De: 480... Até: 480... → só mov_b
+        filtro, request = self._filtro_de(
+            np_de="480.299999996-9",
+            np_ate="480.299999996-9",
+        )
+        qs = filtro.queryset(request, self._qs())
+        self.assertNotIn(self.mov_a, qs)
+        self.assertIn(self.mov_b, qs)
+
+    def test_range_nao_pega_nenhuma(self):
+        # De: 100... Até: 200... — nenhum bem cai nesse intervalo
+        filtro, request = self._filtro_de(
+            np_de="100.000000000-0",
+            np_ate="200.000000000-0",
+        )
+        qs = filtro.queryset(request, self._qs())
+        self.assertNotIn(self.mov_a, qs)
+        self.assertNotIn(self.mov_b, qs)
+
+    def test_range_pega_ambas(self):
+        # De: 001... Até: 999... → ambas
+        filtro, request = self._filtro_de(
+            np_de="001.000000000-0",
+            np_ate="999.000000000-0",
+        )
+        qs = filtro.queryset(request, self._qs())
+        self.assertIn(self.mov_a, qs)
+        self.assertIn(self.mov_b, qs)
+
+    def test_distinct_sem_duplicatas(self):
+        # Movimentação com dois bens no intervalo não deve aparecer duplicada
+        bem_extra = BemPatrimonial.objects.create(
+            nome="Bem Extra",
+            numero_patrimonial="003.000000035-9",
+            unidade_administrativa=self.ua_origem,
+            status=constants.APROVADO,
+            valor_unitario="1.00",
+        )
+        MovimentacaoBensItem.objects.create(movimentacao=self.mov_a, bem=bem_extra)
+
+        filtro, request = self._filtro_de(
+            np_de="003.000000034-8",
+            np_ate="003.000000035-9",
+        )
+        qs = filtro.queryset(request, self._qs())
+        # mov_a tem dois bens no intervalo — sem distinct apareceria duas vezes
+        self.assertEqual(qs.filter(pk=self.mov_a.pk).count(), 1)
+
+    def test_np_de_com_espacos_em_branco_e_ignorado(self):
+        # Valor vazio (só espaços) deve ser tratado como ausente
+        filtro, request = self._filtro_de(np_de="   ", np_ate="   ")
+        qs = filtro.queryset(request, self._qs())
+        self.assertIn(self.mov_a, qs)
+        self.assertIn(self.mov_b, qs)
+
+
+class IntervaloNpDeFiltroMetadataTestCase(IntervaloFilterBaseTestCase):
+
+    def test_has_output_retorna_true(self):
+        filtro, _ = self._filtro_de()
+        self.assertTrue(filtro.has_output())
+
+    def test_lookups_retorna_vazio(self):
+        filtro, request = self._filtro_de()
+        self.assertEqual(list(filtro.lookups(request, self.model_admin)), [])
+
+    def test_choices_retorna_um_item(self):
+        filtro, _ = self._filtro_de()
+        # choices() é um generator — precisa de changelist mock mínimo
+
+        class FakeChangelist:
+            params = {}
+
+            def get_query_string(self, *a, **kw):
+                return ""
+        choices = list(filtro.choices(FakeChangelist()))
+        self.assertEqual(len(choices), 1)
+
+    def test_title(self):
+        filtro, _ = self._filtro_de()
+        self.assertEqual(filtro.title, "Por Intervalo")
+
+    def test_parameter_name(self):
+        filtro, _ = self._filtro_de()
+        self.assertEqual(filtro.parameter_name, "np_de")
+
+    def test_template(self):
+        filtro, _ = self._filtro_de()
+        self.assertEqual(
+            filtro.template,
+            "admin/bem_patrimonial/filters/intervalo_numero_patrimonial.html",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Testes de IntervaloNpAteFilter (filtro fantasma)
+# ---------------------------------------------------------------------------
+
+class IntervaloNpAteFiltroTestCase(IntervaloFilterBaseTestCase):
+
+    def _filtro_ate(self, np_ate=""):
+        params = {"np_ate": np_ate} if np_ate else {}
+        request = self.factory.get("/admin", params)
+        return IntervaloNpAteFilter(
+            request, params, MovimentacaoBemPatrimonial, self.model_admin
+        ), request
+
+    def test_has_output_retorna_false(self):
+        filtro, _ = self._filtro_ate()
+        self.assertFalse(filtro.has_output())
+
+    def test_queryset_nao_filtra(self):
+        # O filtro fantasma nunca altera o queryset
+        filtro, request = self._filtro_ate(np_ate="003.000000034-8")
+        qs_original = self._qs()
+        qs_filtrado = filtro.queryset(request, qs_original)
+        self.assertEqual(
+            list(qs_original.order_by("pk")),
+            list(qs_filtrado.order_by("pk")),
+        )
+
+    def test_lookups_retorna_vazio(self):
+        filtro, request = self._filtro_ate()
+        self.assertEqual(list(filtro.lookups(request, self.model_admin)), [])
+
+    def test_parameter_name(self):
+        filtro, _ = self._filtro_ate()
+        self.assertEqual(filtro.parameter_name, "np_ate")
+
+    def test_template_vazio(self):
+        filtro, _ = self._filtro_ate()
+        self.assertEqual(
+            filtro.template,
+            "admin/bem_patrimonial/filters/filtro_vazio.html",
+        )
