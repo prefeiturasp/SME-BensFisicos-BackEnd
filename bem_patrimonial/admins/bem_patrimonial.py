@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html
 from django.utils import timezone
 from django.template.response import TemplateResponse
+import re
 
 from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
@@ -187,24 +188,282 @@ class HistoricoGeralInline(GenericTabularInline):
         return False
 
 
+# ---------------------------------------------------------------------------
+# Colunas aceitas na planilha de importação (Ponto 1)
+# ---------------------------------------------------------------------------
+
+COLUNAS_MODELO = (
+    "numero_patrimonial",
+    "nome",
+    "descricao",
+    "valor_unitario",
+    "marca",
+    "modelo",
+)
+
+
 class BemPatrimonialResource(resources.ModelResource):
+    """
+    Resource usado pelo django-import-export no Django Admin.
+
+    Comportamento aplicado na importação:
+    - Aceita apenas planilhas com exatamente as 6 colunas do modelo.
+    - Valida o arquivo INTEIRO antes de salvar qualquer bem (tudo ou nada).
+    - Se houver qualquer erro, rejeita toda a carga sem salvar nada.
+    - Todos os bens importados entram com status Aguardando Aprovação.
+    - A Unidade Administrativa usada é sempre a do usuário logado.
+    - marca e modelo em branco são normalizados para "-".
+    - Retorno de erros padronizado: {linha, numero_patrimonial, campo, mensagem}.
+    """
+
+    NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
+
+    # Campo customizado para valor_unitario: normaliza vírgula → ponto antes
+    # de passar ao widget DecimalWidget do django-import-export, evitando
+    # decimal.InvalidOperation quando o usuário digita "2,50" na planilha.
+    valor_unitario = resources.Field(
+        column_name="valor_unitario",
+        attribute="valor_unitario",
+    )
+
     class Meta:
         model = BemPatrimonial
         fields = (
-            "id",
-            "status",
+            "numero_patrimonial",
             "nome",
-            "marca",
-            "modelo",
             "descricao",
             "valor_unitario",
-            "numero_processo",
-            "numero_patrimonial",
-            "localizacao",
-            "criado_por__nome",
-            "criado_em",
+            "marca",
+            "modelo",
         )
         export_order = fields
+        import_id_fields = ()
+        skip_unchanged = False
+        report_skipped = True
+
+    def __init__(self, *args, **kwargs):
+        self.request = kwargs.pop("request", None)
+        super().__init__(*args, **kwargs)
+        self._erros_por_linha: list[dict] = []
+        self._mensagens_exibidas = False
+
+    # ------------------------------------------------------------------
+    # Helpers internos
+    # ------------------------------------------------------------------
+
+    def _normalizar_valor(self, value):
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def _registrar_erro(self, linha: int, numero_patrimonial: str, campo: str, mensagem: str):
+        """Registra erro padronizado: {linha, numero_patrimonial, campo, mensagem}"""
+        self._erros_por_linha.append({
+            "linha": linha,
+            "numero_patrimonial": numero_patrimonial or "-",
+            "campo": campo,
+            "mensagem": mensagem,
+        })
+
+    def _parse_valor_unitario(self, raw: str, linha: int, numero_patrimonial: str):
+        """Converte string para Decimal. Registra erro e retorna None se inválido."""
+        if not raw:
+            self._registrar_erro(linha, numero_patrimonial, "valor_unitario", "Campo obrigatório.")
+            return None
+        try:
+            from decimal import Decimal, InvalidOperation
+            normalizado = raw.strip().replace(".", "").replace(",", ".")
+            valor = Decimal(normalizado)
+        except (InvalidOperation, ValueError):
+            self._registrar_erro(
+                linha, numero_patrimonial, "valor_unitario",
+                "Valor inválido. Use o formato 0,00 ou 0.000,00."
+            )
+            return None
+        if valor < 0:
+            self._registrar_erro(
+                linha, numero_patrimonial, "valor_unitario",
+                "O valor unitário não pode ser negativo."
+            )
+            return None
+        return valor
+
+    # ------------------------------------------------------------------
+    # Validação completa do dataset — tudo ou nada (Ponto 2 e 3)
+    # ------------------------------------------------------------------
+
+    def _validar_cabecalho(self, dataset):
+        """Verifica se as colunas correspondem exatamente ao modelo."""
+        headers = {str(h).strip().lower() for h in (dataset.headers or [])}
+        esperados = set(COLUNAS_MODELO)
+        faltando = esperados - headers
+        extras = headers - esperados
+        if faltando or extras:
+            partes = []
+            if faltando:
+                partes.append(f"colunas faltando: {', '.join(sorted(faltando))}")
+            if extras:
+                partes.append(f"colunas não esperadas: {', '.join(sorted(extras))}")
+            return f"Cabeçalho inválido — {'; '.join(partes)}. Use o modelo oficial."
+        return None
+
+    def _validar_campos_obrigatorios(self, idx, numero_patrimonial, row):
+        """Valida campos obrigatórios de texto de uma linha.
+
+        marca e modelo NÃO são validados aqui — valores vazios são normalizados
+        para "-" no before_import_row (regra de negócio definida na história).
+        """
+        msg = "Campo obrigatório."
+        for campo in ("nome", "descricao"):
+            if not self._normalizar_valor(row.get(campo)):
+                self._registrar_erro(idx, numero_patrimonial, campo, msg)
+
+    def _validar_numero_patrimonial(self, idx, numero_patrimonial, numeros_vistos):
+        """Valida duplicidade do número patrimonial no arquivo e no banco."""
+        if not numero_patrimonial:
+            return
+
+        numero_key = numero_patrimonial.lower()
+        linha_anterior = numeros_vistos.get(numero_key)
+
+        if linha_anterior:
+            self._registrar_erro(
+                idx, numero_patrimonial, "numero_patrimonial",
+                f"Número patrimonial duplicado no arquivo. "
+                f"Primeira ocorrência na linha {linha_anterior}."
+            )
+            return
+
+        numeros_vistos[numero_key] = idx
+
+        if BemPatrimonial.objects.filter(
+            numero_patrimonial__iexact=numero_patrimonial
+        ).exists():
+            self._registrar_erro(
+                idx, numero_patrimonial, "numero_patrimonial",
+                "Número patrimonial já cadastrado no sistema."
+            )
+
+    def _validar_dataset_completo(self, dataset):
+        """
+        Valida TODAS as linhas antes de salvar qualquer uma.
+        Implementa tudo-ou-nada: acumula todos os erros e retorna a lista.
+        """
+        self._erros_por_linha = []
+        numeros_vistos: dict[str, int] = {}
+
+        for idx, row in enumerate(dataset.dict, start=1):
+            numero_patrimonial = self._normalizar_valor(row.get("numero_patrimonial"))
+            valor_raw = self._normalizar_valor(row.get("valor_unitario"))
+
+            self._validar_campos_obrigatorios(idx, numero_patrimonial, row)
+            self._parse_valor_unitario(valor_raw, idx, numero_patrimonial)
+            self._validar_numero_patrimonial(idx, numero_patrimonial, numeros_vistos)
+
+        return self._erros_por_linha
+
+    # ------------------------------------------------------------------
+    # Hooks do django-import-export
+    # ------------------------------------------------------------------
+
+    def before_import(self, dataset, *args, **kwargs):
+        """
+        Valida contexto do usuário e o dataset completo antes de processar qualquer linha.
+        Tudo ou nada: qualquer erro rejeita a carga inteira.
+        """
+        self._erros_por_linha = []
+        self._mensagens_exibidas = False
+
+        if not self.request:
+            return
+
+        ua_usuario = getattr(self.request.user, "unidade_administrativa", None)
+        if not ua_usuario:
+            raise ValidationError(
+                "Não é possível importar bens: seu usuário não possui uma "
+                "Unidade Administrativa vinculada. "
+                "Entre em contato com o gestor de patrimônio."
+            )
+        if not ua_usuario.is_ativa:
+            raise ValidationError(
+                f"Não é possível importar bens: sua Unidade Administrativa "
+                f"'{ua_usuario.nome}' está inativa. "
+                "Entre em contato com o gestor de patrimônio."
+            )
+
+        if len(dataset) == 0:
+            raise ValidationError("A planilha está vazia ou não contém linhas de dados.")
+
+        erro_cabecalho = self._validar_cabecalho(dataset)
+        if erro_cabecalho:
+            raise ValidationError(erro_cabecalho)
+
+        erros = self._validar_dataset_completo(dataset)
+        if erros:
+            if self.request:
+                qtd = len(erros)
+                messages.error(
+                    self.request,
+                    f"Importação rejeitada: {qtd} linha(s) com erro. Nenhum bem foi importado."
+                )
+                for erro in erros[:20]:
+                    messages.warning(
+                        self.request,
+                        f"Linha {erro['linha']} | {erro['numero_patrimonial']} | "
+                        f"{erro['campo']}: {erro['mensagem']}"
+                    )
+                if qtd > 20:
+                    messages.warning(
+                        self.request,
+                        f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima."
+                    )
+            raise ValidationError(
+                f"Importação rejeitada: {len(erros)} linha(s) com erro. "
+                "Corrija o arquivo e tente novamente."
+            )
+
+    def before_import_row(self, row, row_number=None, **kwargs):
+        """Força status, limpa ID, normaliza marca/modelo e valor_unitario."""
+        for header in ("id", "ID", "Id"):
+            if header in row:
+                row[header] = None
+        for header in ("status", "STATUS", "Status"):
+            if header in row:
+                row[header] = constants.AGUARDANDO_APROVACAO
+        # Ponto 4: marca e modelo vazios → "-"
+        for campo in ("marca", "modelo"):
+            valor = self._normalizar_valor(row.get(campo))
+            row[campo] = valor if valor else "-"
+        # Normaliza valor_unitario: "2,50" → "2.50" para o DecimalWidget
+        if "valor_unitario" in row:
+            raw = self._normalizar_valor(row.get("valor_unitario"))
+            if raw:
+                row["valor_unitario"] = raw.replace(".", "").replace(",", ".")
+
+    def get_instance(self, instance_loader, row):
+        return None
+
+    def before_save_instance(self, instance, *args, **kwargs):
+        instance.pk = None
+        instance.id = None
+        if self.request:
+            if not instance.criado_por_id:
+                instance.criado_por = self.request.user
+            instance.unidade_administrativa = self.request.user.unidade_administrativa
+        instance.status = constants.AGUARDANDO_APROVACAO
+        numero_patrimonial = self._normalizar_valor(instance.numero_patrimonial)
+        if not numero_patrimonial:
+            instance.numero_patrimonial = None
+            instance.sem_numeracao = True
+            instance.numero_formato_antigo = False
+            return
+        instance.sem_numeracao = False
+        instance.numero_formato_antigo = not bool(
+            re.fullmatch(self.NEW_FMT_RE, numero_patrimonial)
+        )
+
+    def after_import(self, dataset, result, *args, **kwargs):
+        super().after_import(dataset, result, *args, **kwargs)
 
 
 class BemPatrimonialAdmin(ImportExportModelAdmin):
@@ -705,6 +964,10 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
         return queryset
 
+    def get_import_formats(self):
+        """Restringe a importação a CSV, XLS e XLSX — alinhado com a API."""
+        return [CSV, XLS, XLSX]
+
     def get_export_formats(self):
         return [CSV, XLSX, XLS, HTML, PDFFormat]
 
@@ -954,7 +1217,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         except Exception:
             pass
         return "—"
-    
+
     def _aplicar_filtros_autocomplete_bem(self, request, qs, use_distinct):
         app_label = request.GET.get("app_label")
         model_name = request.GET.get("model_name")
@@ -1013,7 +1276,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
             qs = qs.exclude(pk__in=ids)
 
         return qs, use_distinct
-    
+
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context=extra_context)
 
