@@ -76,7 +76,7 @@
 }
 
 .filtro-intervalo-np-actions button[type="submit"]:hover {
-  background: var(--primary-fg, #245269);
+  background: #2b5268;
 }
 
 .filtro-intervalo-np-limpar {

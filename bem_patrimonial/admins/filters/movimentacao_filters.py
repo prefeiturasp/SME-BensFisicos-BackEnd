@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.utils import timezone
 
 from bem_patrimonial import constants
+from bem_patrimonial.models import MovimentacaoBensItem
 
 
 class MovimentacaoAtrasadaFilter(admin.SimpleListFilter):
@@ -53,7 +54,6 @@ class IntervaloNpDeFilter(admin.SimpleListFilter):
         return True
 
     def choices(self, changelist):
-        # Necessário retornar ao menos um item para o template ser renderizado
         yield {}
 
     def queryset(self, request, queryset):
@@ -63,16 +63,22 @@ class IntervaloNpDeFilter(admin.SimpleListFilter):
         if not np_de and not np_ate:
             return queryset
 
-        if np_de:
-            queryset = queryset.filter(
-                itens__bem__numero_patrimonial__gte=np_de
-            )
-        if np_ate:
-            queryset = queryset.filter(
-                itens__bem__numero_patrimonial__lte=np_ate
-            )
+        # Ponto 2: restringir apenas a bens no formato padrão
+        # (sem_numeracao=False e numero_formato_antigo=False)
+        itens_qs = MovimentacaoBensItem.objects.filter(
+            bem__sem_numeracao=False,
+            bem__numero_formato_antigo=False,
+        )
 
-        return queryset.distinct()
+        # Ponto 1: garantir que o mesmo item atenda ambos os limites.
+        # Aplicar os dois filtros na mesma subquery, não em joins separados.
+        if np_de:
+            itens_qs = itens_qs.filter(bem__numero_patrimonial__gte=np_de)
+        if np_ate:
+            itens_qs = itens_qs.filter(bem__numero_patrimonial__lte=np_ate)
+
+        movimentacao_ids = itens_qs.values_list("movimentacao_id", flat=True)
+        return queryset.filter(pk__in=movimentacao_ids)
 
 
 class IntervaloNpAteFilter(admin.SimpleListFilter):
@@ -91,9 +97,7 @@ class IntervaloNpAteFilter(admin.SimpleListFilter):
         return ()
 
     def has_output(self):
-        # Não renderiza bloco visual na barra lateral
         return False
 
     def queryset(self, request, queryset):
-        # A filtragem é feita inteiramente em IntervaloNpDeFilter
         return queryset
