@@ -26,7 +26,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.functions import Cast
 
 from bem_patrimonial import constants
-from bem_patrimonial.admins.bem_patrimonial_admin import BemPatrimonialResource
+from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialResource
 from bem_patrimonial.serializers.bem_patrimonial_serializers import (
     BemPatrimonialListSerializer,
     BemPatrimonialDetailSerializer,
