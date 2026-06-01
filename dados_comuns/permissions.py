@@ -1,6 +1,8 @@
 from rest_framework.permissions import BasePermission
 from rest_framework.exceptions import PermissionDenied
 
+from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
+
 
 class BemPatrimonialPermission(BasePermission):
     """
@@ -63,6 +65,36 @@ class BemPatrimonialPermission(BasePermission):
             )
 
         return True
+
+
+class MovimentacaoBemPatrimonialPermission(BasePermission):
+    """
+    Permissão para a API de movimentações:
+    - acesso ao módulo: gestor, operador ou superuser;
+    - leitura e ações de workflow respeitam a mesma regra de escopo do queryset.
+    """
+
+    def _pode_acessar_modulo(self, user):
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "is_superuser", False):
+            return True
+        return bool(
+            getattr(user, "is_gestor_patrimonio", False)
+            or getattr(user, "is_operador_inventario", False)
+        )
+
+    def has_permission(self, request, view):
+        return self._pode_acessar_modulo(request.user)
+
+    def has_object_permission(self, request, view, obj):
+        from bem_patrimonial.models import MovimentacaoBemPatrimonial
+
+        if not self._pode_acessar_modulo(request.user):
+            return False
+
+        queryset = MovimentacaoBemPatrimonial.objects.filter(pk=obj.pk)
+        return filtrar_queryset_movimentacao_por_escopo(request.user, queryset).exists()
 
 
 class UnidadeAdministrativaPermission(BasePermission):

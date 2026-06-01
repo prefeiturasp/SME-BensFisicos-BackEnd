@@ -1,3 +1,4 @@
+import os
 import re
 from decimal import Decimal, InvalidOperation
 
@@ -549,3 +550,42 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
             raise serializers.ValidationError({"linhas": linhas_errors})
 
         return attrs
+
+
+# ---------------------------------------------------------------------------
+# Importação via planilha
+# ---------------------------------------------------------------------------
+
+class ImportacaoBemPatrimonialSerializer(serializers.Serializer):
+    """
+    Serializer de entrada para importação em lote via planilha.
+
+    Valida apenas o arquivo recebido — toda a lógica de negócio
+    (UA/UO, número patrimonial, duplicidade, status, sem_numeracao, etc.)
+    fica no BemPatrimonialResource, garantindo paridade total com o Admin.
+    """
+
+    arquivo = serializers.FileField(
+        help_text=(
+            "Planilha com os bens a importar. "
+            "Formatos aceitos: XLSX, XLS, CSV. "
+            "Tamanho máximo: 10 MB."
+        )
+    )
+
+    def validate_arquivo(self, value):
+        max_bytes = 10 * 1024 * 1024  # 10 MB
+        if value.size > max_bytes:
+            raise serializers.ValidationError(
+                "O arquivo excede o tamanho máximo permitido de 10 MB."
+            )
+
+        _, ext = os.path.splitext((value.name or "").lower())
+        formatos_aceitos = {".xlsx", ".xls", ".csv"}
+        if ext not in formatos_aceitos:
+            raise serializers.ValidationError(
+                f"Formato de arquivo não suportado: '{value.name}'. "
+                "Use XLSX, XLS ou CSV."
+            )
+
+        return value

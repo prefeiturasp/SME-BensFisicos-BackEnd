@@ -180,3 +180,4 @@ cython_debug/
 .vscode/launch.json
 docker-compose-dev.yml
 docker-compose-ok.yml
+requirements.dev.txt
