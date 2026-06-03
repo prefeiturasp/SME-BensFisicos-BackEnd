@@ -24,6 +24,7 @@ from bem_patrimonial.models import (
 from bem_patrimonial.formats import PDFFormat
 from import_export.admin import ImportExportModelAdmin
 from import_export import resources
+from import_export.widgets import DecimalWidget
 from rangefilter.filters import DateRangeFilter
 from import_export.formats.base_formats import CSV, XLS, XLSX, HTML
 from django.contrib.contenttypes.models import ContentType
@@ -218,12 +219,12 @@ class BemPatrimonialResource(resources.ModelResource):
 
     NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
 
-    # Campo customizado para valor_unitario: normaliza vírgula → ponto antes
-    # de passar ao widget DecimalWidget do django-import-export, evitando
-    # decimal.InvalidOperation quando o usuário digita "2,50" na planilha.
+    # Campo com widget DecimalWidget explícito para aceitar vírgula como separador decimal.
+    # A normalização vírgula→ponto é feita no before_import_row antes de chegar aqui.
     valor_unitario = resources.Field(
         column_name="valor_unitario",
         attribute="valor_unitario",
+        widget=DecimalWidget(),
     )
 
     class Meta:
@@ -237,9 +238,11 @@ class BemPatrimonialResource(resources.ModelResource):
             "modelo",
         )
         export_order = fields
-        import_id_fields = ()
+        # "id" como import_id_fields faz o pipeline de hidratação funcionar corretamente,
+        # enquanto get_instance retornando None garante que sempre será criado um novo registro.
+        import_id_fields = ["id"]
         skip_unchanged = False
-        report_skipped = True
+        report_skipped = False
 
     def __init__(self, *args, **kwargs):
         self.request = kwargs.pop("request", None)
@@ -424,16 +427,18 @@ class BemPatrimonialResource(resources.ModelResource):
 
     def before_import_row(self, row, row_number=None, **kwargs):
         """Força status, limpa ID, normaliza marca/modelo e valor_unitario."""
-        for header in ("id", "ID", "Id"):
-            if header in row:
-                row[header] = None
-        for header in ("status", "STATUS", "Status"):
-            if header in row:
-                row[header] = constants.AGUARDANDO_APROVACAO
+        # Remove colunas que não fazem parte do modelo de importação para
+        # evitar que o django-import-export tente mapeá-las (ex: id, status
+        # presentes em planilhas exportadas pelo próprio sistema).
+        for header in row.keys():
+            if header.lower() not in COLUNAS_MODELO:
+                del row[header]
+
         # Ponto 4: marca e modelo vazios → "-"
         for campo in ("marca", "modelo"):
             valor = self._normalizar_valor(row.get(campo))
             row[campo] = valor if valor else "-"
+
         # Normaliza valor_unitario: "2,50" → "2.50" para o DecimalWidget
         if "valor_unitario" in row:
             raw = self._normalizar_valor(row.get("valor_unitario"))
@@ -441,6 +446,7 @@ class BemPatrimonialResource(resources.ModelResource):
                 row["valor_unitario"] = raw.replace(".", "").replace(",", ".")
 
     def get_instance(self, instance_loader, row):
+        # Sempre retorna None para forçar criação de novo registro.
         return None
 
     def before_save_instance(self, instance, *args, **kwargs):
