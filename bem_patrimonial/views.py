@@ -3,15 +3,21 @@ from collections import defaultdict
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from django.db.models import OuterRef, Subquery
 from django.db import models, transaction
 
+import os
+
+import tablib
+
 from rest_framework import viewsets, status as http_status
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
@@ -20,10 +26,12 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.functions import Cast
 
 from bem_patrimonial import constants
+from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialResource
 from bem_patrimonial.serializers.bem_patrimonial_serializers import (
     BemPatrimonialListSerializer,
     BemPatrimonialDetailSerializer,
     BemPatrimonialMultiCreateSerializer,
+    ImportacaoBemPatrimonialSerializer,
 )
 from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
 
@@ -43,6 +51,13 @@ from dados_comuns.escopo import (
     filtrar_queryset_transferencia_por_escopo,
     validar_bem_no_escopo_com_transferencia,
 )
+
+# Mapeamento extensão → formato tablib
+_EXTENSAO_PARA_FORMATO = {
+    ".xlsx": "xlsx",
+    ".xls": "xls",
+    ".csv": "csv",
+}
 
 
 @login_required
@@ -172,6 +187,8 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == "list":
             return BemPatrimonialListSerializer
+        if self.action == "importar":
+            return ImportacaoBemPatrimonialSerializer
         return BemPatrimonialDetailSerializer
 
     def get_queryset(self):
@@ -273,6 +290,10 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             queryset=BemPatrimonial.objects.all(),
             campo_ua="unidade_administrativa",
         )
+
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
 
     @action(detail=False, methods=["post"], url_path="multi")
     def create_multi(self, request):
@@ -395,6 +416,156 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                 "ignorados": count_outros,
             },
             status=http_status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="importar",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def importar(self, request):
+        """
+        POST /api/bens/importar/
+
+        Importa bens patrimoniais em lote a partir de uma planilha XLSX, XLS ou CSV.
+        Envia o arquivo no campo `arquivo` via multipart/form-data.
+
+        Status de retorno:
+          400 — arquivo ausente, extensão inválida ou tamanho excedido
+          403 — usuário sem UA vinculada ou UA inativa
+          422 — planilha inválida (vazia, cabeçalho errado, duplicidade,
+                valor inválido etc.); sempre acompanha erros_por_linha padronizado
+          201 — importação realizada com sucesso (tudo ou nada)
+
+        Regras:
+        - Apenas 6 colunas aceitas: numero_patrimonial, nome, descricao,
+          valor_unitario, marca, modelo.
+        - Tudo ou nada: qualquer erro rejeita a carga inteira.
+        - UA sempre a do usuário autenticado.
+        - Todos os bens criados entram com status Aguardando Aprovação.
+        - marca e modelo vazios são normalizados para "-".
+        """
+        input_serializer = ImportacaoBemPatrimonialSerializer(data=request.data)
+        if not input_serializer.is_valid():
+            return Response(
+                {
+                    "detail": "Arquivo inválido.",
+                    "erros": input_serializer.errors,
+                },
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        arquivo = input_serializer.validated_data["arquivo"]
+
+        # Detecta o formato a partir da extensão validada pelo serializer
+        _, ext = os.path.splitext((arquivo.name or "").lower())
+        formato = _EXTENSAO_PARA_FORMATO[ext]
+
+        # Lê o arquivo em um Dataset tablib
+        try:
+            dataset = self._ler_planilha(arquivo, formato)
+        except Exception as exc:
+            return Response(
+                {
+                    "detail": "Não foi possível ler a planilha.",
+                    "erro": str(exc),
+                },
+                status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        if len(dataset) == 0:
+            return Response(
+                {"detail": "A planilha está vazia ou não contém linhas de dados."},
+                status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        # Executa a importação via BemPatrimonialResource (mesma lógica do Admin)
+        resource = BemPatrimonialResource(request=request)
+
+        try:
+            result = resource.import_data(
+                dataset,
+                dry_run=False,
+                raise_errors=False,
+                use_transactions=True,
+            )
+        except DjangoValidationError as exc:
+            # ValidationError lançado pelo before_import.
+            # Distingue entre erro de permissão (403) e erro de planilha (422).
+            mensagem = (
+                exc.message
+                if hasattr(exc, "message") and isinstance(exc.message, str)
+                else "; ".join(exc.messages)
+            )
+
+            # 403: falta de permissão — usuário sem UA ou UA inativa
+            eh_erro_permissao = (
+                "Unidade Administrativa" in mensagem
+                or "inativa" in mensagem
+            )
+            if eh_erro_permissao:
+                return Response(
+                    {"detail": mensagem},
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
+            # 422: erro de validação da planilha (cabeçalho, duplicidade, campos inválidos)
+            erros = resource._erros_por_linha or []
+            payload: dict = {"detail": mensagem}
+            if erros:
+                payload["erros_por_linha"] = erros
+            return Response(payload, status=http_status.HTTP_422_UNPROCESSABLE_ENTITY)
+        except Exception as exc:
+            return Response(
+                {
+                    "detail": "Erro inesperado durante a importação.",
+                    "erro": str(exc),
+                },
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return self._montar_resposta_importacao(result, resource)
+
+    def _ler_planilha(self, arquivo, formato: str) -> tablib.Dataset:
+        """Lê o arquivo enviado e retorna um tablib.Dataset."""
+        conteudo = arquivo.read()
+
+        if formato == "csv":
+            # tablib espera string para CSV; tenta UTF-8 e cai em latin-1
+            try:
+                texto = conteudo.decode("utf-8")
+            except UnicodeDecodeError:
+                texto = conteudo.decode("latin-1")
+            return tablib.Dataset().load(texto, headers=True)
+
+        # xlsx / xls: tablib aceita bytes diretamente
+        return tablib.Dataset().load(conteudo, headers=True)
+
+    def _montar_resposta_importacao(self, result, resource: BemPatrimonialResource) -> Response:
+        """
+        Constrói o payload de resposta para o caso de sucesso (201).
+
+        Com a regra tudo-ou-nada, qualquer erro de planilha é capturado no
+        before_import (ValidationError) e tratado em importar() como 422 antes
+        de chegar aqui. Este método cobre exclusivamente o caminho feliz.
+        """
+        totais = result.totals
+        criados = totais.get("new", 0)
+        total_linhas = (
+            totais.get("new", 0)
+            + totais.get("skip", 0)
+            + totais.get("invalid", 0)
+            + totais.get("error", 0)
+        )
+        return Response(
+            {
+                "detail": f"{criados} bem(ns) importado(s) com sucesso.",
+                "importados": criados,
+                "ignorados_com_erro": 0,
+                "total_linhas": total_linhas,
+            },
+            status=http_status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["get"], url_path="historico")

@@ -9,7 +9,10 @@ from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
 )
 from bem_patrimonial.admins.filters.movimentacao_filters import (
     MovimentacaoAtrasadaFilter,
+    IntervaloNpDeFilter,
+    IntervaloNpAteFilter,
 )
+
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
 )
@@ -441,7 +444,12 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "unidade_administrativa_destino",
     )
 
-    list_filter = ("status", MovimentacaoAtrasadaFilter)
+    list_filter = (
+        "status",
+        MovimentacaoAtrasadaFilter,
+        IntervaloNpDeFilter,
+        IntervaloNpAteFilter,
+    )
     actions = [
         aprovar_solicitacao,
         rejeitar_solicitacao,
@@ -463,6 +471,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 "css/prevenir_duplo_submit.css",
                 "css/custom_inline.css",
                 "css/hide_crud_icons.css",
+                "css/admin_filtros.css",
             )
         }
 

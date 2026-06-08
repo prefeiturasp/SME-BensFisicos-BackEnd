@@ -17,3 +17,74 @@
   box-sizing: border-box;
   padding: 4px 6px;
 }
+
+/* Estilos do filtro de intervalo de número patrimonial */
+#filtro-intervalo-np-list {
+  padding: 3px 0 6px;
+}
+
+.filtro-intervalo-np-field {
+  list-style: none;
+  padding: 3px 15px 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.filtro-intervalo-np-field label {
+  font-size: 0.8rem;
+  color: var(--body-quiet-color, #999);
+}
+
+.filtro-intervalo-np-field input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--darkened-bg, #1a1a1a);
+  border: 1px solid var(--border-color, #555);
+  border-radius: 3px;
+  color: var(--body-fg, #f5f5f5);
+  font-size: 0.8rem;
+  padding: 4px 7px;
+}
+
+.filtro-intervalo-np-field input[type="text"]:focus {
+  border-color: var(--link-fg, #79aec8);
+  outline: none;
+}
+
+.filtro-intervalo-np-field input[type="text"]::placeholder {
+  color: var(--body-quiet-color, #777);
+  font-size: 0.75rem;
+}
+
+.filtro-intervalo-np-actions {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 15px 4px;
+}
+
+.filtro-intervalo-np-actions button[type="submit"] {
+  background: var(--primary, #417690);
+  border: none;
+  border-radius: 3px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 4px 14px;
+}
+
+.filtro-intervalo-np-actions button[type="submit"]:hover {
+  background: #2b5268;
+}
+
+.filtro-intervalo-np-limpar {
+  color: var(--link-fg, #79aec8);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.filtro-intervalo-np-limpar:hover {
+  text-decoration: underline;
+}
