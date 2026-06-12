@@ -390,7 +390,8 @@ def _criar_informacoes_complementares(transferencia):
     ]
 
 
-def _criar_rodape_ntbpm():
+def _criar_rodape_ntbpm(transferencia=None):
+    _ = transferencia
     return criar_tabela_rodape_responsaveis(
         label_esquerda="RESPONSÁVEL DA UNIDADE ORÇAMENTÁRIA QUE TRANSFERE",
         label_direita="RESPONSÁVEL DA UNIDADE ORÇAMENTÁRIA QUE RECEBE",
