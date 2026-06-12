@@ -156,7 +156,7 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
             [self.ua_origem.id, self.ua_origem_2.id],
         )
 
-    def test_form_rejeita_numero_processo_duplicado(self):
+    def test_form_aceita_numero_processo_duplicado(self):
         TransferenciaBemPatrimonial.objects.create(
             unidade_orcamentaria_origem=self.uo_origem,
             unidade_orcamentaria_destino=self.uo_destino,
@@ -174,8 +174,28 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
             request=type("obj", (object,), {"user": self.gestor})(),
         )
 
-        self.assertFalse(form.is_valid())
-        self.assertIn("numero_processo", form.errors)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertNotIn("numero_processo", form.errors)
+
+    def test_admin_list_exibe_multiplas_transferencias_mesmo_processo(self):
+        TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino,
+            numero_processo="SEI-MULT/2026",
+            criado_por=self.gestor,
+        )
+        TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino_2,
+            numero_processo="SEI-MULT/2026",
+            criado_por=self.gestor,
+        )
+
+        qs = TransferenciaBemPatrimonial.objects.filter(numero_processo="SEI-MULT/2026")
+
+        self.assertEqual(qs.count(), 2)
 
     def test_change_form_nao_quebra_quando_campos_model_sao_readonly(self):
         transferencia = TransferenciaBemPatrimonial.objects.create(

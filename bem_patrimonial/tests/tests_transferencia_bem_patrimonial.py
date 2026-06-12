@@ -163,7 +163,7 @@ class TransferenciaBemPatrimonialModelTestCase(TestCase):
         self.assertIn("status 'Aprovado'", str(ctx.exception))
         self.assertFalse(transferencia.numero_ntbpm)
 
-    def test_numero_processo_da_transferencia_deve_ser_unico(self):
+    def test_numero_processo_da_transferencia_pode_ser_repetido(self):
         self._criar_transferencia()
         transferencia = TransferenciaBemPatrimonial(
             unidade_orcamentaria_origem=self.uo_origem,
@@ -174,7 +174,53 @@ class TransferenciaBemPatrimonialModelTestCase(TestCase):
             criado_por=self.gestor,
         )
 
-        with self.assertRaises(ValidationError) as ctx:
-            transferencia.full_clean()
+        transferencia.full_clean()
+        transferencia.save()
 
-        self.assertIn("numero_processo", ctx.exception.message_dict)
+        self.assertEqual(
+            TransferenciaBemPatrimonial.objects.filter(
+                numero_processo="SEI-123456/2026"
+            ).count(),
+            2,
+        )
+
+    def test_model_permite_multiplas_transferencias_mesmo_processo(self):
+        t1 = self._criar_transferencia()
+        t2 = TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino,
+            numero_processo="SEI-123456/2026",
+            observacao="Segunda transferência no mesmo processo",
+            criado_por=self.gestor,
+        )
+
+        self.assertEqual(t1.numero_processo, t2.numero_processo)
+        self.assertNotEqual(t1.pk, t2.pk)
+
+    def test_efetivar_transferencia_com_multiplos_processos_iguais(self):
+        bem1 = self._criar_bem("001.000000006-6", self.ua_origem_1)
+        bem2 = self._criar_bem("001.000000007-7", self.ua_origem_2)
+
+        t1 = self._criar_transferencia()
+        TransferenciaBensItem.objects.create(transferencia=t1, bem=bem1)
+        t1.efetivar_transferencia(self.gestor)
+
+        t2 = TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino,
+            numero_processo="SEI-123456/2026",
+            observacao="Segunda transferência no mesmo processo",
+            criado_por=self.gestor,
+        )
+        TransferenciaBensItem.objects.create(transferencia=t2, bem=bem2)
+        t2.efetivar_transferencia(self.gestor)
+
+        bem2.refresh_from_db()
+        t2.refresh_from_db()
+        self.assertEqual(bem2.unidade_administrativa, self.ua_destino)
+        self.assertEqual(bem2.status, constants.TRANSFERIDO)
+        self.assertTrue(t2.numero_ntbpm)
+        self.assertEqual(t1.numero_processo, t2.numero_processo)
+        self.assertNotEqual(t1.numero_ntbpm, t2.numero_ntbpm)
