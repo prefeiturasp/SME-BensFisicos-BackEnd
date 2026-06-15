@@ -911,7 +911,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
         "Número do processo de Baixa Física",
         max_length=64,
         null=False,
-        blank=False,
+        blank=True,
+        default="",
     )
 
     status = models.CharField(
@@ -939,7 +940,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
     data_baixa = models.DateField(
         "Data da Baixa Física",
-        default=timezone.now,
+        null=True,
+        blank=True,
         help_text="Data informada no processo de baixa física",
     )
 
@@ -970,6 +972,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
         return f"Baixa Física #{self.pk} - UA: {self.unidade_administrativa_origem}"
 
     def _clean_valida_data_baixa(self):
+        # data_baixa agora é opcional; valida apenas se informada
         if not self.data_baixa:
             return
         data_baixa = (
@@ -1008,12 +1011,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
     def clean(self):
         super().clean()
         self._clean_valida_data_baixa()
-        if not self.numero_processo_baixa:
-            raise ValidationError(
-                {
-                    "numero_processo_baixa": "Informe o número do processo de Baixa Física."
-                }
-            )
+
         if not self.pk:
             return
         itens = list(self.itens.select_related("bem", "bem__unidade_administrativa"))
@@ -1024,7 +1022,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
     @transaction.atomic
     def enviar_solicitacao(self):
         """
-        Confirma a baixa (coloca como ENVIADA) e
+        Confirma a baixa (coloca como SOLICITADA) e
         marca os bens como 'Baixa Física - Aguardando aprovação'.
         """
         if not self.itens.exists():
@@ -1035,7 +1033,6 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
         for item in self.itens.select_related("bem"):
             bem = item.bem
-
             bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
             bem.save(update_fields=["status"])
 
@@ -1046,6 +1043,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
         - status da baixa => ACEITA
         - status do bem => BAIXA_FISICA
         - limpa 'numero_processo' (incorporação)
+        - localização usa numero_processo_baixa se preenchido, senão o ID da baixa
         """
         if self.status != constants.SOLICITADA:
             raise ValidationError(
@@ -1056,7 +1054,9 @@ class BaixaFisicaBemPatrimonial(models.Model):
         self.aprovado_por = usuario_aprovador
         self.data_aprovacao = timezone.now()
         self.save(update_fields=["status", "aprovado_por", "data_aprovacao"])
-        texto_localizacao = f"Baixa Física - {self.numero_processo_baixa}"
+
+        referencia = self.numero_processo_baixa or str(self.pk)
+        texto_localizacao = f"Baixa Física - {referencia}"
 
         for item in self.itens.select_related("bem"):
             bem = item.bem
