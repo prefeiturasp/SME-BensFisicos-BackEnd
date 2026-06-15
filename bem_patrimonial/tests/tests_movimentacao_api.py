@@ -33,6 +33,12 @@ class MovimentacaoApiTestCase(TestCase):
             sigla="UA2",
             nome="UA Destino",
         )
+        self.ua_ponto_central = criar_ua(
+            uo=self.uo_origem,
+            codigo="001",
+            sigla="PC",
+            nome="Ponto Central",
+        )
         self.uo_outra = criar_uo(
             codigo=codigo_uo(2, 20, 30),
             nome="UO Outra",
@@ -204,6 +210,22 @@ class MovimentacaoApiTestCase(TestCase):
         ids = {item["id"] for item in self._lista_movimentacoes(response)}
         self.assertIn(self.mov_visivel.id, ids)
         self.assertNotIn(self.mov_oculta.id, ids)
+
+    def test_opcoes_cadastro_exibem_uos_ativas_com_ponto_central(self):
+        url = reverse("movimentacoes-opcoes-cadastro")
+
+        for user in (self.gestor_origem, self.operador_origem):
+            with self.subTest(user=user.username):
+                self._autenticar(user)
+
+                response = self.client.get(url)
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                uos = {uo["id"]: uo for uo in response.data}
+                self.assertIn(self.uo_origem.id, uos)
+                self.assertIn(self.uo_outra.id, uos)
+                self.assertTrue(uos[self.uo_origem.id]["tem_ponto_central"])
+                self.assertIsInstance(uos[self.uo_outra.id]["tem_ponto_central"], bool)
 
     def test_usuario_sem_permissao_nao_acessa_api(self):
         self._autenticar(self.usuaria_sem_grupo)

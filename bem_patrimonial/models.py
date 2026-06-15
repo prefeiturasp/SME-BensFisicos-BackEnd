@@ -633,7 +633,7 @@ class TransferenciaBemPatrimonial(models.Model):
     numero_processo = models.CharField(
         "Número do processo",
         max_length=64,
-        unique=True,
+        unique=False,
         null=False,
         blank=False,
     )
@@ -642,7 +642,7 @@ class TransferenciaBemPatrimonial(models.Model):
         max_length=30,
         unique=True,
         blank=True,
-        default="",
+        null=True,
         db_index=True,
     )
     observacao = models.TextField("Observação", blank=True)
