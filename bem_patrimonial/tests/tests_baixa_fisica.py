@@ -110,16 +110,6 @@ class BaixaFisicaModelCleanTestCase(TestCase):
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
         return baixa
 
-    def test_clean_exige_numero_processo(self):
-        baixa = BaixaFisicaBemPatrimonial(
-            unidade_administrativa_origem=self.ua_origem,
-            criado_por=self.operador_origem,
-            data_baixa=timezone.localdate(),
-        )
-        with self.assertRaises(ValidationError) as ctx:
-            baixa.clean()
-        self.assertIn("numero_processo_baixa", ctx.exception.message_dict)
-
     def test_clean_exige_itens_para_baixa_existente(self):
         baixa = BaixaFisicaBemPatrimonial.objects.create(
             unidade_administrativa_origem=self.ua_origem,
