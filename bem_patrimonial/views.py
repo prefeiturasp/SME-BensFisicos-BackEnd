@@ -1,3 +1,5 @@
+# bem_patrimonial/views.py
+
 from collections import defaultdict
 
 from django.utils import timezone

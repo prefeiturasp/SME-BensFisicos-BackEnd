@@ -46,6 +46,12 @@ AGUARDANDO_ENVIO = "aguardando_envio"
 SOLICITADA = "solicitada"
 RECUSADA = "recusada"
 
+# Alias semântico para o novo fluxo de Baixa Física.
+# "Em elaboração" substitui "Aguardando envio" na interface,
+# mas o valor gravado no banco continua sendo "aguardando_envio"
+# para não exigir migration de dados.
+EM_ELABORACAO = AGUARDANDO_ENVIO
+
 STATUS_MOVIMENTACAO = (
     (ENVIADA, "Enviada"),
     (ACEITA, "Aceita"),
@@ -54,7 +60,8 @@ STATUS_MOVIMENTACAO = (
 )
 
 STATUS_BAIXA_FISICA = (
-    (AGUARDANDO_ENVIO, "Aguardando envio"),
+    # Label atualizado: "Em elaboração" substitui "Aguardando envio"
+    (AGUARDANDO_ENVIO, "Em elaboração"),
     (SOLICITADA, "Solicitada"),
     (ACEITA, "Aceita"),
     (RECUSADA, "Recusada"),
