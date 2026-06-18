@@ -5,7 +5,7 @@
             const opts = isStringUrl ? options : { ...options };
             const url = isStringUrl ? opts : opts.url;
 
-            if (!url || url.indexOf('/admin/autocomplete/') === -1) {
+            if (!url || !url.includes('/admin/autocomplete/')) {
                 return oldAjax.apply(this, arguments);
             }
 
@@ -29,7 +29,7 @@
             }
 
             if (params.length) {
-                const sep = url.indexOf('?') === -1 ? '?' : '&';
+                const sep = url.includes('?') ? '&' : '?';
                 const newUrl = url + sep + params.join('&');
                 return oldAjax.apply(this, [isStringUrl ? newUrl : { ...opts, url: newUrl }]);
             }
@@ -38,7 +38,7 @@
     }
 
     function startWhenReady() {
-        if (!window.django || !django.jQuery) {
+        if (!globalThis.django || !django.jQuery) {
             return setTimeout(startWhenReady, 100);
         }
 

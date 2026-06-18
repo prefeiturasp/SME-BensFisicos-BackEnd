@@ -3,7 +3,7 @@
   function id(s){ return document.getElementById(s); }
   function qs(s, r){ return (r || document).querySelector(s); }
   function qsa(s, r){ return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
-  function onlyDigits(s){ return (s||'').replace(/\D/g,''); }
+  function onlyDigits(s){ return (s||'').replaceAll(/\D/g,''); }
   function fmt(d){
     d = (d||'').slice(0,13);
     const p1=d.slice(0,3), p2=d.slice(3,12), p3=d.slice(12,13);
@@ -42,17 +42,17 @@
     (function init(){
       const raw = (el.value?.trim() || "");
       if (raw){
-        const digits = raw.replace(/[^\d]/g, "");
+        const digits = raw.replaceAll(/[^\d]/g, "");
         const formatted = formatBRMoneyFromDigits(digits);
         if (raw !== formatted) el.value = formatted;
       }
     })();
     el.addEventListener("input", function(){
-      const digits = (el.value || "").replace(/[^\d]/g, "");
+      const digits = (el.value || "").replaceAll(/[^\d]/g, "");
       el.value = formatBRMoneyFromDigits(digits);
     });
     el.addEventListener("blur", function(){
-      const digits = (el.value || "").replace(/[^\d]/g, "");
+      const digits = (el.value || "").replaceAll(/[^\d]/g, "");
       el.value = formatBRMoneyFromDigits(digits);
     });
     el.setAttribute("required", "required");
@@ -80,14 +80,14 @@
     }
 
     function applyPatternAndMask(){
-      
-      if (!ant?.checked){
-        np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
-        np.placeholder = '000.000000000-0';
-        np.value = fmt(onlyDigits(np.value));
-      } else {
+
+      if (ant?.checked){
         np.removeAttribute('pattern');
         np.placeholder = 'Valor livre (formato antigo)';
+      } else {
+        np.setAttribute('pattern', String.raw`^\d{3}\.\d{9}-\d$`);
+        np.placeholder = '000.000000000-0';
+        np.value = fmt(onlyDigits(np.value));
       }
     }
 
@@ -153,7 +153,7 @@
       const semMarcado = !!sem?.checked;
       if (!ant?.checked && !semMarcado){
         np.value = fmt(onlyDigits(np.value));
-        np.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
+        np.setAttribute('pattern', String.raw`^\d{3}\.\d{9}-\d$`);
         np.placeholder = '000.000000000-0';
       } else if (ant?.checked){
         np.removeAttribute('pattern');
@@ -243,7 +243,7 @@
         input.removeAttribute('pattern');
         input.placeholder = 'Valor livre (formato antigo)';
       } else if (!sem.checked){
-        input.setAttribute('pattern', '^\\d{3}\\.\\d{9}-\\d$');
+        input.setAttribute('pattern', String.raw`^\d{3}\.\d{9}-\d$`);
         input.value = fmt(onlyDigits(input.value));
         input.placeholder = '000.000000000-0';
       }
@@ -292,16 +292,16 @@
       const sem = qs('.fld-sem', row);
       const loc = qs('.fld-loc', row);
 
-      if (typeof item.numero_patrimonial !== 'undefined' && np){
+      if (item.numero_patrimonial !== undefined && np){
         np.value = item.numero_patrimonial || '';
       }
-      if (typeof item.numero_formato_antigo !== 'undefined' && ant){
+      if (item.numero_formato_antigo !== undefined && ant){
         ant.checked = !!item.numero_formato_antigo;
       }
-      if (typeof item.sem_numeracao !== 'undefined' && sem){
+      if (item.sem_numeracao !== undefined && sem){
         sem.checked = !!item.sem_numeracao;
       }
-      if (typeof item.localizacao !== 'undefined' && loc){
+      if (item.localizacao !== undefined && loc){
         loc.value = item.localizacao || '';
       }
       ant?.dispatchEvent(new Event('change'));
@@ -335,19 +335,6 @@
         errors.push('Adicione ao menos uma linha no modo Múltiplos Bens.');
     }
 
-    function markErr(input){
-        input.classList.add('error');
-        input.style.setProperty('border-color', '#ba2121', 'important');
-        input.style.setProperty('outline', '2px solid rgba(186,33,33,.15)', 'important');
-        input.style.setProperty('outline-offset', '1px', 'important');
-    }
-    function clearErr(input){
-        input.classList.remove('error');
-        input.style.removeProperty('border-color');
-        input.style.removeProperty('outline');
-        input.style.removeProperty('outline-offset');
-    }
-
     rows.forEach(function(r, i){
         const idx = i + 1;
         const np  = qs('.fld-npat', r);
@@ -368,12 +355,12 @@
         clearErr(np);
         }
 
-        if (!locVal){
+        if (locVal){
+        clearErr(loc);
+        } else {
         errors.push('Linha '+idx+': Informe a Localização (obrigatória).');
         markErr(loc);
         r.classList.add('invalid');
-        } else {
-        clearErr(loc);
         }
     });
 
@@ -392,6 +379,20 @@
   function cleanBaseHighlights(form){
     qsa('.form-row .error', form).forEach(function(el){ el.classList.remove('error'); });
     qsa('.form-row input, .form-row select, .form-row textarea', form).forEach(function(el){ el.style.borderColor = ''; });
+  }
+
+  function markErr(input){
+    input.classList.add('error');
+    input.style.setProperty('border-color', '#ba2121', 'important');
+    input.style.setProperty('outline', '2px solid rgba(186,33,33,.15)', 'important');
+    input.style.setProperty('outline-offset', '1px', 'important');
+  }
+
+  function clearErr(input){
+    input.classList.remove('error');
+    input.style.removeProperty('border-color');
+    input.style.removeProperty('outline');
+    input.style.removeProperty('outline-offset');
   }
 
   function markErrorField(field){
@@ -433,7 +434,7 @@
   function collectRequiredFields(form){
     let req = qsa('input[required], select[required], textarea[required]', form);
     qsa('.form-row.required input, .form-row.required select, .form-row.required textarea', form).forEach(function(el){
-      if (req.indexOf(el) === -1) req.push(el);
+      if (!req.includes(el)) req.push(el);
     });
     req = req.filter(function(el){ return !el.closest('#multi-container'); });
     return req;
@@ -515,7 +516,7 @@
     })();
 
     hydrateFromPayload(initialPayload);
-    const forceMultiFlag = root.getAttribute('data-force-multi') === '1';
+    const forceMultiFlag = root.dataset.forceMulti === '1';
     setMode(forceMultiFlag ? 'multi' : null);
 
     function guardSubmit(ev){

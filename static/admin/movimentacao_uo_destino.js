@@ -68,7 +68,7 @@
     }
 
     function init() {
-        if (!window.django || !django.jQuery) {
+        if (!globalThis.django || !django.jQuery) {
             return setTimeout(init, 100);
         }
 

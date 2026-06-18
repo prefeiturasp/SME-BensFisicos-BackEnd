@@ -166,8 +166,8 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
     def get_readonly_fields(self, request, obj=None):
 
         if obj and obj.status != constants.AGUARDANDO_ENVIO:
-            return ("bem",)
-        return ()
+            return ["bem"]
+        return []
 
 
 class BaixaFisicaResource(resources.ModelResource):
@@ -309,7 +309,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
-            return (
+            return [
                 "unidade_administrativa_origem",
                 "numero_processo_baixa",
                 "status",
@@ -318,8 +318,8 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 "aprovado_por",
                 "data_aprovacao",
                 "data_baixa",
-            )
-        return ()
+            ]
+        return []
 
     def get_fieldsets(self, request, obj=None):
         campos_basicos = (

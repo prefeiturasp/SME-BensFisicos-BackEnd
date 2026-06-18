@@ -1,7 +1,7 @@
 (function () {
     function ready(fn) {
-        if (document.readyState !== 'loading') fn()
-        else document.addEventListener('DOMContentLoaded', fn)
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn)
+        else fn()
     }
 
     function ensurePrefixEl(afterEl) {

@@ -1,7 +1,7 @@
 (function () {
     function ready(fn) {
-        if (document.readyState !== 'loading') fn()
-        else document.addEventListener('DOMContentLoaded', fn)
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn)
+        else fn()
     }
 
     function setSelected(selectEl, value) {
@@ -20,7 +20,7 @@
 
         if (!uo || !ua) return;
 
-        const url = new URL(window.location.href);
+        const url = new URL(globalThis.location.href);
         const uoParam = url.searchParams.get('unidade_orcamentaria');
         if (uoParam) {
             setSelected(uo, uoParam);
@@ -31,7 +31,7 @@
         uo.addEventListener('change', function () {
             const uoId = uo.value || '';
             ua.value = '';
-            const newUrl = new URL(window.location.href);
+            const newUrl = new URL(globalThis.location.href);
 
             if (uoId) {
                 newUrl.searchParams.set('unidade_orcamentaria', uoId);
@@ -39,7 +39,7 @@
                 newUrl.searchParams.delete('unidade_orcamentaria');
             }
 
-            window.location.href = newUrl.toString();
+            globalThis.location.href = newUrl.toString();
         });
     });
 })()

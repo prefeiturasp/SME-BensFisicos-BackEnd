@@ -230,8 +230,8 @@ class TransferenciaBensItemInline(admin.TabularInline):
 
     def get_readonly_fields(self, request, obj=None):
         if obj is None:
-            return ()
-        return ("bem_detalhado",)
+            return []
+        return ["bem_detalhado"]
 
     def get_extra(self, request, obj=None, **kwargs):
         if obj is None:
