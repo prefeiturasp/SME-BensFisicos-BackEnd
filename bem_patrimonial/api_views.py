@@ -26,6 +26,7 @@ from .api_serializers import (
     BaixaFisicaEnviarSolicitacaoSerializer,
     BaixaFisicaAprovarSerializer,
     BaixaFisicaCancelarSerializer,
+    BaixaFisicaSolicitarCorrecaoSerializer,
 )
 from .api_docs import (
     LIST_BAIXAS_FISICAS_DOC,
@@ -35,6 +36,7 @@ from .api_docs import (
     ENVIAR_SOLICITACAO_DOC,
     APROVAR_BAIXA_FISICA_DOC,
     CANCELAR_BAIXA_FISICA_DOC,
+    SOLICITAR_CORRECAO_DOC,
     GERAR_NBBPM_DOC,
     EXPORTAR_EXCEL_DOC,
 )
@@ -200,6 +202,8 @@ class BaixaFisicaBemPatrimonialViewSet(
             return BaixaFisicaAprovarSerializer
         elif self.action == 'recusar':
             return BaixaFisicaCancelarSerializer
+        elif self.action == 'solicitar_correcao':
+            return BaixaFisicaSolicitarCorrecaoSerializer
         return BaixaFisicaBemPatrimonialDetailSerializer
 
     def _detail_response(self, baixa, request, http_status=status.HTTP_200_OK):
@@ -608,6 +612,68 @@ class BaixaFisicaBemPatrimonialViewSet(
             valor_novo=baixa.get_status_display(),
             usuario=request.user,
             justificativa=f"Baixa recusada. Motivo: {motivo}" if motivo else "Baixa recusada",
+        )
+
+        try:
+            envia_email_baixa_fisica_cancelada(baixa, request.user)
+        except Exception:
+            pass
+
+        return self._detail_response(baixa, request)
+
+    # =========================================================
+    # SOLICITAR CORREÇÃO
+    # =========================================================
+    #
+    # Distinto de `recusar`: este fluxo é uma devolução para ajustes,
+    # não um encerramento do processo. Usado pela tela "Validar Baixa"
+    # do frontend, através da página própria "Solicitar correção".
+    #
+    # Diferenças em relação a `recusar`:
+    #   - só é permitido a partir do status "solicitada"
+    #   - o status final é "aguardando_envio" (Em elaboração), não
+    #     "recusada"
+    #   - motivo é obrigatório, não opcional
+    #   - os bens NÃO são restaurados ao status "aprovado": continuam
+    #     em "Baixa Física - Aguardando aprovação", pois a baixa ainda
+    #     está em andamento, apenas voltando para edição
+
+    @extend_schema(
+        tags=["Baixas Físicas"],
+        summary="Solicitar correção da baixa física",
+        description=SOLICITAR_CORRECAO_DOC,
+        request=BaixaFisicaSolicitarCorrecaoSerializer,
+        responses={
+            200: BaixaFisicaBemPatrimonialDetailSerializer,
+            400: OpenApiResponse(description="Erro de validação"),
+            403: OpenApiResponse(description="Sem permissão"),
+            404: OpenApiResponse(description="Baixa física não encontrada"),
+        },
+    )
+    @action(detail=True, methods=['post'], url_path='solicitar-correcao')
+    def solicitar_correcao(self, request, pk=None):
+        baixa = self.get_object()
+
+        serializer = self.get_serializer(
+            data=request.data, context={'baixa': baixa, 'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        status_anterior = baixa.get_status_display()
+        motivo = serializer.validated_data['motivo']
+
+        with transaction.atomic():
+            set_user(request.user)
+            baixa.status = constants.AGUARDANDO_ENVIO
+            baixa.save(update_fields=['status'])
+
+        self._registrar_historico(
+            baixa=baixa,
+            campo="status",
+            valor_antigo=status_anterior,
+            valor_novo=baixa.get_status_display(),
+            usuario=request.user,
+            justificativa=f"Correção solicitada. Observações: {motivo}",
         )
 
         try:

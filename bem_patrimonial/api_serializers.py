@@ -143,6 +143,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     url_solicitar = serializers.SerializerMethodField()
     url_aprovar = serializers.SerializerMethodField()
     url_recusar = serializers.SerializerMethodField()
+    url_solicitar_correcao = serializers.SerializerMethodField()
     url_gerar_nbbpm = serializers.SerializerMethodField()
 
     class Meta:
@@ -163,6 +164,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             'url_solicitar',
             'url_aprovar',
             'url_recusar',
+            'url_solicitar_correcao',
             'url_gerar_nbbpm',
         ]
         read_only_fields = fields
@@ -202,6 +204,11 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     def get_url_recusar(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA] and self._usuario_e_gestor():
             return self._build_url('baixas-fisicas-recusar', obj.id)
+        return None
+
+    def get_url_solicitar_correcao(self, obj: BaixaFisicaBemPatrimonial):
+        if obj.status == constants.SOLICITADA and self._usuario_e_gestor():
+            return self._build_url('baixas-fisicas-solicitar-correcao', obj.id)
         return None
 
     def get_url_gerar_nbbpm(self, obj: BaixaFisicaBemPatrimonial):
@@ -456,5 +463,44 @@ class BaixaFisicaCancelarSerializer(serializers.Serializer):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied(
                 "Apenas Gestor de Patrimônio pode cancelar baixas físicas."
+            )
+        return attrs
+
+
+class BaixaFisicaSolicitarCorrecaoSerializer(serializers.Serializer):
+    """
+    Serializer do endpoint /solicitar-correcao/.
+
+    Distinto de BaixaFisicaCancelarSerializer:
+      - motivo é OBRIGATÓRIO aqui (no cancelar é opcional)
+      - só é válido a partir do status "solicitada" (no cancelar,
+        também vale para "aguardando_envio")
+    """
+    motivo = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        help_text="Orientações sobre o que precisa ser corrigido (obrigatório)."
+    )
+
+    def validate_motivo(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError(
+                "Descreva as orientações para a correção."
+            )
+        return value.strip()
+
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        baixa = self.context['baixa']
+        user = self.context['request'].user
+
+        if baixa.status != constants.SOLICITADA:
+            raise serializers.ValidationError(
+                f"Não é possível solicitar correção desta baixa. "
+                f"Status atual: {baixa.get_status_display()}"
+            )
+        if not (user.is_gestor_patrimonio or user.is_superuser):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                "Apenas Gestor de Patrimônio pode solicitar correção de baixas físicas."
             )
         return attrs

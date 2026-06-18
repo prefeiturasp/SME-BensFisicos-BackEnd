@@ -25,6 +25,7 @@ from bem_patrimonial.api_serializers import (
     BaixaFisicaBemPatrimonialDetailSerializer,
     BaixaFisicaAprovarSerializer,
     BaixaFisicaCancelarSerializer,
+    BaixaFisicaSolicitarCorrecaoSerializer,
     BaixaFisicaEnviarSolicitacaoSerializer,
     BaixaFisicaBensItemCreateSerializer,
     UnidadeAdministrativaSimpleSerializer,
@@ -428,6 +429,91 @@ class BaixaFisicaCancelarSerializerTestCase(BaseSetup):
         self.assertTrue(s.is_valid(), s.errors)
 
 
+class BaixaFisicaSolicitarCorrecaoSerializerTestCase(BaseSetup):
+    """
+    Cobertura do novo BaixaFisicaSolicitarCorrecaoSerializer.
+
+    Segue o mesmo padrão de BaixaFisicaCancelarSerializerTestCase, com as
+    diferenças de regra de negócio do novo fluxo:
+      - só é válido a partir do status "solicitada" (não "aguardando_envio")
+      - motivo é OBRIGATÓRIO (cancelar tem motivo opcional)
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+
+    def _req(self, user):
+        req = MagicMock()
+        req.user = user
+        return req
+
+    def _ctx(self, user):
+        return {"baixa": self.baixa, "request": self._req(user)}
+
+    def test_gestor_pode_solicitar_correcao(self):
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": "Corrigir o item X"},
+            context=self._ctx(self.gestor),
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_operador_nao_pode_solicitar_correcao(self):
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": "Corrigir o item X"},
+            context=self._ctx(self.operador),
+        )
+        with self.assertRaises(PermissionDenied):
+            s.is_valid(raise_exception=True)
+
+    def test_invalido_quando_status_diferente_de_solicitada(self):
+        self.baixa.status = constants.AGUARDANDO_ENVIO
+        self.baixa.save()
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": "Corrigir o item X"},
+            context=self._ctx(self.gestor),
+        )
+        self.assertFalse(s.is_valid())
+
+    def test_invalido_quando_baixa_ja_aceita(self):
+        self.baixa.status = constants.ACEITA
+        self.baixa.save()
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": "Corrigir o item X"},
+            context=self._ctx(self.gestor),
+        )
+        self.assertFalse(s.is_valid())
+
+    def test_motivo_obrigatorio_ausente_invalido(self):
+        s = BaixaFisicaSolicitarCorrecaoSerializer(data={}, context=self._ctx(self.gestor))
+        self.assertFalse(s.is_valid())
+        self.assertIn("motivo", s.errors)
+
+    def test_motivo_vazio_invalido(self):
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": ""},
+            context=self._ctx(self.gestor),
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("motivo", s.errors)
+
+    def test_motivo_apenas_espacos_invalido(self):
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": "   "},
+            context=self._ctx(self.gestor),
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("motivo", s.errors)
+
+    def test_motivo_e_normalizado_com_strip(self):
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": "  Corrigir o item X  "},
+            context=self._ctx(self.gestor),
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data["motivo"], "Corrigir o item X")
+
+
 # ============================================================================
 # TESTES DO SERIALIZER DE DETALHE (URLs de ação)
 # ============================================================================
@@ -474,6 +560,26 @@ class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
         data = self._serializer(baixa, self.gestor).data
         self.assertIsNone(data["url_gerar_nbbpm"])
+
+    def test_url_solicitar_correcao_quando_solicitada_e_gestor(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        data = self._serializer(baixa, self.gestor).data
+        self.assertIsNotNone(data["url_solicitar_correcao"])
+
+    def test_url_solicitar_correcao_ausente_para_operador(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        data = self._serializer(baixa, self.operador).data
+        self.assertIsNone(data["url_solicitar_correcao"])
+
+    def test_url_solicitar_correcao_ausente_quando_aguardando_envio(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        data = self._serializer(baixa, self.gestor).data
+        self.assertIsNone(data["url_solicitar_correcao"])
+
+    def test_url_solicitar_correcao_ausente_quando_aceita(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
+        data = self._serializer(baixa, self.gestor).data
+        self.assertIsNone(data["url_solicitar_correcao"])
 
 
 # ============================================================================
@@ -873,6 +979,146 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
             self.action_url(self.baixa.id, "recusar"), {}, format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+
+# ============================================================================
+# TESTES DO VIEWSET — SOLICITAR CORREÇÃO
+# ============================================================================
+
+class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
+    """
+    Cobertura do novo endpoint POST /baixa-fisica/{id}/solicitar-correcao/.
+
+    Segue o mesmo padrão de BaixaFisicaViewSetCancelarTestCase, mas:
+      - parte de uma baixa "solicitada" (não "aguardando_envio")
+      - motivo é obrigatório (400 sem ele)
+      - status final esperado é AGUARDANDO_ENVIO (não RECUSADA)
+      - os bens NÃO são restaurados para APROVADO (a baixa continua em
+        andamento, apenas voltando para edição)
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
+        self.bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+        self.bem.save()
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada")
+    def test_gestor_solicita_correcao(self, mock_email):
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item com número patrimonial X"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.AGUARDANDO_ENVIO)
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada")
+    def test_solicitar_correcao_nao_restaura_status_bem(self, mock_email):
+        self._auth(self.gestor)
+        self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item"},
+            format="json",
+        )
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.status, constants.BAIXA_FISICA_AGUARDANDO_APROVACAO)
+
+    def test_solicitar_correcao_sem_motivo_retorna_400(self):
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"), {}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.SOLICITADA)
+
+    def test_solicitar_correcao_motivo_vazio_retorna_400(self):
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": ""},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_operador_nao_pode_solicitar_correcao(self):
+        self._auth(self.operador)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.SOLICITADA)
+
+    def test_nao_pode_solicitar_correcao_de_baixa_aguardando_envio(self):
+        self.baixa.status = constants.AGUARDANDO_ENVIO
+        self.baixa.save()
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nao_pode_solicitar_correcao_de_baixa_aceita(self):
+        self.baixa.status = constants.ACEITA
+        self.baixa.save()
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada",
+           side_effect=Exception("Erro email"))
+    def test_falha_email_nao_impede_solicitacao_de_correcao(self, mock_email):
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada")
+    def test_solicitar_correcao_registra_historico_com_motivo(self, mock_email):
+        self._auth(self.gestor)
+        motivo = "Corrigir o item com número patrimonial 001.053500289-0"
+        self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": motivo},
+            format="json",
+        )
+        resp = self.client.get(self.action_url(self.baixa.id, "historico"))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        justificativas = [item.get("justificativa", "") for item in resp.data]
+        self.assertTrue(any(motivo in (j or "") for j in justificativas))
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada")
+    def test_baixa_pode_ser_reenviada_apos_solicitar_correcao(self, mock_email):
+        self._auth(self.gestor)
+        self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item"},
+            format="json",
+        )
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.AGUARDANDO_ENVIO)
+
+        self._auth(self.operador)
+        resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.SOLICITADA)
 
 
 # ============================================================================
