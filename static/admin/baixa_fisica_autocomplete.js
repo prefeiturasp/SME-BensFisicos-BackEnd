@@ -116,7 +116,7 @@
                 const opts = isStringUrl ? options : { ...options };
                 const url = isStringUrl ? opts : opts.url;
 
-                if (!url || !url.includes('/admin/autocomplete/')) {
+                if (!globalThis.AdminAutocompleteFilter.isAutocompleteUrl(url)) {
                     return oldAjax.apply(this, arguments);
                 }
 

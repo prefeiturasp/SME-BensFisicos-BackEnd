@@ -463,6 +463,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
     class Media:
         js = (
             "js/bem_patrimonial/prevenir_duplo_submit.js",
+            "admin/admin_autocomplete_filter.js",
             "admin/movimentacao_filtra_bens_por_ua.js",
             "admin/movimentacao_uo_destino.js",
         )

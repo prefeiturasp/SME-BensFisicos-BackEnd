@@ -298,7 +298,10 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
     change_form_template = "admin/bem_patrimonial/baixa_fisica/change_form.html"
 
     class Media:
-        js = ("admin/baixa_fisica_autocomplete.js",)
+        js = (
+            "admin/admin_autocomplete_filter.js",
+            "admin/baixa_fisica_autocomplete.js",
+        )
         css = {
             "all": (
                 "css/hide_crud_icons.css",

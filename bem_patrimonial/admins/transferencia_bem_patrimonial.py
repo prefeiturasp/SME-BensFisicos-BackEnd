@@ -73,6 +73,7 @@ class TransferenciaBemPatrimonialAdmin(admin.ModelAdmin):
     class Media:
         js = (
             "js/bem_patrimonial/prevenir_duplo_submit.js",
+            "admin/admin_autocomplete_filter.js",
             "admin/transferencia_filtra_bens_por_uo.js",
         )
         css = {
