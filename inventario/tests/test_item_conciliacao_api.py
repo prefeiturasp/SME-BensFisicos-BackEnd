@@ -1,29 +1,14 @@
-from datetime import date
-from decimal import Decimal
-
-from django.contrib.auth.models import Group
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.test import APITestCase
 
-from bem_patrimonial import constants as bem_constants
-from bem_patrimonial.models import BemPatrimonial
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
-from dados_comuns.tests.factories import criar_ua, criar_uo
 from inventario import constants
-from inventario.models import (
-    ConciliacaoUA,
-    ItemConciliacao,
-    OcorrenciaConciliacao,
-)
-from usuario.constants import (
-    GRUPO_GESTOR_PATRIMONIO,
-    GRUPO_OPERADOR_INVENTARIO,
-)
-from usuario.models import Usuario
+from inventario.models import ItemConciliacao, OcorrenciaConciliacao
+from inventario.tests.conciliacao_base import ConciliacaoAPIBaseTestCase
 
 
-class ItemConciliacaoAPITestCase(APITestCase):
+class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
+    username_prefix = "items_"
+
     LIST_FIELDS = {
         "id",
         "conciliacao",
@@ -50,101 +35,17 @@ class ItemConciliacaoAPITestCase(APITestCase):
         "ocorrencias",
     }
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.uo1 = criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO 1", sigla="UO1")
-        cls.uo2 = criar_uo(codigo=codigo_uo(20, 20, 20), nome="UO 2", sigla="UO2")
-
-        cls.ua1 = criar_ua(
-            uo=cls.uo1,
-            codigo=codigo_ua(10, 10, 10, 1),
-            sigla="UA1",
-            nome="Unidade 1",
-        )
-        cls.ua2 = criar_ua(
-            uo=cls.uo1,
-            codigo=codigo_ua(10, 10, 10, 2),
-            sigla="UA2",
-            nome="Unidade 2",
-        )
-        cls.ua_fora = criar_ua(
-            uo=cls.uo2,
-            codigo=codigo_ua(20, 20, 20, 1),
-            sigla="UAF",
-            nome="Unidade Fora",
-        )
-
-        grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
-
-        cls.gestor_com_ua = Usuario.objects.create_user(
-            username="gestor_items_com_ua",
-            email="gestor.items.com.ua@test.com",
-            **auth_kwargs("test123"),
-            nome="Gestor Com UA",
-            is_staff=True,
-            unidade_administrativa=cls.ua1,
-            unidade_orcamentaria=cls.uo1,
-        )
-        cls.gestor_com_ua.groups.add(grupo_gestor)
-
-        cls.gestor_sem_ua = Usuario.objects.create_user(
-            username="gestor_items_sem_ua",
-            email="gestor.items.sem.ua@test.com",
-            **auth_kwargs("test123"),
-            nome="Gestor Sem UA",
-            is_staff=True,
-            unidade_orcamentaria=cls.uo1,
-        )
-        cls.gestor_sem_ua.groups.add(grupo_gestor)
-
-        cls.operador = Usuario.objects.create_user(
-            username="operador_items",
-            email="operador.items@test.com",
-            **auth_kwargs("test123"),
-            nome="Operador Items",
-            is_staff=True,
-            unidade_administrativa=cls.ua1,
-            unidade_orcamentaria=cls.uo1,
-        )
-        cls.operador.groups.add(grupo_operador)
-
-        cls.operador_fora = Usuario.objects.create_user(
-            username="operador_items_fora",
-            email="operador.items.fora@test.com",
-            **auth_kwargs("test123"),
-            nome="Operador Fora",
-            is_staff=True,
-            unidade_administrativa=cls.ua_fora,
-            unidade_orcamentaria=cls.uo2,
-        )
-        cls.operador_fora.groups.add(grupo_operador)
-
     def setUp(self):
-        self.conciliacao_ua1 = ConciliacaoUA.objects.create(
-            tipo=constants.CONCILIACAO_EVENTUAL,
-            periodo_final=date(2025, 8, 23),
-            unidade_administrativa=self.ua1,
-            criado_por=self.gestor_com_ua,
+        super().setUp()
+        self.bem_ua1_a = self._criar_bem(
+            self.ua1, numero_patrimonial="001.000000001-1"
         )
-        self.conciliacao_ua2 = ConciliacaoUA.objects.create(
-            tipo=constants.CONCILIACAO_EVENTUAL,
-            periodo_final=date(2025, 9, 1),
-            unidade_administrativa=self.ua2,
-            criado_por=self.gestor_com_ua,
+        self.bem_ua1_b = self._criar_bem(
+            self.ua1, numero_patrimonial="001.000000002-2"
         )
-        self.conciliacao_fora = ConciliacaoUA.objects.create(
-            tipo=constants.CONCILIACAO_EVENTUAL,
-            periodo_final=date(2025, 9, 1),
-            unidade_administrativa=self.ua_fora,
-            criado_por=self.operador_fora,
+        self.bem_ua2 = self._criar_bem(
+            self.ua2, numero_patrimonial="001.000000003-3"
         )
-
-        self.bem_ua1_a = self._criar_bem(self.ua1, numero_patrimonial="001.000000001-1")
-        self.bem_ua1_b = self._criar_bem(self.ua1, numero_patrimonial="001.000000002-2")
-        self.bem_ua2 = self._criar_bem(self.ua2, numero_patrimonial="001.000000003-3")
         self.bem_fora = self._criar_bem(
             self.ua_fora, numero_patrimonial="001.000000004-4"
         )
@@ -168,13 +69,11 @@ class ItemConciliacaoAPITestCase(APITestCase):
             observacao="Divergência",
             registrado_por=self.gestor_com_ua,
         )
-
         self.item_ua2 = ItemConciliacao.objects.create(
             conciliacao=self.conciliacao_ua2,
             bem=self.bem_ua2,
             situacao=constants.ENCONTRADO_SEM_DIVERGENCIA,
         )
-
         self.item_fora = ItemConciliacao.objects.create(
             conciliacao=self.conciliacao_fora,
             bem=self.bem_fora,
@@ -184,23 +83,6 @@ class ItemConciliacaoAPITestCase(APITestCase):
         self.list_url = reverse(
             "itens-conciliacao-list", args=[self.conciliacao_ua1.id]
         )
-
-    def _criar_bem(self, ua, **kwargs):
-        defaults = {
-            "nome": "Bem Teste",
-            "descricao": "Descrição",
-            "valor_unitario": Decimal("100.00"),
-            "marca": "Marca",
-            "modelo": "Modelo",
-            "status": bem_constants.APROVADO,
-            "unidade_administrativa": ua,
-            "criado_por": self.gestor_com_ua,
-        }
-        defaults.update(kwargs)
-        return BemPatrimonial.objects.create(**defaults)
-
-    def _auth(self, user):
-        self.client.force_authenticate(user)
 
     def _list_url(self, conciliacao_id):
         return reverse("itens-conciliacao-list", args=[conciliacao_id])
@@ -415,6 +297,7 @@ class ItemConciliacaoAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_registrar_ocorrencia_conciliacao_fechada_retorna_400(self):
+        from inventario.models import ConciliacaoUA
         ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
             status=constants.CONCILIACAO_FECHADO
         )
@@ -475,6 +358,7 @@ class ItemConciliacaoAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_excluir_ocorrencia_conciliacao_fechada_retorna_400(self):
+        from inventario.models import ConciliacaoUA
         ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
             status=constants.CONCILIACAO_FECHADO
         )

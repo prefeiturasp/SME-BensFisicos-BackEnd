@@ -1,28 +1,17 @@
 from datetime import date
-from decimal import Decimal
-from io import BytesIO
 from unittest.mock import patch
+from io import BytesIO
 
-from django.contrib.auth.models import Group
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
 
-from bem_patrimonial import constants as bem_constants
-from bem_patrimonial.models import BemPatrimonial
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
-from dados_comuns.tests.factories import criar_ua, criar_uo
 from inventario import constants
 from inventario.models import ConciliacaoUA
-from usuario.constants import (
-    GRUPO_GESTOR_PATRIMONIO,
-    GRUPO_OPERADOR_INVENTARIO,
-)
-from usuario.models import Usuario
+from inventario.tests.conciliacao_base import ConciliacaoAPIBaseTestCase
 
 
-class ConciliacaoUAAPITestCase(APITestCase):
+class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
     LIST_FIELDS = {
         "id",
         "numero_conciliacao",
@@ -54,128 +43,10 @@ class ConciliacaoUAAPITestCase(APITestCase):
         "esta_aberto",
     }
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.uo1 = criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO 1", sigla="UO1")
-        cls.uo2 = criar_uo(codigo=codigo_uo(20, 20, 20), nome="UO 2", sigla="UO2")
-
-        cls.ua1 = criar_ua(
-            uo=cls.uo1,
-            codigo=codigo_ua(10, 10, 10, 1),
-            sigla="UA1",
-            nome="Unidade 1",
-        )
-        cls.ua2 = criar_ua(
-            uo=cls.uo1,
-            codigo=codigo_ua(10, 10, 10, 2),
-            sigla="UA2",
-            nome="Unidade 2",
-        )
-        cls.ua_fora = criar_ua(
-            uo=cls.uo2,
-            codigo=codigo_ua(20, 20, 20, 1),
-            sigla="UAF",
-            nome="Unidade Fora",
-        )
-
-        grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
-
-        cls.gestor_com_ua = Usuario.objects.create_user(
-            username="gestor_com_ua",
-            email="gestor.com.ua@test.com",
-            **auth_kwargs("test123"),
-            nome="Gestor Com UA",
-            is_staff=True,
-            unidade_administrativa=cls.ua1,
-            unidade_orcamentaria=cls.uo1,
-        )
-        cls.gestor_com_ua.groups.add(grupo_gestor)
-
-        cls.gestor_sem_ua = Usuario.objects.create_user(
-            username="gestor_sem_ua",
-            email="gestor.sem.ua@test.com",
-            **auth_kwargs("test123"),
-            nome="Gestor Sem UA",
-            is_staff=True,
-            unidade_orcamentaria=cls.uo1,
-        )
-        cls.gestor_sem_ua.groups.add(grupo_gestor)
-
-        cls.operador = Usuario.objects.create_user(
-            username="operador",
-            email="operador@test.com",
-            **auth_kwargs("test123"),
-            nome="Operador",
-            is_staff=True,
-            unidade_administrativa=cls.ua1,
-            unidade_orcamentaria=cls.uo1,
-        )
-        cls.operador.groups.add(grupo_operador)
-
-        cls.operador_fora = Usuario.objects.create_user(
-            username="operador_fora",
-            email="operador.fora@test.com",
-            **auth_kwargs("test123"),
-            nome="Operador Fora",
-            is_staff=True,
-            unidade_administrativa=cls.ua_fora,
-            unidade_orcamentaria=cls.uo2,
-        )
-        cls.operador_fora.groups.add(grupo_operador)
-
-        cls.superuser = Usuario.objects.create_user(
-            username="superuser",
-            email="superuser@test.com",
-            **auth_kwargs("test123"),
-            nome="Superuser",
-            is_staff=True,
-            is_superuser=True,
-            unidade_orcamentaria=cls.uo1,
-        )
-        cls.superuser.groups.add(grupo_gestor)
-
     def setUp(self):
+        super().setUp()
         self._criar_bem(self.ua1)
-        self.conciliacao_ua1 = ConciliacaoUA.objects.create(
-            tipo=constants.CONCILIACAO_EVENTUAL,
-            periodo_final=date(2025, 8, 23),
-            unidade_administrativa=self.ua1,
-            criado_por=self.gestor_com_ua,
-        )
-        self.conciliacao_ua2 = ConciliacaoUA.objects.create(
-            tipo=constants.CONCILIACAO_EVENTUAL,
-            periodo_final=date(2025, 9, 1),
-            unidade_administrativa=self.ua2,
-            criado_por=self.gestor_com_ua,
-        )
-        self.conciliacao_fora = ConciliacaoUA.objects.create(
-            tipo=constants.CONCILIACAO_EVENTUAL,
-            periodo_final=date(2025, 9, 1),
-            unidade_administrativa=self.ua_fora,
-            criado_por=self.operador_fora,
-        )
         self.list_url = reverse("conciliacoes-list")
-
-    def _criar_bem(self, ua, **kwargs):
-        defaults = {
-            "numero_patrimonial": f"001.{str(BemPatrimonial.objects.count() + 1).zfill(9)}-0",
-            "nome": "Bem Teste",
-            "descricao": "Descrição",
-            "valor_unitario": Decimal("100.00"),
-            "marca": "Marca",
-            "modelo": "Modelo",
-            "status": bem_constants.APROVADO,
-            "unidade_administrativa": ua,
-            "criado_por": self.gestor_com_ua,
-        }
-        defaults.update(kwargs)
-        return BemPatrimonial.objects.create(**defaults)
-
-    def _auth(self, user):
-        self.client.force_authenticate(user)
 
     def _detail_url(self, conciliacao_id):
         return reverse("conciliacoes-detail", args=[conciliacao_id])
@@ -325,8 +196,6 @@ class ConciliacaoUAAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_retrieve_remove_itens_baixados_invalidos(self):
-        from unittest.mock import patch
-
         self._auth(self.gestor_com_ua)
         with patch(
             "inventario.api_views.remover_itens_baixados_invalidos"
@@ -337,8 +206,6 @@ class ConciliacaoUAAPITestCase(APITestCase):
             mock_remover.assert_called_once()
 
     def test_retrieve_conciliacao_fechada_nao_remove_itens(self):
-        from unittest.mock import patch
-
         ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
             status=constants.CONCILIACAO_FECHADO
         )
