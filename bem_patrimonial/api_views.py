@@ -44,6 +44,7 @@ from .emails import (
     envia_email_baixa_fisica_solicitada,
     envia_email_baixa_fisica_aprovada,
     envia_email_baixa_fisica_cancelada,
+    envia_email_baixa_fisica_correcao_solicitada,
 )
 from .nbbpm import http_response_nbbpm, gerar_numero_nbbpm
 from . import constants
@@ -615,7 +616,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         )
 
         try:
-            envia_email_baixa_fisica_cancelada(baixa, request.user)
+            envia_email_baixa_fisica_correcao_solicitada(baixa, request.user)
         except Exception:
             pass
 

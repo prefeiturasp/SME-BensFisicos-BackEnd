@@ -342,6 +342,44 @@ def envia_email_baixa_fisica_aprovada(baixa_fisica):
     )
 
 
+def envia_email_baixa_fisica_correcao_solicitada(baixa_fisica, usuario_solicitante):
+    """
+    Envio de e-mail quando uma correção é solicitada (ação: solicitar_correcao).
+    Destinatário: usuário que criou a baixa (criado_por).
+    """
+    if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
+        return
+
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
+
+    solicitante_nome = (
+        usuario_solicitante.nome or usuario_solicitante.username
+        if usuario_solicitante
+        else "gestor responsável"
+    )
+
+    lista_bens_formatada = _formata_lista_bens_baixa(baixa_fisica) or ""
+
+    subject = "[Bens Físicos] Correção solicitada na sua Baixa Física"
+    dict_params = {
+        "subject": subject,
+        "title": "Olá!",
+        "subtitle": (
+            f"A solicitação de Baixa Física de número de processo {baixa_fisica.numero_processo_baixa} "
+            f"foi devolvida para correção por {solicitante_nome}.\n\n"
+            f"Bens envolvidos:\n{lista_bens_formatada}\n\n"
+            f"Acesse {object_url} para realizar as correções necessárias."
+        ),
+    }
+
+    email_utils.send_email_ctrl(
+        subject,
+        dict_params,
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
+        baixa_fisica.criado_por.email,
+    )
+
+
 def envia_email_baixa_fisica_cancelada(baixa_fisica, usuario_cancelador):
     """
     Envio de e-mail quando a baixa é cancelada (ação: acao_cancelar_baixa).
