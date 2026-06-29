@@ -1,3 +1,5 @@
+# bem_patrimonial/admin.py
+
 from django.contrib import admin
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,

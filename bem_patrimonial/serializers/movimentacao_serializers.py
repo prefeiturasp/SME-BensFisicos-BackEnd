@@ -78,6 +78,14 @@ class UnidadeOrcamentariaSimpleSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class MovimentacaoUoCadastroOptionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    codigo = serializers.CharField()
+    nome = serializers.CharField()
+    label = serializers.CharField()
+    tem_ponto_central = serializers.BooleanField()
+
+
 class UnidadeAdministrativaSimpleSerializer(serializers.ModelSerializer):
     unidade_orcamentaria = UnidadeOrcamentariaSimpleSerializer(read_only=True)
 

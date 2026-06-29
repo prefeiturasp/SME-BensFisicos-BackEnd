@@ -38,10 +38,12 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     MovimentacaoBemPatrimonialListSerializer,
     MovimentacaoBemPatrimonialUpdateSerializer,
     MovimentacaoHistoricoGrupoSerializer,
+    MovimentacaoUoCadastroOptionSerializer,
+    obter_ua_ponto_central,
 )
 from dados_comuns.context import audit_as
 from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
-from dados_comuns.models import HistoricoGeral
+from dados_comuns.models import HistoricoGeral, UnidadeOrcamentaria
 from dados_comuns.permissions import MovimentacaoBemPatrimonialPermission
 
 logger = logging.getLogger(__name__)
@@ -261,6 +263,22 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return MovimentacaoBemPatrimonialCreateSerializer
         return MovimentacaoBemPatrimonialDetailSerializer
+
+    @action(detail=False, methods=["get"], url_path="opcoes-cadastro")
+    def opcoes_cadastro(self, request):
+        uos = UnidadeOrcamentaria.objects.filter(ativa=True).order_by("codigo", "nome")
+        data = [
+            {
+                "id": uo.id,
+                "codigo": uo.codigo,
+                "nome": uo.nome,
+                "label": f"{uo.codigo} - {uo.nome}",
+                "tem_ponto_central": bool(obter_ua_ponto_central(uo)),
+            }
+            for uo in uos
+        ]
+        serializer = MovimentacaoUoCadastroOptionSerializer(data, many=True)
+        return Response(serializer.data)
 
     def get_queryset(self):
         qs = (

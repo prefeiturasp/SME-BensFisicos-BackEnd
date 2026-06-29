@@ -95,14 +95,15 @@ class BaixaFisicaBensItemCreateSerializer(serializers.ModelSerializer):
 
 
 # ============================================================================
-# SERIALIZERS DE BAIXA FÍSICA
+# SERIALIZERS DE BAIXA FÍSICA — LEITURA
 # ============================================================================
 
 class BaixaFisicaBemPatrimonialListSerializer(serializers.ModelSerializer):
     unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
     criado_por = UserSimpleSerializer(read_only=True)
     aprovado_por = UserSimpleSerializer(read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    # Usa SerializerMethodField para sobrescrever "Aguardando envio" → "Em elaboração"
+    status_display = serializers.SerializerMethodField()
     total_itens = serializers.SerializerMethodField()
 
     class Meta:
@@ -123,6 +124,11 @@ class BaixaFisicaBemPatrimonialListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_status_display(self, obj: BaixaFisicaBemPatrimonial) -> str:
+        if obj.status == constants.AGUARDANDO_ENVIO:
+            return "Em elaboração"
+        return obj.get_status_display()
+
     def get_total_itens(self, obj: BaixaFisicaBemPatrimonial) -> int:
         return obj.itens.count()
 
@@ -131,7 +137,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
     criado_por = UserSimpleSerializer(read_only=True)
     aprovado_por = UserSimpleSerializer(read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    status_display = serializers.SerializerMethodField()
     itens = BaixaFisicaBensItemSerializer(many=True, read_only=True)
 
     url_solicitar = serializers.SerializerMethodField()
@@ -160,6 +166,11 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             'url_gerar_nbbpm',
         ]
         read_only_fields = fields
+
+    def get_status_display(self, obj: BaixaFisicaBemPatrimonial) -> str:
+        if obj.status == constants.AGUARDANDO_ENVIO:
+            return "Em elaboração"
+        return obj.get_status_display()
 
     def _build_url(self, viewname: str, pk: int) -> str | None:
         request = self.context.get('request')
@@ -209,11 +220,16 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaixaFisicaBemPatrimonial
         fields = [
+            # numero_processo_baixa e data_baixa agora são opcionais no novo fluxo
             'numero_processo_baixa',
             'unidade_administrativa_origem',
             'data_baixa',
             'itens',
         ]
+        extra_kwargs = {
+            'numero_processo_baixa': {'required': False, 'allow_blank': True, 'default': ''},
+            'data_baixa': {'required': False, 'allow_null': True, 'default': None},
+        }
 
     def validate_itens(self, value: list) -> list:
         if not value:
@@ -223,6 +239,7 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_data_baixa(self, value):
+        # data_baixa é opcional; valida apenas se informada
         if value and value > timezone.now().date():
             raise serializers.ValidationError(
                 "A data de baixa não pode ser futura."
@@ -276,7 +293,7 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         baixa = BaixaFisicaBemPatrimonial.objects.create(
             **validated_data,
             criado_por=user,
-            status=constants.AGUARDANDO_ENVIO
+            status=constants.AGUARDANDO_ENVIO,
         )
 
         for item_data in itens_data:
@@ -309,7 +326,7 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
             )
         if instance.status != constants.AGUARDANDO_ENVIO:
             raise serializers.ValidationError(
-                "Apenas baixas com status 'Aguardando envio' podem ser editadas."
+                "Apenas baixas com status 'Em elaboração' podem ser editadas."
             )
         return attrs
 
