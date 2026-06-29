@@ -58,6 +58,24 @@ def filtrar_queryset_por_escopo(usuario, queryset, campo_ua="unidade_administrat
     return queryset.none()
 
 
+def filtrar_queryset_usuario_por_escopo(usuario, queryset):
+    """
+    Escopo para exportação/listagem de usuários:
+    - superuser vê tudo;
+    - gestor vê apenas usuários da sua UO;
+    - demais perfis não veem nada.
+    """
+    _is_super, is_gestor, _ua_id, uo_id = resolver_ids_escopo(usuario)
+
+    if _is_super:
+        return queryset
+
+    if is_gestor and uo_id:
+        return queryset.filter(unidade_orcamentaria_id=uo_id)
+
+    return queryset.none()
+
+
 def validar_objeto_no_escopo(usuario, objeto, campo_ua="unidade_administrativa"):
     """
     Mesma lógica do filtro, mas para validar um objeto específico.

@@ -86,3 +86,21 @@ permitindo que o usuário volte a acessar o sistema.
 
 A ação também gera um registro na tabela **HistoricoGeral**.
 """)
+
+# API: /api/user/exportar/ (GET)
+EXPORT_USERS_DOC = dedent("""
+Exporta os usuarios visiveis para o usuario autenticado em formato Excel.
+
+Regras de acesso:
+
+- superusuario exporta todos os usuarios;
+- gestor de patrimonio exporta apenas os usuarios da sua Unidade Orcamentaria;
+- operador de inventario nao acessa este recurso.
+
+O arquivo exportado segue o padrao de colunas:
+
+- Nome
+- RF
+- E-mail
+- Unidade Administrativa
+""")
