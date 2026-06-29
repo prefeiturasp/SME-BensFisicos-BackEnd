@@ -222,13 +222,15 @@ class CustomUserModelAdmin(ImportExportModelAdmin, UserAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
-    def get_queryset(self, request):
+    def _get_queryset_filtrado_por_escopo(self, request):
         qs = super().get_queryset(request)
         return filtrar_queryset_usuario_por_escopo(request.user, qs)
 
+    def get_queryset(self, request):
+        return self._get_queryset_filtrado_por_escopo(request)
+
     def get_export_queryset(self, request):
-        qs = super().get_queryset(request)
-        return filtrar_queryset_usuario_por_escopo(request.user, qs)
+        return self._get_queryset_filtrado_por_escopo(request)
 
     def get_export_formats(self):
         return [XLSX]
