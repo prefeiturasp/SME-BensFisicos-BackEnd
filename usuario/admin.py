@@ -230,7 +230,7 @@ class CustomUserModelAdmin(ImportExportModelAdmin, UserAdmin):
         return self._get_queryset_filtrado_por_escopo(request)
 
     def get_export_queryset(self, request):
-        return self._get_queryset_filtrado_por_escopo(request)
+        return self.get_queryset(request)
 
     def get_export_formats(self):
         return [XLSX]
