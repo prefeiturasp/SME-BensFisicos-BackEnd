@@ -133,6 +133,11 @@ class CustomUserModelAdminTestCase(TestCase):
         )
 
         request = self.factory.get("/admin/usuario/usuario/")
+        request.user = SimpleNamespace(
+            is_superuser=True,
+            is_gestor_patrimonio=False,
+            unidade_orcamentaria_id=None,
+        )
         queryset = self.admin.get_queryset(request)
 
         usuarios_ordenados = list(queryset)
