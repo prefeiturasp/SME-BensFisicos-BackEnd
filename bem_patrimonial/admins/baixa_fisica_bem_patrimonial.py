@@ -167,7 +167,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
 
         if obj and obj.status != constants.AGUARDANDO_ENVIO:
             return ("bem",)
-        return (None,)
+        return super().get_readonly_fields(request, obj)
 
 
 class BaixaFisicaResource(resources.ModelResource):
