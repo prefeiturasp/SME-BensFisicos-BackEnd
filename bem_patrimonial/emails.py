@@ -1,10 +1,7 @@
-import pytz
 from django.conf import settings
 from django.utils import timezone
 from config.utils import email_utils
 from usuario.models import Usuario
-
-local_timezone = pytz.timezone(settings.TIME_ZONE)
 
 EMAIL_TEMPLATE_SIMPLE_MESSAGE = "simple_message.html"
 URL_BAIXA_FISICA_CHANGE = "{}/bem_patrimonial/baixafisicabempatrimonial/{}/change/"

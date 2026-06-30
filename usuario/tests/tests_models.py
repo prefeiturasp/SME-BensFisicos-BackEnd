@@ -5,11 +5,13 @@ from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ValidationError
 from unittest.mock import patch
 from types import SimpleNamespace
+from import_export.formats.base_formats import XLSX
 
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.models import Usuario
 from usuario.admin import CustomUserModelAdmin
+from usuario.resources import UsuarioResource
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 
 from django.contrib.auth import get_user_model
@@ -131,6 +133,11 @@ class CustomUserModelAdminTestCase(TestCase):
         )
 
         request = self.factory.get("/admin/usuario/usuario/")
+        request.user = SimpleNamespace(
+            is_superuser=True,
+            is_gestor_patrimonio=False,
+            unidade_orcamentaria_id=None,
+        )
         queryset = self.admin.get_queryset(request)
 
         usuarios_ordenados = list(queryset)
@@ -196,6 +203,174 @@ class CustomUserModelAdminTestCase(TestCase):
 
     def test_nome_is_first_field_in_list_display(self):
         self.assertEqual(self.admin.list_display[0], "nome")
+
+
+class CustomUserModelAdminExportTestCase(TestCase):
+
+    def setUp(self):
+        self.site = AdminSite()
+        self.admin = CustomUserModelAdmin(Usuario, self.site)
+        self.factory = RequestFactory()
+
+        self.uo = criar_uo(codigo="100", nome="UO 100")
+        self.ua = criar_ua(
+            uo=self.uo,
+            codigo="001.001.001",
+            sigla="UA-TESTE",
+            nome="Unidade Administrativa Teste",
+        )
+
+        self.group_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
+        self.group_operador = Group.objects.get_or_create(
+            name=GRUPO_OPERADOR_INVENTARIO
+        )[0]
+
+        self.superuser = Usuario.objects.create_user(
+            username="superuser_export",
+            email="superuser_export@test.com",
+            **auth_kwargs("test123"),
+            nome="Superuser Export",
+            rf="123456",
+            is_staff=True,
+            is_superuser=True,
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+        )
+        self.superuser.groups.add(self.group_gestor)
+
+        self.gestor = Usuario.objects.create_user(
+            username="gestor_export",
+            email="gestor_export@test.com",
+            **auth_kwargs("test123"),
+            nome="Gestor Export",
+            rf="654321",
+            is_staff=True,
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+        )
+        self.gestor.groups.add(self.group_gestor)
+
+        self.operador = Usuario.objects.create_user(
+            username="operador_export",
+            email="operador_export@test.com",
+            **auth_kwargs("test123"),
+            nome="Operador Export",
+            rf="999999",
+            is_staff=True,
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+        )
+        self.operador.groups.add(self.group_operador)
+
+    def test_formato_exportacao_disponivel_somente_xlsx(self):
+        formats = self.admin.get_export_formats()
+        titles = [fmt().get_title() for fmt in formats]
+
+        self.assertEqual(titles, ["xlsx"])
+
+    def test_permissao_exportacao_para_superuser_e_gestor(self):
+        request = self.factory.get("/admin/usuario/usuario/")
+
+        request.user = self.superuser
+        self.assertTrue(self.admin.has_export_permission(request))
+
+        request.user = self.gestor
+        self.assertTrue(self.admin.has_export_permission(request))
+
+    def test_operador_nao_pode_exportar(self):
+        request = self.factory.get("/admin/usuario/usuario/")
+        request.user = self.operador
+
+        self.assertFalse(self.admin.has_export_permission(request))
+
+    def test_apenas_gestor_e_superuser_acessam_o_modulo(self):
+        request = self.factory.get("/admin/usuario/usuario/")
+
+        request.user = self.superuser
+        self.assertTrue(self.admin.has_module_permission(request))
+        self.assertTrue(self.admin.has_view_permission(request))
+        self.assertTrue(self.admin.has_add_permission(request))
+        self.assertTrue(self.admin.has_change_permission(request))
+
+        request.user = self.gestor
+        self.assertTrue(self.admin.has_module_permission(request))
+        self.assertTrue(self.admin.has_view_permission(request))
+        self.assertTrue(self.admin.has_add_permission(request))
+        self.assertTrue(self.admin.has_change_permission(request))
+
+        request.user = self.operador
+        self.assertFalse(self.admin.has_module_permission(request))
+        self.assertFalse(self.admin.has_view_permission(request))
+        self.assertFalse(self.admin.has_add_permission(request))
+        self.assertFalse(self.admin.has_change_permission(request))
+
+    def test_resource_exporta_colunas_e_valores_esperados(self):
+        usuario_sem_ua = Usuario.objects.create_user(
+            username="sem_ua",
+            email="sem_ua@test.com",
+            **auth_kwargs("test123"),
+            nome="Sem UA",
+            rf="111111",
+            is_staff=True,
+        )
+
+        resource = UsuarioResource()
+        dataset = resource.export(Usuario.objects.filter(pk__in=[self.gestor.pk, usuario_sem_ua.pk]))
+
+        self.assertEqual(
+            dataset.headers,
+            ["Nome", "RF", "E-mail", "Unidade Administrativa"],
+        )
+
+        linha_gestor = next(row for row in dataset if row[1] == "654321")
+        self.assertEqual(
+            list(linha_gestor),
+            [
+                "Gestor Export",
+                "654321",
+                "gestor_export@test.com",
+                str(self.ua),
+            ],
+        )
+
+        linha_sem_ua = next(row for row in dataset if row[1] == "111111")
+        self.assertEqual(linha_sem_ua[3], "-")
+
+    def test_export_queryset_respeita_queryset_base_do_admin(self):
+        request = self.factory.get("/admin/usuario/usuario/")
+        request.user = self.superuser
+
+        queryset = self.admin.get_export_queryset(request)
+        self.assertIn(self.superuser, queryset)
+        self.assertIn(self.gestor, queryset)
+        self.assertIn(self.operador, queryset)
+
+    def test_export_queryset_do_gestor_fica_restrito_a_sua_uo(self):
+        outra_uo = criar_uo(codigo="200", nome="UO 200")
+        outra_ua = criar_ua(
+            uo=outra_uo,
+            codigo="002.002.002",
+            sigla="UA-OUTRA",
+            nome="Unidade Administrativa Outra",
+        )
+        usuario_outra_uo = Usuario.objects.create_user(
+            username="usuario_outra_uo",
+            email="outra_uo@test.com",
+            **auth_kwargs("test123"),
+            nome="Usuario Outra UO",
+            rf="222222",
+            is_staff=True,
+            unidade_orcamentaria=outra_uo,
+            unidade_administrativa=outra_ua,
+        )
+
+        request = self.factory.get("/admin/usuario/usuario/")
+        request.user = self.gestor
+
+        queryset = self.admin.get_export_queryset(request)
+        self.assertIn(self.gestor, queryset)
+        self.assertIn(self.operador, queryset)
+        self.assertNotIn(usuario_outra_uo, queryset)
 
 
 class UsuarioRFFieldTestCase(TestCase):

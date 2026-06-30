@@ -40,7 +40,7 @@ class Command(BaseCommand):
         )
         return True
 
-    def _processar_descricao_bem(self, bem, numero, descricao_original):
+    def _processar_descricao_bem(self, numero, descricao_original):
         descricao_trabalhada = descricao_original
         alterou = False
         if numero and numero in descricao_trabalhada:
@@ -81,7 +81,7 @@ class Command(BaseCommand):
                     continue
 
                 descricao_limpa, alterou = self._processar_descricao_bem(
-                    bem, numero, descricao_original
+                    numero, descricao_original
                 )
 
                 if not alterou:

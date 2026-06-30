@@ -1,3 +1,4 @@
+import io
 from dados_comuns.tests.auth_test_utils import (
     NEW_PASSWORD1_KEY,
     NEW_PASSWORD2_KEY,
@@ -11,6 +12,7 @@ from django.conf import settings
 from django.utils import timezone
 import uuid
 from rest_framework.test import APIClient, APITestCase
+from openpyxl import load_workbook
 
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
@@ -452,6 +454,135 @@ class UsuarioViewSetTests(TestCase):
         usernames = [u["username"] for u in resp.data["results"]]
 
         self.assertIn("user1", usernames)
+
+
+class UsuarioExportViewSetTests(TestCase):
+
+    def setUp(self):
+        self.client = APIClient()
+        self.senha = "S3nh@123"
+
+        self.group_gestor = Group.objects.get_or_create(
+            name=GRUPO_GESTOR_PATRIMONIO
+        )[0]
+        self.group_operador = Group.objects.get_or_create(
+            name=GRUPO_OPERADOR_INVENTARIO
+        )[0]
+
+        self.uo1 = criar_uo(codigo="101", nome="UO 101")
+        self.ua1 = criar_ua(
+            uo=self.uo1,
+            codigo="101.001",
+            sigla="UA-101",
+            nome="Unidade Administrativa 101",
+        )
+        self.uo2 = criar_uo(codigo="202", nome="UO 202")
+        self.ua2 = criar_ua(
+            uo=self.uo2,
+            codigo="202.001",
+            sigla="UA-202",
+            nome="Unidade Administrativa 202",
+        )
+
+        self.superuser = User.objects.create_user(
+            username="superuser_export",
+            email="superuser_export@test.com",
+            password=self.senha,
+            nome="Superuser Export",
+            rf="900001",
+            is_staff=True,
+            is_superuser=True,
+            unidade_orcamentaria=self.uo1,
+            unidade_administrativa=self.ua1,
+        )
+        self.superuser.groups.add(self.group_gestor)
+
+        self.gestor = User.objects.create_user(
+            username="gestor_export",
+            email="gestor_export@test.com",
+            password=self.senha,
+            nome="Gestor Export",
+            rf="900002",
+            is_staff=True,
+            unidade_orcamentaria=self.uo1,
+            unidade_administrativa=self.ua1,
+        )
+        self.gestor.groups.add(self.group_gestor)
+
+        self.operador = User.objects.create_user(
+            username="operador_export",
+            email="operador_export@test.com",
+            password=self.senha,
+            nome="Operador Export",
+            rf="900003",
+            is_staff=True,
+            unidade_orcamentaria=self.uo1,
+            unidade_administrativa=self.ua1,
+        )
+        self.operador.groups.add(self.group_operador)
+
+        self.usuario_outra_uo = User.objects.create_user(
+            username="usuario_outra_uo",
+            email="outra@test.com",
+            password=self.senha,
+            nome="Usuario Outra UO",
+            rf="900004",
+            is_staff=True,
+            unidade_orcamentaria=self.uo2,
+            unidade_administrativa=self.ua2,
+        )
+
+        self.export_url = reverse("usuario-exportar")
+
+    def _auth(self, user):
+        self.client.force_authenticate(user=user)
+
+    def _ler_planilha(self, response):
+        workbook = load_workbook(io.BytesIO(response.content))
+        sheet = workbook.active
+        return list(sheet.iter_rows(values_only=True))
+
+    def test_superuser_exporta_todos_os_usuarios(self):
+        self._auth(self.superuser)
+
+        response = self.client.get(self.export_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertIn(".xlsx", response["Content-Disposition"])
+
+        rows = self._ler_planilha(response)
+        self.assertEqual(
+            rows[0],
+            ("Nome", "RF", "E-mail", "Unidade Administrativa"),
+        )
+        nomes = {row[0] for row in rows[1:] if row and row[0]}
+        self.assertIn("Gestor Export", nomes)
+        self.assertIn("Operador Export", nomes)
+        self.assertIn("Usuario Outra UO", nomes)
+
+    def test_gestor_exporta_apenas_usuarios_da_sua_uo(self):
+        self._auth(self.gestor)
+
+        response = self.client.get(self.export_url)
+
+        self.assertEqual(response.status_code, 200)
+
+        rows = self._ler_planilha(response)
+        nomes = {row[0] for row in rows[1:] if row and row[0]}
+        self.assertIn("Gestor Export", nomes)
+        self.assertIn("Operador Export", nomes)
+        self.assertNotIn("Usuario Outra UO", nomes)
+
+    def test_operador_nao_pode_exportar_usuarios(self):
+        self._auth(self.operador)
+
+        response = self.client.get(self.export_url)
+
+        self.assertEqual(response.status_code, 403)
 
 
 # =========================================
