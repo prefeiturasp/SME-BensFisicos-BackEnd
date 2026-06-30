@@ -167,7 +167,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
 
         if obj and obj.status != constants.AGUARDANDO_ENVIO:
             return ("bem",)
-        return ()
+        return (None,)
 
 
 class BaixaFisicaResource(resources.ModelResource):
@@ -308,18 +308,19 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         }
 
     def get_readonly_fields(self, request, obj=None):
+        campos_readonly = (
+            "unidade_administrativa_origem",
+            "numero_processo_baixa",
+            "status",
+            "criado_por",
+            "data_criacao",
+            "aprovado_por",
+            "data_aprovacao",
+            "data_baixa",
+        )
         if obj:
-            return (
-                "unidade_administrativa_origem",
-                "numero_processo_baixa",
-                "status",
-                "criado_por",
-                "data_criacao",
-                "aprovado_por",
-                "data_aprovacao",
-                "data_baixa",
-            )
-        return ()
+            return campos_readonly
+        return (None,) * len(campos_readonly)
 
     def get_fieldsets(self, request, obj=None):
         campos_basicos = (
@@ -457,7 +458,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 request,
                 (
                     "As seguintes Baixas Físicas não podem ser solicitadas, "
-                    "pois não estão com status 'Aguardando envio': "
+                    "pois não estão com status 'Em Elaboração': "
                     f"{lista_invalidas}"
                 ),
                 level=messages.ERROR,
@@ -579,7 +580,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 request,
                 (
                     "Nenhuma das Baixas Físicas selecionadas está em status "
-                    "'Aguardando envio' ou 'solicitada'. Nada foi recusado."
+                    "'Em Elaboração' ou 'Solicitada'. Nada foi recusado."
                 ),
                 level=messages.WARNING,
             )

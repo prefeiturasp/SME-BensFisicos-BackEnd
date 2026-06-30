@@ -616,7 +616,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         )
 
         try:
-            envia_email_baixa_fisica_correcao_solicitada(baixa, request.user)
+            envia_email_baixa_fisica_cancelada(baixa, request.user)
         except Exception:
             pass
 
@@ -678,7 +678,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         )
 
         try:
-            envia_email_baixa_fisica_cancelada(baixa, request.user)
+            envia_email_baixa_fisica_correcao_solicitada(baixa, request.user)
         except Exception:
             pass
 
