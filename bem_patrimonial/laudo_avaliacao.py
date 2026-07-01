@@ -1,15 +1,3 @@
-# bem_patrimonial/laudo_avaliacao.py
-#
-# Gera o "Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis"
-# conforme Artigo 20 do Decreto 53.484/2012.
-#
-# Documento distinto da NBBPM (nbbpm.py):
-#   - Sem número sequencial próprio
-#   - Sem colunas de quantidade ou valor
-#   - Com fundamentação legal do Decreto 53.484/2012
-#   - Assinaturas de Operador de Inventário e Chefia Imediata
-#   - Rodapé com data da SOLICITAÇÃO (data_criacao), não data de geração
-
 from io import BytesIO
 
 from django.core.exceptions import ValidationError
@@ -87,7 +75,7 @@ def _formatar_data_criacao(baixa: BaixaFisicaBemPatrimonial) -> str:
 # CABEÇALHO — desenhado no onPage para repetir em todas as páginas
 # ===========================================================================
 
-def _desenhar_cabecalho(canvas, doc, baixa: BaixaFisicaBemPatrimonial):
+def _desenhar_cabecalho(canvas, baixa: BaixaFisicaBemPatrimonial):
     """
     Desenha o cabeçalho do laudo no topo de cada página:
       - Logo da SME (esquerda)
@@ -154,7 +142,7 @@ def _desenhar_cabecalho(canvas, doc, baixa: BaixaFisicaBemPatrimonial):
 
     y_texto = y_topo - 0.3 * cm
     for p in linhas_texto:
-        w, h = p.wrap(texto_largura, 2 * cm)
+        _, h = p.wrap(texto_largura, 2 * cm)
         p.drawOn(canvas, texto_x, y_texto - h)
         y_texto -= h + 0.1 * cm
 
@@ -171,7 +159,7 @@ def _desenhar_cabecalho(canvas, doc, baixa: BaixaFisicaBemPatrimonial):
 # RODAPÉ — desenhado no onPage
 # ===========================================================================
 
-def _desenhar_rodape(canvas, doc, baixa: BaixaFisicaBemPatrimonial):
+def _desenhar_rodape(canvas, baixa: BaixaFisicaBemPatrimonial):
     """
     Rodapé com identificação do solicitante e data da solicitação:
       "Solicitado por {RF} em DD/MM/AAAA"
@@ -193,7 +181,7 @@ def _desenhar_rodape(canvas, doc, baixa: BaixaFisicaBemPatrimonial):
     texto = f"Solicitado por {rf} em {data_str}"
 
     p = Paragraph(texto, estilo_rodape)
-    w, h = p.wrap(LARGURA_UTIL, 1 * cm)
+    _, h = p.wrap(LARGURA_UTIL, 1 * cm)
 
     y_rodape = PDFConfig.MARGEM_INFERIOR - 1.0 * cm
     p.drawOn(canvas, PDFConfig.MARGEM_ESQUERDA, y_rodape)
@@ -409,15 +397,12 @@ def _criar_bloco_assinaturas(styles) -> list:
 
 def gerar_pdf_laudo_avaliacao(
     baixa: BaixaFisicaBemPatrimonial,
-    usuario_gerador=None,
 ) -> BytesIO:
     """
     Gera o Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis em PDF.
 
     Args:
         baixa: Instância de BaixaFisicaBemPatrimonial com status ACEITA.
-        usuario_gerador: Usuário que está gerando o documento (não utilizado
-                         no conteúdo do laudo, mas disponível para log futuro).
 
     Returns:
         BytesIO com o conteúdo do PDF pronto para download.
@@ -456,8 +441,8 @@ def gerar_pdf_laudo_avaliacao(
     )
 
     def on_page(canvas, doc_):
-        _desenhar_cabecalho(canvas, doc_, baixa)
-        _desenhar_rodape(canvas, doc_, baixa)
+        _desenhar_cabecalho(canvas, baixa)
+        _desenhar_rodape(canvas, baixa)
 
     template = PageTemplate(id="todas_paginas", frames=[frame], onPage=on_page)
     doc.addPageTemplates([template])
@@ -481,12 +466,11 @@ def gerar_pdf_laudo_avaliacao(
 
 def http_response_laudo_avaliacao(
     baixa: BaixaFisicaBemPatrimonial,
-    usuario_gerador=None,
 ) -> HttpResponse:
     """
     Retorna HttpResponse com o PDF do Laudo de Avaliação pronto para download.
     """
-    buffer = gerar_pdf_laudo_avaliacao(baixa, usuario_gerador=usuario_gerador)
+    buffer = gerar_pdf_laudo_avaliacao(baixa)
     filename = f"Laudo-Avaliacao-{baixa.id}.pdf"
 
     resp = HttpResponse(buffer.getvalue(), content_type="application/pdf")

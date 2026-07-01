@@ -754,7 +754,7 @@ class BaixaFisicaBemPatrimonialViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        return http_response_laudo_avaliacao(baixa, usuario_gerador=request.user)
+        return http_response_laudo_avaliacao(baixa)
 
     # =========================================================
     # EXPORTAR EXCEL
