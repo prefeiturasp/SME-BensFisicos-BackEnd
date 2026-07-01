@@ -1,5 +1,3 @@
-# bem_patrimonial/api_views.py
-
 from rest_framework import viewsets, status, filters, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -47,6 +45,7 @@ from .emails import (
     envia_email_baixa_fisica_correcao_solicitada,
 )
 from .nbbpm import http_response_nbbpm, gerar_numero_nbbpm
+from .laudo_avaliacao import http_response_laudo_avaliacao
 from . import constants
 from dados_comuns.escopo import filtrar_queryset_por_escopo
 from dados_comuns.context import set_user
@@ -143,6 +142,7 @@ class BaixaFisicaBemPatrimonialViewSet(
     - POST   /api/baixa-fisica/{id}/recusar/            → Cancelar/Recusar
     - POST   /api/baixa-fisica/{id}/solicitar/          → Enviar para aprovação
     - GET    /api/baixa-fisica/{id}/gerar-nbbpm/        → Gerar PDF NBBPM
+    - GET    /api/baixa-fisica/{id}/gerar-laudo/        → Gerar PDF Laudo de Avaliação
     - GET    /api/baixa-fisica/{id}/historico/          → Histórico de alterações
     - GET    /api/baixa-fisica/exportar-excel/          → Exportar Excel
     """
@@ -724,6 +724,37 @@ class BaixaFisicaBemPatrimonialViewSet(
             )
 
         return http_response_nbbpm(baixa)
+
+    # =========================================================
+    # GERAR LAUDO DE AVALIAÇÃO
+    # =========================================================
+
+    @extend_schema(
+        tags=["Baixas Físicas"],
+        summary="Gerar PDF do Laudo de Avaliação",
+        description=(
+            "Gera o Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis "
+            "conforme Artigo 20 do Decreto 53.484/2012. "
+            "Disponível apenas para baixas com status 'Aceita'."
+        ),
+        request=None,
+        responses={
+            200: OpenApiResponse(description="PDF do Laudo de Avaliação"),
+            400: OpenApiResponse(description="Baixa não está com status Aceita"),
+            404: OpenApiResponse(description="Baixa física não encontrada"),
+        },
+    )
+    @action(detail=True, methods=['get'], url_path='gerar-laudo')
+    def gerar_laudo(self, request, pk=None):
+        baixa = self.get_object()
+
+        if baixa.status != constants.ACEITA:
+            return Response(
+                {'detail': 'O Laudo de Avaliação só pode ser gerado para baixas aceitas.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return http_response_laudo_avaliacao(baixa, usuario_gerador=request.user)
 
     # =========================================================
     # EXPORTAR EXCEL

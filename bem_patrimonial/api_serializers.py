@@ -145,6 +145,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     url_recusar = serializers.SerializerMethodField()
     url_solicitar_correcao = serializers.SerializerMethodField()
     url_gerar_nbbpm = serializers.SerializerMethodField()
+    url_gerar_laudo = serializers.SerializerMethodField()
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
@@ -166,6 +167,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             'url_recusar',
             'url_solicitar_correcao',
             'url_gerar_nbbpm',
+            'url_gerar_laudo',
         ]
         read_only_fields = fields
 
@@ -214,6 +216,12 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     def get_url_gerar_nbbpm(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status == constants.ACEITA and obj.numero_nbbpm:
             return self._build_url('baixas-fisicas-gerar-nbbpm', obj.id)
+        return None
+
+    def get_url_gerar_laudo(self, obj: BaixaFisicaBemPatrimonial):
+        # O laudo não depende de numero_nbbpm — basta status ACEITA
+        if obj.status == constants.ACEITA:
+            return self._build_url('baixas-fisicas-gerar-laudo', obj.id)
         return None
 
 
