@@ -356,7 +356,7 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
         self.client.get(self.action_url(self.baixa_aceita.id, "gerar-laudo"))
 
         self.assertTrue(mock_pdf.called)
-        args, kwargs = mock_pdf.call_args
+        args, _ = mock_pdf.call_args
         baixa_passada = args[0]
         self.assertEqual(baixa_passada.id, self.baixa_aceita.id)
 
