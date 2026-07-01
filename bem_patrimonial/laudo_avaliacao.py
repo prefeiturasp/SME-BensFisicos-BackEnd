@@ -1,3 +1,15 @@
+# bem_patrimonial/laudo_avaliacao.py
+#
+# Gera o "Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis"
+# conforme Artigo 20 do Decreto 53.484/2012.
+#
+# Documento distinto da NBBPM (nbbpm.py):
+#   - Sem número sequencial próprio
+#   - Sem colunas de quantidade ou valor
+#   - Com fundamentação legal do Decreto 53.484/2012
+#   - Assinaturas de Operador de Inventário e Chefia Imediata
+#   - Rodapé com data da SOLICITAÇÃO (data_criacao), não data de geração
+
 from io import BytesIO
 
 from django.core.exceptions import ValidationError
@@ -75,7 +87,7 @@ def _formatar_data_criacao(baixa: BaixaFisicaBemPatrimonial) -> str:
 # CABEÇALHO — desenhado no onPage para repetir em todas as páginas
 # ===========================================================================
 
-def _desenhar_cabecalho(canvas, baixa: BaixaFisicaBemPatrimonial):
+def _desenhar_cabecalho(canvas, _, baixa: BaixaFisicaBemPatrimonial):
     """
     Desenha o cabeçalho do laudo no topo de cada página:
       - Logo da SME (esquerda)
@@ -159,7 +171,7 @@ def _desenhar_cabecalho(canvas, baixa: BaixaFisicaBemPatrimonial):
 # RODAPÉ — desenhado no onPage
 # ===========================================================================
 
-def _desenhar_rodape(canvas, baixa: BaixaFisicaBemPatrimonial):
+def _desenhar_rodape(canvas, _, baixa: BaixaFisicaBemPatrimonial):
     """
     Rodapé com identificação do solicitante e data da solicitação:
       "Solicitado por {RF} em DD/MM/AAAA"
@@ -441,8 +453,8 @@ def gerar_pdf_laudo_avaliacao(
     )
 
     def on_page(canvas, doc_):
-        _desenhar_cabecalho(canvas, baixa)
-        _desenhar_rodape(canvas, baixa)
+        _desenhar_cabecalho(canvas, doc_, baixa)
+        _desenhar_rodape(canvas, doc_, baixa)
 
     template = PageTemplate(id="todas_paginas", frames=[frame], onPage=on_page)
     doc.addPageTemplates([template])
@@ -466,6 +478,7 @@ def gerar_pdf_laudo_avaliacao(
 
 def http_response_laudo_avaliacao(
     baixa: BaixaFisicaBemPatrimonial,
+    usuario_gerador=None,  # NOSONAR
 ) -> HttpResponse:
     """
     Retorna HttpResponse com o PDF do Laudo de Avaliação pronto para download.

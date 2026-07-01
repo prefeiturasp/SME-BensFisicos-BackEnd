@@ -280,16 +280,23 @@ class HttpResponseLaudoAvaliacaoTestCase(BaseSetup):
         self.assertIn(".pdf", resp["Content-Disposition"])
 
     @patch("bem_patrimonial.laudo_avaliacao.gerar_pdf_laudo_avaliacao")
-    def test_repassa_usuario_gerador(self, mock_gerar):
-        """usuario_gerador deve ser repassado para gerar_pdf_laudo_avaliacao."""
+    def test_aceita_usuario_gerador_sem_repassar(self, mock_gerar):
+        """
+        http_response_laudo_avaliacao aceita usuario_gerador mas não o repassa
+        para gerar_pdf_laudo_avaliacao (parâmetro removido desta função pelo
+        Sonar — era unused). Verifica que a chamada ao gerar_pdf usa só a baixa.
+        """
         mock_gerar.return_value = BytesIO(b"%PDF-fake")
 
         from bem_patrimonial.laudo_avaliacao import http_response_laudo_avaliacao
 
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
-        http_response_laudo_avaliacao(baixa, usuario_gerador=self.gestor)
+        # Não deve lançar TypeError mesmo recebendo usuario_gerador
+        resp = http_response_laudo_avaliacao(baixa, usuario_gerador=self.gestor)
 
-        mock_gerar.assert_called_once_with(baixa, usuario_gerador=self.gestor)
+        # gerar_pdf é chamado apenas com a baixa (sem usuario_gerador)
+        mock_gerar.assert_called_once_with(baixa)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
 
     @patch("bem_patrimonial.laudo_avaliacao.gerar_pdf_laudo_avaliacao")
     def test_corpo_nao_vazio(self, mock_gerar):
@@ -352,19 +359,6 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
         args, kwargs = mock_pdf.call_args
         baixa_passada = args[0]
         self.assertEqual(baixa_passada.id, self.baixa_aceita.id)
-
-    @patch("bem_patrimonial.api_views.http_response_laudo_avaliacao")
-    def test_gerar_laudo_passa_usuario_gerador(self, mock_pdf):
-        """usuario_gerador passado ao http_response deve ser o usuário logado."""
-        mock_pdf.return_value = HttpResponse(
-            content=b"%PDF-fake",
-            content_type="application/pdf",
-        )
-        self._auth(self.gestor)
-        self.client.get(self.action_url(self.baixa_aceita.id, "gerar-laudo"))
-
-        _, kwargs = mock_pdf.call_args
-        self.assertEqual(kwargs.get("usuario_gerador"), self.gestor)
 
     @patch("bem_patrimonial.api_views.http_response_laudo_avaliacao")
     def test_gerar_laudo_operador_pode_gerar(self, mock_pdf):
