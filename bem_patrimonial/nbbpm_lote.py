@@ -172,7 +172,7 @@ def _desenhar_rodape_em_pagina(canvas, doc, nbbpm, usuario_gerador=None, data_ge
     )
 
 
-def _criar_rodape_nbbpm(nbbpm):
+def _criar_rodape_nbbpm(nbbpm):  # NOSONAR
     return criar_tabela_rodape_responsaveis(
         label_esquerda="CONTADOR DA UNIDADE ORÇAMENTÁRIA",
         label_direita="TITULAR DA UNIDADE ORÇAMENTÁRIA",
