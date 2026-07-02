@@ -500,7 +500,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
     def get_fieldsets(self, request, obj=None):
         if obj is None:
-            return (
+            return [
                 (
                     "Criar Conciliação",
                     {
@@ -511,9 +511,9 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                         )
                     },
                 ),
-            )
+            ]
 
-        return (
+        return [
             (
                 "Dados Básicos",
                 {
@@ -530,7 +530,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 "Auditoria",
                 {"fields": ("criado_por", "criado_em", "fechado_por", "fechado_em")},
             ),
-        )
+        ]
 
     def get_readonly_fields(self, request, obj=None):
         ro = list(super().get_readonly_fields(request, obj))

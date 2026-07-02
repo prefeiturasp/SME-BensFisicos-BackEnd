@@ -11,7 +11,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER
 from reportlab.platypus import Image, Paragraph, Spacer
 
-import pytz
+from zoneinfo import ZoneInfo
 
 
 class PDFConfigBase:
@@ -116,7 +116,7 @@ def formatar_data(dt):
 
 
 def formatar_datahora_geracao(data_geracao=None, config_cls=PDFConfigBase):
-    tz = pytz.timezone(config_cls.TZ_PADRAO)
+    tz = ZoneInfo(config_cls.TZ_PADRAO)
     data_ref = data_geracao if data_geracao else timezone.now()
 
     if timezone.is_naive(data_ref):

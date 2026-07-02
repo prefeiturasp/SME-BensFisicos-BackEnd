@@ -22,7 +22,7 @@ from reportlab.platypus import (
     PageTemplate,
     KeepTogether,
 )
-import pytz
+from zoneinfo import ZoneInfo
 
 from inventario import constants as inv_constants
 from bem_patrimonial.pdf_utils import obter_rf_usuario
@@ -136,7 +136,7 @@ def _criar_info_geracao(usuario_gerador=None, data_geracao=None):
         "InfoGeracao", styles, alignment=TA_LEFT, textColor=colors.grey
     )
 
-    tz_sp = pytz.timezone("America/Sao_Paulo")
+    tz_sp = ZoneInfo("America/Sao_Paulo")
 
     data_ref = data_geracao or timezone.now()
     if timezone.is_naive(data_ref):

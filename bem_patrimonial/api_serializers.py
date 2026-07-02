@@ -5,9 +5,9 @@ from django.urls import reverse
 from django.db import transaction
 from typing import Dict, Any
 
-from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial
+from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial, NBBPM
 from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.escopo import filtrar_ua_origem_por_escopo
+from dados_comuns.escopo import filtrar_ua_origem_por_escopo, filtrar_queryset_por_escopo
 from . import constants
 
 User = get_user_model()
@@ -143,7 +143,9 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     url_solicitar = serializers.SerializerMethodField()
     url_aprovar = serializers.SerializerMethodField()
     url_recusar = serializers.SerializerMethodField()
+    url_solicitar_correcao = serializers.SerializerMethodField()
     url_gerar_nbbpm = serializers.SerializerMethodField()
+    url_gerar_laudo = serializers.SerializerMethodField()
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
@@ -163,7 +165,9 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             'url_solicitar',
             'url_aprovar',
             'url_recusar',
+            'url_solicitar_correcao',
             'url_gerar_nbbpm',
+            'url_gerar_laudo',
         ]
         read_only_fields = fields
 
@@ -204,9 +208,20 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             return self._build_url('baixas-fisicas-recusar', obj.id)
         return None
 
+    def get_url_solicitar_correcao(self, obj: BaixaFisicaBemPatrimonial):
+        if obj.status == constants.SOLICITADA and self._usuario_e_gestor():
+            return self._build_url('baixas-fisicas-solicitar-correcao', obj.id)
+        return None
+
     def get_url_gerar_nbbpm(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status == constants.ACEITA and obj.numero_nbbpm:
             return self._build_url('baixas-fisicas-gerar-nbbpm', obj.id)
+        return None
+
+    def get_url_gerar_laudo(self, obj: BaixaFisicaBemPatrimonial):
+        # O laudo não depende de numero_nbbpm — basta status ACEITA
+        if obj.status == constants.ACEITA:
+            return self._build_url('baixas-fisicas-gerar-laudo', obj.id)
         return None
 
 
@@ -458,3 +473,177 @@ class BaixaFisicaCancelarSerializer(serializers.Serializer):
                 "Apenas Gestor de Patrimônio pode cancelar baixas físicas."
             )
         return attrs
+
+
+class BaixaFisicaSolicitarCorrecaoSerializer(serializers.Serializer):
+    """
+    Serializer do endpoint /solicitar-correcao/.
+
+    Distinto de BaixaFisicaCancelarSerializer:
+      - motivo é OBRIGATÓRIO aqui (no cancelar é opcional)
+      - só é válido a partir do status "solicitada" (no cancelar,
+        também vale para "aguardando_envio")
+    """
+    motivo = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        help_text="Orientações sobre o que precisa ser corrigido (obrigatório)."
+    )
+
+    def validate_motivo(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError(
+                "Descreva as orientações para a correção."
+            )
+        return value.strip()
+
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        baixa = self.context['baixa']
+        user = self.context['request'].user
+
+        if baixa.status != constants.SOLICITADA:
+            raise serializers.ValidationError(
+                f"Não é possível solicitar correção desta baixa. "
+                f"Status atual: {baixa.get_status_display()}"
+            )
+        if not (user.is_gestor_patrimonio or user.is_superuser):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                "Apenas Gestor de Patrimônio pode solicitar correção de baixas físicas."
+            )
+        return attrs
+
+
+# ============================================================================
+# NBBPM CONSOLIDADA — geração em lote (NOVO)
+# ============================================================================
+
+class NBBPMSerializer(serializers.ModelSerializer):
+    """Representação de saída de uma NBBPM consolidada já gerada."""
+    baixas = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    criado_por = UserSimpleSerializer(read_only=True)
+    unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
+
+    class Meta:
+        model = NBBPM
+        fields = [
+            'id',
+            'numero',
+            'baixas',
+            'unidade_administrativa_origem',
+            'numero_processo_baixa',
+            'data_autorizacao',
+            'responsavel',
+            'numero_processo_destinacao_final',
+            'criado_por',
+            'data_criacao',
+        ]
+        read_only_fields = fields
+
+
+class NBBPMGerarLoteSerializer(serializers.Serializer):
+    """
+    Serializer do endpoint POST /baixa-fisica/gerar-nbbpm-lote/.
+
+    Recebe a seleção de Baixas Físicas (status ACEITA / "Aprovado") e os
+    dados básicos informados na tela de geração da NBBPM, valida as
+    regras de negócio e persiste o registro consolidado.
+    """
+
+    baixas = serializers.PrimaryKeyRelatedField(
+        queryset=BaixaFisicaBemPatrimonial.objects.all(),
+        many=True,
+        required=True,
+        help_text="IDs das Baixas Físicas aprovadas selecionadas.",
+    )
+    numero_processo_baixa = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=64,
+        help_text="Número do processo de Baixa.",
+    )
+    data_autorizacao = serializers.DateField(
+        required=True,
+        help_text="Data da Autorização.",
+    )
+    responsavel = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=255,
+        help_text="Responsável pela Baixa/geração da NBBPM.",
+    )
+    numero_processo_destinacao_final = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=64,
+        default="",
+        help_text="Número do processo de destinação final (opcional).",
+    )
+
+    def validate_numero_processo_baixa(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("Informe o número do processo de Baixa.")
+        return value.strip()
+
+    def validate_responsavel(self, value: str) -> str:
+        if not value.strip():
+            raise serializers.ValidationError("Informe o responsável.")
+        return value.strip()
+
+    def validate_numero_processo_destinacao_final(self, value: str) -> str:
+        return (value or "").strip()
+
+    def validate_baixas(self, baixas):
+        if not baixas:
+            raise serializers.ValidationError(
+                "Selecione ao menos uma Baixa Física aprovada."
+            )
+
+        request = self.context["request"]
+
+        # Restringe a seleção às baixas dentro do escopo do usuário logado
+        # (mesma regra aplicada na listagem de Baixas Físicas).
+        escopo_ids = set(
+            filtrar_queryset_por_escopo(
+                usuario=request.user,
+                queryset=BaixaFisicaBemPatrimonial.objects.all(),
+                campo_ua="unidade_administrativa_origem",
+            ).values_list("id", flat=True)
+        )
+
+        fora_do_escopo = [b for b in baixas if b.id not in escopo_ids]
+        if fora_do_escopo:
+            raise serializers.ValidationError(
+                "Uma ou mais Baixas selecionadas não pertencem ao seu escopo de acesso."
+            )
+
+        nao_aprovadas = [b for b in baixas if b.status != constants.ACEITA]
+        if nao_aprovadas:
+            raise serializers.ValidationError(
+                "A NBBPM só pode ser gerada para Baixas Físicas com status Aprovado."
+            )
+
+        unidades_orcamentarias = {
+            getattr(b.unidade_administrativa_origem.unidade_orcamentaria, "id", None)
+            for b in baixas
+        }
+        if len(unidades_orcamentarias) > 1 or None in unidades_orcamentarias:
+            raise serializers.ValidationError(
+                "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária."
+            )
+
+        ja_utilizadas = [b for b in baixas if b.nbbpms_lote.exists()]
+        if ja_utilizadas:
+            ids = ", ".join(str(b.id) for b in ja_utilizadas)
+            raise serializers.ValidationError(
+                f"As Baixas {ids} já possuem NBBPM gerada."
+            )
+
+        return baixas
+
+    def create(self, validated_data):
+        baixas = validated_data.pop("baixas")
+        criado_por = self.context["request"].user
+        nbbpm = NBBPM.objects.create(criado_por=criado_por, **validated_data)
+        nbbpm.baixas.set(baixas)
+        return nbbpm

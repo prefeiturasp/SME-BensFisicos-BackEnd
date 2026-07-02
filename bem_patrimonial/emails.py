@@ -1,10 +1,7 @@
-import pytz
 from django.conf import settings
 from django.utils import timezone
 from config.utils import email_utils
 from usuario.models import Usuario
-
-local_timezone = pytz.timezone(settings.TIME_ZONE)
 
 EMAIL_TEMPLATE_SIMPLE_MESSAGE = "simple_message.html"
 URL_BAIXA_FISICA_CHANGE = "{}/bem_patrimonial/baixafisicabempatrimonial/{}/change/"
@@ -331,6 +328,44 @@ def envia_email_baixa_fisica_aprovada(baixa_fisica):
             f"foi aprovada.\n\n"
             f"Bens baixados:\n{lista_bens_formatada}\n\n"
             f"Acesse {object_url} para visualizar mais detalhes."
+        ),
+    }
+
+    email_utils.send_email_ctrl(
+        subject,
+        dict_params,
+        EMAIL_TEMPLATE_SIMPLE_MESSAGE,
+        baixa_fisica.criado_por.email,
+    )
+
+
+def envia_email_baixa_fisica_correcao_solicitada(baixa_fisica, usuario_solicitante):
+    """
+    Envio de e-mail quando uma correção é solicitada (ação: solicitar_correcao).
+    Destinatário: usuário que criou a baixa (criado_por).
+    """
+    if not baixa_fisica.criado_por or not baixa_fisica.criado_por.email:
+        return
+
+    object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
+
+    solicitante_nome = (
+        usuario_solicitante.nome or usuario_solicitante.username
+        if usuario_solicitante
+        else "gestor responsável"
+    )
+
+    lista_bens_formatada = _formata_lista_bens_baixa(baixa_fisica) or ""
+
+    subject = "[Bens Físicos] Correção solicitada na sua Baixa Física"
+    dict_params = {
+        "subject": subject,
+        "title": "Olá!",
+        "subtitle": (
+            f"A solicitação de Baixa Física de número de processo {baixa_fisica.numero_processo_baixa} "
+            f"foi devolvida para correção por {solicitante_nome}.\n\n"
+            f"Bens envolvidos:\n{lista_bens_formatada}\n\n"
+            f"Acesse {object_url} para realizar as correções necessárias."
         ),
     }
 
