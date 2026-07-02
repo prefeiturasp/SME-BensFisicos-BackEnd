@@ -15,7 +15,7 @@ import django_filters
 from dados_comuns.models import HistoricoGeral
 from django.contrib.contenttypes.models import ContentType
 
-from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem
+from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, NBBPM
 from .api_serializers import (
     BaixaFisicaBemPatrimonialListSerializer,
     BaixaFisicaBemPatrimonialDetailSerializer,
@@ -25,6 +25,8 @@ from .api_serializers import (
     BaixaFisicaAprovarSerializer,
     BaixaFisicaCancelarSerializer,
     BaixaFisicaSolicitarCorrecaoSerializer,
+    NBBPMGerarLoteSerializer,
+    NBBPMSerializer,
 )
 from .api_docs import (
     LIST_BAIXAS_FISICAS_DOC,
@@ -45,6 +47,10 @@ from .emails import (
     envia_email_baixa_fisica_correcao_solicitada,
 )
 from .nbbpm import http_response_nbbpm, gerar_numero_nbbpm
+from .nbbpm_lote import (
+    http_response_nbbpm_lote,
+    gerar_numero_nbbpm_lote,
+)
 from .laudo_avaliacao import http_response_laudo_avaliacao
 from . import constants
 from dados_comuns.escopo import filtrar_queryset_por_escopo
@@ -142,6 +148,7 @@ class BaixaFisicaBemPatrimonialViewSet(
     - POST   /api/baixa-fisica/{id}/recusar/            → Cancelar/Recusar
     - POST   /api/baixa-fisica/{id}/solicitar/          → Enviar para aprovação
     - GET    /api/baixa-fisica/{id}/gerar-nbbpm/        → Gerar PDF NBBPM
+    - POST   /api/baixa-fisica/gerar-nbbpm-lote/        → Gerar PDF NBBPM consolidada (NOVO)
     - GET    /api/baixa-fisica/{id}/gerar-laudo/        → Gerar PDF Laudo de Avaliação
     - GET    /api/baixa-fisica/{id}/historico/          → Histórico de alterações
     - GET    /api/baixa-fisica/exportar-excel/          → Exportar Excel
@@ -205,6 +212,8 @@ class BaixaFisicaBemPatrimonialViewSet(
             return BaixaFisicaCancelarSerializer
         elif self.action == 'solicitar_correcao':
             return BaixaFisicaSolicitarCorrecaoSerializer
+        elif self.action == 'gerar_nbbpm_lote':
+            return NBBPMGerarLoteSerializer
         return BaixaFisicaBemPatrimonialDetailSerializer
 
     def _detail_response(self, baixa, request, http_status=status.HTTP_200_OK):
@@ -724,6 +733,42 @@ class BaixaFisicaBemPatrimonialViewSet(
             )
 
         return http_response_nbbpm(baixa)
+
+    # =========================================================
+    # GERAR NBBPM CONSOLIDADA (LOTE) — NOVO
+    # =========================================================
+    #
+    # Fluxo da tela "Baixas Físicas de Bens Patrimoniais": o usuário
+    # seleciona uma ou mais Baixas com status Aprovado (ACEITA) da sua
+    # Unidade Orçamentária, informa Número do processo de Baixa, Data da
+    # Autorização, Responsável e (opcionalmente) o Número do processo de
+    # destinação final, e o sistema gera um único PDF consolidado.
+
+    @extend_schema(
+        tags=["Baixas Físicas"],
+        summary="Gerar PDF NBBPM consolidada (lote)",
+        description=(
+            "Gera uma NBBPM consolidada a partir de uma ou mais Baixas "
+            "Físicas aprovadas (status ACEITA) da mesma Unidade "
+            "Orçamentária do usuário logado."
+        ),
+        request=NBBPMGerarLoteSerializer,
+        responses={
+            200: OpenApiResponse(description="PDF da NBBPM consolidada"),
+            400: OpenApiResponse(description="Seleção inválida de Baixas Físicas"),
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='gerar-nbbpm-lote')
+    def gerar_nbbpm_lote(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            nbbpm = serializer.save()
+            nbbpm.numero = gerar_numero_nbbpm_lote(nbbpm)
+            nbbpm.save(update_fields=['numero'])
+
+        return http_response_nbbpm_lote(nbbpm, usuario_gerador=request.user)
 
     # =========================================================
     # GERAR LAUDO DE AVALIAÇÃO
