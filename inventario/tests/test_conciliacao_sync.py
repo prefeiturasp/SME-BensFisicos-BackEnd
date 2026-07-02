@@ -43,7 +43,7 @@ class ConciliacaoSyncTest(TestCase):
         ua = ua or self.ua
         return ConciliacaoUA.objects.create(
             tipo=inv_constants.CONCILIACAO_EVENTUAL,
-            periodo_final=datetime.date.today(),
+            periodo_final=datetime.date.today() - datetime.timedelta(days=1),
             unidade_administrativa=ua,
             criado_por=self.usuario,
             status=inv_constants.CONCILIACAO_EM_ABERTO,
