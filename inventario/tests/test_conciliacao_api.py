@@ -55,7 +55,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         payload = {
             "unidade_administrativa": self.ua1.id,
             "tipo": constants.CONCILIACAO_EVENTUAL,
-            "periodo_final": str(date.today()),
+            "periodo_final": str(date.today() - timezone.timedelta(days=1)),
         }
         payload.update(overrides)
         return payload
@@ -225,7 +225,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
 
         payload = self._payload_create(
             unidade_administrativa=self.ua1.id,
-            periodo_final=str(date.today() + timezone.timedelta(days=10)),
+            periodo_final=str(date.today() - timezone.timedelta(days=1)),
         )
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -241,7 +241,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         )
         self._auth(self.operador)
         payload = self._payload_create(
-            periodo_final=str(date.today() + timezone.timedelta(days=10)),
+            periodo_final=str(date.today() - timezone.timedelta(days=1)),
         )
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -254,7 +254,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         self._auth(self.gestor_com_ua)
         payload = self._payload_create(
             unidade_administrativa=self.ua_fora.id,
-            periodo_final=str(date.today()),
+            periodo_final=str(date.today() - timezone.timedelta(days=1)),
         )
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -283,7 +283,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
     def test_create_com_conciliacao_aberta_existente_retorna_400(self):
         self._auth(self.gestor_com_ua)
         payload = self._payload_create(
-            periodo_final=str(date.today() + timezone.timedelta(days=10)),
+            periodo_final=str(date.today() - timezone.timedelta(days=1)),
         )
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -293,7 +293,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         self._auth(self.operador)
         payload = self._payload_create(
             unidade_administrativa=self.ua2.id,
-            periodo_final=str(date.today()),
+            periodo_final=str(date.today() - timezone.timedelta(days=1)),
         )
         response = self.client.post(self.list_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 
 from dados_comuns.escopo import filtrar_ua_origem_por_escopo
@@ -132,6 +135,19 @@ class ConciliacaoUACreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"periodo_final": "Este campo é obrigatório para conciliação eventual."}
             )
+
+        if tipo == constants.CONCILIACAO_EVENTUAL and periodo_final:
+            hoje = timezone.localdate()
+            if periodo_final >= hoje:
+                data_maxima = hoje - timedelta(days=1)
+                raise serializers.ValidationError(
+                    {
+                        "periodo_final": (
+                            "O Período Final deve ser anterior à data atual. "
+                            f"Data máxima permitida: {data_maxima:%d/%m/%Y}."
+                        )
+                    }
+                )
 
         return attrs
 
