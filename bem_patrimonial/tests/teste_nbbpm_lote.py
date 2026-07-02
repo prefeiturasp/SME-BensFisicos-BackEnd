@@ -35,7 +35,7 @@ def criar_usuario(username, uo, ua, **kwargs):
     return Usuario.objects.create_user(
         username=username,
         email=f"{username}@test.com",
-        password=["senha", "123"].join(""),
+        password="".join(["senha", "123"]),
         unidade_administrativa=ua,
         unidade_orcamentaria=uo,
         **kwargs,
