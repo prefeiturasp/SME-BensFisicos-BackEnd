@@ -445,12 +445,6 @@ class CustomUserModelAdminExportTestCase(TestCase):
             sigla="UO1",
             nome="UO 1",
         )
-        ua2 = criar_ua(
-            uo=uo,
-            codigo="101.002",
-            sigla="UO2",
-            nome="UO 2",
-        )
         operador_sem_ua = Usuario.objects.create_user(
             username="operador_sem_ua_export",
             email="operador_sem_ua_export@test.com",
