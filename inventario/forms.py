@@ -123,8 +123,19 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
             self._clean_conciliacao_anual(
                 cleaned, hoje, ano_corrente, unidade_administrativa
             )
-        elif tipo == constants.CONCILIACAO_EVENTUAL and not periodo_final:
-            raise ValidationError({"periodo_final": "Este campo é obrigatório."})
+        elif tipo == constants.CONCILIACAO_EVENTUAL:
+            if not periodo_final:
+                raise ValidationError({"periodo_final": "Este campo é obrigatório."})
+            if periodo_final >= hoje:
+                data_maxima = hoje - timezone.timedelta(days=1)
+                raise ValidationError(
+                    {
+                        "periodo_final": (
+                            "O Período Final deve ser anterior à data atual. "
+                            f"Data máxima permitida: {data_maxima:%d/%m/%Y}."
+                        )
+                    }
+                )
 
     def _clean_conciliacao_anual(
         self, cleaned, hoje, ano_corrente, unidade_administrativa

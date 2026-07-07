@@ -531,6 +531,7 @@ class UsuarioExportViewSetTests(TestCase):
             unidade_orcamentaria=self.uo2,
             unidade_administrativa=self.ua2,
         )
+        self.usuario_outra_uo.groups.add(self.group_operador)
 
         self.export_url = reverse("usuario-exportar")
 
@@ -542,7 +543,7 @@ class UsuarioExportViewSetTests(TestCase):
         sheet = workbook.active
         return list(sheet.iter_rows(values_only=True))
 
-    def test_superuser_exporta_todos_os_usuarios(self):
+    def test_superuser_exporta_apenas_operadores(self):
         self._auth(self.superuser)
 
         response = self.client.get(self.export_url)
@@ -557,14 +558,15 @@ class UsuarioExportViewSetTests(TestCase):
         rows = self._ler_planilha(response)
         self.assertEqual(
             rows[0],
-            ("Nome", "RF", "E-mail", "Unidade Administrativa"),
+            ("Nome do Operador", "RF", "E-mail", "UA 1"),
         )
         nomes = {row[0] for row in rows[1:] if row and row[0]}
-        self.assertIn("Gestor Export", nomes)
         self.assertIn("Operador Export", nomes)
         self.assertIn("Usuario Outra UO", nomes)
+        self.assertNotIn("Gestor Export", nomes)
+        self.assertNotIn("Superuser Export", nomes)
 
-    def test_gestor_exporta_apenas_usuarios_da_sua_uo(self):
+    def test_gestor_exporta_apenas_operadores_da_sua_uo(self):
         self._auth(self.gestor)
 
         response = self.client.get(self.export_url)
@@ -573,8 +575,8 @@ class UsuarioExportViewSetTests(TestCase):
 
         rows = self._ler_planilha(response)
         nomes = {row[0] for row in rows[1:] if row and row[0]}
-        self.assertIn("Gestor Export", nomes)
         self.assertIn("Operador Export", nomes)
+        self.assertNotIn("Gestor Export", nomes)
         self.assertNotIn("Usuario Outra UO", nomes)
 
     def test_operador_nao_pode_exportar_usuarios(self):

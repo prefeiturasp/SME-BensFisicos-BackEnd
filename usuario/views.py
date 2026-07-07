@@ -378,7 +378,7 @@ class UsuarioViewSet(
         qs = User.objects.select_related(
             "unidade_orcamentaria",
             "unidade_administrativa"
-        ).prefetch_related("groups")
+        ).prefetch_related("groups", "unidades_administrativas")
         return filtrar_queryset_usuario_por_escopo(self.request.user, qs)
 
     # =========================================================

@@ -224,6 +224,7 @@ class CustomUserModelAdmin(ImportExportModelAdmin, UserAdmin):
 
     def _get_queryset_filtrado_por_escopo(self, request):
         qs = super().get_queryset(request)
+        qs = qs.prefetch_related("unidades_administrativas")
         return filtrar_queryset_usuario_por_escopo(request.user, qs)
 
     def get_queryset(self, request):
