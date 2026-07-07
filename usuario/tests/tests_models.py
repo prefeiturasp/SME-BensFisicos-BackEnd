@@ -305,36 +305,180 @@ class CustomUserModelAdminExportTestCase(TestCase):
         self.assertFalse(self.admin.has_change_permission(request))
 
     def test_resource_exporta_colunas_e_valores_esperados(self):
-        usuario_sem_ua = Usuario.objects.create_user(
-            username="sem_ua",
-            email="sem_ua@test.com",
+        usuario_sem_grupo = Usuario.objects.create_user(
+            username="sem_grupo",
+            email="sem_grupo@test.com",
             **auth_kwargs("test123"),
-            nome="Sem UA",
+            nome="Sem Grupo",
             rf="111111",
             is_staff=True,
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
         )
 
         resource = UsuarioResource()
-        dataset = resource.export(Usuario.objects.filter(pk__in=[self.gestor.pk, usuario_sem_ua.pk]))
+        dataset = resource.export(
+            Usuario.objects.filter(
+                pk__in=[self.gestor.pk, self.operador.pk, usuario_sem_grupo.pk]
+            )
+        )
 
         self.assertEqual(
             dataset.headers,
-            ["Nome", "RF", "E-mail", "Unidade Administrativa"],
+            ["Nome do Operador", "RF", "E-mail", "UA 1"],
         )
 
-        linha_gestor = next(row for row in dataset if row[1] == "654321")
+        self.assertEqual(len(dataset), 1)
+
+        linha_operador = next(row for row in dataset if row[1] == "999999")
         self.assertEqual(
-            list(linha_gestor),
+            list(linha_operador),
             [
-                "Gestor Export",
-                "654321",
-                "gestor_export@test.com",
+                "Operador Export",
+                "999999",
+                "operador_export@test.com",
                 str(self.ua),
             ],
         )
 
-        linha_sem_ua = next(row for row in dataset if row[1] == "111111")
-        self.assertEqual(linha_sem_ua[3], "-")
+    def test_resource_export_sem_queryset_usar_get_queryset_e_filtra_operadores(self):
+        outro_operador = Usuario.objects.create_user(
+            username="outro_operador",
+            email="outro_operador@test.com",
+            **auth_kwargs("test123"),
+            nome="Outro Operador",
+            rf="222222",
+            is_staff=True,
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+        )
+        outro_operador.groups.add(self.group_operador)
+
+        resource = UsuarioResource()
+        with patch.object(resource, "get_queryset", return_value=Usuario.objects.all()):
+            dataset = resource.export()
+
+        nomes = [row[0] for row in dataset]
+        self.assertIn("Operador Export", nomes)
+        self.assertIn("Outro Operador", nomes)
+        self.assertNotIn("Gestor Export", nomes)
+
+    def test_resource_export_sem_queryset_padrao_do_resource(self):
+        outro_operador = Usuario.objects.create_user(
+            username="outro_operador_padrao",
+            email="outro_operador_padrao@test.com",
+            **auth_kwargs("test123"),
+            nome="Outro Operador Padrao",
+            rf="222223",
+            is_staff=True,
+            unidade_orcamentaria=self.uo,
+            unidade_administrativa=self.ua,
+        )
+        outro_operador.groups.add(self.group_operador)
+
+        resource = UsuarioResource()
+        dataset = resource.export()
+
+        nomes = [row[0] for row in dataset]
+        self.assertIn("Operador Export", nomes)
+        self.assertIn("Outro Operador Padrao", nomes)
+        self.assertNotIn("Gestor Export", nomes)
+
+    def test_resource_exporta_colunas_dinamicas_para_multiplas_uas(self):
+        ua_extra = criar_ua(
+            uo=self.uo,
+            codigo="001.002.001",
+            sigla="UA-TESTE-2",
+            nome="Unidade Administrativa Teste 2",
+        )
+        ua_terceira = criar_ua(
+            uo=self.uo,
+            codigo="001.002.002",
+            sigla="UA-TESTE-3",
+            nome="Unidade Administrativa Teste 3",
+        )
+
+        usuario_multi_ua = Usuario.objects.create_user(
+            username="multi_ua",
+            email="multi_ua@test.com",
+            **auth_kwargs("test123"),
+            nome="Usuario Multi UA",
+            rf="333333",
+            is_staff=True,
+            unidade_orcamentaria=self.uo,
+        )
+        usuario_multi_ua.groups.add(self.group_operador)
+        usuario_multi_ua.unidades_administrativas.add(self.ua, ua_extra, ua_terceira)
+
+        resource = UsuarioResource()
+        dataset = resource.export(Usuario.objects.filter(pk=usuario_multi_ua.pk))
+
+        self.assertEqual(
+            dataset.headers,
+            [
+                "Nome do Operador",
+                "RF",
+                "E-mail",
+                "UA 1",
+                "UA 2",
+                "UA 3",
+            ],
+        )
+        self.assertEqual(len(dataset), 1)
+        self.assertEqual(
+            list(dataset[0]),
+            [
+                "Usuario Multi UA",
+                "333333",
+                "multi_ua@test.com",
+                str(self.ua),
+                str(ua_extra),
+                str(ua_terceira),
+            ],
+        )
+
+    def test_resource_exporta_operador_sem_ua_com_fallback_da_ua_principal(self):
+        uo = criar_uo(codigo="101", nome="UO Gestor Sem UA")
+        ua1 = criar_ua(
+            uo=uo,
+            codigo="101.001",
+            sigla="UO1",
+            nome="UO 1",
+        )
+        ua2 = criar_ua(
+            uo=uo,
+            codigo="101.002",
+            sigla="UO2",
+            nome="UO 2",
+        )
+        operador_sem_ua = Usuario.objects.create_user(
+            username="operador_sem_ua_export",
+            email="operador_sem_ua_export@test.com",
+            **auth_kwargs("test123"),
+            nome="Operador Sem UA Export",
+            rf="444444",
+            is_staff=True,
+            unidade_orcamentaria=uo,
+            unidade_administrativa=ua1,
+        )
+        operador_sem_ua.groups.add(self.group_operador)
+
+        resource = UsuarioResource()
+        dataset = resource.export(Usuario.objects.filter(pk=operador_sem_ua.pk))
+
+        self.assertEqual(
+            dataset.headers,
+            ["Nome do Operador", "RF", "E-mail", "UA 1"],
+        )
+        self.assertEqual(
+            list(dataset[0]),
+            [
+                "Operador Sem UA Export",
+                "444444",
+                "operador_sem_ua_export@test.com",
+                str(ua1),
+            ],
+        )
 
     def test_export_queryset_respeita_queryset_base_do_admin(self):
         request = self.factory.get("/admin/usuario/usuario/")
