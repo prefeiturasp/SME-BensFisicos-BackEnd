@@ -89,18 +89,26 @@ A ação também gera um registro na tabela **HistoricoGeral**.
 
 # API: /api/user/exportar/ (GET)
 EXPORT_USERS_DOC = dedent("""
-Exporta os usuarios visiveis para o usuario autenticado em formato Excel.
+Exporta os operadores visiveis para o usuario autenticado em formato Excel.
 
 Regras de acesso:
 
-- superusuario exporta todos os usuarios;
-- gestor de patrimonio exporta apenas os usuarios da sua Unidade Orcamentaria;
+- superusuario pode acessar o recurso;
+- gestor de patrimonio pode acessar o recurso;
 - operador de inventario nao acessa este recurso.
 
 O arquivo exportado segue o padrao de colunas:
 
-- Nome
+- Nome do Operador
 - RF
 - E-mail
-- Unidade Administrativa
+- UA 1
+- UA 2
+- ...
+
+Quando o usuario estiver vinculado a mais de uma Unidade Administrativa,
+o arquivo cria colunas adicionais para cada vinculo.
+
+O conteudo exportado sempre considera apenas usuarios do grupo de operador de
+inventario.
 """)
