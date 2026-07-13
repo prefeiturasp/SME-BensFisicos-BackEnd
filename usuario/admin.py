@@ -3,9 +3,13 @@ from django import forms
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import Group
 from django_admin_listfilter_dropdown.filters import DropdownFilter
+from import_export.admin import ImportExportModelAdmin
+from import_export.formats.base_formats import XLSX
 from rangefilter.filters import DateRangeFilter
 from usuario.models import Usuario
+from usuario.resources import UsuarioResource
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
 from django.core.exceptions import ValidationError
 
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
@@ -131,8 +135,9 @@ class GroupSingleSelectWidget(forms.Select):
         return groups
 
 
-class CustomUserModelAdmin(UserAdmin):
+class CustomUserModelAdmin(ImportExportModelAdmin, UserAdmin):
     model = Usuario
+    resource_class = UsuarioResource
     list_display = (
         "nome",
         "email",
@@ -189,6 +194,47 @@ class CustomUserModelAdmin(UserAdmin):
     class Media:
         css = {"all": ("css/hide_crud_icons.css",)}
         js = ("admin/usuario_uo_ua.js",)
+
+    def has_import_permission(self, request):
+        return False
+
+    def has_export_permission(self, request):
+        return request.user.is_superuser or request.user.is_gestor_patrimonio
+
+    def _pode_gerenciar(self, user):
+        return bool(
+            getattr(user, "is_superuser", False)
+            or getattr(user, "is_gestor_patrimonio", False)
+        )
+
+    def has_module_permission(self, request):
+        return self._pode_gerenciar(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return self._pode_gerenciar(request.user)
+
+    def has_add_permission(self, request):
+        return self._pode_gerenciar(request.user)
+
+    def has_change_permission(self, request, obj=None):
+        return self._pode_gerenciar(request.user)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def _get_queryset_filtrado_por_escopo(self, request):
+        qs = super().get_queryset(request)
+        qs = qs.prefetch_related("unidades_administrativas")
+        return filtrar_queryset_usuario_por_escopo(request.user, qs)
+
+    def get_queryset(self, request):
+        return self._get_queryset_filtrado_por_escopo(request)
+
+    def get_export_queryset(self, request):
+        return self.get_queryset(request)
+
+    def get_export_formats(self):
+        return [XLSX]
 
     def get_fieldsets(self, request, obj=None):
         if obj is None:

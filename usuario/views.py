@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.views import (
@@ -17,6 +18,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.utils import ProgrammingError
 from django.shortcuts import get_object_or_404, redirect
+from django.http import HttpResponse
 from django.urls import reverse_lazy, reverse
 from urllib.parse import urlencode
 from django.utils import timezone
@@ -28,6 +30,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import viewsets, mixins, status
 from rest_framework.permissions import IsAdminUser
 from usuario.serializers import UsuarioSerializer
+from usuario.resources import UsuarioResource
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from usuario.filters import UsuarioFilter
@@ -39,12 +42,14 @@ from drf_spectacular.utils import (
 from usuario.api_doc import (
     CREATE_USERS_DOC,
     DELETE_USERS_DOC,
+    EXPORT_USERS_DOC,
     LIST_USERS_DOC,
     PATCH_USERS_DOC,
     RESTORE_USERS_DOC,
     RETRIEVE_USERS_DOC,
     UPDATE_USERS_DOC,
 )
+from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -373,22 +378,8 @@ class UsuarioViewSet(
         qs = User.objects.select_related(
             "unidade_orcamentaria",
             "unidade_administrativa"
-        ).prefetch_related("groups")
-
-        user = self.request.user
-
-        if getattr(user, "is_superuser", False):
-            return qs
-
-        if getattr(user, "is_operador_inventario", False):
-            return qs.none()
-
-        if getattr(user, "unidade_orcamentaria_id", None):
-            return qs.filter(
-                unidade_orcamentaria_id=user.unidade_orcamentaria_id
-            )
-
-        return qs.none()
+        ).prefetch_related("groups", "unidades_administrativas")
+        return filtrar_queryset_usuario_por_escopo(self.request.user, qs)
 
     # =========================================================
     # OBJECT COM ESCOPOS
@@ -456,6 +447,35 @@ class UsuarioViewSet(
     )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
+
+    # =========================================================
+    # EXPORT
+    # =========================================================
+
+    @extend_schema(
+        tags=["Usuarios"],
+        summary="Exportar usuarios",
+        description=EXPORT_USERS_DOC,
+        responses={
+            200: OpenApiResponse(description="Arquivo Excel gerado com sucesso."),
+            403: OpenApiResponse(description="Usuario sem permissao para exportar."),
+        },
+    )
+    @action(detail=False, methods=["get"], url_path="exportar")
+    def exportar(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        resource = UsuarioResource()
+        dataset = resource.export(queryset)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"usuarios_{timestamp}.xlsx"
+        response = HttpResponse(
+            dataset.xlsx,
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
     # =========================================================
     # CREATE
@@ -725,3 +745,5 @@ class UsuarioViewSet(
         ]
 
         return Response(data, status=status.HTTP_200_OK)
+
+

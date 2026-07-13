@@ -227,6 +227,7 @@ class PermissionsAPITestCase(SimpleTestCase):
             "partial_update",
             "destroy",
             "restore",
+            "exportar",
             "acao_desconhecida",
         ):
             with self.subTest(action=action):
@@ -235,9 +236,16 @@ class PermissionsAPITestCase(SimpleTestCase):
         gestor = self._user(gestor=True)
         self.assertTrue(perm.has_permission(self._request(gestor), self._view("list")))
         self.assertTrue(perm.has_permission(self._request(gestor), self._view("destroy")))
+        self.assertTrue(perm.has_permission(self._request(gestor), self._view("exportar")))
 
         with self.assertRaises(PermissionDenied):
             perm.has_permission(self._request(self._user(operador=True)), self._view("list"))
+
+        with self.assertRaises(PermissionDenied):
+            perm.has_permission(
+                self._request(self._user(operador=True)),
+                self._view("exportar"),
+            )
 
         self.assertFalse(
             perm.has_permission(self._request(self._user()), self._view("list"))

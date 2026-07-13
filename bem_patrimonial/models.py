@@ -1085,3 +1085,113 @@ class BaixaFisicaBensItem(models.Model):
 
     def __str__(self):
         return f"{self.bem} (Baixa #{self.baixa_id})"
+
+
+# ============================================================================
+# NBBPM CONSOLIDADA — geração em lote (NOVO)
+# ============================================================================
+#
+# Permite consolidar VÁRIAS Baixas Físicas aprovadas (status ACEITA) da
+# mesma Unidade Orçamentária em um único documento NBBPM, conforme a
+# funcionalidade "Gerar NBBPM" da listagem de Baixas Físicas.
+#
+# Não substitui nem altera o campo `numero_nbbpm` já existente em
+# BaixaFisicaBemPatrimonial (mantido por compatibilidade com o fluxo
+# antigo, de geração individual), nem o novo fluxo de "Laudo de
+# Avaliação" (gerar_laudo). Este novo modelo guarda o registro do
+# documento consolidado e o vínculo com todas as baixas selecionadas.
+
+class NBBPM(models.Model):
+    """
+    Nota de Baixa de Bens Patrimoniais Móveis e Intangíveis — versão
+    consolidada, gerada a partir da seleção de uma ou mais Baixas Físicas
+    com status Aprovado (ACEITA), todas pertencentes à mesma Unidade
+    Orçamentária do usuário.
+    """
+
+    numero = models.CharField(
+        "Número da NBBPM",
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Gerado automaticamente, no formato <COD_UO>.<SEQUENCIAL_7>.<ANO>",
+    )
+
+    baixas = models.ManyToManyField(
+        BaixaFisicaBemPatrimonial,
+        related_name="nbbpms_lote",
+        verbose_name="Baixas Físicas",
+    )
+
+    numero_processo_baixa = models.CharField(
+        "Número do processo de Baixa",
+        max_length=64,
+    )
+
+    data_autorizacao = models.DateField(
+        "Data da Autorização",
+    )
+
+    responsavel = models.CharField(
+        "Responsável",
+        max_length=255,
+    )
+
+    numero_processo_destinacao_final = models.CharField(
+        "Número do processo de destinação final",
+        max_length=64,
+        blank=True,
+        default="",
+    )
+
+    criado_por = models.ForeignKey(
+        Usuario,
+        verbose_name="Usuário que gerou a NBBPM",
+        related_name="nbbpms_lote_geradas",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+    )
+
+    data_criacao = models.DateTimeField(
+        "Data de geração",
+        auto_now_add=True,
+    )
+
+    class Meta:
+        verbose_name = "NBBPM (Nota de Baixa de Bens Patrimoniais Móveis e Intangíveis)"
+        verbose_name_plural = "NBBPMs (Notas de Baixa de Bens Patrimoniais Móveis e Intangíveis)"
+        ordering = ["-data_criacao"]
+
+    def __str__(self):
+        return f"NBBPM {self.numero or self.pk}"
+
+    @property
+    def unidade_administrativa_origem(self):
+        """
+        Unidade Administrativa da primeira baixa vinculada. Todas as
+        baixas de uma mesma NBBPM pertencem obrigatoriamente à mesma
+        Unidade Orçamentária (validado no serializer), então qualquer
+        uma delas serve de referência para exibir Prefixo/Órgão/Código
+        da Unidade Orçamentária no documento.
+        """
+        primeira = self.baixas.select_related(
+            "unidade_administrativa_origem",
+            "unidade_administrativa_origem__unidade_orcamentaria",
+        ).first()
+        return primeira.unidade_administrativa_origem if primeira else None
+
+    @property
+    def unidade_orcamentaria(self):
+        ua = self.unidade_administrativa_origem
+        return getattr(ua, "unidade_orcamentaria", None) if ua else None
+
+    def clean(self):
+        super().clean()
+        if self.pk and self.baixas.exists():
+            status_invalidos = self.baixas.exclude(status=constants.ACEITA)
+            if status_invalidos.exists():
+                raise ValidationError(
+                    "A NBBPM só pode ser gerada para Baixas Físicas com status Aprovado."
+                )

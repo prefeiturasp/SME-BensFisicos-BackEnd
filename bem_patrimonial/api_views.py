@@ -1,5 +1,3 @@
-# bem_patrimonial/api_views.py
-
 from rest_framework import viewsets, status, filters, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -17,7 +15,7 @@ import django_filters
 from dados_comuns.models import HistoricoGeral
 from django.contrib.contenttypes.models import ContentType
 
-from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem
+from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, NBBPM
 from .api_serializers import (
     BaixaFisicaBemPatrimonialListSerializer,
     BaixaFisicaBemPatrimonialDetailSerializer,
@@ -26,6 +24,9 @@ from .api_serializers import (
     BaixaFisicaEnviarSolicitacaoSerializer,
     BaixaFisicaAprovarSerializer,
     BaixaFisicaCancelarSerializer,
+    BaixaFisicaSolicitarCorrecaoSerializer,
+    NBBPMGerarLoteSerializer,
+    NBBPMSerializer,
 )
 from .api_docs import (
     LIST_BAIXAS_FISICAS_DOC,
@@ -35,6 +36,7 @@ from .api_docs import (
     ENVIAR_SOLICITACAO_DOC,
     APROVAR_BAIXA_FISICA_DOC,
     CANCELAR_BAIXA_FISICA_DOC,
+    SOLICITAR_CORRECAO_DOC,
     GERAR_NBBPM_DOC,
     EXPORTAR_EXCEL_DOC,
 )
@@ -42,8 +44,14 @@ from .emails import (
     envia_email_baixa_fisica_solicitada,
     envia_email_baixa_fisica_aprovada,
     envia_email_baixa_fisica_cancelada,
+    envia_email_baixa_fisica_correcao_solicitada,
 )
 from .nbbpm import http_response_nbbpm, gerar_numero_nbbpm
+from .nbbpm_lote import (
+    http_response_nbbpm_lote,
+    gerar_numero_nbbpm_lote,
+)
+from .laudo_avaliacao import http_response_laudo_avaliacao
 from . import constants
 from dados_comuns.escopo import filtrar_queryset_por_escopo
 from dados_comuns.context import set_user
@@ -140,6 +148,8 @@ class BaixaFisicaBemPatrimonialViewSet(
     - POST   /api/baixa-fisica/{id}/recusar/            → Cancelar/Recusar
     - POST   /api/baixa-fisica/{id}/solicitar/          → Enviar para aprovação
     - GET    /api/baixa-fisica/{id}/gerar-nbbpm/        → Gerar PDF NBBPM
+    - POST   /api/baixa-fisica/gerar-nbbpm-lote/        → Gerar PDF NBBPM consolidada (NOVO)
+    - GET    /api/baixa-fisica/{id}/gerar-laudo/        → Gerar PDF Laudo de Avaliação
     - GET    /api/baixa-fisica/{id}/historico/          → Histórico de alterações
     - GET    /api/baixa-fisica/exportar-excel/          → Exportar Excel
     """
@@ -200,6 +210,10 @@ class BaixaFisicaBemPatrimonialViewSet(
             return BaixaFisicaAprovarSerializer
         elif self.action == 'recusar':
             return BaixaFisicaCancelarSerializer
+        elif self.action == 'solicitar_correcao':
+            return BaixaFisicaSolicitarCorrecaoSerializer
+        elif self.action == 'gerar_nbbpm_lote':
+            return NBBPMGerarLoteSerializer
         return BaixaFisicaBemPatrimonialDetailSerializer
 
     def _detail_response(self, baixa, request, http_status=status.HTTP_200_OK):
@@ -617,6 +631,68 @@ class BaixaFisicaBemPatrimonialViewSet(
 
         return self._detail_response(baixa, request)
 
+    # =========================================================
+    # SOLICITAR CORREÇÃO
+    # =========================================================
+    #
+    # Distinto de `recusar`: este fluxo é uma devolução para ajustes,
+    # não um encerramento do processo. Usado pela tela "Validar Baixa"
+    # do frontend, através da página própria "Solicitar correção".
+    #
+    # Diferenças em relação a `recusar`:
+    #   - só é permitido a partir do status "solicitada"
+    #   - o status final é "aguardando_envio" (Em elaboração), não
+    #     "recusada"
+    #   - motivo é obrigatório, não opcional
+    #   - os bens NÃO são restaurados ao status "aprovado": continuam
+    #     em "Baixa Física - Aguardando aprovação", pois a baixa ainda
+    #     está em andamento, apenas voltando para edição
+
+    @extend_schema(
+        tags=["Baixas Físicas"],
+        summary="Solicitar correção da baixa física",
+        description=SOLICITAR_CORRECAO_DOC,
+        request=BaixaFisicaSolicitarCorrecaoSerializer,
+        responses={
+            200: BaixaFisicaBemPatrimonialDetailSerializer,
+            400: OpenApiResponse(description="Erro de validação"),
+            403: OpenApiResponse(description="Sem permissão"),
+            404: OpenApiResponse(description="Baixa física não encontrada"),
+        },
+    )
+    @action(detail=True, methods=['post'], url_path='solicitar-correcao')
+    def solicitar_correcao(self, request, pk=None):
+        baixa = self.get_object()
+
+        serializer = self.get_serializer(
+            data=request.data, context={'baixa': baixa, 'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        status_anterior = baixa.get_status_display()
+        motivo = serializer.validated_data['motivo']
+
+        with transaction.atomic():
+            set_user(request.user)
+            baixa.status = constants.AGUARDANDO_ENVIO
+            baixa.save(update_fields=['status'])
+
+        self._registrar_historico(
+            baixa=baixa,
+            campo="status",
+            valor_antigo=status_anterior,
+            valor_novo=baixa.get_status_display(),
+            usuario=request.user,
+            justificativa=f"Correção solicitada. Observações: {motivo}",
+        )
+
+        try:
+            envia_email_baixa_fisica_correcao_solicitada(baixa, request.user)
+        except Exception:
+            pass
+
+        return self._detail_response(baixa, request)
+
     def _restaurar_bens_da_baixa(self, baixa: BaixaFisicaBemPatrimonial) -> None:
         """Restaura o status dos bens ao cancelar uma baixa."""
         for item in baixa.itens.select_related('bem'):
@@ -657,6 +733,73 @@ class BaixaFisicaBemPatrimonialViewSet(
             )
 
         return http_response_nbbpm(baixa)
+
+    # =========================================================
+    # GERAR NBBPM CONSOLIDADA (LOTE) — NOVO
+    # =========================================================
+    #
+    # Fluxo da tela "Baixas Físicas de Bens Patrimoniais": o usuário
+    # seleciona uma ou mais Baixas com status Aprovado (ACEITA) da sua
+    # Unidade Orçamentária, informa Número do processo de Baixa, Data da
+    # Autorização, Responsável e (opcionalmente) o Número do processo de
+    # destinação final, e o sistema gera um único PDF consolidado.
+
+    @extend_schema(
+        tags=["Baixas Físicas"],
+        summary="Gerar PDF NBBPM consolidada (lote)",
+        description=(
+            "Gera uma NBBPM consolidada a partir de uma ou mais Baixas "
+            "Físicas aprovadas (status ACEITA) da mesma Unidade "
+            "Orçamentária do usuário logado."
+        ),
+        request=NBBPMGerarLoteSerializer,
+        responses={
+            200: OpenApiResponse(description="PDF da NBBPM consolidada"),
+            400: OpenApiResponse(description="Seleção inválida de Baixas Físicas"),
+        },
+    )
+    @action(detail=False, methods=['post'], url_path='gerar-nbbpm-lote')
+    def gerar_nbbpm_lote(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            nbbpm = serializer.save()
+            nbbpm.numero = gerar_numero_nbbpm_lote(nbbpm)
+            nbbpm.save(update_fields=['numero'])
+
+        return http_response_nbbpm_lote(nbbpm, usuario_gerador=request.user)
+
+    # =========================================================
+    # GERAR LAUDO DE AVALIAÇÃO
+    # =========================================================
+
+    @extend_schema(
+        tags=["Baixas Físicas"],
+        summary="Gerar PDF do Laudo de Avaliação",
+        description=(
+            "Gera o Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis "
+            "conforme Artigo 20 do Decreto 53.484/2012. "
+            "Disponível apenas para baixas com status 'Aceita'."
+        ),
+        request=None,
+        responses={
+            200: OpenApiResponse(description="PDF do Laudo de Avaliação"),
+            400: OpenApiResponse(description="Baixa não está com status Aceita"),
+            404: OpenApiResponse(description="Baixa física não encontrada"),
+        },
+    )
+    @action(detail=True, methods=['get'], url_path='gerar-laudo')
+    def gerar_laudo(self, request, pk=None):
+        baixa = self.get_object()
+
+        if baixa.status != constants.ACEITA:
+            return Response(
+                {'detail': 'O Laudo de Avaliação só pode ser gerado para baixas aceitas.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return http_response_laudo_avaliacao(baixa)
 
     # =========================================================
     # EXPORTAR EXCEL

@@ -51,7 +51,11 @@ class OcorrenciaBaseTest(TestCase):
         if ano:
             periodo_final = datetime.date(ano, 12, 31)
         else:
-            periodo_final = datetime.date.today()
+            periodo_final = datetime.date.today() - datetime.timedelta(days=1)
+
+        hoje = datetime.date.today()
+        if periodo_final >= hoje:
+            periodo_final = hoje - datetime.timedelta(days=1)
 
         inv = ConciliacaoUA.objects.create(
             tipo=constants.CONCILIACAO_EVENTUAL,

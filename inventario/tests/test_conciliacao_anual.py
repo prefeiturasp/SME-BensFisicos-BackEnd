@@ -89,3 +89,24 @@ class ConciliacaoAnualModelTest(TestCase):
                 tipo=constants.CONCILIACAO_ANUAL,
                 criado_por=self.usuario,
             )
+
+
+class ConciliacaoEventualModelTest(TestCase):
+
+    def setUp(self):
+        self.ua = criar_ua(codigo="001.0099", sigla="UEV", nome="Unidade Eventual")
+        self.usuario = Usuario.objects.create_user(
+            username="gestor_eventual",
+            **auth_kwargs("123"),
+            unidade_orcamentaria=self.ua.unidade_orcamentaria,
+        )
+
+    def test_eventual_com_periodo_final_futuro_nao_permite_criar(self):
+        conciliacao = ConciliacaoUA(
+            tipo=constants.CONCILIACAO_EVENTUAL,
+            periodo_final=date.today() + timezone.timedelta(days=1),
+            unidade_administrativa=self.ua,
+        )
+        with self.assertRaises(ValidationError) as context:
+            conciliacao.clean()
+        self.assertIn("periodo_final", context.exception.message_dict)

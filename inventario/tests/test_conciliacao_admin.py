@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import urlencode
 
 from django.contrib.admin.sites import AdminSite
@@ -145,6 +145,80 @@ class ConciliacaoUAAdminFormTest(ConciliacaoAdminBaseTest):
         self.assertTrue(form.fields["unidade_administrativa"].disabled)
         self.assertTrue(form.fields["tipo"].disabled)
         self.assertTrue(form.fields["periodo_final"].disabled)
+
+    def test_form_em_edicao_valido(self):
+        request = self.factory.get("/admin/")
+        request.user = self.superuser
+        form = ConciliacaoUAAdminForm(
+            instance=self.conciliacao,
+            data={},
+            request=request,
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_form_eventual_com_periodo_final_futuro_invalido(self):
+        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(
+            status=constants.CONCILIACAO_FECHADO
+        )
+        request = self.factory.get("/admin/")
+        request.user = self.superuser
+        form = ConciliacaoUAAdminForm(
+            data={
+                "unidade_administrativa": self.outra_ua.pk,
+                "tipo": constants.CONCILIACAO_EVENTUAL,
+                "periodo_final": str(date.today() + timedelta(days=1)),
+            },
+            request=request,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("periodo_final", form.errors)
+
+    def test_form_eventual_com_periodo_final_passado_valido(self):
+        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(
+            status=constants.CONCILIACAO_FECHADO
+        )
+        request = self.factory.get("/admin/")
+        request.user = self.superuser
+        form = ConciliacaoUAAdminForm(
+            data={
+                "unidade_administrativa": self.outra_ua.pk,
+                "tipo": constants.CONCILIACAO_EVENTUAL,
+                "periodo_final": str(date.today() - timedelta(days=1)),
+            },
+            request=request,
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_form_eventual_sem_periodo_final_invalido(self):
+        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(
+            status=constants.CONCILIACAO_FECHADO
+        )
+        request = self.factory.get("/admin/")
+        request.user = self.superuser
+        form = ConciliacaoUAAdminForm(
+            data={
+                "unidade_administrativa": self.outra_ua.pk,
+                "tipo": constants.CONCILIACAO_EVENTUAL,
+                "periodo_final": "",
+            },
+            request=request,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("periodo_final", form.errors)
+
+    def test_form_com_conciliacao_aberta_existente_invalido(self):
+        request = self.factory.get("/admin/")
+        request.user = self.superuser
+        form = ConciliacaoUAAdminForm(
+            data={
+                "unidade_administrativa": self.ua.pk,
+                "tipo": constants.CONCILIACAO_EVENTUAL,
+                "periodo_final": str(date.today() - timedelta(days=1)),
+            },
+            request=request,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("unidade_administrativa", form.errors)
 
 
 class ConciliacaoAdminMethodsTest(ConciliacaoAdminBaseTest):

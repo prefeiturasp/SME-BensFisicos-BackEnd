@@ -350,3 +350,42 @@ O cabeçalho aceita variações de caixa e acentuação
  
 Somente usuários com permissão de criação de bens patrimoniais podem usar este endpoint.
 """)
+
+# API: /api/baixas-fisicas/:id/solicitar-correcao/ (POST)
+SOLICITAR_CORRECAO_DOC = dedent("""
+Solicita correção de uma baixa física, devolvendo-a ao solicitante original.
+ 
+### Quando usar
+ 
+O Gestor utiliza este endpoint ao revisar uma baixa com status **Solicitada**
+e identificar que um ou mais itens precisam de ajuste antes da aprovação.
+ 
+### Diferença em relação a `recusar`
+ 
+- **`recusar`**: encerra definitivamente o processo (status → Recusada).
+- **`solicitar-correcao`**: devolve a baixa para edição (status →
+  Em elaboração), permitindo que o solicitante ajuste os itens e
+  reenvie para nova análise.
+ 
+### Parâmetros obrigatórios
+ 
+- **motivo** → texto livre com as orientações sobre o que precisa ser
+  corrigido (obrigatório, não pode ser vazio)
+ 
+### Comportamento
+ 
+1. Valida que o status atual da baixa é **Solicitada**
+2. Valida que o usuário é Gestor de Patrimônio (ou superuser)
+3. Altera o status da baixa para **Em elaboração**
+4. Registra o motivo no histórico da baixa
+5. Notifica o solicitante original por e-mail (melhor esforço,
+   falhas de envio não impedem a operação)
+ 
+### Retorno
+ 
+Retorna o objeto **BaixaFisicaBemPatrimonialDetailSerializer** atualizado,
+já refletindo o novo status.
+ 
+**Importante:** este endpoint só pode ser chamado a partir do status
+Solicitada. Para baixas em outros status, a API retorna erro de validação.
+""")

@@ -117,7 +117,7 @@ class ConciliacaoPDFTestBase(TestCase):
         defaults = {
             "unidade_administrativa": ua,
             "tipo": constants.CONCILIACAO_EVENTUAL,
-            "periodo_final": timezone.localdate(),
+            "periodo_final": timezone.localdate() - timezone.timedelta(days=1),
             "status": constants.CONCILIACAO_EM_ABERTO,
             "criado_por": self.operador_a,
         }

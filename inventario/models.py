@@ -289,6 +289,24 @@ class ConciliacaoUA(models.Model):
                 {"periodo_final": "Campo obrigatório para conciliação eventual."}
             )
 
+        if (
+            self.tipo == constants.CONCILIACAO_EVENTUAL
+            and self.periodo_final
+            and not self.pk
+        ):
+            hoje = timezone.localdate()
+            if self.periodo_final >= hoje:
+                data_maxima = hoje - timezone.timedelta(days=1)
+                raise ValidationError(
+                    {
+                        "periodo_final": (
+                            "O Período Final da conciliação eventual deve ser "
+                            f"anterior à data atual. Data máxima permitida: "
+                            f"{data_maxima:%d/%m/%Y}."
+                        )
+                    }
+                )
+
         if self.tipo == constants.CONCILIACAO_ANUAL:
             ano_referencia = self._get_ano_referencia()
             self.periodo_final = date(ano_referencia, 12, 31)
