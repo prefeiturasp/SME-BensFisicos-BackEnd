@@ -258,6 +258,23 @@ class TransferenciaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
                         f"O bem '{bem.numero_patrimonial}' precisa estar com status 'Aprovado' para ser transferido."
                     )
                 }
+                continue
+
+            if getattr(bem, "bloqueado_conciliacao", False):
+                erros[str(idx)] = {
+                    "bem": (
+                        f"O bem '{bem.numero_patrimonial}' está bloqueado por inventário e não pode ser movimentado."
+                    )
+                }
+                continue
+
+            if getattr(bem, "tem_movimentacao_pendente", False):
+                erros[str(idx)] = {
+                    "bem": (
+                        f"O bem '{bem.numero_patrimonial}' já possui uma movimentação pendente."
+                    )
+                }
+                continue
 
         if erros:
             raise serializers.ValidationError({"itens": erros})

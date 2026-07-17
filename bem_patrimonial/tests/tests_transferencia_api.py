@@ -9,6 +9,8 @@ from bem_patrimonial.models import (
     BemPatrimonial,
     TransferenciaBemPatrimonial,
     TransferenciaBensItem,
+    MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
 )
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
@@ -209,6 +211,7 @@ class TransferenciaApiTestCase(TestCase):
         uos = {item["id"]: item for item in response.data}
         self.assertIn(self.uo_destino.id, uos)
         self.assertNotIn(self.uo_origem.id, uos)
+        self.assertNotIn(self.uo_sem_pc.id, uos)
         self.assertTrue(uos[self.uo_destino.id]["tem_ponto_central"])
 
     def test_listagem_busca_por_numero_processo(self):
@@ -337,6 +340,60 @@ class TransferenciaApiTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("itens", response.data)
         self.assertIn("status 'Aprovado'", str(response.data["itens"]))
+
+    def test_create_rejeita_bem_bloqueado_por_inventario(self):
+        bem_bloqueado = self._criar_bem(
+            "001.000000010-0",
+            self.ua_origem_1,
+        )
+        bem_bloqueado.bloqueado_conciliacao = True
+        bem_bloqueado.save(update_fields=["bloqueado_conciliacao"])
+
+        self._autenticar(self.gestor)
+        payload = {
+            "unidade_orcamentaria_destino": self.uo_destino.id,
+            "numero_processo": "SEI-123459/2026",
+            "observacao": "Transferencia com bloqueio de inventario",
+            "itens": [{"bem": bem_bloqueado.id}],
+        }
+
+        response = self.client.post(reverse("transferencias-list"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("itens", response.data)
+        self.assertIn("bloqueado por inventário", str(response.data["itens"]).lower())
+
+    def test_create_rejeita_bem_com_movimentacao_pendente(self):
+        bem_pendente = self._criar_bem(
+            "001.000000011-1",
+            self.ua_origem_1,
+        )
+        movimentacao = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bem_pendente,
+            unidade_administrativa_origem=self.ua_origem_1,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.gestor,
+        )
+        MovimentacaoBensItem.objects.create(
+            movimentacao=movimentacao,
+            bem=bem_pendente,
+        )
+        bem_pendente.status = constants.APROVADO
+        bem_pendente.save(update_fields=["status"])
+
+        self._autenticar(self.gestor)
+        payload = {
+            "unidade_orcamentaria_destino": self.uo_destino.id,
+            "numero_processo": "SEI-123460/2026",
+            "observacao": "Transferencia com movimentacao pendente",
+            "itens": [{"bem": bem_pendente.id}],
+        }
+
+        response = self.client.post(reverse("transferencias-list"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("itens", response.data)
+        self.assertIn("movimentação pendente", str(response.data["itens"]).lower())
 
     def test_create_rejeita_bem_fora_da_uo_origem(self):
         self._autenticar(self.gestor)

@@ -9,7 +9,6 @@ from drf_spectacular.utils import (
 )
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from bem_patrimonial.models import TransferenciaBemPatrimonial
@@ -29,6 +28,7 @@ from bem_patrimonial.transferencia_api_serializers import (
     queryset_uos_destino_externas,
 )
 from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
+from dados_comuns.permissions import TransferenciaBemPatrimonialPermission
 
 
 TRANSFERENCIA_ID_PATH_PARAM = OpenApiParameter(
@@ -97,26 +97,6 @@ TRANSFERENCIA_LIST_QUERY_PARAMETERS = [
         description="Filtra pela UO de destino.",
     ),
 ]
-
-
-class TransferenciaBemPatrimonialPermission(IsAuthenticated):
-    """
-    Acesso ao módulo de Transferência:
-    - apenas Gestor de Patrimônio autenticado, em linha com o Django Admin.
-    """
-
-    def has_permission(self, request, view):
-        if not super().has_permission(request, view):
-            return False
-        return bool(getattr(request.user, "is_gestor_patrimonio", False))
-
-    def has_object_permission(self, request, view, obj):
-        if not self.has_permission(request, view):
-            return False
-
-        queryset = TransferenciaBemPatrimonial.objects.filter(pk=obj.pk)
-        return filtrar_queryset_transferencia_por_escopo(request.user, queryset).exists()
-
 
 class TransferenciaBemPatrimonialFilter(FilterSet):
     numero_ntbpm = CharFilter(field_name="numero_ntbpm", lookup_expr="icontains")
@@ -232,6 +212,7 @@ class TransferenciaBemPatrimonialViewSet(
     def opcoes_cadastro(self, request):
         uo_origem = obter_uo_referencia_do_usuario(request.user)
         uos = queryset_uos_destino_externas(getattr(uo_origem, "pk", None))
+        uos = [uo for uo in uos if obter_ua_ponto_central(uo)]
         data = [
             {
                 "id": uo.id,
