@@ -274,7 +274,6 @@ class TransferenciaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
                         f"O bem '{bem.numero_patrimonial}' já possui uma movimentação pendente."
                     )
                 }
-                continue
 
         if erros:
             raise serializers.ValidationError({"itens": erros})
