@@ -69,9 +69,9 @@ class BemPatrimonialViewSetTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("results", response.data)
 
-    def test_list_bens_com_param_baixados_mais_de_um_periodo(self):
+    def test_list_bens_com_param_bens_baixados(self):
         url = reverse("bens-list")
-        response = self.client.get(url, {"baixados_mais_de_um_periodo": "1"})
+        response = self.client.get(url, {"bens_baixados": "1"})
         self.assertEqual(response.status_code, 200)
 
     def test_list_bens_com_busca_geral_uos_exibe_uo_externa(self):
