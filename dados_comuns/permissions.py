@@ -1,6 +1,7 @@
 from rest_framework.permissions import BasePermission
 from rest_framework.exceptions import PermissionDenied
 
+from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
 from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
 
 
@@ -95,6 +96,33 @@ class MovimentacaoBemPatrimonialPermission(BasePermission):
 
         queryset = MovimentacaoBemPatrimonial.objects.filter(pk=obj.pk)
         return filtrar_queryset_movimentacao_por_escopo(request.user, queryset).exists()
+
+
+class TransferenciaBemPatrimonialPermission(BasePermission):
+    """
+    Permissão para a API de transferências:
+    - acesso ao módulo: gestor ou superuser;
+    - leitura e ações respeitam o escopo da UO.
+    """
+
+    def _pode_acessar_modulo(self, user):
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "is_superuser", False):
+            return True
+        return bool(getattr(user, "is_gestor_patrimonio", False))
+
+    def has_permission(self, request, view):
+        return self._pode_acessar_modulo(request.user)
+
+    def has_object_permission(self, request, view, obj):
+        from bem_patrimonial.models import TransferenciaBemPatrimonial
+
+        if not self._pode_acessar_modulo(request.user):
+            return False
+
+        queryset = TransferenciaBemPatrimonial.objects.filter(pk=obj.pk)
+        return filtrar_queryset_transferencia_por_escopo(request.user, queryset).exists()
 
 
 class UnidadeAdministrativaPermission(BasePermission):
