@@ -1,8 +1,8 @@
 from rest_framework.permissions import BasePermission
 from rest_framework.exceptions import PermissionDenied
 
-from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
 from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
+from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
 
 
 class BemPatrimonialPermission(BasePermission):
@@ -154,7 +154,7 @@ class UnidadeAdministrativaPermission(BasePermission):
 
         action = getattr(view, "action", None)
 
-        if action in ("list", "retrieve", "historico"):
+        if action in ("list", "retrieve", "historico", "usuarios"):
             return True
 
         if action in ("create", "update", "partial_update", "destroy", "exportar"):

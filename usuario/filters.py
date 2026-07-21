@@ -26,11 +26,6 @@ class UsuarioFilter(django_filters.FilterSet):
         method="filter_unidade"
     )
 
-    # id da unidade administrativa (FK ativa ou vínculo M2M)
-    unidade_administrativa_id = django_filters.NumberFilter(
-        method="filter_unidade_administrativa_id"
-    )
-
     unidade_orcamentaria = django_filters.NumberFilter(
         field_name="unidade_orcamentaria_id"
     )
@@ -55,7 +50,6 @@ class UsuarioFilter(django_filters.FilterSet):
             "is_active",
             "group_name",
             "unidade",
-            "unidade_administrativa_id",
             "unidade_orcamentaria",
         ]
 
@@ -65,14 +59,3 @@ class UsuarioFilter(django_filters.FilterSet):
             Q(unidade_administrativa__codigo__icontains=value) |
             Q(unidade_administrativa__sigla__icontains=value)
         )
-
-    def filter_unidade_administrativa_id(self, queryset, name, value):
-        """
-        Retorna os usuários associados à Unidade Administrativa informada,
-        considerando tanto a UA ativa (FK ``unidade_administrativa``) quanto
-        os vínculos adicionais (M2M ``unidades_administrativas``).
-        """
-        return queryset.filter(
-            Q(unidade_administrativa_id=value) |
-            Q(unidades_administrativas__id=value)
-        ).distinct()
