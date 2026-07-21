@@ -1,4 +1,3 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -8,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -91,6 +91,10 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
         self.list_url = reverse("unidades-administrativas-list")
 
+    # ===============================
+    # HELPERS
+    # ===============================
+
     def _auth(self, user):
         self.client.force_authenticate(user)
 
@@ -110,6 +114,52 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
     def _get_detail_url(self, ua_id):
         return reverse("unidades-administrativas-detail", args=[ua_id])
+
+    def _usuarios_url(self, ua_id):
+        return reverse("unidades-administrativas-usuarios", args=[ua_id])
+
+    # Além dos usuários criados por _criar_usuarios_da_ua1, o self.operador
+    # do setUp também tem FK para a UA1 — por isso o total esperado é 4.
+    TOTAL_USUARIOS_UA1 = 4
+
+    def _criar_usuarios_da_ua1(self):
+        """Cria vínculos com a UA1: um por FK, um por M2M e um pelos dois."""
+        usuario_fk = Usuario.objects.create_user(
+            username="ana_fk",
+            email="ana.fk@test.com",
+            **auth_kwargs("test123"),
+            nome="Ana Fk",
+            rf="1111111",
+            unidade_orcamentaria=self.uo1,
+            unidade_administrativa=self.ua1,
+        )
+
+        usuario_m2m = Usuario.objects.create_user(
+            username="bruno_m2m",
+            email="bruno.m2m@test.com",
+            **auth_kwargs("test123"),
+            nome="Bruno M2m",
+            rf="2222222",
+            unidade_orcamentaria=self.uo1,
+        )
+        usuario_m2m.unidades_administrativas.add(self.ua1)
+
+        usuario_ambos = Usuario.objects.create_user(
+            username="carla_ambos",
+            email="carla.ambos@test.com",
+            **auth_kwargs("test123"),
+            nome="Carla Ambos",
+            rf="3333333",
+            unidade_orcamentaria=self.uo1,
+            unidade_administrativa=self.ua1,
+        )
+        usuario_ambos.unidades_administrativas.add(self.ua1)
+
+        return usuario_fk, usuario_m2m, usuario_ambos
+
+    # ===============================
+    # AUTENTICAÇÃO E ESCOPO
+    # ===============================
 
     def test_nao_autenticado_retorna_401_no_get(self):
         response = self.client.get(self.list_url)
@@ -178,6 +228,10 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
         self.assertEqual(ids, {self.ua1.id, self.ua2.id})
+
+    # ===============================
+    # CRIAÇÃO E VALIDAÇÃO
+    # ===============================
 
     def test_criacao_codigo_valido_em_varios_formatos(self):
         self._auth(self.gestor)
@@ -325,6 +379,10 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("codigo", response.data)
 
+    # ===============================
+    # HISTÓRICO
+    # ===============================
+
     def test_historico_retorna_lista_e_ignora_filtros(self):
         self._auth(self.gestor)
         detail_url = self._get_detail_url(self.ua1.id)
@@ -352,6 +410,10 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
             reverse("unidades-administrativas-historico", args=[self.ua3.id])
         )
         self.assertEqual(historico_fora_escopo.status_code, status.HTTP_404_NOT_FOUND)
+
+    # ===============================
+    # EXPORTAÇÃO
+    # ===============================
 
     def test_exportacao_por_formato_permitido(self):
         self._auth(self.gestor)
@@ -396,6 +458,10 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.assertEqual(invalido.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("formato", invalido.data)
 
+    # ===============================
+    # EXCLUSÃO
+    # ===============================
+
     def test_delete_quando_protected_error_retorna_400(self):
         self._auth(self.gestor)
         detail_url = self._get_detail_url(self.ua1.id)
@@ -409,3 +475,200 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("detail", response.data)
+
+    # ===============================
+    # ACTION usuarios
+    # ===============================
+
+    def test_usuarios_exige_autenticacao(self):
+        response = self.client.get(self._usuarios_url(self.ua1.id))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_usuarios_retorna_vinculos_por_fk_e_m2m_sem_duplicar(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        response = self.client.get(self._usuarios_url(self.ua1.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        usernames = [item["username"] for item in response.data["results"]]
+
+        self.assertIn("ana_fk", usernames)
+        self.assertIn("bruno_m2m", usernames)
+        self.assertEqual(usernames.count("carla_ambos"), 1)
+        self.assertEqual(len(usernames), len(set(usernames)))
+
+    def test_usuarios_nao_inclui_vinculados_a_outra_ua(self):
+        self._criar_usuarios_da_ua1()
+        Usuario.objects.create_user(
+            username="daniel_ua2",
+            email="daniel.ua2@test.com",
+            **auth_kwargs("test123"),
+            nome="Daniel Ua2",
+            rf="4444444",
+            unidade_orcamentaria=self.uo1,
+            unidade_administrativa=self.ua2,
+        )
+        self._auth(self.gestor)
+
+        response = self.client.get(self._usuarios_url(self.ua1.id))
+
+        usernames = {item["username"] for item in response.data["results"]}
+        self.assertNotIn("daniel_ua2", usernames)
+
+    def test_usuarios_retorna_lista_vazia_para_ua_sem_vinculos(self):
+        self._auth(self.gestor)
+
+        response = self.client.get(self._usuarios_url(self.ua2.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["results"], [])
+
+    def test_usuarios_404_para_ua_fora_do_escopo(self):
+        self._auth(self.gestor)
+
+        response = self.client.get(self._usuarios_url(self.ua3.id))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_usuarios_404_para_ua_inexistente(self):
+        self._auth(self.gestor)
+
+        response = self.client.get(self._usuarios_url(999999))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_usuarios_busca_por_nome_username_e_rf(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        cenarios = [
+            ("Bruno", "bruno_m2m"),
+            ("ana_fk", "ana_fk"),
+            ("3333333", "carla_ambos"),
+        ]
+
+        for termo, esperado in cenarios:
+            with self.subTest(termo=termo):
+                response = self.client.get(
+                    self._usuarios_url(self.ua1.id), {"search": termo}
+                )
+                usernames = [item["username"] for item in response.data["results"]]
+                self.assertEqual(usernames, [esperado])
+
+    def test_usuarios_busca_ignora_espacos_em_volta(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        response = self.client.get(
+            self._usuarios_url(self.ua1.id), {"search": "   Bruno   "}
+        )
+
+        usernames = [item["username"] for item in response.data["results"]]
+        self.assertEqual(usernames, ["bruno_m2m"])
+
+    def test_usuarios_busca_apenas_com_espacos_nao_filtra(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        response = self.client.get(self._usuarios_url(self.ua1.id), {"search": "    "})
+
+        self.assertEqual(response.data["count"], self.TOTAL_USUARIOS_UA1)
+
+    def test_usuarios_busca_sem_resultado_retorna_vazio(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        response = self.client.get(
+            self._usuarios_url(self.ua1.id), {"search": "inexistente"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_usuarios_ordenacao_padrao_por_nome(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        response = self.client.get(self._usuarios_url(self.ua1.id))
+
+        nomes = [item["nome"] for item in response.data["results"]]
+        self.assertEqual(nomes, sorted(nomes))
+
+    def test_usuarios_aceita_campos_de_ordenacao_suportados(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        for campo in ("id", "nome", "username", "rf"):
+            with self.subTest(campo=campo):
+                asc = self.client.get(
+                    self._usuarios_url(self.ua1.id), {"ordering": campo}
+                )
+                desc = self.client.get(
+                    self._usuarios_url(self.ua1.id), {"ordering": f"-{campo}"}
+                )
+
+                valores_asc = [item[campo] for item in asc.data["results"]]
+                valores_desc = [item[campo] for item in desc.data["results"]]
+
+                # Campos opcionais (rf) podem vir nulos: no Postgres o ASC
+                # coloca NULL por último, então replicamos essa chave aqui.
+                self.assertEqual(
+                    valores_asc,
+                    sorted(valores_asc, key=lambda valor: (valor is None, valor)),
+                )
+                self.assertEqual(valores_desc, list(reversed(valores_asc)))
+
+    def test_usuarios_ordenacao_invalida_cai_no_padrao(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        response = self.client.get(
+            self._usuarios_url(self.ua1.id), {"ordering": "email; drop table"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        nomes = [item["nome"] for item in response.data["results"]]
+        self.assertEqual(nomes, sorted(nomes))
+
+    def test_usuarios_pagina_resultados(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        primeira = self.client.get(
+            self._usuarios_url(self.ua1.id), {"page_size": 3, "ordering": "nome"}
+        )
+        self.assertEqual(primeira.data["count"], self.TOTAL_USUARIOS_UA1)
+        self.assertEqual(len(primeira.data["results"]), 3)
+        self.assertIsNotNone(primeira.data["next"])
+
+        segunda = self.client.get(
+            self._usuarios_url(self.ua1.id),
+            {"page_size": 3, "page": 2, "ordering": "nome"},
+        )
+        self.assertEqual(len(segunda.data["results"]), self.TOTAL_USUARIOS_UA1 - 3)
+        self.assertIsNone(segunda.data["next"])
+        self.assertIsNotNone(segunda.data["previous"])
+
+    def test_usuarios_search_e_ordering_nao_filtram_a_propria_ua(self):
+        # A action reaproveita os params "search"/"ordering" para os usuários.
+        # Se eles vazassem para o filter_queryset do viewset (search_fields =
+        # codigo/sigla/nome da UA), a UA sairia do queryset e daria 404.
+        self._criar_usuarios_da_ua1()
+        self._auth(self.gestor)
+
+        response = self.client.get(
+            self._usuarios_url(self.ua1.id),
+            {"search": "Bruno", "ordering": "username"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_usuarios_operador_acessa_ua_do_proprio_escopo(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.operador)
+
+        response = self.client.get(self._usuarios_url(self.ua1.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
