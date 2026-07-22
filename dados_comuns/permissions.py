@@ -129,6 +129,8 @@ class UnidadeAdministrativaPermission(BasePermission):
     """
     Regras de acesso para API de Unidade Administrativa:
     - Listagem/detalhe/historico: superuser, gestor e operador.
+    - Usuarios vinculados: apenas superuser e gestor, pois expõe dados do
+      cadastro de usuários, módulo ao qual o operador não tem acesso.
     - Criacao/edicao/exclusao/exportacao: apenas superuser e gestor.
     """
 
@@ -154,8 +156,13 @@ class UnidadeAdministrativaPermission(BasePermission):
 
         action = getattr(view, "action", None)
 
-        if action in ("list", "retrieve", "historico", "usuarios"):
+        if action in ("list", "retrieve", "historico"):
             return True
+
+        # Consultar os usuários vinculados à UA é leitura, mas de dados do
+        # cadastro de usuários: segue a mesma restrição daquele módulo.
+        if action == "usuarios":
+            return self._pode_gerenciar(request.user)
 
         if action in ("create", "update", "partial_update", "destroy", "exportar"):
             return self._pode_gerenciar(request.user)
@@ -167,6 +174,9 @@ class UnidadeAdministrativaPermission(BasePermission):
 
         if action in ("retrieve", "historico"):
             return True
+
+        if action == "usuarios":
+            return self._pode_gerenciar(request.user)
 
         if action in ("update", "partial_update", "destroy"):
             return self._pode_gerenciar(request.user)

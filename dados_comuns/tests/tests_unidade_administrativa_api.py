@@ -665,9 +665,27 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_usuarios_operador_acessa_ua_do_proprio_escopo(self):
+    def test_usuarios_bloqueia_operador(self):
+        # Operador não acessa o cadastro de usuários, então também não pode
+        # consultar os usuários vinculados à UA — nem com lista vazia.
         self._criar_usuarios_da_ua1()
         self._auth(self.operador)
+
+        response = self.client.get(self._usuarios_url(self.ua1.id))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_usuarios_bloqueia_operador_mesmo_em_ua_sem_vinculos(self):
+        # Garante que o 403 vem da permissão e não do queryset vazio.
+        self._auth(self.operador)
+
+        response = self.client.get(self._usuarios_url(self.ua2.id))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_usuarios_permite_superuser(self):
+        self._criar_usuarios_da_ua1()
+        self._auth(self.superuser)
 
         response = self.client.get(self._usuarios_url(self.ua1.id))
 

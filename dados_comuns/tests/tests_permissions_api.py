@@ -107,6 +107,7 @@ class PermissionsAPITestCase(SimpleTestCase):
             "list",
             "retrieve",
             "historico",
+            "usuarios",
             "create",
             "update",
             "partial_update",
@@ -123,6 +124,23 @@ class PermissionsAPITestCase(SimpleTestCase):
         self.assertFalse(perm.has_permission(self._request(operador), self._view("create")))
         self.assertFalse(perm.has_permission(self._request(operador), self._view("acao_desconhecida")))
 
+    def test_ua_usuarios_apenas_para_quem_gerencia(self):
+        perm = UnidadeAdministrativaPermission()
+        view = self._view("usuarios")
+
+        self.assertFalse(
+            perm.has_permission(self._request(self._user(authenticated=False)), view)
+        )
+        self.assertFalse(
+            perm.has_permission(self._request(self._user(operador=True)), view)
+        )
+        self.assertTrue(
+            perm.has_permission(self._request(self._user(gestor=True)), view)
+        )
+        self.assertTrue(
+            perm.has_permission(self._request(self._user(superuser=True)), view)
+        )
+
     def test_ua_has_object_permission_cobre_ramos(self):
         perm = UnidadeAdministrativaPermission()
         operador = self._user(operador=True)
@@ -134,6 +152,13 @@ class PermissionsAPITestCase(SimpleTestCase):
         )
         self.assertTrue(
             perm.has_object_permission(self._request(operador), self._view("historico"), obj)
+        )
+
+        self.assertFalse(
+            perm.has_object_permission(self._request(operador), self._view("usuarios"), obj)
+        )
+        self.assertTrue(
+            perm.has_object_permission(self._request(gestor), self._view("usuarios"), obj)
         )
 
         self.assertFalse(

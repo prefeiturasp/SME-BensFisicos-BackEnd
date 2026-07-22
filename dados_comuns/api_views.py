@@ -71,7 +71,6 @@ UA_ID_PATH_PARAM = OpenApiParameter(
 # (GET /unidades-administrativas/{id}/usuarios/). Mantida isolada da
 # configuração de search_fields/ordering_fields do UnidadeAdministrativaViewSet
 # para não afetar a listagem/exportação de UAs.
-UA_USUARIOS_SEARCH_FIELDS = ["nome", "username", "rf"]
 UA_USUARIOS_ORDERING_FIELDS = ["id", "nome", "username", "rf"]
 UA_USUARIOS_DEFAULT_ORDERING = ["nome"]
 
