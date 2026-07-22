@@ -496,7 +496,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
         return attrs
 
-
     def _validar_uo_create_obrigatoria_e_escopo(
         self,
         user,
@@ -795,3 +794,24 @@ class UsuarioSerializer(serializers.ModelSerializer):
             instance.groups.set(groups)
 
         return instance
+
+
+class UnidadeAdministrativaUsuarioSerializer(serializers.ModelSerializer):
+    """
+    Representação enxuta do usuário para o endpoint de usuários associados
+    à Unidade Administrativa (GET /unidades-administrativas/{id}/usuarios/).
+
+    Expõe somente os dados necessários para a listagem (Nome, RF), mantendo
+    o restante do payload do ``UsuarioSerializer`` (senha, grupos, etc.)
+    fora deste recurso de leitura.
+    """
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "nome",
+            "rf",
+        ]
+        read_only_fields = fields
