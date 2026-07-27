@@ -234,6 +234,30 @@ class TransferenciaApiTestCase(TestCase):
         self.assertEqual(len(resultados), 1)
         self.assertEqual(resultados[0]["numero_processo"], transferencia_encontrada.numero_processo)
 
+    def test_listagem_expoe_nome_do_bem_e_filtra_por_nome(self):
+        transferencia_encontrada = self._criar_transferencia("SEI-010/2026")
+        transferencia_encontrada.refresh_from_db()
+        outra_transferencia = self._criar_transferencia(
+            "SEI-011/2026",
+            uo_destino=self.uo_destino_2,
+            ua_destino=self.ua_destino_2,
+            bens=[self.bem_origem_2],
+        )
+        outra_transferencia.refresh_from_db()
+
+        self._autenticar(self.gestor)
+        response = self.client.get(
+            reverse("transferencias-list"),
+            {"nome_bem": self.bem_origem_1.nome},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        resultados = self._lista_transferencias(response)
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0]["id"], transferencia_encontrada.id)
+        self.assertEqual(resultados[0]["nome_bem"], self.bem_origem_1.nome)
+        self.assertNotEqual(resultados[0]["id"], outra_transferencia.id)
+
     def test_listagem_filtra_por_uo_destino(self):
         transferencia_destino_2 = self._criar_transferencia(
             "SEI-003/2026",
@@ -253,8 +277,13 @@ class TransferenciaApiTestCase(TestCase):
         resultados = self._lista_transferencias(response)
         ids = {item["id"] for item in resultados}
         self.assertIn(transferencia_destino_2.id, ids)
-        self.assertNotIn(self.uo_destino.id, {item["unidade_orcamentaria_destino"]["id"] for item in resultados})
-        self.assertTrue(all(item["unidade_orcamentaria_destino"]["id"] == self.uo_destino_2.id for item in resultados))
+        self.assertNotIn(
+            self.uo_destino.id,
+            {item["unidade_orcamentaria_destino"]["id"] for item in resultados},
+        )
+        self.assertTrue(
+            all(item["unidade_orcamentaria_destino"]["id"] == self.uo_destino_2.id for item in resultados)
+        )
 
     def test_listagem_paginada_respeita_page_size(self):
         primeira = self._criar_transferencia("SEI-005/2026")
