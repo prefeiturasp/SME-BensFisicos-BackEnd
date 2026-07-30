@@ -11,6 +11,7 @@ LIST_TRANSFERENCIAS_DOC = dedent(
       das UOs de origem e destino, além de número patrimonial e nome dos bens
     - **numero_ntbpm** → filtra por número NTBPM
     - **numero_processo** → filtra por número do processo
+    - **nome_bem** → filtra pelo nome do bem
     - **unidade_orcamentaria_origem** → filtra pela UO de origem
     - **unidade_orcamentaria_destino** → filtra pela UO de destino
 
