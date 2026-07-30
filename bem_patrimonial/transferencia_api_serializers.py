@@ -69,7 +69,6 @@ class TransferenciaBemPatrimonialBaseSerializer(serializers.ModelSerializer):
     unidade_orcamentaria_destino = UnidadeOrcamentariaSimpleSerializer(read_only=True)
     unidade_administrativa_destino = UnidadeAdministrativaSimpleSerializer(read_only=True)
     criado_por = UserSimpleSerializer(read_only=True)
-    nome_bem = serializers.SerializerMethodField()
     total_itens = serializers.SerializerMethodField()
     url_documento_ntbpm = serializers.SerializerMethodField()
 
@@ -77,7 +76,6 @@ class TransferenciaBemPatrimonialBaseSerializer(serializers.ModelSerializer):
         model = TransferenciaBemPatrimonial
         fields = [
             "id",
-            "nome_bem",
             "numero_ntbpm",
             "numero_processo",
             "observacao",
@@ -96,14 +94,7 @@ class TransferenciaBemPatrimonialBaseSerializer(serializers.ModelSerializer):
         return obj.itens.count()
 
     def get_nome_bem(self, obj: TransferenciaBemPatrimonial) -> str:
-        nomes = []
-        for item in obj.itens.all():
-            bem = getattr(item, "bem", None)
-            nome = getattr(bem, "nome", None)
-            if nome:
-                nomes.append(nome)
-
-        return ", ".join(dict.fromkeys(nomes))
+        return ", ".join(item.bem.nome for item in obj.itens.all())
 
     def get_url_documento_ntbpm(self, obj: TransferenciaBemPatrimonial):
         if not obj.numero_ntbpm:
@@ -123,6 +114,8 @@ class TransferenciaBemPatrimonialBaseSerializer(serializers.ModelSerializer):
 class TransferenciaBemPatrimonialListSerializer(
     TransferenciaBemPatrimonialBaseSerializer
 ):
+    nome_bem = serializers.SerializerMethodField()
+
     class Meta(TransferenciaBemPatrimonialBaseSerializer.Meta):
         fields = [
             "id",
