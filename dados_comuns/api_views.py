@@ -1,10 +1,13 @@
 from collections import defaultdict
 from datetime import datetime
 
+from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
+from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
@@ -34,6 +37,7 @@ from dados_comuns.api_serializers import (
     UnidadeOrcamentariaListSerializer,
 )
 from dados_comuns.context import audit_as
+from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
 from dados_comuns.formats import (
     UnidadeAdministrativaPDFFormat,
     UnidadeOrcamentariaPDFFormat,
@@ -43,11 +47,16 @@ from dados_comuns.permissions import (
     UnidadeAdministrativaPermission,
     UnidadeOrcamentariaPermission,
 )
+from dados_comuns.libs.pagination import SafePagination
 from dados_comuns.resources import (
     UnidadeAdministrativaResource,
     UnidadeOrcamentariaResource,
 )
 from dados_comuns.utils import dict_changes, garantir_ua_ponto_central_externa
+from usuario.serializers import UnidadeAdministrativaUsuarioSerializer
+
+
+User = get_user_model()
 
 
 UA_ID_PATH_PARAM = OpenApiParameter(
@@ -57,6 +66,13 @@ UA_ID_PATH_PARAM = OpenApiParameter(
     location=OpenApiParameter.PATH,
     description="Identificador numérico único da unidade administrativa.",
 )
+
+# Configuração da busca/ordenação do sub-recurso de usuários associados à UA
+# (GET /unidades-administrativas/{id}/usuarios/). Mantida isolada da
+# configuração de search_fields/ordering_fields do UnidadeAdministrativaViewSet
+# para não afetar a listagem/exportação de UAs.
+UA_USUARIOS_ORDERING_FIELDS = ["id", "nome", "username", "rf"]
+UA_USUARIOS_DEFAULT_ORDERING = ["nome"]
 
 UO_ID_PATH_PARAM = OpenApiParameter(
     name="id",
@@ -591,6 +607,107 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
         "nome",
         "status",
     )
+
+    @extend_schema(
+        parameters=[
+            UA_ID_PATH_PARAM,
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Busca por nome, usuário (username) ou RF.",
+            ),
+            OpenApiParameter(
+                name="ordering",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "Campo de ordenação. Aceita: id, nome, username, rf "
+                    "(prefixo '-' para ordem decrescente). Padrão: nome."
+                ),
+            ),
+            OpenApiParameter(
+                name="page",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+            ),
+            OpenApiParameter(
+                name="page_size",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Itens por página (padrão 10, máximo 100).",
+            ),
+        ],
+        responses={200: UnidadeAdministrativaUsuarioSerializer(many=True)},
+        description=(
+            "Lista os usuários associados à Unidade Administrativa (vínculo "
+            "ativo e vínculos adicionais), com paginação, busca e ordenação, "
+            "respeitando o mesmo escopo de visibilidade da listagem geral de "
+            "usuários."
+        ),
+    )
+    @action(detail=True, methods=["get"], url_path="usuarios")
+    def usuarios(self, request, pk=None):
+        """
+        GET /unidades-administrativas/{id}/usuarios/
+
+        Recupera os usuários vinculados à UA tanto pela FK ativa
+        (``unidade_administrativa``) quanto pelo vínculo adicional M2M
+        (``unidades_administrativas``), sem duplicidade.
+
+        Não usamos ``self.get_object()`` (ver comentário abaixo): resolvemos
+        o objeto diretamente, mas a MESMA checagem de escopo usada em
+        retrieve/update (``_pode_acessar_objeto``) continua sendo aplicada.
+        """
+        # Não usamos self.get_object() aqui de propósito: ele passa pelo
+        # self.filter_queryset(), que aplicaria o SearchFilter/OrderingFilter
+        # de classe do UnidadeAdministrativaViewSet (search_fields =
+        # codigo/sigla/nome da própria UA) sobre os MESMOS parâmetros
+        # "search"/"ordering" que aqui são destinados aos usuários da UA —
+        # podendo filtrar a UA para fora do queryset e gerar 404 indevido.
+        # Resolvemos o objeto diretamente, preservando a mesma checagem de
+        # escopo usada em retrieve/update.
+        unidade = get_object_or_404(self.get_queryset(), pk=pk)
+        if not self._pode_acessar_objeto(request.user, unidade):
+            raise NotFound()
+
+        # Resolve primeiro os IDs dos usuários vinculados à UA (FK ou M2M) e
+        # só então monta o queryset final a partir deles. Isso evita manter
+        # o JOIN do M2M "pendurado" no queryset enquanto aplicamos busca e
+        # ordenação em seguida, o que poderia gerar duplicidade de linhas.
+        usuario_ids = (
+            filtrar_queryset_usuario_por_escopo(request.user, User.objects.all())
+            .filter(
+                Q(unidade_administrativa_id=unidade.id)
+                | Q(unidades_administrativas__id=unidade.id)
+            )
+            .values_list("id", flat=True)
+            .distinct()
+        )
+        queryset = User.objects.filter(id__in=list(usuario_ids))
+
+        search_term = (request.query_params.get("search") or "").strip()
+        if search_term:
+            queryset = queryset.filter(
+                Q(nome__icontains=search_term)
+                | Q(username__icontains=search_term)
+                | Q(rf__icontains=search_term)
+            )
+
+        ordering_param = request.query_params.get("ordering") or ""
+        ordering_field = ordering_param.lstrip("-")
+        if ordering_field not in UA_USUARIOS_ORDERING_FIELDS:
+            ordering_param = ",".join(UA_USUARIOS_DEFAULT_ORDERING)
+        queryset = queryset.order_by(*ordering_param.split(","))
+
+        paginator = SafePagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = UnidadeAdministrativaUsuarioSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     def get_serializer_class(self):
         if self.action == "list":
