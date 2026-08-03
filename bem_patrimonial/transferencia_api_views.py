@@ -85,6 +85,12 @@ TRANSFERENCIA_LIST_QUERY_PARAMETERS = [
         description="Filtra pelo número do processo.",
     ),
     OpenApiParameter(
+        name="nome_bem",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        description="Filtra pelo nome do bem.",
+    ),
+    OpenApiParameter(
         name="unidade_orcamentaria_origem",
         type=OpenApiTypes.INT,
         location=OpenApiParameter.QUERY,
@@ -101,6 +107,7 @@ TRANSFERENCIA_LIST_QUERY_PARAMETERS = [
 class TransferenciaBemPatrimonialFilter(FilterSet):
     numero_ntbpm = CharFilter(field_name="numero_ntbpm", lookup_expr="icontains")
     numero_processo = CharFilter(field_name="numero_processo", lookup_expr="icontains")
+    nome_bem = CharFilter(field_name="itens__bem__nome", lookup_expr="icontains")
     unidade_orcamentaria_origem = NumberFilter(
         field_name="unidade_orcamentaria_origem__id"
     )
@@ -113,6 +120,7 @@ class TransferenciaBemPatrimonialFilter(FilterSet):
         fields = [
             "numero_ntbpm",
             "numero_processo",
+            "nome_bem",
             "unidade_orcamentaria_origem",
             "unidade_orcamentaria_destino",
         ]

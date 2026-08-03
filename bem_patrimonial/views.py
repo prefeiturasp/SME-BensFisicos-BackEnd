@@ -443,6 +443,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         Status de retorno:
           400 — arquivo ausente, extensão inválida ou tamanho excedido
           403 — usuário sem UA vinculada ou UA inativa
+          409 — existe Conciliação em aberto para a UA do usuário
           422 — planilha inválida (vazia, cabeçalho errado, duplicidade,
                 valor inválido etc.); sempre acompanha erros_por_linha padronizado
           201 — importação realizada com sucesso (tudo ou nada)
@@ -467,64 +468,31 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         arquivo = input_serializer.validated_data["arquivo"]
 
+        bloqueio_conciliacao = self._bloquear_importacao_se_conciliacao_em_aberto(request)
+        if bloqueio_conciliacao is not None:
+            return bloqueio_conciliacao
+
         # Detecta o formato a partir da extensão validada pelo serializer
         _, ext = os.path.splitext((arquivo.name or "").lower())
         formato = _EXTENSAO_PARA_FORMATO[ext]
 
-        # Lê o arquivo em um Dataset tablib
-        try:
-            dataset = self._ler_planilha(arquivo, formato)
-        except Exception as exc:
-            return Response(
-                {
-                    "detail": "Não foi possível ler a planilha.",
-                    "erro": str(exc),
-                },
-                status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            )
-
-        if len(dataset) == 0:
-            return Response(
-                {"detail": "A planilha está vazia ou não contém linhas de dados."},
-                status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            )
+        dataset, erro_leitura = self._ler_dataset_da_importacao(arquivo, formato)
+        if erro_leitura is not None:
+            return erro_leitura
 
         # Executa a importação via BemPatrimonialResource (mesma lógica do Admin)
         resource = BemPatrimonialResource(request=request)
 
         try:
-            result = resource.import_data(
-                dataset,
-                dry_run=False,
-                raise_errors=False,
-                use_transactions=True,
-            )
-        except DjangoValidationError as exc:
-            # ValidationError lançado pelo before_import.
-            # Distingue entre erro de permissão (403) e erro de planilha (422).
-            mensagem = (
-                exc.message
-                if hasattr(exc, "message") and isinstance(exc.message, str)
-                else "; ".join(exc.messages)
-            )
-
-            # 403: falta de permissão — usuário sem UA ou UA inativa
-            eh_erro_permissao = (
-                "Unidade Administrativa" in mensagem
-                or "inativa" in mensagem
-            )
-            if eh_erro_permissao:
-                return Response(
-                    {"detail": mensagem},
-                    status=http_status.HTTP_403_FORBIDDEN,
+            with audit_as(request.user):
+                result = resource.import_data(
+                    dataset,
+                    dry_run=False,
+                    raise_errors=False,
+                    use_transactions=True,
                 )
-
-            # 422: erro de validação da planilha (cabeçalho, duplicidade, campos inválidos)
-            erros = resource._erros_por_linha or []
-            payload: dict = {"detail": mensagem}
-            if erros:
-                payload["erros_por_linha"] = erros
-            return Response(payload, status=http_status.HTTP_422_UNPROCESSABLE_ENTITY)
+        except DjangoValidationError as exc:
+            return self._tratar_erro_validacao_importacao(exc, resource)
         except Exception as exc:
             return Response(
                 {
@@ -535,6 +503,81 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             )
 
         return self._montar_resposta_importacao(result, resource)
+
+    def _bloquear_importacao_se_conciliacao_em_aberto(self, request):
+        """
+        Retorna uma Response 409 se existir Conciliação em aberto para a UA
+        do usuário autenticado — a mesma UA usada para os bens importados
+        (ver before_import_row do BemPatrimonialResource) — ou None quando a
+        importação pode prosseguir. Chamado antes de ler/processar a
+        planilha, para não persistir nada quando a importação for bloqueada.
+        """
+        from inventario.models import ConciliacaoUA
+        from inventario import constants as inv_constants
+
+        ua_usuario = getattr(request.user, "unidade_administrativa", None)
+        if ua_usuario is None:
+            return None
+
+        existe_conciliacao_em_aberto = ConciliacaoUA.objects.filter(
+            unidade_administrativa_id=ua_usuario.id,
+            status=inv_constants.CONCILIACAO_EM_ABERTO,
+        ).exists()
+        if not existe_conciliacao_em_aberto:
+            return None
+
+        return Response(
+            {"detail": "Importação não realizada: existe Conciliação em aberto."},
+            status=http_status.HTTP_409_CONFLICT,
+        )
+
+    def _ler_dataset_da_importacao(self, arquivo, formato: str):
+        """
+        Lê a planilha enviada e retorna (dataset, None) em caso de sucesso,
+        ou (None, Response) com o erro 422 apropriado.
+        """
+        try:
+            dataset = self._ler_planilha(arquivo, formato)
+        except Exception as exc:
+            return None, Response(
+                {
+                    "detail": "Não foi possível ler a planilha.",
+                    "erro": str(exc),
+                },
+                status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        if len(dataset) == 0:
+            return None, Response(
+                {"detail": "A planilha está vazia ou não contém linhas de dados."},
+                status=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        return dataset, None
+
+    def _tratar_erro_validacao_importacao(
+        self, exc: DjangoValidationError, resource: "BemPatrimonialResource"
+    ) -> Response:
+        """
+        Traduz o ValidationError lançado pelo before_import em 403 (erro de
+        permissão — usuário sem UA ou UA inativa) ou 422 (erro de validação
+        da planilha: cabeçalho, duplicidade, campos inválidos).
+        """
+        mensagem = (
+            exc.message
+            if hasattr(exc, "message") and isinstance(exc.message, str)
+            else "; ".join(exc.messages)
+        )
+
+        eh_erro_permissao = "Unidade Administrativa" in mensagem or "inativa" in mensagem
+        if eh_erro_permissao:
+            return Response({"detail": mensagem}, status=http_status.HTTP_403_FORBIDDEN)
+
+        erros = resource._erros_por_linha or []
+        payload: dict = {"detail": mensagem}
+        if erros:
+            payload["erros_por_linha"] = erros
+        return Response(payload, status=http_status.HTTP_422_UNPROCESSABLE_ENTITY)
 
     def _ler_planilha(self, arquivo, formato: str) -> tablib.Dataset:
         """Lê o arquivo enviado e retorna um tablib.Dataset."""
