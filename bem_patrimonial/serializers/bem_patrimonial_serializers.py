@@ -18,6 +18,7 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
     """
 
     criado_por_nome = serializers.CharField(source="criado_por.nome", read_only=True)
+    criado_por_rf = serializers.CharField(source="criado_por.rf", read_only=True)
 
     unidade_orcamentaria_codigo = serializers.CharField(
         source="unidade_administrativa.unidade_orcamentaria.codigo",
@@ -291,6 +292,7 @@ class BemPatrimonialDetailSerializer(
             "bloqueado_conciliacao",
             "criado_por",
             "criado_por_nome",
+            "criado_por_rf",
             "criado_em",
             "atualizado_em",
             "baixa_data",
