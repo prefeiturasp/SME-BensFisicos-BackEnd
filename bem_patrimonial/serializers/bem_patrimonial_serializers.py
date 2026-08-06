@@ -310,6 +310,7 @@ class BemPatrimonialDetailSerializer(
             "baixa_data",
             "audit_last_at",
             "audit_last_by_id",
+            "bloqueado_conciliacao",
         ]
 
     def _validate_instance_edit_restrictions(self, attrs):
