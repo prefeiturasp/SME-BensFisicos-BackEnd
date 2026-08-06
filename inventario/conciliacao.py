@@ -23,7 +23,9 @@ def _recalcular_bloqueio_bem_por_inventario(bem: BemPatrimonial):
 
     if bem.bloqueado_conciliacao != novo_valor:
         bem.bloqueado_conciliacao = novo_valor
-        bem.save(update_fields=["bloqueado_conciliacao"])
+        bem.__class__.objects.filter(pk=bem.pk).update(
+            bloqueado_conciliacao=novo_valor
+        )
 
 
 @transaction.atomic
