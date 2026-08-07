@@ -61,6 +61,13 @@ class BemPatrimonialSerializerTest(TestCase):
         self.assertIn("unidade_administrativa_nome", data)
         self.assertIn("unidade_administrativa_codigo", data)
 
+    def test_detail_serializer_inclui_criado_por_rf(self):
+        bem = self._mk_bem(status=constants.APROVADO)
+        s = BemPatrimonialDetailSerializer(instance=bem)
+        data = s.data
+        self.assertIn("criado_por_rf", data)
+        self.assertEqual(data["criado_por_rf"], self.user.rf)
+
     def test_nao_permite_editar_baixa_fisica(self):
         bem = self._mk_bem(status=constants.BAIXA_FISICA)
 
