@@ -105,7 +105,7 @@ class TransferenciaBemPatrimonialBaseSerializer(serializers.ModelSerializer):
             return None
 
         try:
-            path = reverse("download_documento_ntbpm", kwargs={"pk": obj.pk})
+            path = reverse("transferencias-documento-ntbpm", kwargs={"pk": obj.pk})
             return request.build_absolute_uri(path)
         except Exception:
             return None
