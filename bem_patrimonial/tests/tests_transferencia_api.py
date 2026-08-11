@@ -123,10 +123,10 @@ class TransferenciaApiTestCase(TestCase):
     def _autenticar(self, usuario):
         self.client.force_authenticate(user=usuario)
 
-    def _criar_bem(self, numero_patrimonial, ua, status=constants.APROVADO):
+    def _criar_bem(self, numero_patrimonial, ua, status=constants.APROVADO, nome=None):
         return BemPatrimonial.objects.create(
             numero_patrimonial=numero_patrimonial,
-            nome=f"Bem {numero_patrimonial}",
+            nome=nome or f"Bem {numero_patrimonial}",
             descricao="Bem para teste de transferência",
             valor_unitario=1000,
             marca="Dell",
@@ -234,6 +234,90 @@ class TransferenciaApiTestCase(TestCase):
         self.assertEqual(len(resultados), 1)
         self.assertEqual(resultados[0]["numero_processo"], transferencia_encontrada.numero_processo)
 
+    def test_listagem_expoe_nome_do_bem_e_filtra_por_nome(self):
+        transferencia_encontrada = self._criar_transferencia("SEI-010/2026")
+        transferencia_encontrada.refresh_from_db()
+        outra_transferencia = self._criar_transferencia(
+            "SEI-011/2026",
+            uo_destino=self.uo_destino_2,
+            ua_destino=self.ua_destino_2,
+            bens=[self.bem_origem_2],
+        )
+        outra_transferencia.refresh_from_db()
+
+        self._autenticar(self.gestor)
+        response = self.client.get(
+            reverse("transferencias-list"),
+            {"nome_bem": self.bem_origem_1.nome},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        resultados = self._lista_transferencias(response)
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0]["id"], transferencia_encontrada.id)
+        self.assertEqual(resultados[0]["nome_bem"], self.bem_origem_1.nome)
+        self.assertNotEqual(resultados[0]["id"], outra_transferencia.id)
+
+    def test_listagem_filtra_nome_bem_por_parte_do_nome(self):
+        bem_mesa = self._criar_bem(
+            "001.000000012-2",
+            self.ua_origem_1,
+            nome="Mesa Reunião Azul",
+        )
+        transferencia_mesa = self._criar_transferencia(
+            "SEI-012/2026",
+            bens=[bem_mesa],
+        )
+        self._criar_transferencia(
+            "SEI-013/2026",
+            uo_destino=self.uo_destino_2,
+            ua_destino=self.ua_destino_2,
+            bens=[self.bem_origem_2],
+        )
+
+        self._autenticar(self.gestor)
+        response = self.client.get(
+            reverse("transferencias-list"),
+            {"nome_bem": "MESA"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        resultados = self._lista_transferencias(response)
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0]["id"], transferencia_mesa.id)
+        self.assertEqual(resultados[0]["nome_bem"], "Mesa Reunião Azul")
+
+    def test_listagem_concatenacao_nome_bem_com_multiplos_itens(self):
+        bem_mesa = self._criar_bem(
+            "001.000000014-4",
+            self.ua_origem_1,
+            nome="Mesa Reunião Azul",
+        )
+        bem_cadeira = self._criar_bem(
+            "001.000000015-5",
+            self.ua_origem_2,
+            nome="Cadeira Ergonômica",
+        )
+        transferencia = self._criar_transferencia(
+            "SEI-014/2026",
+            bens=[bem_mesa, bem_cadeira],
+        )
+
+        self._autenticar(self.gestor)
+        response = self.client.get(
+            reverse("transferencias-list"),
+            {"nome_bem": "mesa"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        resultados = self._lista_transferencias(response)
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0]["id"], transferencia.id)
+        self.assertEqual(
+            resultados[0]["nome_bem"],
+            "Mesa Reunião Azul, Cadeira Ergonômica",
+        )
+
     def test_listagem_filtra_por_uo_destino(self):
         transferencia_destino_2 = self._criar_transferencia(
             "SEI-003/2026",
@@ -253,8 +337,13 @@ class TransferenciaApiTestCase(TestCase):
         resultados = self._lista_transferencias(response)
         ids = {item["id"] for item in resultados}
         self.assertIn(transferencia_destino_2.id, ids)
-        self.assertNotIn(self.uo_destino.id, {item["unidade_orcamentaria_destino"]["id"] for item in resultados})
-        self.assertTrue(all(item["unidade_orcamentaria_destino"]["id"] == self.uo_destino_2.id for item in resultados))
+        self.assertNotIn(
+            self.uo_destino.id,
+            {item["unidade_orcamentaria_destino"]["id"] for item in resultados},
+        )
+        self.assertTrue(
+            all(item["unidade_orcamentaria_destino"]["id"] == self.uo_destino_2.id for item in resultados)
+        )
 
     def test_listagem_paginada_respeita_page_size(self):
         primeira = self._criar_transferencia("SEI-005/2026")
@@ -463,3 +552,4 @@ class TransferenciaApiTestCase(TestCase):
         self.assertIn(str(transferencia.pk), response.data["url_documento_ntbpm"])
         self.assertEqual(len(response.data["itens"]), 2)
         self.assertEqual(response.data["total_itens"], 2)
+        self.assertNotIn("nome_bem", response.data)
