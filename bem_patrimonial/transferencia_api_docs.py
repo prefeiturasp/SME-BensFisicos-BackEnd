@@ -75,6 +75,16 @@ RETRIEVE_TRANSFERENCIA_DOC = dedent(
 )
 
 
+DOWNLOAD_DOCUMENTO_NTBPM_DOC = dedent(
+    """
+    Retorna o PDF NTBPM da transferência selecionada.
+
+    O download respeita a permissão de Gestor de Patrimônio e o escopo da UO
+    de origem ou destino, seguindo a mesma regra do Django Admin.
+    """
+)
+
+
 OPCOES_CADASTRO_TRANSFERENCIA_DOC = dedent(
     """
     Lista UOs externas ativas que podem ser usadas como destino na
