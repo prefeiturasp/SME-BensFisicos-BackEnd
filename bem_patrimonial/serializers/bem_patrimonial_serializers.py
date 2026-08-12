@@ -472,6 +472,7 @@ class BemItemCriacaoSerializer(serializers.Serializer):
     numero_formato_antigo = serializers.BooleanField(required=False, default=False)
     sem_numeracao = serializers.BooleanField(required=False, default=False)
     localizacao = serializers.CharField(required=False, allow_blank=True, default="")
+    numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.Serializer):
@@ -490,7 +491,6 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
     valor_unitario = serializers.CharField()
     marca = serializers.CharField()
     modelo = serializers.CharField()
-    numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
     observacao = serializers.CharField(required=False, allow_blank=True, default="")
     multi_payload = BemItemCriacaoSerializer(many=True)
 

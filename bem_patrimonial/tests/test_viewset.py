@@ -291,13 +291,13 @@ class CreateMultiViewSetTest(TestCase):
             "valor_unitario": "500,00",
             "marca": "Flexform",
             "modelo": "Ergo500",
-            "numero_processo": "PROC-01",
             "multi_payload": multi_payload if multi_payload is not None else [
                 {
                     "numero_patrimonial": "000.000000100-0",
                     "numero_formato_antigo": False,
                     "sem_numeracao": False,
                     "localizacao": "Sala 1",
+                    "numero_processo": "PROC-01",
                 }
             ],
         }
@@ -313,6 +313,53 @@ class CreateMultiViewSetTest(TestCase):
             BemPatrimonial.objects.filter(numero_patrimonial="000.000000100-0").count(),
             1,
         )
+
+    def test_create_multi_numero_processo_e_gravado_por_item(self):
+        self.client.post(self._url(), self._payload(), format="json")
+        bem = BemPatrimonial.objects.get(numero_patrimonial="000.000000100-0")
+        self.assertEqual(bem.numero_processo, "PROC-01")
+
+    def test_create_multi_numero_processo_pode_ser_distinto_por_item(self):
+        payload = self._payload(
+            multi_payload=[
+                {
+                    "numero_patrimonial": "000.000000201-0",
+                    "numero_formato_antigo": False,
+                    "sem_numeracao": False,
+                    "localizacao": "Sala 1",
+                    "numero_processo": "PROC-A",
+                },
+                {
+                    "numero_patrimonial": "000.000000202-0",
+                    "numero_formato_antigo": False,
+                    "sem_numeracao": False,
+                    "localizacao": "Sala 2",
+                    "numero_processo": "PROC-B",
+                },
+            ]
+        )
+        self.client.post(self._url(), payload, format="json")
+
+        bem_a = BemPatrimonial.objects.get(numero_patrimonial="000.000000201-0")
+        bem_b = BemPatrimonial.objects.get(numero_patrimonial="000.000000202-0")
+        self.assertEqual(bem_a.numero_processo, "PROC-A")
+        self.assertEqual(bem_b.numero_processo, "PROC-B")
+
+    def test_create_multi_numero_processo_e_opcional(self):
+        payload = self._payload(
+            multi_payload=[
+                {
+                    "numero_patrimonial": "000.000000300-0",
+                    "numero_formato_antigo": False,
+                    "sem_numeracao": False,
+                    "localizacao": "Sala 1",
+                }
+            ]
+        )
+        response = self.client.post(self._url(), payload, format="json")
+        self.assertEqual(response.status_code, 201)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="000.000000300-0")
+        self.assertEqual(bem.numero_processo, "")
 
     def test_create_multi_status_aguardando_aprovacao(self):
         self.client.post(self._url(), self._payload(), format="json")
