@@ -545,6 +545,72 @@ class BemPatrimonialTransferidoHistoricoViewSetTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["id"], self.bem.pk)
 
+    def test_listagem_oculta_bem_transferido_por_padrao(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_origem)
+
+        response = client.get(reverse("bens-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.bem.pk, [bem["id"] for bem in response.data["results"]])
+
+    def test_listagem_exibe_bem_transferido_pelo_status(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_origem)
+        url = reverse("bens-list")
+
+        por_status = client.get(url, {"status": constants.TRANSFERIDO})
+
+        self.assertEqual(por_status.status_code, 200)
+        self.assertEqual(
+            [bem["id"] for bem in por_status.data["results"]],
+            [self.bem.pk],
+        )
+
+    def test_gestor_destino_lista_bem_transferido_da_sua_uo(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_destino)
+
+        response = client.get(
+            reverse("bens-list"), {"status": constants.TRANSFERIDO}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [bem["id"] for bem in response.data["results"]], [self.bem.pk]
+        )
+
+    def test_operador_visualiza_transferido_fora_da_ua_com_busca_geral(self):
+        operador = get_user_model().objects.create_user(
+            username="operador_transferido_viewset",
+            email="operador.transferido.viewset@test.com",
+            **auth_kwargs("123456"),
+            unidade_orcamentaria=self.uo_destino,
+            unidade_administrativa=self.ua_destino_usuario,
+            is_staff=True,
+        )
+        operador.groups.add(
+            Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
+        )
+        operador.unidades_administrativas.add(self.ua_destino_usuario)
+
+        client = APIClient()
+        client.force_authenticate(operador)
+        url = reverse("bens-list")
+
+        sem_busca_geral = client.get(url, {"status": constants.TRANSFERIDO})
+        com_busca_geral = client.get(
+            url,
+            {"status": constants.TRANSFERIDO, "busca_geral_uos": "true"},
+        )
+
+        self.assertEqual(sem_busca_geral.status_code, 200)
+        self.assertEqual(com_busca_geral.status_code, 200)
+        self.assertEqual(sem_busca_geral.data["count"], 0)
+        self.assertEqual(
+            [bem["id"] for bem in com_busca_geral.data["results"]], [self.bem.pk]
+        )
+
     def test_destino_pode_consultar_historico_de_bem_transferido(self):
         client = APIClient()
         client.force_authenticate(self.gestor_destino)

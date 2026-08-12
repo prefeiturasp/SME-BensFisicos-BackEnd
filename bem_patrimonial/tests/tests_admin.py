@@ -5,6 +5,10 @@ from django.contrib.auth import get_user_model
 
 from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
+from bem_patrimonial.admins.filters.baixados_periodo_filter import (
+    StatusBemPatrimonialFilter,
+)
+from bem_patrimonial import constants
 from dados_comuns.tests.factories import criar_ua, criar_uo
 
 
@@ -64,7 +68,6 @@ class BemPatrimonialAdminTest(TestCase):
         self.assertFalse(getattr(form.fields["numero_patrimonial"], "disabled", False))
 
     def test_edicao_trava_flags_mas_numero_editavel_quando_nao_sem_numeracao(self):
-
         obj = self._mk_bem(numero_patrimonial="000.000000123-4", sem_numeracao=False)
         form_cls = self._get_form_for(obj)
         form = form_cls(instance=obj)
@@ -73,3 +76,73 @@ class BemPatrimonialAdminTest(TestCase):
         if "numero_formato_antigo" in form.fields:
             self.assertFalse(form.fields["numero_formato_antigo"].disabled)
         self.assertFalse(getattr(form.fields["numero_patrimonial"], "disabled", False))
+
+
+class StatusBemPatrimonialFilterTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = get_user_model().objects.create_superuser(
+            username="admin_status_filter",
+            email="admin.status.filter@test.com",
+            **auth_kwargs("123456"),
+        )
+        self.ua = criar_ua(uo=criar_uo(codigo="910", nome="UO 910"))
+        self.model_admin = BemPatrimonialAdmin(BemPatrimonial, admin.site)
+        self.bem_aprovado = self._criar_bem("Bem aprovado", constants.APROVADO)
+        self.bem_transferido = self._criar_bem(
+            "Bem transferido", constants.TRANSFERIDO
+        )
+
+    def _criar_bem(self, nome, status):
+        return BemPatrimonial.objects.create(
+            nome=nome,
+            descricao="Descricao",
+            valor_unitario=1,
+            marca="Marca",
+            modelo="Modelo",
+            numero_processo="PROC-1",
+            numero_patrimonial=f"000.00000000{BemPatrimonial.objects.count() + 1}-0",
+            numero_formato_antigo=False,
+            sem_numeracao=False,
+            criado_por=self.user,
+            unidade_administrativa=self.ua,
+            status=status,
+        )
+
+    def _filtro(self, data=None):
+        request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/", data)
+        request.user = self.user
+        return StatusBemPatrimonialFilter(
+            request,
+            request.GET.copy(),
+            BemPatrimonial,
+            self.model_admin,
+        ), request
+
+    def test_padrao_exibe_todos_sem_transferidos(self):
+        filtro, request = self._filtro()
+
+        queryset = filtro.queryset(request, BemPatrimonial.objects.all())
+
+        self.assertEqual(list(queryset), [self.bem_aprovado])
+
+    def test_status_transferido_exibe_apenas_transferidos(self):
+        filtro, request = self._filtro(
+            {StatusBemPatrimonialFilter.parameter_name: constants.TRANSFERIDO}
+        )
+
+        queryset = filtro.queryset(request, BemPatrimonial.objects.all())
+
+        self.assertEqual(list(queryset), [self.bem_transferido])
+
+    def test_opcao_padrao_comunica_que_transferidos_nao_sao_exibidos(self):
+        filtro, _ = self._filtro()
+
+        class ChangeListFake:
+            def get_query_string(self, *args, **kwargs):
+                return "?"
+
+        choices = list(filtro.choices(ChangeListFake()))
+
+        self.assertEqual(choices[0]["display"], "Todos (sem transferidos)")
+        self.assertTrue(choices[0]["selected"])
