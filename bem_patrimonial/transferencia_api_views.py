@@ -1,3 +1,5 @@
+from django.http import FileResponse
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import CharFilter, FilterSet, NumberFilter
 from drf_spectacular.types import OpenApiTypes
@@ -9,11 +11,14 @@ from drf_spectacular.utils import (
 )
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 
 from bem_patrimonial.models import TransferenciaBemPatrimonial
+from bem_patrimonial.ntbpm import gerar_pdf_ntbpm
 from bem_patrimonial.transferencia_api_docs import (
     CREATE_TRANSFERENCIA_DOC,
+    DOWNLOAD_DOCUMENTO_NTBPM_DOC,
     LIST_TRANSFERENCIAS_DOC,
     OPCOES_CADASTRO_TRANSFERENCIA_DOC,
     RETRIEVE_TRANSFERENCIA_DOC,
@@ -240,3 +245,30 @@ class TransferenciaBemPatrimonialViewSet(
 
         transferencia = serializer.save()
         return self._detail_response(transferencia, request, http_status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        tags=["Transferências"],
+        summary="Baixar documento NTBPM",
+        description=DOWNLOAD_DOCUMENTO_NTBPM_DOC,
+        request=None,
+        parameters=[TRANSFERENCIA_ID_PATH_PARAM],
+        responses={200: OpenApiResponse(description="Arquivo PDF NTBPM")},
+    )
+    @action(detail=True, methods=["get"], url_path="documento-ntbpm")
+    def documento_ntbpm(self, request, pk=None):
+        transferencia = self.get_object()
+        if not transferencia.numero_ntbpm:
+            raise NotFound("Número NTBPM não gerado para esta transferência.")
+
+        pdf_buffer = gerar_pdf_ntbpm(
+            transferencia,
+            usuario_gerador=request.user,
+            data_geracao=timezone.now(),
+        )
+        filename = f"NTBPM_{transferencia.numero_ntbpm.replace('.', '_')}.pdf"
+        return FileResponse(
+            pdf_buffer,
+            as_attachment=True,
+            filename=filename,
+            content_type="application/pdf",
+        )

@@ -11,6 +11,44 @@ def _normalizar_bool_param(value):
     return "1" if value_str in {"1", "true", "on", "yes", "sim"} else "0"
 
 
+class StatusBemPatrimonialFilter(admin.SimpleListFilter):
+    title = "Por Status"
+    parameter_name = "status__exact"
+
+    @classmethod
+    def deve_ocultar_transferidos(cls, request):
+        return request.GET.get(cls.parameter_name) != constants.TRANSFERIDO
+
+    def lookups(self, request, model_admin):
+        return constants.STATUS
+
+    def valor(self):
+        value = self.value()
+        return value[-1] if isinstance(value, list) else value
+
+    def choices(self, changelist):
+        yield {
+            "selected": self.valor() is None,
+            "query_string": changelist.get_query_string(
+                remove=[self.parameter_name]
+            ),
+            "display": "Todos (sem transferidos)",
+        }
+        for lookup, title in self.lookup_choices:
+            yield {
+                "selected": self.valor() == str(lookup),
+                "query_string": changelist.get_query_string(
+                    {self.parameter_name: lookup}
+                ),
+                "display": title,
+            }
+
+    def queryset(self, request, queryset):
+        if self.valor() is None:
+            return queryset.exclude(status=constants.TRANSFERIDO)
+        return queryset.filter(status=self.valor())
+
+
 class BaixadosMaisDeUmPeriodoFilter(admin.SimpleListFilter):
     title = ""
     parameter_name = "baixados_mais_de_um_periodo"

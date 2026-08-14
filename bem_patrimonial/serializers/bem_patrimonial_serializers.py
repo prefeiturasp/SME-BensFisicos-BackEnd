@@ -18,6 +18,7 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
     """
 
     criado_por_nome = serializers.CharField(source="criado_por.nome", read_only=True)
+    criado_por_rf = serializers.CharField(source="criado_por.rf", read_only=True)
 
     unidade_orcamentaria_codigo = serializers.CharField(
         source="unidade_administrativa.unidade_orcamentaria.codigo",
@@ -291,6 +292,7 @@ class BemPatrimonialDetailSerializer(
             "bloqueado_conciliacao",
             "criado_por",
             "criado_por_nome",
+            "criado_por_rf",
             "criado_em",
             "atualizado_em",
             "baixa_data",
@@ -308,6 +310,7 @@ class BemPatrimonialDetailSerializer(
             "baixa_data",
             "audit_last_at",
             "audit_last_by_id",
+            "bloqueado_conciliacao",
         ]
 
     def _validate_instance_edit_restrictions(self, attrs):
@@ -469,6 +472,7 @@ class BemItemCriacaoSerializer(serializers.Serializer):
     numero_formato_antigo = serializers.BooleanField(required=False, default=False)
     sem_numeracao = serializers.BooleanField(required=False, default=False)
     localizacao = serializers.CharField(required=False, allow_blank=True, default="")
+    numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.Serializer):
@@ -487,7 +491,6 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
     valor_unitario = serializers.CharField()
     marca = serializers.CharField()
     modelo = serializers.CharField()
-    numero_processo = serializers.CharField(required=False, allow_blank=True, default="")
     observacao = serializers.CharField(required=False, allow_blank=True, default="")
     multi_payload = BemItemCriacaoSerializer(many=True)
 

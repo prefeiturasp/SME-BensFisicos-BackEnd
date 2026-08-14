@@ -37,6 +37,7 @@ from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     BaixadosMaisDeUmPeriodoFilter,
     BuscaGeralTodasUOsFilter,
+    StatusBemPatrimonialFilter,
 )
 from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
@@ -506,7 +507,7 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
     resource_class = BemPatrimonialResource
 
     list_filter = (
-        "status",
+        StatusBemPatrimonialFilter,
         SemNumeroFilter,
         "numero_formato_antigo",
         ("criado_em", DateRangeFilter),
@@ -930,6 +931,11 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
 
     def _buscar_com_baixados_antigos(self, request, search_term):
         queryset_ampliado = self._get_queryset_com_auditoria(request)
+
+        if StatusBemPatrimonialFilter.deve_ocultar_transferidos(request):
+            queryset_ampliado = queryset_ampliado.exclude(
+                status=constants.TRANSFERIDO
+            )
 
         qs, use_distinct = super().get_search_results(
             request, queryset_ampliado, search_term

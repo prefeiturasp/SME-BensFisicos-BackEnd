@@ -73,10 +73,16 @@ def incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, ua_id):
         if pendente:
             continue
 
-        if not em_processo:
-            OcorrenciaConciliacao.objects.filter(item=item).exclude(
-                situacao=inv_constants.EM_PROCESSO_BAIXA_FISICA
-            ).delete()
+        if em_processo:
+            # Item com ocorrência "Em processo de baixa" já reflete o que o
+            # usuário salvou em registrar_ocorrencia. Este sync é disparado
+            # via on_commit quando bem.save() muda bloqueado_conciliacao;
+            # sobrescrever aqui reverteria o registro recém-feito.
+            continue
+
+        OcorrenciaConciliacao.objects.filter(item=item).exclude(
+            situacao=inv_constants.EM_PROCESSO_BAIXA_FISICA
+        ).delete()
 
         item.situacao = inv_constants.ENCONTRADO_SEM_DIVERGENCIA
         item.observacao = ""

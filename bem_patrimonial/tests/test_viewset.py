@@ -291,13 +291,13 @@ class CreateMultiViewSetTest(TestCase):
             "valor_unitario": "500,00",
             "marca": "Flexform",
             "modelo": "Ergo500",
-            "numero_processo": "PROC-01",
             "multi_payload": multi_payload if multi_payload is not None else [
                 {
                     "numero_patrimonial": "000.000000100-0",
                     "numero_formato_antigo": False,
                     "sem_numeracao": False,
                     "localizacao": "Sala 1",
+                    "numero_processo": "PROC-01",
                 }
             ],
         }
@@ -313,6 +313,53 @@ class CreateMultiViewSetTest(TestCase):
             BemPatrimonial.objects.filter(numero_patrimonial="000.000000100-0").count(),
             1,
         )
+
+    def test_create_multi_numero_processo_e_gravado_por_item(self):
+        self.client.post(self._url(), self._payload(), format="json")
+        bem = BemPatrimonial.objects.get(numero_patrimonial="000.000000100-0")
+        self.assertEqual(bem.numero_processo, "PROC-01")
+
+    def test_create_multi_numero_processo_pode_ser_distinto_por_item(self):
+        payload = self._payload(
+            multi_payload=[
+                {
+                    "numero_patrimonial": "000.000000201-0",
+                    "numero_formato_antigo": False,
+                    "sem_numeracao": False,
+                    "localizacao": "Sala 1",
+                    "numero_processo": "PROC-A",
+                },
+                {
+                    "numero_patrimonial": "000.000000202-0",
+                    "numero_formato_antigo": False,
+                    "sem_numeracao": False,
+                    "localizacao": "Sala 2",
+                    "numero_processo": "PROC-B",
+                },
+            ]
+        )
+        self.client.post(self._url(), payload, format="json")
+
+        bem_a = BemPatrimonial.objects.get(numero_patrimonial="000.000000201-0")
+        bem_b = BemPatrimonial.objects.get(numero_patrimonial="000.000000202-0")
+        self.assertEqual(bem_a.numero_processo, "PROC-A")
+        self.assertEqual(bem_b.numero_processo, "PROC-B")
+
+    def test_create_multi_numero_processo_e_opcional(self):
+        payload = self._payload(
+            multi_payload=[
+                {
+                    "numero_patrimonial": "000.000000300-0",
+                    "numero_formato_antigo": False,
+                    "sem_numeracao": False,
+                    "localizacao": "Sala 1",
+                }
+            ]
+        )
+        response = self.client.post(self._url(), payload, format="json")
+        self.assertEqual(response.status_code, 201)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="000.000000300-0")
+        self.assertEqual(bem.numero_processo, "")
 
     def test_create_multi_status_aguardando_aprovacao(self):
         self.client.post(self._url(), self._payload(), format="json")
@@ -544,6 +591,72 @@ class BemPatrimonialTransferidoHistoricoViewSetTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["id"], self.bem.pk)
+
+    def test_listagem_oculta_bem_transferido_por_padrao(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_origem)
+
+        response = client.get(reverse("bens-list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.bem.pk, [bem["id"] for bem in response.data["results"]])
+
+    def test_listagem_exibe_bem_transferido_pelo_status(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_origem)
+        url = reverse("bens-list")
+
+        por_status = client.get(url, {"status": constants.TRANSFERIDO})
+
+        self.assertEqual(por_status.status_code, 200)
+        self.assertEqual(
+            [bem["id"] for bem in por_status.data["results"]],
+            [self.bem.pk],
+        )
+
+    def test_gestor_destino_lista_bem_transferido_da_sua_uo(self):
+        client = APIClient()
+        client.force_authenticate(self.gestor_destino)
+
+        response = client.get(
+            reverse("bens-list"), {"status": constants.TRANSFERIDO}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [bem["id"] for bem in response.data["results"]], [self.bem.pk]
+        )
+
+    def test_operador_visualiza_transferido_fora_da_ua_com_busca_geral(self):
+        operador = get_user_model().objects.create_user(
+            username="operador_transferido_viewset",
+            email="operador.transferido.viewset@test.com",
+            **auth_kwargs("123456"),
+            unidade_orcamentaria=self.uo_destino,
+            unidade_administrativa=self.ua_destino_usuario,
+            is_staff=True,
+        )
+        operador.groups.add(
+            Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
+        )
+        operador.unidades_administrativas.add(self.ua_destino_usuario)
+
+        client = APIClient()
+        client.force_authenticate(operador)
+        url = reverse("bens-list")
+
+        sem_busca_geral = client.get(url, {"status": constants.TRANSFERIDO})
+        com_busca_geral = client.get(
+            url,
+            {"status": constants.TRANSFERIDO, "busca_geral_uos": "true"},
+        )
+
+        self.assertEqual(sem_busca_geral.status_code, 200)
+        self.assertEqual(com_busca_geral.status_code, 200)
+        self.assertEqual(sem_busca_geral.data["count"], 0)
+        self.assertEqual(
+            [bem["id"] for bem in com_busca_geral.data["results"]], [self.bem.pk]
+        )
 
     def test_destino_pode_consultar_historico_de_bem_transferido(self):
         client = APIClient()
