@@ -329,6 +329,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                         numero_formato_antigo=item.get("numero_formato_antigo", False),
                         sem_numeracao=sem,
                         localizacao=item.get("localizacao", ""),
+                        numero_processo=item.get("numero_processo", ""),
                         criado_por=request.user,
                         status=constants.AGUARDANDO_APROVACAO,
                     )
