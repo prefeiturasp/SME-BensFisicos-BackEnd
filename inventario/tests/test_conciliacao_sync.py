@@ -116,13 +116,18 @@ class ConciliacaoSyncTest(TestCase):
         self.assertEqual(item.situacao, inv_constants.NAO_ENCONTRADO)
 
     def test_incluir_bem_em_processo_baixa_nao_deleta_ocorrencias_marca_bloqueado(self):
-        """Cobre ramo em_processo=True: não deleta ocorrências EM_PROCESSO_BAIXA_FISICA."""
+        """Com em_processo=True: ocorrência EM_PROCESSO_BAIXA_FISICA é preservada
+        e o item mantém situação/observação definidos pelo usuário (o sync
+        disparado por on_commit não pode sobrescrever o que registrar_ocorrencia
+        acabou de salvar)."""
         conciliacao = self._criar_conciliacao_aberta()
         bem = self._criar_bem()
         item = ItemConciliacao.objects.create(
             conciliacao=conciliacao,
             bem=bem,
             situacao=inv_constants.EM_PROCESSO_BAIXA_FISICA,
+            observacao="obs preservada",
+            divergencia="",
         )
         OcorrenciaConciliacao.objects.create(
             item=item,
@@ -134,6 +139,9 @@ class ConciliacaoSyncTest(TestCase):
                 bem, self.ua.pk
             )
         self.assertEqual(OcorrenciaConciliacao.objects.filter(item=item).count(), 1)
+        item.refresh_from_db()
+        self.assertEqual(item.situacao, inv_constants.EM_PROCESSO_BAIXA_FISICA)
+        self.assertEqual(item.observacao, "obs preservada")
         bem.refresh_from_db()
         self.assertTrue(bem.bloqueado_conciliacao)
 

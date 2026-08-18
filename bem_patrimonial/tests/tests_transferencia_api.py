@@ -550,6 +550,75 @@ class TransferenciaApiTestCase(TestCase):
         self.assertEqual(response.data["id"], transferencia.id)
         self.assertTrue(response.data["url_documento_ntbpm"])
         self.assertIn(str(transferencia.pk), response.data["url_documento_ntbpm"])
+        self.assertIn("documento-ntbpm", response.data["url_documento_ntbpm"])
         self.assertEqual(len(response.data["itens"]), 2)
         self.assertEqual(response.data["total_itens"], 2)
         self.assertNotIn("nome_bem", response.data)
+
+    def test_gestor_baixa_documento_ntbpm_pela_api(self):
+        transferencia = self._criar_transferencia("SEI-778/2026")
+
+        self._autenticar(self.gestor)
+        response = self.client.get(
+            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn(
+            f"NTBPM_{transferencia.numero_ntbpm.replace('.', '_')}.pdf",
+            response["Content-Disposition"],
+        )
+
+    def test_documento_ntbpm_retorna_404_sem_numero_gerado(self):
+        transferencia = TransferenciaBemPatrimonial.objects.create(
+            unidade_orcamentaria_origem=self.uo_origem,
+            unidade_orcamentaria_destino=self.uo_destino,
+            unidade_administrativa_destino=self.ua_destino,
+            numero_processo="SEI-779/2026",
+            criado_por=self.gestor,
+        )
+
+        self._autenticar(self.gestor)
+        response = self.client.get(
+            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_operador_nao_baixa_documento_ntbpm_pela_api(self):
+        transferencia = self._criar_transferencia("SEI-780/2026")
+
+        self._autenticar(self.operador)
+        response = self.client.get(
+            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_gestor_fora_do_escopo_nao_baixa_documento_ntbpm_pela_api(self):
+        transferencia = self._criar_transferencia("SEI-781/2026")
+        uo_terceira = criar_uo(
+            codigo=codigo_uo(8, 80, 90),
+            nome="Terceira UO",
+            sigla="TER",
+        )
+        gestor_fora_escopo = Usuario.objects.create_user(
+            username="gestor_fora_escopo_ntbpm",
+            email="gestor.fora.escopo.ntbpm@test.com",
+            **auth_kwargs("123456"),
+            nome="Gestor Fora do Escopo",
+            is_staff=True,
+            unidade_orcamentaria=uo_terceira,
+        )
+        gestor_fora_escopo.groups.add(
+            Group.objects.get(name=GRUPO_GESTOR_PATRIMONIO)
+        )
+
+        self._autenticar(gestor_fora_escopo)
+        response = self.client.get(
+            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

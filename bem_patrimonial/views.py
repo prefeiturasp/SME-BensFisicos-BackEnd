@@ -221,19 +221,19 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         )
         qs = qs.annotate(baixa_data=Subquery(baixa_data_sq))
 
-        # Filtro especial "Bens Baixados":
-        # - Visão padrão (parâmetro ausente/falso): bens com status "Baixa Física"
-        #   não são exibidos, independentemente do período da baixa.
-        # - Com o filtro ativo: exibe apenas os bens com status "Baixa Física".
         bens_baixados = str(
             self.request.query_params.get("bens_baixados", "")
         ).strip().lower() in {"1", "true", "on", "yes", "sim"}
-
         if action == "list":
             if bens_baixados:
                 qs = qs.filter(status=constants.BAIXA_FISICA)
-            else:
-                qs = qs.exclude(status=constants.BAIXA_FISICA)
+            elif self.request.query_params.get("status") not in {
+                constants.BAIXA_FISICA,
+                constants.TRANSFERIDO,
+            }:
+                qs = qs.exclude(
+                    status__in=[constants.BAIXA_FISICA, constants.TRANSFERIDO]
+                )
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
@@ -329,6 +329,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                         numero_formato_antigo=item.get("numero_formato_antigo", False),
                         sem_numeracao=sem,
                         localizacao=item.get("localizacao", ""),
+                        numero_processo=item.get("numero_processo", ""),
                         criado_por=request.user,
                         status=constants.AGUARDANDO_APROVACAO,
                     )
