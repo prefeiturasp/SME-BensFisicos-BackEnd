@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.contrib.auth.models import Group
 from django.utils import timezone
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Spacer
 
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
@@ -285,6 +286,12 @@ class TestHelpersRelatorioConciliacao(TestCase):
         self.assertEqual(estilos["txt"].leading, 9)
         self.assertEqual(estilos["txt_center"].fontSize, 8)
         self.assertEqual(estilos["txt_center"].leading, 9)
+        self.assertEqual(estilos["totalizador_label"].fontName, "Helvetica-Bold")
+        self.assertEqual(estilos["totalizador_valor"].fontName, "Helvetica-Bold")
+        self.assertEqual(
+            estilos["totalizador_geral_label"].fontName, "Helvetica-Bold"
+        )
+        self.assertEqual(estilos["ocorrencia_badge"].fontName, "Helvetica-Bold")
 
 
 class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
@@ -365,12 +372,254 @@ class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
 
         item_com_ocorrencia = self.conciliacao.itens.get(situacao=constants.DIVERGENTE)
         estilos = _estilos_blocos_itens(getSampleStyleSheet())
-        rows, _ = _linhas_tabela_item(
-            item_com_ocorrencia,
-            estilos["txt"],
-            estilos["txt_center"],
+        rows, _ = _linhas_tabela_item(item_com_ocorrencia, estilos)
+
+        self.assertIn(
+            "ITEM COM OCORRÊNCIA NESTA CONCILIAÇÃO",
+            rows[-1][0].getPlainText(),
         )
         registrado_por = rows[-1][1].getPlainText()
 
         self.assertEqual(registrado_por, "Registrado por: 1111111")
         self.assertNotIn("Operador A", registrado_por)
+
+
+class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
+    """Cobertura da reestruturação do relatório nas 5 categorias de situação."""
+
+    def setUp(self):
+        super().setUp()
+        self.conciliacao = self.criar_conciliacao_eventual(ua=self.ua_a)
+
+        valores = {
+            constants.ENCONTRADO_SEM_DIVERGENCIA: Decimal("100.00"),
+            constants.ENCONTRADO: Decimal("250.00"),
+            constants.NAO_ENCONTRADO: Decimal("310.00"),
+            constants.DIVERGENTE: Decimal("420.00"),
+            constants.EM_PROCESSO_BAIXA_FISICA: Decimal("530.00"),
+            constants.BAIXA_FISICA: Decimal("0.00"),
+        }
+
+        self.itens = {}
+        for i, (situacao, valor) in enumerate(valores.items(), start=1):
+            bem = self.criar_bem(
+                ua=self.ua_a,
+                numero_patrimonial=f"001.000000{i:03d}-{i}",
+                valor_unitario=valor,
+            )
+            item = ItemConciliacao.objects.create(
+                conciliacao=self.conciliacao,
+                bem=bem,
+                situacao=situacao,
+                observacao="" if situacao != constants.DIVERGENTE else "Obs do item",
+                divergencia=(
+                    "Divergência do item"
+                    if situacao == constants.DIVERGENTE
+                    else ""
+                ),
+                atualizado_por=self.operador_a,
+            )
+            self.itens[situacao] = item
+
+        OcorrenciaConciliacao.objects.create(
+            item=self.itens[constants.DIVERGENTE],
+            situacao=constants.DIVERGENTE,
+            observacao="Obs ocorrência",
+            divergencia="Divergência ocorrência",
+            registrado_por=self.operador_a,
+        )
+
+    def _coletar_texto_blocos(self, conciliacao=None):
+        """Recupera o texto dos elementos (blocos) que compõem o corpo do PDF."""
+        conciliacao = conciliacao or self.conciliacao
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
+        from reportlab.platypus import KeepTogether, Paragraph, Table
+
+        textos = []
+
+        def percorrer(flowables):
+            for el in flowables:
+                if isinstance(el, Paragraph):
+                    textos.append(el.getPlainText())
+                elif isinstance(el, KeepTogether):
+                    percorrer(el._content)
+                elif isinstance(el, Table):
+                    for row in el._cellvalues:
+                        for cell in row:
+                            percorrer([cell])
+
+        percorrer(_criar_blocos_itens_conciliacao(conciliacao))
+        return "\n".join(t for t in textos if t)
+
+    def test_pdf_agrupa_por_categorias_de_situacao(self):
+        texto = self._coletar_texto_blocos()
+
+        self.assertIn("Encontrados / Sem divergência (2)", texto)
+        self.assertIn("Não encontrados (1)", texto)
+        self.assertIn("Divergentes (1)", texto)
+        self.assertIn("Em processo de baixa (1)", texto)
+        self.assertIn("Baixa Física (1)", texto)
+
+        self.assertNotIn("Itens encontrados sem divergência", texto)
+        self.assertNotIn("Itens com ocorrência / divergência", texto)
+
+    def test_pdf_linhas_valor_total_por_categoria_e_geral(self):
+        texto = self._coletar_texto_blocos()
+
+        totais = [
+            ("Encontrados", "2 itens", "R$ 350,00"),
+            ("Não encontrados", "1 item", "R$ 310,00"),
+            ("Divergentes", "1 item", "R$ 420,00"),
+            ("Em processo de baixa", "1 item", "R$ 530,00"),
+            ("Baixa Física", "1 item", "R$ 0,00"),
+        ]
+
+        posicao_anterior = -1
+        for titulo, quantidade, valor in totais:
+            posicao_titulo = texto.index(titulo)
+            self.assertGreater(posicao_titulo, posicao_anterior)
+
+            posicao_label = texto.index("Valor total da categoria", posicao_titulo)
+            posicao_quantidade = texto.index(quantidade, posicao_label)
+            posicao_valor = texto.index(valor, posicao_quantidade)
+            self.assertLess(posicao_valor, posicao_label + 200)
+
+            posicao_anterior = posicao_valor
+
+        posicao_geral = texto.index("Valor total geral", posicao_anterior)
+        self.assertGreater(posicao_geral, posicao_anterior)
+        posicao_quantidade_geral = texto.index("6 itens", posicao_geral)
+        posicao_valor_geral = texto.index("R$ 1.610,00", posicao_quantidade_geral)
+        self.assertEqual(posicao_valor_geral, texto.rfind("R$ 1.610,00"))
+
+    def test_titulo_categoria_agrupado_com_primeiro_item(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
+        from reportlab.platypus import KeepTogether, Table
+
+        elements = _criar_blocos_itens_conciliacao(self.conciliacao)
+
+        primeiro = elements[0]
+        self.assertIsInstance(primeiro, KeepTogether)
+        conteudo = primeiro._content
+        self.assertIsInstance(conteudo[0], Table)
+        texto_titulo = conteudo[0]._cellvalues[0][0].getPlainText()
+        self.assertIn("Encontrados", texto_titulo)
+        self.assertIsInstance(conteudo[1], Spacer)
+
+    def test_totalizador_categoria_tem_tres_celulas_com_grade(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
+        from reportlab.platypus import KeepTogether, Table
+
+        elements = _criar_blocos_itens_conciliacao(self.conciliacao)
+
+        totalizador = elements[1]._content[-1]
+        self.assertIsInstance(totalizador, Table)
+        celulas = totalizador._cellvalues[0]
+        self.assertEqual(celulas[0].getPlainText(), "Valor total da categoria")
+        self.assertEqual(celulas[1].getPlainText(), "2 itens")
+        self.assertEqual(celulas[2].getPlainText(), "R$ 350,00")
+        self.assertIn(
+            "INNERGRID",
+            [cmd[0] for cmd in totalizador._linecmds],
+        )
+
+    def test_total_geral_ultimo_elemento_com_tres_celulas(self):
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
+        from reportlab.platypus import Table
+
+        elements = _criar_blocos_itens_conciliacao(self.conciliacao)
+
+        self.assertIsInstance(elements[-1], Table)
+        celulas = elements[-1]._cellvalues[0]
+        self.assertEqual(celulas[0].getPlainText(), "Valor total geral")
+        self.assertEqual(celulas[1].getPlainText(), "6 itens")
+        self.assertEqual(celulas[2].getPlainText(), "R$ 1.610,00")
+        self.assertIn(
+            "INNERGRID",
+            [cmd[0] for cmd in elements[-1]._linecmds],
+        )
+
+    def test_espacamentos_entre_categorias_e_apos_titulo(self):
+        from inventario.relatorio_conciliacao_pdf import (
+            _criar_blocos_itens_conciliacao,
+            PDFConfig,
+        )
+        from reportlab.platypus import Spacer, Table
+
+        elements = _criar_blocos_itens_conciliacao(self.conciliacao)
+
+        espaco_categorias = elements[2]
+        self.assertIsInstance(espaco_categorias, Spacer)
+        self.assertAlmostEqual(
+            espaco_categorias.height,
+            PDFConfig.ESPACO_ENTRE_CATEGORIAS,
+            places=2,
+        )
+
+        self.assertIsInstance(elements[-2], Spacer)
+        self.assertAlmostEqual(
+            elements[-2].height, PDFConfig.ESPACO_ENTRE_CATEGORIAS, places=2
+        )
+        self.assertIsInstance(elements[-1], Table)
+
+        conteudo = elements[0]._content
+        self.assertIsInstance(conteudo[1], Spacer)
+        self.assertAlmostEqual(
+            conteudo[1].height,
+            PDFConfig.ESPACO_APOS_TITULO_CATEGORIA,
+            places=2,
+        )
+
+    def test_conciliacao_sem_itens_exibe_aviso_e_total_geral_zero(self):
+        vazia = self.criar_conciliacao_eventual(
+            ua=self.ua_a,
+            periodo_final=timezone.localdate() - timezone.timedelta(days=2),
+        )
+        texto = self._coletar_texto_blocos(vazia)
+
+        self.assertIn("Nenhum item encontrado para esta conciliação.", texto)
+        self.assertIn("Valor total geral", texto)
+        self.assertIn("0 itens", texto)
+        self.assertIn("R$ 0,00", texto)
+
+    def test_pdf_multipagina_com_muitos_itens_gera_pdf(self):
+        from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
+
+        conc = self.criar_conciliacao_eventual(
+            ua=self.ua_a,
+            periodo_final=timezone.localdate() - timezone.timedelta(days=7),
+        )
+        situacoes = (
+            [constants.ENCONTRADO_SEM_DIVERGENCIA] * 30
+            + [constants.NAO_ENCONTRADO] * 12
+            + [constants.DIVERGENTE] * 8
+            + [constants.EM_PROCESSO_BAIXA_FISICA] * 6
+            + [constants.BAIXA_FISICA] * 4
+        )
+        for i, sit in enumerate(situacoes):
+            bem = self.criar_bem(
+                ua=self.ua_a,
+                numero_patrimonial=f"002.{i:09d}-{i}",
+                valor_unitario=Decimal("100.00"),
+            )
+            ItemConciliacao.objects.create(
+                conciliacao=conc,
+                bem=bem,
+                situacao=sit,
+                observacao="",
+                divergencia="Div" if sit == constants.DIVERGENTE else "",
+                atualizado_por=self.operador_a,
+            )
+
+        buf = gerar_pdf_conciliacao(conc, usuario_gerador=self.operador_a)
+        raw = buf.getvalue()
+        self.assertTrue(raw.startswith(b"%PDF"))
+        paginas = raw.count(b"/Type /Page") - raw.count(b"/Type /Pages")
+        self.assertGreater(paginas, 1)
+
+    def test_pdf_sinaliza_item_com_ocorrencia(self):
+        texto = self._coletar_texto_blocos()
+
+        self.assertEqual(
+            texto.count("ITEM COM OCORRÊNCIA NESTA CONCILIAÇÃO"), 1
+        )
