@@ -429,26 +429,29 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
             registrado_por=self.operador_a,
         )
 
+    def _recuperar_textos_blocos(self, flowables, textos):
+        """Adiciona o texto plano dos blocos (Paragraph/KeepTogether/Table) à lista."""
+        from reportlab.platypus import KeepTogether, Paragraph, Table
+
+        for el in flowables:
+            if isinstance(el, Paragraph):
+                textos.append(el.getPlainText())
+            elif isinstance(el, KeepTogether):
+                self._recuperar_textos_blocos(el._content, textos)
+            elif isinstance(el, Table):
+                for row in el._cellvalues:
+                    for cell in row:
+                        self._recuperar_textos_blocos([cell], textos)
+
     def _coletar_texto_blocos(self, conciliacao=None):
         """Recupera o texto dos elementos (blocos) que compõem o corpo do PDF."""
         conciliacao = conciliacao or self.conciliacao
         from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
-        from reportlab.platypus import KeepTogether, Paragraph, Table
 
         textos = []
-
-        def percorrer(flowables):
-            for el in flowables:
-                if isinstance(el, Paragraph):
-                    textos.append(el.getPlainText())
-                elif isinstance(el, KeepTogether):
-                    percorrer(el._content)
-                elif isinstance(el, Table):
-                    for row in el._cellvalues:
-                        for cell in row:
-                            percorrer([cell])
-
-        percorrer(_criar_blocos_itens_conciliacao(conciliacao))
+        self._recuperar_textos_blocos(
+            _criar_blocos_itens_conciliacao(conciliacao), textos
+        )
         return "\n".join(t for t in textos if t)
 
     def test_pdf_agrupa_por_categorias_de_situacao(self):
@@ -508,7 +511,7 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
 
     def test_totalizador_categoria_tem_tres_celulas_com_grade(self):
         from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
-        from reportlab.platypus import KeepTogether, Table
+        from reportlab.platypus import Table
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
