@@ -1641,15 +1641,15 @@ class ImportacaoEndpointTest(_Base):
 
         fake_resource.import_data.side_effect = _import_data_raise
 
-        # Patchamos tanto o módulo admin quanto o módulo da view para cobrir
-        # qualquer caminho de importação que o repositório use.
+        # Patchamos o resource da API (usado pelo endpoint) e também o resource
+        # base no módulo do admin, para cobrir qualquer caminho de importação.
         patches = [
             mock_patch(
                 f"{self._RESOURCE_PATH}",
                 return_value=fake_resource,
             ),
             mock_patch(
-                "bem_patrimonial.views.BemPatrimonialResource",
+                "bem_patrimonial.views.BemPatrimonialAPIResource",
                 return_value=fake_resource,
             ),
         ]
@@ -1691,7 +1691,7 @@ class ImportacaoEndpointTest(_Base):
                 return_value=fake_resource,
             ),
             mock_patch(
-                "bem_patrimonial.api_views.BemPatrimonialResource",
+                "bem_patrimonial.views.BemPatrimonialAPIResource",
                 return_value=fake_resource,
             ),
         ]

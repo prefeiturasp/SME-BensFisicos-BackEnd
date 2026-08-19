@@ -28,7 +28,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.functions import Cast
 
 from bem_patrimonial import constants
-from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialResource
+from bem_patrimonial.resources_api import BemPatrimonialAPIResource
 from bem_patrimonial.serializers.bem_patrimonial_serializers import (
     BemPatrimonialListSerializer,
     BemPatrimonialDetailSerializer,
@@ -51,6 +51,7 @@ from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
     filtrar_queryset_por_escopo,
     filtrar_queryset_transferencia_por_escopo,
+    uas_acessiveis_para_importacao,
     validar_bem_no_escopo_com_transferencia,
 )
 
@@ -454,7 +455,10 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
           valor_unitario, marca, modelo.
         - Tudo ou nada: qualquer erro rejeita a carga inteira.
         - UA sempre a do usuário autenticado.
-        - Todos os bens criados entram com status Aguardando Aprovação.
+        - Status inicial conforme o perfil de quem importa:
+            * Gestor de Patrimônio/superusuário: bens entram Aprovados,
+              disponíveis imediatamente na listagem da UA.
+            * Operador de Inventário: bens entram Aguardando Aprovação.
         - marca e modelo vazios são normalizados para "-".
         """
         input_serializer = ImportacaoBemPatrimonialSerializer(data=request.data)
@@ -469,7 +473,23 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         arquivo = input_serializer.validated_data["arquivo"]
 
-        bloqueio_conciliacao = self._bloquear_importacao_se_conciliacao_em_aberto(request)
+        # Resolve a UA de destino ANTES de qualquer validação de estado:
+        # - Usuário logado numa UA: usa a UA do próprio usuário (ua_explicita=None).
+        # - Usuário logado numa UO: o front envia unidade_administrativa_id; aqui
+        #   validamos que a UA pertence ao escopo do usuário antes de usá-la.
+        ua_explicita, erro_ua = self._resolver_ua_destino_importacao(request)
+        if erro_ua is not None:
+            return erro_ua
+
+        # UA efetivamente usada para os bens (explícita, quando informada; senão
+        # a do usuário). Usada aqui para checar conciliação na UA correta.
+        ua_destino = ua_explicita or getattr(
+            request.user, "unidade_administrativa", None
+        )
+
+        bloqueio_conciliacao = self._bloquear_importacao_se_conciliacao_em_aberto(
+            ua_destino
+        )
         if bloqueio_conciliacao is not None:
             return bloqueio_conciliacao
 
@@ -481,8 +501,14 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         if erro_leitura is not None:
             return erro_leitura
 
-        # Executa a importação via BemPatrimonialResource (mesma lógica do Admin)
-        resource = BemPatrimonialResource(request=request)
+        # Executa a importação via BemPatrimonialAPIResource: herda todas as
+        # validações do resource do Admin, mas aplica a aprovação diferenciada
+        # por perfil (Gestor incorpora direto; Operador aguarda aprovação) e a
+        # UA de destino escolhida quando o usuário opera no nível de UO.
+        resource = BemPatrimonialAPIResource(
+            request=request,
+            unidade_administrativa=ua_explicita,
+        )
 
         try:
             with audit_as(request.user):
@@ -503,25 +529,42 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                 status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        return self._montar_resposta_importacao(result, resource)
+        # Com raise_errors=False, uma ValidationError lançada por before_import
+        # (ex.: usuário sem UA vinculada / UA inativa) NÃO é relançada: o
+        # django-import-export a guarda em result.base_errors e retorna
+        # normalmente. Sem esta verificação, a importação responderia 201 sem
+        # ter salvo nenhum bem — dando falso sucesso. Detectamos e delegamos ao
+        # mesmo handler que traduz o erro em 403/422.
+        erro_base = self._extrair_erro_base(result)
+        if erro_base is not None:
+            if isinstance(erro_base, DjangoValidationError):
+                return self._tratar_erro_validacao_importacao(erro_base, resource)
+            return Response(
+                {
+                    "detail": "Erro inesperado durante a importação.",
+                    "erro": str(erro_base),
+                },
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-    def _bloquear_importacao_se_conciliacao_em_aberto(self, request):
+        return self._montar_resposta_importacao(result, resource, request)
+
+    def _bloquear_importacao_se_conciliacao_em_aberto(self, ua_destino):
         """
         Retorna uma Response 409 se existir Conciliação em aberto para a UA
-        do usuário autenticado — a mesma UA usada para os bens importados
-        (ver before_import_row do BemPatrimonialResource) — ou None quando a
-        importação pode prosseguir. Chamado antes de ler/processar a
-        planilha, para não persistir nada quando a importação for bloqueada.
+        de destino da importação — a mesma UA usada para os bens importados —
+        ou None quando a importação pode prosseguir. Chamado antes de
+        ler/processar a planilha, para não persistir nada quando a importação
+        for bloqueada.
         """
         from inventario.models import ConciliacaoUA
         from inventario import constants as inv_constants
 
-        ua_usuario = getattr(request.user, "unidade_administrativa", None)
-        if ua_usuario is None:
+        if ua_destino is None:
             return None
 
         existe_conciliacao_em_aberto = ConciliacaoUA.objects.filter(
-            unidade_administrativa_id=ua_usuario.id,
+            unidade_administrativa_id=ua_destino.id,
             status=inv_constants.CONCILIACAO_EM_ABERTO,
         ).exists()
         if not existe_conciliacao_em_aberto:
@@ -556,8 +599,35 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         return dataset, None
 
+    def _extrair_erro_base(self, result):
+        """
+        Retorna a exceção acumulada em result.base_errors pelo import_data
+        quando before_import falha com raise_errors=False, ou None se não houver.
+
+        A estrutura de erros do django-import-export varia entre versões
+        (result.base_errors é uma lista de Error, cada um com .error contendo a
+        exceção original), então lemos de forma defensiva. Também consideramos
+        row_errors() como fallback, cobrindo erros ocorridos por linha.
+        """
+        base_errors = getattr(result, "base_errors", None) or []
+        for err in base_errors:
+            exc = getattr(err, "error", err)
+            if exc is not None:
+                return exc
+
+        # Fallback: erros por linha (has_errors cobre base + row errors).
+        if hasattr(result, "has_errors") and result.has_errors():
+            row_errors = getattr(result, "row_errors", None)
+            if callable(row_errors):
+                for _linha, errors in result.row_errors():
+                    for err in errors:
+                        exc = getattr(err, "error", err)
+                        if exc is not None:
+                            return exc
+        return None
+
     def _tratar_erro_validacao_importacao(
-        self, exc: DjangoValidationError, resource: "BemPatrimonialResource"
+        self, exc: DjangoValidationError, resource: "BemPatrimonialAPIResource"
     ) -> Response:
         """
         Traduz o ValidationError lançado pelo before_import em 403 (erro de
@@ -595,13 +665,70 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         # xlsx / xls: tablib aceita bytes diretamente
         return tablib.Dataset().load(conteudo, headers=True)
 
-    def _montar_resposta_importacao(self, result, resource: BemPatrimonialResource) -> Response:
+    def _resolver_ua_destino_importacao(self, request):
+        """
+        Resolve a Unidade Administrativa de destino da importação.
+
+        Retorna uma tupla (ua_explicita, erro_response):
+        - (None, None): nenhuma UA explícita informada — o resource usará a UA
+          do usuário autenticado (fluxo de quem está logado numa UA). Se o
+          usuário não tiver UA, a validação do resource devolverá 403.
+        - (ua, None): UA explícita válida e dentro do escopo do usuário.
+        - (None, Response): UA informada é inválida ou fora do escopo; a
+          Response (400/403) já está pronta para ser retornada.
+
+        A UA é aceita no campo `unidade_administrativa_id` do multipart. Só é
+        exigida/validada quando enviada; o front a envia quando o usuário está
+        logado numa UO e precisa escolher a UA de destino.
+        """
+        ua_id_raw = request.data.get("unidade_administrativa_id")
+
+        if ua_id_raw in (None, "", "null"):
+            return None, None
+
+        try:
+            ua_id = int(ua_id_raw)
+        except (TypeError, ValueError):
+            return None, Response(
+                {"detail": "Unidade Administrativa inválida."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Valida que a UA informada é uma das UAs em que o usuário pode
+        # importar — a MESMA regra que popula o seletor no frontend
+        # (get_opcoes_escopo), cobrindo superuser, gestor e operador.
+        ua = (
+            uas_acessiveis_para_importacao(request.user)
+            .filter(id=ua_id)
+            .first()
+        )
+        if ua is None:
+            return None, Response(
+                {
+                    "detail": "A Unidade Administrativa selecionada não está "
+                    "disponível para o seu usuário."
+                },
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        return ua, None
+
+    def _montar_resposta_importacao(
+        self, result, resource: BemPatrimonialAPIResource, request
+    ) -> Response:
         """
         Constrói o payload de resposta para o caso de sucesso (201).
 
         Com a regra tudo-ou-nada, qualquer erro de planilha é capturado no
         before_import (ValidationError) e tratado em importar() como 422 antes
         de chegar aqui. Este método cobre exclusivamente o caminho feliz.
+
+        A mensagem (`detail`) reflete o fluxo aplicado conforme o perfil de
+        quem importou:
+        - Gestor de Patrimônio/superusuário: bens já disponíveis na listagem.
+        - Operador de Inventário: bens aguardando aprovação do Gestor.
+        O flag `aprovacao_automatica` permite ao frontend tratar/exibir o
+        resultado sem reimplementar a regra de perfil.
         """
         totais = result.totals
         criados = totais.get("new", 0)
@@ -611,12 +738,31 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             + totais.get("invalid", 0)
             + totais.get("error", 0)
         )
+
+        user = getattr(request, "user", None)
+        aprovacao_automatica = bool(
+            getattr(user, "is_gestor_patrimonio", False)
+            or getattr(user, "is_superuser", False)
+        )
+
+        if aprovacao_automatica:
+            detail = (
+                f"{criados} bem(ns) importado(s) e disponível(is) "
+                "na listagem da Unidade Administrativa."
+            )
+        else:
+            detail = (
+                f"{criados} bem(ns) importado(s) com sucesso e "
+                "aguardando aprovação do Gestor de Patrimônio."
+            )
+
         return Response(
             {
-                "detail": f"{criados} bem(ns) importado(s) com sucesso.",
+                "detail": detail,
                 "importados": criados,
                 "ignorados_com_erro": 0,
                 "total_linhas": total_linhas,
+                "aprovacao_automatica": aprovacao_automatica,
             },
             status=http_status.HTTP_201_CREATED,
         )

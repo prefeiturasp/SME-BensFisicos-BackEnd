@@ -260,6 +260,33 @@ class BemPatrimonialResource(resources.ModelResource):
             return ""
         return str(value).strip()
 
+    def _linha_completamente_vazia(self, row) -> bool:
+        """
+        True quando TODAS as células da linha estão em branco (None, vazio ou
+        só espaços). Linhas assim são descartadas silenciosamente na
+        importação; linhas parcialmente preenchidas NÃO entram aqui e seguem
+        para a validação normal (podendo gerar erro por campo obrigatório).
+        """
+        return all(
+            self._normalizar_valor(row.get(coluna)) == ""
+            for coluna in COLUNAS_MODELO
+        )
+
+    def _remover_linhas_vazias(self, dataset):
+        """
+        Remove do dataset (in place) as linhas 100% vazias, para que a
+        importação processe apenas as linhas preenchidas. Retorna a quantidade
+        de linhas removidas. Percorre de trás para frente para não invalidar os
+        índices durante a remoção.
+        """
+        removidas = 0
+        linhas = dataset.dict
+        for idx in range(len(linhas) - 1, -1, -1):
+            if self._linha_completamente_vazia(linhas[idx]):
+                del dataset[idx]
+                removidas += 1
+        return removidas
+
     def _registrar_erro(self, linha: int, numero_patrimonial: str, campo: str, mensagem: str):
         """Registra erro padronizado: {linha, numero_patrimonial, campo, mensagem}"""
         self._erros_por_linha.append({
@@ -370,6 +397,16 @@ class BemPatrimonialResource(resources.ModelResource):
     # Hooks do django-import-export
     # ------------------------------------------------------------------
 
+    def _ua_para_importacao(self):
+        """
+        Unidade Administrativa de destino dos bens importados.
+
+        No resource base (usado pelo Django Admin) é sempre a UA do usuário
+        autenticado. Subclasses (ex.: o resource da API) podem sobrescrever
+        para suportar uma UA escolhida explicitamente.
+        """
+        return getattr(self.request.user, "unidade_administrativa", None)
+
     def before_import(self, dataset, *args, **kwargs):
         """
         Valida contexto do usuário e o dataset completo antes de processar qualquer linha.
@@ -381,7 +418,7 @@ class BemPatrimonialResource(resources.ModelResource):
         if not self.request:
             return
 
-        ua_usuario = getattr(self.request.user, "unidade_administrativa", None)
+        ua_usuario = self._ua_para_importacao()
         if not ua_usuario:
             raise ValidationError(
                 "Não é possível importar bens: seu usuário não possui uma "
@@ -401,6 +438,17 @@ class BemPatrimonialResource(resources.ModelResource):
         erro_cabecalho = self._validar_cabecalho(dataset)
         if erro_cabecalho:
             raise ValidationError(erro_cabecalho)
+
+        # Descarta linhas 100% vazias antes de validar/importar: apenas as
+        # linhas preenchidas seguem adiante. Linhas parcialmente preenchidas
+        # permanecem e são validadas normalmente (campo obrigatório em branco
+        # continua sendo erro).
+        self._remover_linhas_vazias(dataset)
+
+        # Após remover as linhas vazias, a planilha pode ter ficado sem nenhuma
+        # linha de dados — trata como planilha vazia.
+        if len(dataset) == 0:
+            raise ValidationError("A planilha está vazia ou não contém linhas de dados.")
 
         erros = self._validar_dataset_completo(dataset)
         if erros:
@@ -456,7 +504,7 @@ class BemPatrimonialResource(resources.ModelResource):
         if self.request:
             if not instance.criado_por_id:
                 instance.criado_por = self.request.user
-            instance.unidade_administrativa = self.request.user.unidade_administrativa
+            instance.unidade_administrativa = self._ua_para_importacao()
         instance.status = constants.AGUARDANDO_APROVACAO
         numero_patrimonial = self._normalizar_valor(instance.numero_patrimonial)
         if not numero_patrimonial:
