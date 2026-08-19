@@ -1,4 +1,5 @@
 """
+Resource de importação de Bens Patrimoniais usado EXCLUSIVAMENTE pela API
 (POST /api/bens/importar/).
 
 Estende BemPatrimonialResource (o resource compartilhado com o Django Admin)
