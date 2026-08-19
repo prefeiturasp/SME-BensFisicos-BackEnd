@@ -10,7 +10,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     Table,
     TableStyle,
@@ -38,6 +38,14 @@ class PDFConfig:
     COR_CINZA_CLARO = colors.HexColor("#F5F5F5")
     COR_CINZA_MEDIO = colors.HexColor("#F0F0F0")
     COR_CINZA_ZEBRA = colors.HexColor("#FAFAFA")
+
+    COR_OCORRENCIA_TEXTO = colors.HexColor("#2E5B8A")
+
+    ESPACO_APOS_CABECALHO = 0.5 * cm
+    ESPACO_APOS_TITULO_CATEGORIA = 0.25 * cm
+    ESPACO_ENTRE_CATEGORIAS = 0.6 * cm
+    ESPACO_TOPO_FRAME = 0.6 * cm
+    ESPACO_BASE_FRAME = 0.4 * cm
 
     FONTE_PADRAO = 7
     FONTE_TITULO = 8
@@ -489,6 +497,18 @@ def _criar_informacoes_gerais_conciliacao(conciliacao):
     return elements
 
 
+def _estilo_totalizador(styles, nome, fonte, alinhamento):
+    """Estilo em negrito usado nas linhas totalizadoras (categoria e geral)."""
+    return criar_estilo_base(
+        nome,
+        styles,
+        fontName="Helvetica-Bold",
+        fontSize=fonte,
+        leading=fonte + 1,
+        alignment=alinhamento,
+    )
+
+
 def _estilos_blocos_itens(styles):
     """Cria estilos usados nos blocos de itens da conciliação."""
     font = 8
@@ -517,31 +537,77 @@ def _estilos_blocos_itens(styles):
         alignment=TA_CENTER,
         wordWrap="CJK",
     )
-    titulo_grupo = criar_estilo_base(
-        "GrupoTitulo",
+    titulo_categoria = criar_estilo_base(
+        "TituloCategoria",
+        styles,
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        leading=9,
+        alignment=TA_LEFT,
+    )
+    ocorrencia_badge = criar_estilo_base(
+        "ItemOcorrencia",
         styles,
         fontName="Helvetica-Bold",
         fontSize=7,
         leading=8,
         alignment=TA_LEFT,
+        textColor=PDFConfig.COR_OCORRENCIA_TEXTO,
     )
-    return {"txt": txt, "txt_center": txt_center, "titulo_grupo": titulo_grupo}
+    totalizador_label = _estilo_totalizador(styles, "TotalizadorLabel", 7, TA_LEFT)
+    totalizador_valor = _estilo_totalizador(styles, "TotalizadorValor", 7, TA_CENTER)
+    totalizador_valor_direita = _estilo_totalizador(
+        styles, "TotalizadorValorDireita", 7, TA_RIGHT
+    )
+    totalizador_geral_label = _estilo_totalizador(
+        styles, "TotalizadorGeralLabel", 8, TA_LEFT
+    )
+    totalizador_geral_valor = _estilo_totalizador(
+        styles, "TotalizadorGeralValor", 8, TA_CENTER
+    )
+    totalizador_geral_valor_direita = _estilo_totalizador(
+        styles, "TotalizadorGeralValorDireita", 8, TA_RIGHT
+    )
+    return {
+        "txt": txt,
+        "txt_center": txt_center,
+        "titulo_categoria": titulo_categoria,
+        "ocorrencia_badge": ocorrencia_badge,
+        "totalizador_label": totalizador_label,
+        "totalizador_valor": totalizador_valor,
+        "totalizador_valor_direita": totalizador_valor_direita,
+        "totalizador_geral_label": totalizador_geral_label,
+        "totalizador_geral_valor": totalizador_geral_valor,
+        "totalizador_geral_valor_direita": totalizador_geral_valor_direita,
+    }
 
 
-def _classificar_itens_conciliacao(itens):
-    """Separa itens em: encontrados sem ocorrência e com ocorrência."""
-    encontrados_sem_ocorrencia = []
-    com_ocorrencia = []
-    for item in itens:
-        if item.tem_ocorrencia:
-            com_ocorrencia.append(item)
-        else:
-            encontrados_sem_ocorrencia.append(item)
-    return encontrados_sem_ocorrencia, com_ocorrencia
+CATEGORIAS_SITUACAO = [
+    (
+        "Encontrados",
+        [inv_constants.ENCONTRADO_SEM_DIVERGENCIA, inv_constants.ENCONTRADO],
+        "Sem divergência",
+    ),
+    ("Não encontrados", [inv_constants.NAO_ENCONTRADO], ""),
+    ("Divergentes", [inv_constants.DIVERGENTE], ""),
+    ("Em processo de baixa", [inv_constants.EM_PROCESSO_BAIXA_FISICA], ""),
+    ("Baixa Física", [inv_constants.BAIXA_FISICA], ""),
+]
 
 
-def _linhas_tabela_item(item, txt, txt_center):
+def _classificar_itens_por_categoria(itens):
+    """Agrupa os itens nas 5 categorias de situação exibidas no relatório."""
+    return [
+        (titulo, [item for item in itens if item.situacao in situacoes], nota)
+        for titulo, situacoes, nota in CATEGORIAS_SITUACAO
+    ]
+
+
+def _linhas_tabela_item(item, estilos):
     """Monta as linhas da tabela para um item (bem) da conciliação."""
+    txt = estilos["txt"]
+    txt_center = estilos["txt_center"]
+    ocorrencia_badge = estilos["ocorrencia_badge"]
     bem = item.bem
     num = (getattr(bem, "numero_patrimonial", None) or "-").strip()
     val = formatar_moeda_brasileira(
@@ -589,7 +655,9 @@ def _linhas_tabela_item(item, txt, txt_center):
         )
         rows.append(
             [
-                Paragraph("", txt),
+                Paragraph(
+                    "<b>ITEM COM OCORRÊNCIA NESTA CONCILIAÇÃO</b>", ocorrencia_badge
+                ),
                 Paragraph(f"<b>Registrado por:</b> {registrado_por}", txt),
                 Paragraph(f"<b>Registrado em:</b> {registrado_em}", txt),
             ]
@@ -597,19 +665,26 @@ def _linhas_tabela_item(item, txt, txt_center):
     return rows, oc
 
 
-def _tabela_item_conciliacao(rows, oc):
-    """Cria a Table (reportlab) com estilo aplicado para um item."""
-    box = Table(rows, colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm])
-    style_cmds = [
+def _comandos_tabela_base(valign="TOP", com_grade=False):
+    """Comandos de estilo comuns às tabelas dos blocos de itens."""
+    cmds = [
         ("BOX", (0, 0), (-1, -1), 1, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("VALIGN", (0, 0), (-1, -1), valign),
         ("LEFTPADDING", (0, 0), (-1, -1), 2),
         ("RIGHTPADDING", (0, 0), (-1, -1), 2),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_CINZA_CLARO),
     ]
+    if com_grade:
+        cmds.insert(1, ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey))
+    return cmds
+
+
+def _tabela_item_conciliacao(rows, oc):
+    """Cria a Table (reportlab) com estilo aplicado para um item."""
+    box = Table(rows, colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm])
+    style_cmds = _comandos_tabela_base("TOP", com_grade=True)
+    style_cmds.append(("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_CINZA_CLARO))
     if oc:
         style_cmds += [
             ("SPAN", (0, 3), (2, 3)),
@@ -620,27 +695,115 @@ def _tabela_item_conciliacao(rows, oc):
     return box
 
 
-def _render_grupo_itens(titulo, lista, estilos, elements):
-    """Adiciona ao elements o título do grupo e as tabelas de cada item."""
-    txt = estilos["txt"]
-    titulo_grupo = estilos["titulo_grupo"]
-    txt_center = estilos["txt_center"]
+def _plural_quantidade(quantidade):
+    return f"{quantidade} item" if quantidade == 1 else f"{quantidade} itens"
+
+
+def _somar_valores(itens):
+    """Soma o valor unitário dos bens dos itens, tratando ausência como 0."""
+    return sum(
+        getattr(item.bem, "valor_unitario", None) or Decimal("0.00")
+        for item in itens
+    )
+
+
+def _titulo_categoria(titulo, quantidade, nota, estilos):
+    """Cria a barra de título da categoria, destacada em caixa com fundo.
+
+    A ``nota`` (ex.: "Sem divergência") é exibida junto ao título, quando
+    informada, separada por "/" (ex.: "Encontrados / Sem divergência (N)").
+    """
+    estilo = estilos["titulo_categoria"]
+    titulo_exibido = f"{titulo} / {nota}" if nota else titulo
+    texto = f"<b>{titulo_exibido}</b> ({quantidade})"
+    box = Table(
+        [
+            [
+                Paragraph(texto, estilo),
+                Paragraph("", estilo),
+                Paragraph("", estilo),
+            ]
+        ],
+        colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm],
+    )
+    box.setStyle(
+        TableStyle(
+            _comandos_tabela_base("MIDDLE")
+            + [("BACKGROUND", (0, 0), (-1, -1), PDFConfig.COR_HEADER)]
+        )
+    )
+    return box
+
+
+def _tabela_totalizador(estilos, label, quantidade, valor, destaque=False):
+    """Cria a linha totalizadora (quantidade + valor) exibida no relatório."""
+    prefixo = "totalizador_geral_" if destaque else "totalizador_"
+    label_style = estilos[prefixo + "label"]
+    quantidade_style = estilos[prefixo + "valor"]
+    valor_style = estilos[prefixo + "valor_direita"]
+    fundo = PDFConfig.COR_HEADER if destaque else PDFConfig.COR_CINZA_MEDIO
+
+    box = Table(
+        [
+            [
+                Paragraph(label, label_style),
+                Paragraph(quantidade, quantidade_style),
+                Paragraph(valor, valor_style),
+            ]
+        ],
+        colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm],
+    )
+    box.setStyle(
+        TableStyle(
+            _comandos_tabela_base("MIDDLE", com_grade=True)
+            + [("BACKGROUND", (0, 0), (-1, -1), fundo)]
+        )
+    )
+    return box
+
+
+def _render_grupo_itens(titulo, lista, nota, estilos, elements):
+    """Adiciona o título do grupo, as tabelas de cada item e o total da categoria.
+
+    O título fica agrupado com o primeiro item (KeepTogether) para nunca
+    terminar isolado no rodapé de uma página.
+    """
     if not lista:
         return
-    elements.append(Paragraph(f"<b>{titulo}</b> ({len(lista)})", titulo_grupo))
-    elements.append(Spacer(1, 0.15 * cm))
-    for item in lista:
-        rows, oc = _linhas_tabela_item(item, txt, txt_center)
+    total = _somar_valores(lista)
+    fluxos = []
+    for i, item in enumerate(lista):
+        rows, oc = _linhas_tabela_item(item, estilos)
         box = _tabela_item_conciliacao(rows, oc)
-        elements.append(KeepTogether([box, Spacer(1, 0.15 * cm)]))
-    elements.append(Spacer(1, 0.25 * cm))
+        fluxo = [box, Spacer(1, 0.15 * cm)]
+        if i == len(lista) - 1:
+            fluxo.append(
+                _tabela_totalizador(
+                    estilos,
+                    "Valor total da categoria",
+                    _plural_quantidade(len(lista)),
+                    formatar_moeda_brasileira(total),
+                )
+            )
+        fluxos.append(fluxo)
+
+    fluxos[0].insert(0, Spacer(1, PDFConfig.ESPACO_APOS_TITULO_CATEGORIA))
+    fluxos[0].insert(0, _titulo_categoria(titulo, len(lista), nota, estilos))
+    for fluxo in fluxos:
+        elements.append(KeepTogether(fluxo))
+    elements.append(Spacer(1, PDFConfig.ESPACO_ENTRE_CATEGORIAS))
 
 
 def _criar_blocos_itens_conciliacao(conciliacao):
     """
-    Gera o corpo em blocos por item, agrupando:
-    1) Encontrados sem divergência (sem ocorrência)
-    2) Itens com ocorrência (OcorrenciaConciliacao)
+    Gera o corpo em blocos por item, agrupando pelas 5 categorias de situação:
+    1) Encontrados (encontrado_sem_divergencia + encontrado)
+    2) Não encontrados
+    3) Divergentes
+    4) Em processo de baixa
+    5) Baixa Física
+    Cada categoria termina com "Valor total da categoria" e o relatório com
+    "Valor total geral".
     """
     elements = []
     styles = getSampleStyleSheet()
@@ -653,17 +816,24 @@ def _criar_blocos_itens_conciliacao(conciliacao):
         .all()
         .order_by("bem__numero_patrimonial")
     )
-    encontrados_sem_ocorrencia, com_ocorrencia = _classificar_itens_conciliacao(itens)
+    categorias = _classificar_itens_por_categoria(itens)
 
-    _render_grupo_itens(
-        "Itens encontrados sem divergência", encontrados_sem_ocorrencia, estilos, elements
-    )
-    _render_grupo_itens(
-        "Itens com ocorrência / divergência", com_ocorrencia, estilos, elements
-    )
+    for titulo, lista, nota in categorias:
+        _render_grupo_itens(titulo, lista, nota, estilos, elements)
 
-    if not encontrados_sem_ocorrencia and not com_ocorrencia:
+    if not elements:
         elements.append(Paragraph("Nenhum item encontrado para esta conciliação.", txt))
+
+    total_geral = _somar_valores(itens)
+    elements.append(
+        _tabela_totalizador(
+            estilos,
+            "Valor total geral",
+            _plural_quantidade(len(itens)),
+            formatar_moeda_brasileira(total_geral),
+            destaque=True,
+        )
+    )
 
     return elements
 
@@ -690,7 +860,15 @@ def gerar_pdf_conciliacao(conciliacao, usuario_gerador=None, data_geracao=None):
         author="Sistema de Bens Físicos - SME",
     )
 
-    frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="normal")
+    frame = Frame(
+        doc.leftMargin,
+        doc.bottomMargin,
+        doc.width,
+        doc.height,
+        id="normal",
+        topPadding=PDFConfig.ESPACO_TOPO_FRAME,
+        bottomPadding=PDFConfig.ESPACO_BASE_FRAME,
+    )
 
     def on_page(canvas, doc_):
         canvas.saveState()
@@ -705,7 +883,7 @@ def gerar_pdf_conciliacao(conciliacao, usuario_gerador=None, data_geracao=None):
 
     elements = []
     elements.extend(_criar_informacoes_gerais_conciliacao(conciliacao))
-    elements.append(Spacer(1, 0.2 * cm))
+    elements.append(Spacer(1, PDFConfig.ESPACO_APOS_CABECALHO))
     elements.extend(_criar_blocos_itens_conciliacao(conciliacao))
     doc.build(elements, canvasmaker=NumberedCanvas)
     buffer.seek(0)
