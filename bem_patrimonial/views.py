@@ -599,6 +599,28 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         return dataset, None
 
+    @staticmethod
+    def _erro_da_entrada(err):
+        """Extrai a exceção de uma entrada de erro do django-import-export."""
+        return getattr(err, "error", err)
+
+    def _primeiro_erro_em(self, entradas):
+        """Primeira exceção não nula de uma lista de entradas de erro, ou None."""
+        for err in entradas or []:
+            exc = self._erro_da_entrada(err)
+            if exc is not None:
+                return exc
+        return None
+
+    def _erros_por_linha_do_result(self, result):
+        """Entradas de erro de todas as linhas (row_errors), achatadas."""
+        if not (hasattr(result, "has_errors") and result.has_errors()):
+            return []
+        row_errors = getattr(result, "row_errors", None)
+        if not callable(row_errors):
+            return []
+        return [err for _linha, errors in result.row_errors() for err in errors]
+
     def _extrair_erro_base(self, result):
         """
         Retorna a exceção acumulada em result.base_errors pelo import_data
@@ -609,22 +631,9 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         exceção original), então lemos de forma defensiva. Também consideramos
         row_errors() como fallback, cobrindo erros ocorridos por linha.
         """
-        base_errors = getattr(result, "base_errors", None) or []
-        for err in base_errors:
-            exc = getattr(err, "error", err)
-            if exc is not None:
-                return exc
-
-        # Fallback: erros por linha (has_errors cobre base + row errors).
-        if hasattr(result, "has_errors") and result.has_errors():
-            row_errors = getattr(result, "row_errors", None)
-            if callable(row_errors):
-                for _linha, errors in result.row_errors():
-                    for err in errors:
-                        exc = getattr(err, "error", err)
-                        if exc is not None:
-                            return exc
-        return None
+        return self._primeiro_erro_em(
+            getattr(result, "base_errors", None)
+        ) or self._primeiro_erro_em(self._erros_por_linha_do_result(result))
 
     def _tratar_erro_validacao_importacao(
         self, exc: DjangoValidationError, resource: "BemPatrimonialAPIResource"
