@@ -160,6 +160,51 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
         ids = {row["id"] for row in response.data["results"]}
         self.assertEqual(ids, {self.item_b.id})
 
+    def test_filtro_por_multiplas_situacoes(self):
+        bem_nao_encontrado = self._criar_bem(
+            self.ua1, numero_patrimonial="001.000000005-5"
+        )
+        item_nao_encontrado = ItemConciliacao.objects.create(
+            conciliacao=self.conciliacao_ua1,
+            bem=bem_nao_encontrado,
+            situacao=constants.NAO_ENCONTRADO,
+        )
+        self._auth(self.operador)
+        response = self.client.get(
+            self.list_url,
+            {"situacao": f"{constants.DIVERGENTE},{constants.NAO_ENCONTRADO}"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data["results"]}
+        self.assertEqual(
+            ids, {self.item_b.id, item_nao_encontrado.id}
+        )
+
+    def test_filtro_por_situacao_invalida_retorna_400(self):
+        self._auth(self.operador)
+        response = self.client.get(self.list_url, {"situacao": "invalida"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_filtro_por_situacao_com_valor_invalido_na_lista_retorna_400(self):
+        self._auth(self.operador)
+        response = self.client.get(
+            self.list_url,
+            {"situacao": f"{constants.DIVERGENTE},invalida"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_filtro_sem_situacao_retorna_itens_sem_filtro(self):
+        self._auth(self.operador)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data["results"]}
+        ids_esperados = set(
+            ItemConciliacao.objects.filter(
+                conciliacao=self.conciliacao_ua1
+            ).values_list("id", flat=True)
+        )
+        self.assertEqual(ids, ids_esperados)
+
     def test_filtro_por_tem_ocorrencia_true(self):
         self._auth(self.operador)
         response = self.client.get(self.list_url, {"tem_ocorrencia": "true"})
