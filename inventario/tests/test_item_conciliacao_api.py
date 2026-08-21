@@ -198,7 +198,12 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
-        self.assertEqual(ids, {self.item_a.id, self.item_b.id})
+        ids_esperados = set(
+            ItemConciliacao.objects.filter(
+                conciliacao=self.conciliacao_ua1
+            ).values_list("id", flat=True)
+        )
+        self.assertEqual(ids, ids_esperados)
 
     def test_filtro_por_tem_ocorrencia_true(self):
         self._auth(self.operador)
