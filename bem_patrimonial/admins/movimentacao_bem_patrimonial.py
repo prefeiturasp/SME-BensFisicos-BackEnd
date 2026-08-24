@@ -1,6 +1,12 @@
+import json
+
 from django.contrib import admin
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.http import HttpResponseNotAllowed, JsonResponse
+from django.urls import path
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
     verificar_movimentacoes_duplicadas,
 )
@@ -15,6 +21,7 @@ from bem_patrimonial.admins.filters.movimentacao_filters import (
 
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
 )
 from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_aceita,
@@ -24,10 +31,17 @@ from bem_patrimonial.emails import (
 from bem_patrimonial import constants
 
 from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
+from bem_patrimonial.serializers.movimentacao_serializers import (
+    BemPatrimonialSimpleSerializer,
+    MovimentacaoBensLotePreviewSerializer,
+    queryset_bens_movimentaveis,
+    validar_ua_origem_movimentacao,
+)
 
 from dados_comuns.escopo import (
     filtrar_queryset_movimentacao_por_escopo,
 )
+from dados_comuns.models import UnidadeAdministrativa
 
 
 def _obter_uo_id_do_usuario(usuario):
@@ -369,6 +383,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         "unidade_orcamentaria_destino",
         "unidade_administrativa_destino",
         "observacao",
+        "itens_lote",
     )
     change_fields = (
         "status",
@@ -465,6 +480,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             "js/bem_patrimonial/prevenir_duplo_submit.js",
             "admin/movimentacao_filtra_bens_por_ua.js",
             "admin/movimentacao_uo_destino.js",
+            "admin/movimentacao_lote.js",
         )
         css = {
             "all": (
@@ -472,6 +488,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 "css/custom_inline.css",
                 "css/hide_crud_icons.css",
                 "css/admin_filtros.css",
+                "css/movimentacao_lote.css",
             )
         }
 
@@ -496,6 +513,69 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
 
         return RequestForm
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "resolver-itens-lote/",
+                self.admin_site.admin_view(self.resolver_itens_lote),
+                name="bem_patrimonial_movimentacaobempatrimonial_resolver_itens_lote",
+            ),
+            path(
+                "buscar-bens-lote/",
+                self.admin_site.admin_view(self.buscar_bens_lote),
+                name="bem_patrimonial_movimentacaobempatrimonial_buscar_bens_lote",
+            ),
+        ]
+        return custom_urls + urls
+
+    def resolver_itens_lote(self, request):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+
+        try:
+            dados = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"detail": "Dados inválidos."}, status=400)
+
+        serializer = MovimentacaoBensLotePreviewSerializer(
+            data=dados,
+            context={"request": request},
+        )
+        if not serializer.is_valid():
+            return JsonResponse({"detail": str(serializer.errors)}, status=400)
+
+        itens = BemPatrimonialSimpleSerializer(
+            serializer.validated_data["bens"],
+            many=True,
+        ).data
+        return JsonResponse({"itens": itens})
+
+    def buscar_bens_lote(self, request):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        if request.method != "GET":
+            return HttpResponseNotAllowed(["GET"])
+
+        try:
+            ua_origem = validar_ua_origem_movimentacao(
+                request.user,
+                UnidadeAdministrativa.objects.filter(
+                    pk=request.GET.get("unidade_administrativa_origem")
+                ).first(),
+            )
+        except DRFValidationError as error:
+            return JsonResponse({"detail": str(error)}, status=400)
+
+        consulta = request.GET.get("q", "").strip()
+        bens = queryset_bens_movimentaveis(ua_origem).filter(
+            numero_patrimonial__icontains=consulta,
+        ).order_by("numero_patrimonial")[:50]
+        itens = BemPatrimonialSimpleSerializer(bens, many=True).data
+        return JsonResponse({"itens": itens})
+
     def get_queryset(self, request):
         qs = (
             super()
@@ -515,6 +595,14 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         if obj.id is None:
             obj.solicitado_por = request.user
         super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        if change:
+            return
+
+        for bem in form.cleaned_data["bens_lote_resolvidos"]:
+            MovimentacaoBensItem.objects.create(movimentacao=form.instance, bem=bem)
 
     def get_documento_cimbpm_link(self, obj):
         if obj and obj.numero_cimbpm:
@@ -564,3 +652,8 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                     for field in form.fields.values():
                         field.disabled = True
         return inline_formsets
+
+    def get_inline_instances(self, request, obj=None):
+        if obj is None:
+            return []
+        return super().get_inline_instances(request, obj)

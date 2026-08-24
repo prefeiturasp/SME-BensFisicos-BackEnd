@@ -147,7 +147,7 @@ class MovimentacaoApiTestCase(TestCase):
             usuario.groups.add(grupo)
         return usuario
 
-    def _criar_bem(self, numero_patrimonial, ua, criado_por):
+    def _criar_bem(self, numero_patrimonial, ua, criado_por, **kwargs):
         return BemPatrimonial.objects.create(
             numero_patrimonial=numero_patrimonial,
             nome=f"Bem {numero_patrimonial}",
@@ -160,6 +160,7 @@ class MovimentacaoApiTestCase(TestCase):
             criado_por=criado_por,
             status=constants.APROVADO,
             unidade_administrativa=ua,
+            **kwargs,
         )
 
     def _criar_movimentacao(
@@ -522,6 +523,244 @@ class MovimentacaoApiTestCase(TestCase):
         ids = {item["id"] for item in self._lista_movimentacoes(response)}
         self.assertIn(movimentacao_intervalo.id, ids)
         self.assertNotIn(self.mov_visivel.id, ids)
+
+    def test_resolver_itens_lote_retorna_bens_da_faixa(self):
+        bens = [
+            self._criar_bem(
+                f"001.00000001{numero}-0",
+                self.ua_origem,
+                criado_por=self.operador_origem,
+            )
+            for numero in range(0, 3)
+        ]
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [
+                    {
+                        "numero_patrimonial_de": bens[0].numero_patrimonial,
+                        "numero_patrimonial_ate": bens[-1].numero_patrimonial,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data["itens"]],
+            [bem.id for bem in bens],
+        )
+
+    def test_resolver_itens_lote_aceita_bem_de_formato_antigo_sem_limite_final(self):
+        bem = self._criar_bem(
+            "01030001",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+            numero_formato_antigo=True,
+        )
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [{"numero_patrimonial_de": bem.numero_patrimonial}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["itens"][0]["id"], bem.id)
+
+    def test_resolver_itens_lote_aceita_um_unico_bem_com_de_igual_ate(self):
+        bem = self._criar_bem(
+            "01020001",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+            numero_formato_antigo=True,
+        )
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [
+                    {
+                        "numero_patrimonial_de": bem.numero_patrimonial,
+                        "numero_patrimonial_ate": bem.numero_patrimonial,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["itens"][0]["id"], bem.id)
+
+    def test_resolver_itens_lote_retorna_bens_existentes_no_intervalo(self):
+        inicio = self._criar_bem(
+            "001.000000010-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+        )
+        fim = self._criar_bem(
+            "001.000000012-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+        )
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [
+                    {
+                        "numero_patrimonial_de": inicio.numero_patrimonial,
+                        "numero_patrimonial_ate": fim.numero_patrimonial,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data["itens"]],
+            [inicio.id, fim.id],
+        )
+
+    def test_resolver_itens_lote_seleciona_todos_os_bens_aprovados_da_ua(self):
+        bem_reprovado = self._criar_bem(
+            "001.000000020-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+        )
+        bem_reprovado.status = constants.NAO_APROVADO
+        bem_reprovado.save()
+        bem_bloqueado = self._criar_bem(
+            "001.000000021-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+            bloqueado_conciliacao=True,
+        )
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "selecionar_todos": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in response.data["itens"]}
+        self.assertIn(self.bem_api.id, ids)
+        self.assertNotIn(bem_reprovado.id, ids)
+        self.assertNotIn(bem_bloqueado.id, ids)
+        self.assertNotIn(self.bem_oculto.id, ids)
+        self.assertNotIn(self.bem_visivel.id, ids)
+
+    def test_resolver_itens_lote_ignora_bem_com_movimentacao_pendente(self):
+        bem_movimentavel = self._criar_bem(
+            "001.000000021-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+        )
+        bem_pendente = self._criar_bem(
+            "001.000000022-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+        )
+        self._criar_movimentacao(
+            bem=bem_pendente,
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+        bem_pendente.status = constants.APROVADO
+        bem_pendente.save(update_fields=["status"])
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [
+                    {
+                        "numero_patrimonial_de": bem_movimentavel.numero_patrimonial,
+                        "numero_patrimonial_ate": bem_pendente.numero_patrimonial,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data["itens"]],
+            [bem_movimentavel.id],
+        )
+
+    def test_bens_movimentaveis_lista_apenas_bens_elegiveis(self):
+        bem_bloqueado = self._criar_bem(
+            "001.000000023-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+            bloqueado_conciliacao=True,
+        )
+        self._autenticar(self.operador_origem)
+
+        response = self.client.get(
+            reverse("movimentacoes-bens-movimentaveis"),
+            {"unidade_administrativa_origem": self.ua_origem.id},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in response.data}
+        self.assertIn(self.bem_api.id, ids)
+        self.assertNotIn(self.bem_visivel.id, ids)
+        self.assertNotIn(bem_bloqueado.id, ids)
+
+    def test_criacao_por_faixa_bloqueia_todos_os_bens_resolvidos(self):
+        bens = [
+            self._criar_bem(
+                f"001.00000003{numero}-0",
+                self.ua_origem,
+                criado_por=self.operador_origem,
+            )
+            for numero in range(0, 2)
+        ]
+        self._autenticar(self.operador_origem)
+
+        with patch("bem_patrimonial.models.envia_email_nova_solicitacao_movimentacao"):
+            response = self.client.post(
+                reverse("movimentacoes-list"),
+                {
+                    "unidade_administrativa_origem": self.ua_origem.id,
+                    "unidade_administrativa_destino": self.ua_destino.id,
+                    "faixas": [
+                        {
+                            "numero_patrimonial_de": bens[0].numero_patrimonial,
+                            "numero_patrimonial_ate": bens[-1].numero_patrimonial,
+                        }
+                    ],
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["total_itens"], len(bens))
+        for bem in bens:
+            bem.refresh_from_db()
+            self.assertEqual(bem.status, constants.BLOQUEADO)
 
     def test_criacao_aprovacao_historico_e_documento_cimbpm(self):
         self._autenticar(self.operador_origem)

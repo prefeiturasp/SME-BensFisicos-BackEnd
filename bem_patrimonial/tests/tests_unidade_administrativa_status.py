@@ -1,3 +1,7 @@
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -90,10 +94,62 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         data = {
             "unidade_administrativa_origem": self.ua_ativa_1.pk,
             "unidade_administrativa_destino": self.ua_ativa_2.pk,
+            "itens_lote": '{"faixas":[],"selecionar_todos":true}',
         }
 
         form = self._create_form_with_request(self.operador_1, data)
         self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["bens_lote_resolvidos"], [self.bem])
+
+    def test_exige_itens_lote_na_criacao(self):
+        form = self._create_form_with_request(
+            self.operador_1,
+            {
+                "unidade_administrativa_origem": self.ua_ativa_1.pk,
+                "unidade_administrativa_destino": self.ua_ativa_2.pk,
+            },
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("itens_lote", form.errors)
+
+    def test_endpoint_admin_resolve_selecao_de_todos_os_bens(self):
+        admin_instance = MovimentacaoBemPatrimonialAdmin(
+            MovimentacaoBemPatrimonial,
+            AdminSite(),
+        )
+        request = self.factory.post(
+            "/admin/bem_patrimonial/movimentacaobempatrimonial/resolver-itens-lote/",
+            data=json.dumps(
+                {
+                    "unidade_administrativa_origem": self.ua_ativa_1.pk,
+                    "selecionar_todos": True,
+                }
+            ),
+            content_type="application/json",
+        )
+        request.user = self.gestor
+
+        response = admin_instance.resolver_itens_lote(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(str(self.bem.pk), response.content.decode())
+
+    def test_endpoint_admin_lista_bens_aprovados_da_ua_de_origem(self):
+        admin_instance = MovimentacaoBemPatrimonialAdmin(
+            MovimentacaoBemPatrimonial,
+            AdminSite(),
+        )
+        request = self.factory.get(
+            "/admin/bem_patrimonial/movimentacaobempatrimonial/buscar-bens-lote/",
+            {"unidade_administrativa_origem": self.ua_ativa_1.pk},
+        )
+        request.user = self.gestor
+
+        response = admin_instance.buscar_bens_lote(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(str(self.bem.pk), response.content.decode())
 
 
 class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
@@ -127,6 +183,32 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
         messages_storage = FallbackStorage(request)
         setattr(request, "_messages", messages_storage)
         return request
+
+    def test_save_related_cria_itens_resolvidos_do_lote(self):
+        movimentacao = MovimentacaoBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+        )
+        form = SimpleNamespace(
+            instance=movimentacao,
+            cleaned_data={"bens_lote_resolvidos": [self.bem]},
+        )
+
+        with patch("django.contrib.admin.options.ModelAdmin.save_related"):
+            self.admin.save_related(
+                self._create_request_with_messages(self.gestor),
+                form,
+                [],
+                False,
+            )
+
+        self.assertTrue(
+            MovimentacaoBensItem.objects.filter(
+                movimentacao=movimentacao,
+                bem=self.bem,
+            ).exists()
+        )
 
     def test_nao_pode_aprovar_se_ua_origem_inativada(self):
         self.ua_origem.status = UnidadeAdministrativa.INATIVA
