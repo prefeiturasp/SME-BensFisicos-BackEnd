@@ -19,6 +19,9 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,
 )
+from bem_patrimonial.admins.widgets.movimentacao_lote_widget import (
+    MovimentacaoLoteWidget,
+)
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
 from .tests_unidade_administrativa_setup import SetupUnidadeAdministrativaStatusData
@@ -112,6 +115,13 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("itens_lote", form.errors)
+
+    def test_widget_lote_exibe_colunas_de_visualizacao_e_exclusao(self):
+        html = MovimentacaoLoteWidget().render("itens_lote", "", {"id": "id_itens_lote"})
+
+        self.assertIn("Bens selecionados", html)
+        self.assertIn("Ação", html)
+        self.assertIn("Apagar", html)
 
     def test_endpoint_admin_resolve_selecao_de_todos_os_bens(self):
         admin_instance = MovimentacaoBemPatrimonialAdmin(

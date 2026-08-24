@@ -34,7 +34,7 @@ class MovimentacaoLoteWidget(Widget):
             ' Selecionar todos os Bens aprovados da UA de origem</label>'
             '<p class="movimentacao-lote__erro" role="alert"></p>'
             '<table class="movimentacao-lote__resumo">'
-            '<thead><tr><th>Número Patrimonial</th><th>Nome do Bem</th><th>Ação</th></tr></thead>'
+            '<thead><tr><th>Número Patrimonial</th><th>Bens selecionados</th><th>Ação</th><th>Apagar</th></tr></thead>'
             '<tbody></tbody></table>{}'
             '</div>',
             resolver_url,
