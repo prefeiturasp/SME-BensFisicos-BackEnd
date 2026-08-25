@@ -26,7 +26,7 @@ from bem_patrimonial.constants import (
 )
 from bem_patrimonial.models import BemPatrimonial, StatusBemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -1827,17 +1827,16 @@ class AdminUsaResourceDaAPITest(_Base):
         from bem_patrimonial.admins.forms.importacao_form import (
             BemPatrimonialImportForm,
         )
-        from import_export.formats.base_formats import XLSX
         # Gestor em UO: sem UA direta.
-        uo = criar_uo(codigo="02.99.99", nome="UO X", sigla="UOX")
-        ua = criar_ua(unidade_orcamentaria=uo, codigo="02.99.99.001", nome="UA X", sigla="UAX")
+        uo = criar_uo(codigo=codigo_uo(2, 99, 99), nome="UO X", sigla="UOX")
+        ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 99, 99, 1), nome="UA X", sigla="UAX")
         gestor_uo = Usuario.objects.create_user(
             username="gestor_uo_admin", email="guoa@t.com", **auth_kwargs("x"),
             nome="G", is_staff=True, unidade_orcamentaria=uo,
         )
         gestor_uo.groups.add(self.grupo_gestor)
 
-        form = BemPatrimonialImportForm([XLSX], user=gestor_uo)
+        form = BemPatrimonialImportForm(self.admin.get_import_formats(), user=gestor_uo)
         self.assertIn("unidade_administrativa", form.fields)
         self.assertTrue(form.fields["unidade_administrativa"].required)
         self.assertIn(ua, list(form.fields["unidade_administrativa"].queryset))
@@ -1846,14 +1845,13 @@ class AdminUsaResourceDaAPITest(_Base):
         from bem_patrimonial.admins.forms.importacao_form import (
             BemPatrimonialImportForm,
         )
-        from import_export.formats.base_formats import XLSX
         # Gestor com UA direta.
-        form = BemPatrimonialImportForm([XLSX], user=self.gestor)
+        form = BemPatrimonialImportForm(self.admin.get_import_formats(), user=self.gestor)
         self.assertNotIn("unidade_administrativa", form.fields)
 
     def test_ua_do_form_repassada_ao_resource(self):
-        uo = criar_uo(codigo="02.98.98", nome="UO Y", sigla="UOY")
-        ua = criar_ua(unidade_orcamentaria=uo, codigo="02.98.98.001", nome="UA Y", sigla="UAY")
+        uo = criar_uo(codigo=codigo_uo(2, 98, 98), nome="UO Y", sigla="UOY")
+        ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 98, 98, 1), nome="UA Y", sigla="UAY")
         gestor_uo = Usuario.objects.create_user(
             username="gestor_uo_admin2", email="guoa2@t.com", **auth_kwargs("x"),
             nome="G", is_staff=True, unidade_orcamentaria=uo,
@@ -1880,8 +1878,8 @@ class AdminUsaResourceDaAPITest(_Base):
         chegando ao resource. Cobre o ponto de maior risco: persistência da UA
         entre upload e confirmação.
         """
-        uo = criar_uo(codigo="02.97.97", nome="UO Z", sigla="UOZ")
-        ua = criar_ua(unidade_orcamentaria=uo, codigo="02.97.97.001", nome="UA Z", sigla="UAZ")
+        uo = criar_uo(codigo=codigo_uo(2, 97, 97), nome="UO Z", sigla="UOZ")
+        ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 97, 97, 1), nome="UA Z", sigla="UAZ")
         gestor_uo = Usuario.objects.create_user(
             username="gestor_uo_admin3", email="guoa3@t.com", **auth_kwargs("x"),
             nome="G", is_staff=True, unidade_orcamentaria=uo,
@@ -1923,9 +1921,9 @@ class AdminUsaResourceDaAPITest(_Base):
         oculto), _extrair_ua_do_form retorna None e o resource cai no fluxo
         padrão (UA do usuário), sem gravar na UA indevida.
         """
-        outra_uo = criar_uo(codigo="02.96.96", nome="UO Fora", sigla="UOF")
+        outra_uo = criar_uo(codigo=codigo_uo(2, 96, 96), nome="UO Fora", sigla="UOF")
         ua_fora = criar_ua(
-            unidade_orcamentaria=outra_uo, codigo="02.96.96.001", nome="UA Fora", sigla="UAF"
+            unidade_orcamentaria=outra_uo, codigo=codigo_ua(2, 96, 96, 1), nome="UA Fora", sigla="UAF"
         )
         # Gestor com UA direta (self.gestor): escopo é só a própria UA.
         req = _request_with_messages(self.factory, self.gestor)
