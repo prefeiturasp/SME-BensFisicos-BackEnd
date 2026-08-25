@@ -687,3 +687,119 @@ class ImportacaoDescartaLinhasVaziasTestCase(APITransactionTestCase):
             response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
         )
         self.assertIn("vazia", str(response.data).lower())
+
+
+class ImportacaoUAEscopoPorPerfilTestCase(APITransactionTestCase):
+    """
+    Regressão do incidente: a UA escolhida no seletor (frontend) deve ser
+    aceita pelo backend para TODOS os perfis que a enxergam no seletor —
+    inclusive Operador de Inventário e superusuário logados numa UO. Antes, a
+    validação usava a regra de movimentação (que ignora esses perfis) e recusava
+    a importação com a mensagem de "UA não vinculada".
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.uo = criar_uo(codigo=codigo_uo(70, 70, 70), nome="UO Esc", sigla="UOE")
+        self.ua = criar_ua(
+            uo=self.uo, codigo=codigo_ua(70, 70, 70, 1), sigla="UAE", nome="UA Esc"
+        )
+        self.client = APIClient()
+
+    def _importa(self, user, num):
+        self.client.force_authenticate(user)
+        return self.client.post(
+            "/api/bens/importar/",
+            {
+                "arquivo": _planilha_valida(
+                    [[num, "Note", "Desc", "10,00", "M", "X"]]
+                ),
+                "unidade_administrativa_id": self.ua.id,
+            },
+            format="multipart",
+        )
+
+    def test_operador_em_uo_com_ua_vinculada_importa(self):
+        operador = Usuario.objects.create_user(
+            username="op_uo_esc",
+            email="op.uo.esc@test.com",
+            **auth_kwargs("test123"),
+            nome="Op UO Esc",
+            is_staff=True,
+            unidade_orcamentaria=self.uo,
+        )
+        operador.groups.add(
+            Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
+        )
+        operador.unidades_administrativas.add(self.ua)
+
+        response = self._importa(operador, "001.000000701-0")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000701-0")
+        self.assertEqual(bem.unidade_administrativa_id, self.ua.id)
+        # Operador mantém o fluxo de aprovação.
+        self.assertEqual(bem.status, bem_constants.AGUARDANDO_APROVACAO)
+
+    def test_superuser_em_uo_importa(self):
+        superuser = Usuario.objects.create_user(
+            username="su_uo_esc",
+            email="su.uo.esc@test.com",
+            **auth_kwargs("test123"),
+            nome="SU UO Esc",
+            is_staff=True,
+            is_superuser=True,
+            unidade_orcamentaria=self.uo,
+        )
+        response = self._importa(superuser, "001.000000702-0")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000702-0")
+        self.assertEqual(bem.unidade_administrativa_id, self.ua.id)
+
+
+class ImportacaoNumeroLinhaOriginalTestCase(APITransactionTestCase):
+    """
+    Os erros devem reportar o número ORIGINAL da linha na planilha, mesmo quando
+    há linhas 100% vazias removidas antes da validação. Sem isso, o erro de uma
+    linha após uma vazia apareceria com o número deslocado.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.uo = criar_uo(codigo=codigo_uo(80, 80, 80), nome="UO NL", sigla="UONL")
+        self.ua = criar_ua(
+            uo=self.uo, codigo=codigo_ua(80, 80, 80, 1), sigla="UANL", nome="UA NL"
+        )
+        self.gestor = Usuario.objects.create_user(
+            username="gestor_nl",
+            email="gestor.nl@test.com",
+            **auth_kwargs("test123"),
+            nome="Gestor NL",
+            is_staff=True,
+            unidade_administrativa=self.ua,
+            unidade_orcamentaria=self.uo,
+        )
+        self.gestor.groups.add(
+            Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.gestor)
+
+    def test_erro_reporta_linha_original_apos_vazia(self):
+        # 1ª linha de dados: válida | 2ª: vazia (removida) | 3ª: erro (sem descrição)
+        arquivo = _planilha_valida(
+            [
+                ["001.000000811-0", "Note", "Desc", "10,00", "M", "X"],
+                ["", "", "", "", "", ""],
+                ["001.000000812-0", "Mouse", "", "5,00", "M", "Y"],
+            ]
+        )
+        response = self.client.post(
+            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
+        )
+        self.assertEqual(
+            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
+        )
+        linhas_erro = {e["linha"] for e in response.data.get("erros_por_linha", [])}
+        # A 3ª linha de dados mantém o número 3 (posição original), não 2.
+        self.assertIn(3, linhas_erro)
+        self.assertNotIn(2, linhas_erro)

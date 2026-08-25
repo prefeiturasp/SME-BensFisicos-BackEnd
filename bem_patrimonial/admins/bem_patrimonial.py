@@ -43,6 +43,7 @@ from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
     filtrar_queryset_por_escopo,
     filtrar_ua_origem_por_escopo,
+    uas_acessiveis_para_importacao,
     validar_objeto_no_escopo,
     obter_unidade_orcamentaria_id_do_usuario,
     usuario_e_super_admin,
@@ -278,14 +279,37 @@ class BemPatrimonialResource(resources.ModelResource):
         importação processe apenas as linhas preenchidas. Retorna a quantidade
         de linhas removidas. Percorre de trás para frente para não invalidar os
         índices durante a remoção.
+
+        Preserva, em self._numeros_linha_originais, o número ORIGINAL de cada
+        linha remanescente (1-based, na ordem em que ficaram no dataset), para
+        que os erros reportem a linha correta da planilha mesmo quando há linhas
+        vazias removidas no meio do arquivo.
         """
-        removidas = 0
         linhas = dataset.dict
+        # Números originais (1-based) das linhas que NÃO são vazias, em ordem.
+        self._numeros_linha_originais = [
+            idx
+            for idx, row in enumerate(linhas, start=1)
+            if not self._linha_completamente_vazia(row)
+        ]
+
+        removidas = 0
         for idx in range(len(linhas) - 1, -1, -1):
             if self._linha_completamente_vazia(linhas[idx]):
                 del dataset[idx]
                 removidas += 1
         return removidas
+
+    def _numero_linha_original(self, idx_atual: int) -> int:
+        """
+        Traduz o índice 1-based dentro do dataset já filtrado para o número da
+        linha original da planilha. Se o mapa não estiver disponível (ex.: nenhum
+        remoção ocorreu), retorna o próprio índice.
+        """
+        mapa = getattr(self, "_numeros_linha_originais", None)
+        if mapa and 1 <= idx_atual <= len(mapa):
+            return mapa[idx_atual - 1]
+        return idx_atual
 
     def _registrar_erro(self, linha: int, numero_patrimonial: str, campo: str, mensagem: str):
         """Registra erro padronizado: {linha, numero_patrimonial, campo, mensagem}"""
@@ -384,12 +408,15 @@ class BemPatrimonialResource(resources.ModelResource):
         numeros_vistos: dict[str, int] = {}
 
         for idx, row in enumerate(dataset.dict, start=1):
+            linha_original = self._numero_linha_original(idx)
             numero_patrimonial = self._normalizar_valor(row.get("numero_patrimonial"))
             valor_raw = self._normalizar_valor(row.get("valor_unitario"))
 
-            self._validar_campos_obrigatorios(idx, numero_patrimonial, row)
-            self._parse_valor_unitario(valor_raw, idx, numero_patrimonial)
-            self._validar_numero_patrimonial(idx, numero_patrimonial, numeros_vistos)
+            self._validar_campos_obrigatorios(linha_original, numero_patrimonial, row)
+            self._parse_valor_unitario(valor_raw, linha_original, numero_patrimonial)
+            self._validar_numero_patrimonial(
+                linha_original, numero_patrimonial, numeros_vistos
+            )
 
         return self._erros_por_linha
 
@@ -552,7 +579,75 @@ class BemPatrimonialAdmin(ImportExportModelAdmin):
         "nome",
     )
 
-    resource_class = BemPatrimonialResource
+    def get_resource_classes(self, *args, **kwargs):
+        # Import tardio evita ciclo de importação (resources_api importa deste
+        # módulo). O Admin passa a usar o mesmo resource da API, aplicando a
+        # aprovação por perfil e a UA de destino escolhida.
+        from bem_patrimonial.resources_api import BemPatrimonialAPIResource
+
+        return [BemPatrimonialAPIResource]
+
+    def get_import_form_class(self, request):
+        from bem_patrimonial.admins.forms.importacao_form import (
+            BemPatrimonialImportForm,
+        )
+
+        return BemPatrimonialImportForm
+
+    def get_confirm_form_class(self, request):
+        from bem_patrimonial.admins.forms.importacao_form import (
+            BemPatrimonialConfirmImportForm,
+        )
+
+        return BemPatrimonialConfirmImportForm
+
+    def get_import_form_kwargs(self, request):
+        # Repassa o usuário ao formulário de importação (1ª etapa), para montar o
+        # queryset de UAs disponíveis e decidir se o campo é exibido/obrigatório.
+        kwargs = super().get_import_form_kwargs(request)
+        kwargs["user"] = request.user
+        return kwargs
+
+    def get_confirm_form_initial(self, request, import_form):
+        initial = super().get_confirm_form_initial(request, import_form) or {}
+        # Propaga a UA escolhida na 1ª etapa para o formulário oculto da 2ª.
+        if import_form is not None:
+            ua = import_form.cleaned_data.get("unidade_administrativa")
+            if ua is not None:
+                initial["unidade_administrativa"] = getattr(ua, "id", ua)
+        return initial
+
+    def get_import_resource_kwargs(self, request, *args, **kwargs):
+        kwargs_res = super().get_import_resource_kwargs(request, *args, **kwargs)
+        form = kwargs.get("form")
+        ua = self._extrair_ua_do_form(request, form)
+        if ua is not None:
+            kwargs_res["unidade_administrativa"] = ua
+        return kwargs_res
+
+    def _extrair_ua_do_form(self, request, form):
+        """
+        Resolve a UA escolhida a partir do formulário (1ª ou 2ª etapa),
+        validando-a contra o escopo do usuário. Retorna a instância de
+        UnidadeAdministrativa ou None.
+        """
+        if form is None or not getattr(form, "cleaned_data", None):
+            return None
+
+        valor = form.cleaned_data.get("unidade_administrativa")
+        if valor is None:
+            return None
+
+        # 1ª etapa: ModelChoiceField já entrega a instância.
+        if isinstance(valor, UnidadeAdministrativa):
+            ua_id = valor.id
+        else:
+            # 2ª etapa: campo oculto entrega o id (int).
+            ua_id = valor
+
+        return (
+            uas_acessiveis_para_importacao(request.user).filter(id=ua_id).first()
+        )
 
     list_filter = (
         StatusBemPatrimonialFilter,
