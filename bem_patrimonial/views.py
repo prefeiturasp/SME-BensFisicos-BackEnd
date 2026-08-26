@@ -23,7 +23,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from django_filters.rest_framework import DjangoFilterBackend
+import django_filters
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet
 from django.contrib.contenttypes.models import ContentType
 from django.db.models.functions import Cast
 
@@ -151,19 +152,51 @@ def download_documento_ntbpm(request, pk):
     )
 
 
+class _NumberInFilter(django_filters.BaseInFilter, django_filters.NumberFilter):
+    """Permite receber uma lista de números (ex.: ?campo=1,2,3)."""
+
+
+class BemPatrimonialFilter(FilterSet):
+    """
+    FilterSet do BemPatrimonial.
+
+    O filtro ``unidade_administrativa`` aceita seleção múltipla, permitindo
+    consultar simultaneamente vários bens de diferentes Unidades
+    Administrativas pertencentes à Unidade Orçamentária do usuário.
+
+    Compatibilidade:
+    - Um único valor (``?unidade_administrativa=5``) continua funcionando
+      exatamente como antes.
+    - Múltiplos valores podem ser enviados de duas formas equivalentes:
+        * repetindo o parâmetro: ``?unidade_administrativa=5&unidade_administrativa=8``
+        * como lista separada por vírgula: ``?unidade_administrativa=5,8``
+    - Quando o parâmetro não é enviado ("Todas as UAs"), o escopo padrão
+      aplicado em ``get_queryset`` já restringe os bens à UO do usuário.
+    """
+
+    unidade_administrativa = _NumberInFilter(
+        field_name="unidade_administrativa_id",
+        lookup_expr="in",
+    )
+
+    class Meta:
+        model = BemPatrimonial
+        fields = [
+            "status",
+            "sem_numeracao",
+            "numero_formato_antigo",
+            "bloqueado_conciliacao",
+            "unidade_administrativa",
+        ]
+
+
 class BemPatrimonialViewSet(viewsets.ModelViewSet):
     permission_classes = [BemPatrimonialPermission]
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
-    filterset_fields = [
-        "status",
-        "sem_numeracao",
-        "numero_formato_antigo",
-        "bloqueado_conciliacao",
-        "unidade_administrativa",
-    ]
+    filterset_class = BemPatrimonialFilter
 
     search_fields = [
         "numero_patrimonial",
