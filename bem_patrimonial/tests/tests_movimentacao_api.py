@@ -638,6 +638,29 @@ class MovimentacaoApiTestCase(TestCase):
             ),
         )
 
+    def test_resolver_itens_lote_rejeita_faixa_com_mais_de_500_bens(self):
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [
+                    {
+                        "numero_patrimonial_de": "001.000000000-0",
+                        "numero_patrimonial_ate": "001.000000500-0",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["faixas"][0],
+            "Cada faixa pode conter no máximo 500 bens.",
+        )
+
     def test_resolver_itens_lote_seleciona_todos_os_bens_aprovados_da_ua(self):
         bem_reprovado = self._criar_bem(
             "001.000000020-0",

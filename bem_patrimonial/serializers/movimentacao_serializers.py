@@ -28,6 +28,7 @@ MENSAGEM_SEM_PONTO_CENTRAL = (
 PADRAO_NUMERO_PATRIMONIAL = re.compile(
     r"^(?P<prefixo>\d{3})\.(?P<sequencia>\d{9})-(?P<digito>\d)$"
 )
+LIMITE_BENS_POR_FAIXA = 500
 
 
 def obter_uo_referencia_do_usuario(usuario):
@@ -130,6 +131,14 @@ def _mensagem_bens_nao_movimentaveis(numeros_patrimoniais):
     )
 
 
+def obter_mensagem_erro_validacao(erros):
+    if isinstance(erros, dict):
+        return obter_mensagem_erro_validacao(next(iter(erros.values())))
+    if isinstance(erros, (list, tuple)):
+        return obter_mensagem_erro_validacao(erros[0])
+    return str(erros)
+
+
 def _resolver_bens_da_faixa(unidade_administrativa, faixa):
     numero_de = faixa["numero_patrimonial_de"].strip()
     numero_ate_informado = (faixa.get("numero_patrimonial_ate") or "").strip()
@@ -151,6 +160,10 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
                     "Número Patrimonial De."
                 )
             }
+        )
+    if indice_ate - indice_de + 1 > LIMITE_BENS_POR_FAIXA:
+        raise serializers.ValidationError(
+            {"faixas": "Cada faixa pode conter no máximo 500 bens."}
         )
 
     bens_da_ua = BemPatrimonial.objects.filter(

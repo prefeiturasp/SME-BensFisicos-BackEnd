@@ -8,7 +8,7 @@ class MovimentacaoLoteWidget(Widget):
         return data.get(name)
 
     def render(self, name, value, attrs=None, renderer=None):
-        attrs = dict(attrs or {})
+        attrs = self.build_attrs(self.attrs, attrs)
         field_id = attrs.get("id", f"id_{name}")
         resolver_url = attrs.pop("data-resolver-url", "")
         buscar_url = attrs.pop("data-buscar-url", "")

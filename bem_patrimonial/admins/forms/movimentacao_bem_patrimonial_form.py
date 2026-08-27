@@ -9,6 +9,7 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from bem_patrimonial.admins.widgets.movimentacao_lote_widget import MovimentacaoLoteWidget
 from bem_patrimonial.models import MovimentacaoBemPatrimonial
 from bem_patrimonial.serializers.movimentacao_serializers import (
+    obter_mensagem_erro_validacao,
     resolver_bens_movimentacao_lote,
     validar_bens_movimentacao,
 )
@@ -493,6 +494,8 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                 )
             validar_bens_movimentacao(cleaned_data["unidade_administrativa_origem"], bens)
         except DRFValidationError as error:
-            raise ValidationError({"itens_lote": str(error.detail)}) from error
+            raise ValidationError(
+                {"itens_lote": obter_mensagem_erro_validacao(error.detail)}
+            ) from error
 
         cleaned_data["bens_lote_resolvidos"] = bens

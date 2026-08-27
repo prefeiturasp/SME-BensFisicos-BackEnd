@@ -34,6 +34,7 @@ from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
     MovimentacaoBensLotePreviewSerializer,
+    obter_mensagem_erro_validacao,
     queryset_bens_movimentaveis,
     validar_ua_origem_movimentacao,
 )
@@ -546,7 +547,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         )
         if not serializer.is_valid():
             return JsonResponse(
-                {"detail": self._obter_mensagem_erro(serializer.errors)},
+                {"detail": obter_mensagem_erro_validacao(serializer.errors)},
                 status=400,
             )
 
@@ -579,16 +580,6 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         itens = BemPatrimonialSimpleSerializer(bens, many=True).data
         return JsonResponse({"itens": itens})
 
-    @staticmethod
-    def _obter_mensagem_erro(erros):
-        if isinstance(erros, dict):
-            return MovimentacaoBemPatrimonialAdmin._obter_mensagem_erro(
-                next(iter(erros.values()))
-            )
-        if isinstance(erros, (list, tuple)):
-            return MovimentacaoBemPatrimonialAdmin._obter_mensagem_erro(erros[0])
-        return str(erros)
-
     def get_queryset(self, request):
         qs = (
             super()
@@ -604,12 +595,15 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         )
         return filtrar_queryset_movimentacao_por_escopo(request.user, qs)
 
+    @transaction.atomic
+    def add_view(self, request, form_url="", extra_context=None):
+        return super().add_view(request, form_url, extra_context)
+
     def save_model(self, request, obj, form, change):
         if obj.id is None:
             obj.solicitado_por = request.user
         super().save_model(request, obj, form, change)
 
-    @transaction.atomic
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         if change:
