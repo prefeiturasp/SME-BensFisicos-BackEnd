@@ -4,8 +4,10 @@ from django.db.models import Q
 from django.dispatch import receiver
 from django.db.models.signals import post_save, pre_save
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 from django.db import transaction
+from django.db.models.functions import Substr
 from django.utils import timezone
 from django.contrib.contenttypes.models import ContentType
 from dados_comuns.models import HistoricoGeral
@@ -961,7 +963,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
     )
 
     numero_nbbpm = models.CharField(
-        max_length=32, blank=True, default="", db_index=True
+        max_length=32, blank=True, default="", db_index=True, editable=False,
+        help_text="Campo legado desativado para escrita; consultar NBBPM via M2M."
     )
 
     class Meta:
@@ -1044,11 +1047,15 @@ class BaixaFisicaBemPatrimonial(models.Model):
         - status do bem => BAIXA_FISICA
         - limpa 'numero_processo' (incorporação)
         - localização usa numero_processo_baixa se preenchido, senão o ID da baixa
+        - validação cruzada central: barra reuso se já tem NBBPM (nova tabela ou legado)
         """
         if self.status != constants.SOLICITADA:
             raise ValidationError(
                 "Só é possível aprovar baixas com status 'Solicitada'."
             )
+
+        if self.nbbpms_lote.exists() or (self.numero_nbbpm or "").strip():
+            raise ValidationError("Esta baixa já possui NBBPM gerada.")
 
         self.status = constants.ACEITA
         self.aprovado_por = usuario_aprovador
@@ -1088,26 +1095,11 @@ class BaixaFisicaBensItem(models.Model):
 
 
 # ============================================================================
-# NBBPM CONSOLIDADA — geração em lote (NOVO)
+# NBBPM CONSOLIDADA — geração em lote
 # ============================================================================
-#
-# Permite consolidar VÁRIAS Baixas Físicas aprovadas (status ACEITA) da
-# mesma Unidade Orçamentária em um único documento NBBPM, conforme a
-# funcionalidade "Gerar NBBPM" da listagem de Baixas Físicas.
-#
-# Não substitui nem altera o campo `numero_nbbpm` já existente em
-# BaixaFisicaBemPatrimonial (mantido por compatibilidade com o fluxo
-# antigo, de geração individual), nem o novo fluxo de "Laudo de
-# Avaliação" (gerar_laudo). Este novo modelo guarda o registro do
-# documento consolidado e o vínculo com todas as baixas selecionadas.
 
 class NBBPM(models.Model):
-    """
-    Nota de Baixa de Bens Patrimoniais Móveis e Intangíveis — versão
-    consolidada, gerada a partir da seleção de uma ou mais Baixas Físicas
-    com status Aprovado (ACEITA), todas pertencentes à mesma Unidade
-    Orçamentária do usuário.
-    """
+    """NBBPM consolidada a partir de Baixas ACEITA da mesma UA."""
 
     numero = models.CharField(
         "Número da NBBPM",
@@ -1115,7 +1107,13 @@ class NBBPM(models.Model):
         blank=True,
         default="",
         db_index=True,
-        help_text="Gerado automaticamente, no formato <COD_UO>.<SEQUENCIAL_7>.<ANO>",
+        help_text="Gerado automaticamente, no formato <COD_UA>.<SEQUENCIAL_7>.<ANO>",
+        validators=[
+            RegexValidator(
+                regex=r"^\d{3}\.\d{7}\.\d{4}$",
+                message="Número NBBPM deve estar no formato XXX.YYYYYYY.ZZZZ",
+            )
+        ],
     )
 
     baixas = models.ManyToManyField(
@@ -1160,9 +1158,20 @@ class NBBPM(models.Model):
     )
 
     class Meta:
-        verbose_name = "NBBPM (Nota de Baixa de Bens Patrimoniais Móveis e Intangíveis)"
-        verbose_name_plural = "NBBPMs (Notas de Baixa de Bens Patrimoniais Móveis e Intangíveis)"
+        verbose_name = "NBBPM"
+        verbose_name_plural = "NBBPMs"
         ordering = ["-data_criacao"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["numero"],
+                condition=Q(numero__isnull=False) & ~Q(numero=""),
+                name="uniq_nbbpm_numero",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["numero"]),
+            models.Index(Substr("numero", 5, 7), name="idx_nbbpm_numero_substr"),
+        ]
 
     def __str__(self):
         return f"NBBPM {self.numero or self.pk}"
@@ -1172,9 +1181,9 @@ class NBBPM(models.Model):
         """
         Unidade Administrativa da primeira baixa vinculada. Todas as
         baixas de uma mesma NBBPM pertencem obrigatoriamente à mesma
-        Unidade Orçamentária (validado no serializer), então qualquer
+        Unidade Administrativa (validado no serializer), então qualquer
         uma delas serve de referência para exibir Prefixo/Órgão/Código
-        da Unidade Orçamentária no documento.
+        no documento.
         """
         primeira = self.baixas.select_related(
             "unidade_administrativa_origem",
