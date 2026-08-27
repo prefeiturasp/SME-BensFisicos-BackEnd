@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.test import APITestCase, APIClient
+from rest_framework.test import APIClient
 
 from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
@@ -22,7 +22,6 @@ from bem_patrimonial.models import (
 from bem_patrimonial.api_serializers import (
     BaixaFisicaBemPatrimonialCreateSerializer,
     BaixaFisicaBemPatrimonialUpdateSerializer,
-    BaixaFisicaBemPatrimonialListSerializer,
     BaixaFisicaBemPatrimonialDetailSerializer,
     BaixaFisicaAprovarSerializer,
     BaixaFisicaCancelarSerializer,
@@ -461,10 +460,20 @@ class BaixaFisicaSolicitarCorrecaoSerializerTestCase(BaseSetup):
         )
         self.assertTrue(s.is_valid(), s.errors)
 
-    def test_operador_nao_pode_solicitar_correcao(self):
+    def test_operador_criador_pode_solicitar_correcao(self):
+        # Operador criador da baixa pode devolver para correção
         s = BaixaFisicaSolicitarCorrecaoSerializer(
             data={"motivo": "Corrigir o item X"},
             context=self._ctx(self.operador),
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_operador_nao_criador_nao_pode_solicitar_correcao(self):
+        # Operador que não é criador nem gestor não pode
+        baixa_outra_ua = criar_baixa(self.ua2, self.operador2, status=constants.SOLICITADA)
+        s = BaixaFisicaSolicitarCorrecaoSerializer(
+            data={"motivo": "Corrigir o item X"},
+            context={"baixa": baixa_outra_ua, "request": self._req(self.operador)},
         )
         with self.assertRaises(PermissionDenied):
             s.is_valid(raise_exception=True)
@@ -554,8 +563,16 @@ class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
         self.assertIsNone(data["url_recusar"])
 
     def test_url_gerar_nbbpm_quando_aceita_com_nbbpm(self):
-        baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA,
-                            numero_nbbpm="NBBPM-001")
+        baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
+        # Cria NBBPM consolidada vinculada (nova tabela M2M) - legado numero_nbbpm desativado
+        nbbpm = NBBPM.objects.create(
+            numero="016.0000001.2026",
+            numero_processo_baixa="PROC-URL",
+            data_autorizacao=timezone.localdate(),
+            responsavel="Gestor",
+            criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([baixa])
         data = self._serializer(baixa, self.gestor).data
         self.assertIsNotNone(data["url_gerar_nbbpm"])
 
@@ -569,9 +586,14 @@ class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
         data = self._serializer(baixa, self.gestor).data
         self.assertIsNotNone(data["url_solicitar_correcao"])
 
-    def test_url_solicitar_correcao_ausente_para_operador(self):
+    def test_url_solicitar_correcao_para_operador_criador_quando_solicitada(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
         data = self._serializer(baixa, self.operador).data
+        self.assertIsNotNone(data["url_solicitar_correcao"])
+
+    def test_url_solicitar_correcao_ausente_para_operador_nao_criador(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        data = self._serializer(baixa, self.operador2).data
         self.assertIsNone(data["url_solicitar_correcao"])
 
     def test_url_solicitar_correcao_ausente_quando_aguardando_envio(self):
@@ -830,10 +852,9 @@ class BaixaFisicaViewSetEnviarSolicitacaoTestCase(BaseAPISetup):
         resp = self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch("bem_patrimonial.api_views.gerar_numero_nbbpm", return_value="NBBPM-2024-001")
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada")
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
-    def test_enviar_solicitacao_nao_reabre_baixa_aceita(self, mock_email_solicitada, mock_email_aprovada, mock_nbbpm):
+    def test_enviar_solicitacao_nao_reabre_baixa_aceita(self, mock_email_solicitada, mock_email_aprovada):
         self._auth(self.operador)
         self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
         self._auth(self.gestor)
@@ -878,8 +899,7 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
         BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
 
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada")
-    @patch("bem_patrimonial.api_views.gerar_numero_nbbpm", return_value="NBBPM-2024-001")
-    def test_gestor_aprova(self, mock_nbbpm, mock_email):
+    def test_gestor_aprova(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -889,12 +909,15 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
         self.assertIsNotNone(self.baixa.data_aprovacao)
 
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada")
-    @patch("bem_patrimonial.api_views.gerar_numero_nbbpm", return_value="NBBPM-2024-001")
-    def test_aprovacao_gera_nbbpm(self, mock_nbbpm, mock_email):
+    def test_aprovacao_nao_gera_nbbpm(self, mock_email):
+        # NBBPM somente via tela de NBBPM (lote)
         self._auth(self.gestor)
         self.client.post(self.action_url(self.baixa.id, "aprovar"))
         self.baixa.refresh_from_db()
-        self.assertIsNotNone(self.baixa.numero_nbbpm)
+        self.assertEqual(self.baixa.status, constants.ACEITA)
+        self.assertEqual((self.baixa.numero_nbbpm or "").strip(), "")
+        self.assertFalse(self.baixa.nbbpms_lote.exists())
+        self.assertFalse(NBBPM.objects.exists())
 
     def test_operador_nao_pode_aprovar(self):
         self._auth(self.operador)
@@ -910,8 +933,7 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
 
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada",
            side_effect=Exception("Erro de email"))
-    @patch("bem_patrimonial.api_views.gerar_numero_nbbpm", return_value="NBBPM-2024-001")
-    def test_falha_email_nao_impede_aprovacao(self, mock_nbbpm, mock_email):
+    def test_falha_email_nao_impede_aprovacao(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
@@ -1048,8 +1070,22 @@ class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_operador_nao_pode_solicitar_correcao(self):
+    def test_operador_criador_pode_solicitar_correcao(self):
         self._auth(self.operador)
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "solicitar-correcao"),
+            {"motivo": "Corrigir o item"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.baixa.status, constants.AGUARDANDO_ENVIO)
+
+    def test_operador_nao_criador_nao_pode_solicitar_correcao(self):
+        # baixa criada por operador, tenta solicitar correção com outro operador da mesma UA (não criador)
+        from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+        operador_mesma_ua = criar_usuario("operador_mesma_ua_correcao", self.uo, self.ua, grupos=[GRUPO_OPERADOR_INVENTARIO])
+        self._auth(operador_mesma_ua)
         resp = self.client.post(
             self.action_url(self.baixa.id, "solicitar-correcao"),
             {"motivo": "Corrigir o item"},
@@ -1122,53 +1158,6 @@ class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.SOLICITADA)
-
-
-# ============================================================================
-# TESTES DO VIEWSET — GERAR NBBPM
-# ============================================================================
-
-class BaixaFisicaViewSetGerarNbbpmTestCase(BaseAPISetup):
-    def setUp(self):
-        super().setUp()
-        self.baixa = criar_baixa(
-            self.ua, self.operador,
-            status=constants.ACEITA,
-            numero_nbbpm="NBBPM-2024-001",
-        )
-
-    @patch("bem_patrimonial.api_views.http_response_nbbpm")
-    def test_gerar_nbbpm_baixa_aceita(self, mock_pdf):
-        from django.http import HttpResponse
-        mock_pdf.return_value = HttpResponse(
-            content_type="application/pdf",
-            content=b"%PDF-fake",
-        )
-        self._auth(self.operador)
-        resp = self.client.get(self.action_url(self.baixa.id, "gerar-nbbpm"))
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        mock_pdf.assert_called_once_with(self.baixa)
-
-    def test_gerar_nbbpm_baixa_nao_aceita_retorna_400(self):
-        self.baixa.status = constants.SOLICITADA
-        self.baixa.save()
-        self._auth(self.operador)
-        resp = self.client.get(self.action_url(self.baixa.id, "gerar-nbbpm"))
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-
-    @patch("bem_patrimonial.api_views.BaixaFisicaBemPatrimonialViewSet.get_object")
-    def test_gerar_nbbpm_sem_numero_retorna_400(self, mock_get_object):
-        baixa_sem_nbbpm = criar_baixa(
-            self.ua, self.operador,
-            status=constants.ACEITA,
-            numero_nbbpm="PLACEHOLDER",
-        )
-        baixa_sem_nbbpm.numero_nbbpm = None
-        mock_get_object.return_value = baixa_sem_nbbpm
-
-        self._auth(self.operador)
-        resp = self.client.get(self.action_url(self.baixa.id, "gerar-nbbpm"))
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 # ============================================================================
@@ -1278,311 +1267,6 @@ class BaixaFisicaViewSetQuerysetTestCase(BaseAPISetup):
 
 
 # ============================================================================
-# TESTES DO VIEWSET — GERAR NBBPM CONSOLIDADA (LOTE)
-# ============================================================================
-
-class BaixaFisicaViewSetGerarNbbpmLoteTestCase(BaseAPISetup):
-    def setUp(self):
-        super().setUp()
-
-        self.baixa1 = criar_baixa(
-            self.ua, self.operador,
-            status=constants.ACEITA,
-            numero_processo_baixa="P1",
-        )
-        self.baixa2 = criar_baixa(
-            self.ua, self.operador,
-            status=constants.ACEITA,
-            numero_processo_baixa="P2",
-        )
-        BaixaFisicaBensItem.objects.create(baixa=self.baixa1, bem=self.bem)
-        BaixaFisicaBensItem.objects.create(baixa=self.baixa2, bem=self.bem2)
-
-    @property
-    def gerar_lote_url(self):
-        return reverse("baixas-fisicas-gerar-nbbpm-lote")
-
-    def _payload(self, **overrides):
-        data = {
-            "baixas": [self.baixa1.id, self.baixa2.id],
-            "numero_processo_baixa": "6016.2025/0117371-7",
-            "data_autorizacao": str(timezone.localdate()),
-            "responsavel": "Priscila Padovesi",
-        }
-        data.update(overrides)
-        return data
-
-    # --------------------------------------------------------------
-    # autenticação / permissão
-    # --------------------------------------------------------------
-
-    def test_requer_autenticacao(self):
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_operador_autenticado_pode_gerar(self):
-        self._auth(self.operador)
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    def test_gestor_autenticado_pode_gerar(self):
-        self._auth(self.gestor)
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    # --------------------------------------------------------------
-    # sucesso — resposta, persistência e numeração
-    # --------------------------------------------------------------
-
-    def test_retorna_pdf_com_content_type_correto(self):
-        self._auth(self.operador)
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp["Content-Type"], "application/pdf")
-        self.assertTrue(resp.content.startswith(b"%PDF"))
-
-    def test_content_disposition_contem_numero_da_nbbpm(self):
-        self._auth(self.operador)
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-
-        nbbpm = NBBPM.objects.get()
-        self.assertIn(f"NBBPM_{nbbpm.numero}.pdf", resp["Content-Disposition"])
-
-    def test_persiste_nbbpm_com_baixas_vinculadas(self):
-        self._auth(self.operador)
-        self.client.post(self.gerar_lote_url, self._payload(), format="json")
-
-        nbbpm = NBBPM.objects.get()
-        self.assertEqual(
-            set(nbbpm.baixas.values_list("id", flat=True)),
-            {self.baixa1.id, self.baixa2.id},
-        )
-        self.assertEqual(nbbpm.numero_processo_baixa, "6016.2025/0117371-7")
-        self.assertEqual(nbbpm.responsavel, "Priscila Padovesi")
-        self.assertEqual(nbbpm.criado_por, self.operador)
-        self.assertEqual(nbbpm.numero_processo_destinacao_final, "")
-
-    def test_gera_numero_automatico_no_formato_esperado(self):
-        self._auth(self.operador)
-        self.client.post(self.gerar_lote_url, self._payload(), format="json")
-
-        nbbpm = NBBPM.objects.get()
-        self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}\.\d{4}$")
-
-    def test_persiste_numero_processo_destinacao_final_quando_informado(self):
-        self._auth(self.operador)
-        self.client.post(
-            self.gerar_lote_url,
-            self._payload(numero_processo_destinacao_final="6016.2025/9999999-9"),
-            format="json",
-        )
-
-        nbbpm = NBBPM.objects.get()
-        self.assertEqual(
-            nbbpm.numero_processo_destinacao_final, "6016.2025/9999999-9"
-        )
-
-    @patch("bem_patrimonial.api_views.http_response_nbbpm_lote")
-    def test_delega_geracao_do_pdf_para_http_response_nbbpm_lote(self, mock_pdf):
-        from django.http import HttpResponse
-        mock_pdf.return_value = HttpResponse(
-            content_type="application/pdf", content=b"%PDF-fake"
-        )
-
-        self._auth(self.operador)
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        mock_pdf.assert_called_once()
-        args, kwargs = mock_pdf.call_args
-        self.assertIsInstance(args[0], NBBPM)
-        self.assertEqual(kwargs.get("usuario_gerador"), self.operador)
-
-    def test_gestor_pode_consolidar_baixas_de_uas_diferentes_da_mesma_uo(self):
-        # ua e ua2 pertencem à mesma Unidade Orçamentária (self.uo)
-        baixa_ua2 = criar_baixa(
-            self.ua2, self.operador2,
-            status=constants.ACEITA,
-            numero_processo_baixa="P3",
-        )
-        BaixaFisicaBensItem.objects.create(baixa=baixa_ua2, bem=self.bem)
-
-        self.gestor.unidade_administrativa = None
-        self.gestor.save()
-        self._auth(self.gestor)
-
-        resp = self.client.post(
-            self.gerar_lote_url,
-            self._payload(baixas=[self.baixa1.id, baixa_ua2.id]),
-            format="json",
-        )
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        nbbpm = NBBPM.objects.get()
-        self.assertEqual(
-            set(nbbpm.baixas.values_list("id", flat=True)),
-            {self.baixa1.id, baixa_ua2.id},
-        )
-
-    # --------------------------------------------------------------
-    # validações — campos obrigatórios
-    # --------------------------------------------------------------
-
-    def test_sem_baixas_retorna_400(self):
-        self._auth(self.operador)
-        resp = self.client.post(
-            self.gerar_lote_url, self._payload(baixas=[]), format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("baixas", resp.data)
-
-    def test_sem_numero_processo_baixa_retorna_400(self):
-        self._auth(self.operador)
-        payload = self._payload()
-        del payload["numero_processo_baixa"]
-        resp = self.client.post(self.gerar_lote_url, payload, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("numero_processo_baixa", resp.data)
-
-    def test_numero_processo_baixa_em_branco_retorna_400(self):
-        self._auth(self.operador)
-        resp = self.client.post(
-            self.gerar_lote_url,
-            self._payload(numero_processo_baixa="   "),
-            format="json",
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("numero_processo_baixa", resp.data)
-
-    def test_sem_data_autorizacao_retorna_400(self):
-        self._auth(self.operador)
-        payload = self._payload()
-        del payload["data_autorizacao"]
-        resp = self.client.post(self.gerar_lote_url, payload, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("data_autorizacao", resp.data)
-
-    def test_sem_responsavel_retorna_400(self):
-        self._auth(self.operador)
-        payload = self._payload()
-        del payload["responsavel"]
-        resp = self.client.post(self.gerar_lote_url, payload, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("responsavel", resp.data)
-
-    def test_responsavel_em_branco_retorna_400(self):
-        self._auth(self.operador)
-        resp = self.client.post(
-            self.gerar_lote_url, self._payload(responsavel="   "), format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("responsavel", resp.data)
-
-    def test_numero_processo_destinacao_final_e_opcional(self):
-        self._auth(self.operador)
-        payload = self._payload()
-        self.assertNotIn("numero_processo_destinacao_final", payload)
-        resp = self.client.post(self.gerar_lote_url, payload, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    def test_baixa_id_inexistente_retorna_400(self):
-        self._auth(self.operador)
-        resp = self.client.post(
-            self.gerar_lote_url,
-            self._payload(baixas=[999999]),
-            format="json",
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("baixas", resp.data)
-
-    # --------------------------------------------------------------
-    # validações — regras de negócio
-    # --------------------------------------------------------------
-
-    def test_baixa_fora_do_escopo_do_usuario_retorna_400(self):
-        baixa_ua2 = criar_baixa(
-            self.ua2, self.operador2,
-            status=constants.ACEITA,
-            numero_processo_baixa="P-UA2",
-        )
-        self._auth(self.operador)  # operador é escopado à self.ua, não à self.ua2
-
-        resp = self.client.post(
-            self.gerar_lote_url,
-            self._payload(baixas=[self.baixa1.id, baixa_ua2.id]),
-            format="json",
-        )
-
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("escopo", str(resp.data))
-        self.assertFalse(NBBPM.objects.exists())
-
-    def test_baixa_com_status_diferente_de_aceita_retorna_400(self):
-        self.baixa1.status = constants.SOLICITADA
-        self.baixa1.save()
-        self._auth(self.operador)
-
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Aprovado", str(resp.data))
-        self.assertFalse(NBBPM.objects.exists())
-
-    @patch("bem_patrimonial.api_serializers.filtrar_queryset_por_escopo")
-    def test_baixas_de_unidades_orcamentarias_diferentes_retorna_400(self, mock_escopo):
-        # O filtro de escopo já restringe por Unidade Orçamentária (mesmo com
-        # unidade_administrativa=None, o usuário não enxerga baixas de outras
-        # UOs), então essa combinação nunca passaria pelo pré-filtro de
-        # escopo em uso real. Mockamos aqui para isolar e travar
-        # especificamente a regra "mesma Unidade Orçamentária" do
-        # NBBPMGerarLoteSerializer, independente de como o escopo é resolvido.
-        uo2 = criar_uo(codigo="200", nome="UO Dois", sigla="UOD")
-        ua3 = criar_ua(uo=uo2, codigo="003", nome="UA Três", sigla="UAT2")
-        operador3 = criar_usuario(
-            "operador3_api", uo2, ua3, grupos=[GRUPO_OPERADOR_INVENTARIO]
-        )
-        baixa_uo2 = criar_baixa(
-            ua3, operador3, status=constants.ACEITA, numero_processo_baixa="P-UO2"
-        )
-
-        mock_escopo.return_value = BaixaFisicaBemPatrimonial.objects.all()
-
-        self.gestor.unidade_administrativa = None
-        self.gestor.save()
-        self._auth(self.gestor)
-
-        resp = self.client.post(
-            self.gerar_lote_url,
-            self._payload(baixas=[self.baixa1.id, baixa_uo2.id]),
-            format="json",
-        )
-
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Unidade Orçamentária", str(resp.data))
-        self.assertFalse(NBBPM.objects.exists())
-
-    def test_baixa_ja_utilizada_em_nbbpm_retorna_400(self):
-        self._auth(self.operador)
-        self.client.post(self.gerar_lote_url, self._payload(), format="json")
-        self.assertEqual(NBBPM.objects.count(), 1)
-
-        resp = self.client.post(self.gerar_lote_url, self._payload(), format="json")
-
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("já possuem NBBPM", str(resp.data))
-        self.assertEqual(NBBPM.objects.count(), 1)
-
-    def test_falha_na_validacao_nao_persiste_nbbpm(self):
-        self.baixa1.status = constants.SOLICITADA
-        self.baixa1.save()
-        self._auth(self.operador)
-
-        self.client.post(self.gerar_lote_url, self._payload(), format="json")
-
-        self.assertFalse(NBBPM.objects.exists())
-
-
-# ============================================================================
 # TESTES DE SERIALIZER — NBBPMGerarLoteSerializer
 # ============================================================================
 
@@ -1616,7 +1300,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
     def _serializer(self, data, user=None):
         return NBBPMGerarLoteSerializer(
             data=data,
-            context={"request": self._req(user or self.operador)},
+            context={"request": self._req(user or self.gestor)},
         )
 
     def test_dados_validos(self):
@@ -1661,7 +1345,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             numero_processo_baixa="P-UA2",
         )
         s = self._serializer(
-            self._data(baixas=[self.baixa1.id, baixa_ua2.id]), user=self.operador
+            self._data(baixas=[self.baixa1.id, baixa_ua2.id]), user=self.gestor
         )
         self.assertFalse(s.is_valid())
         self.assertIn("baixas", s.errors)
@@ -1675,8 +1359,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
 
     @patch("bem_patrimonial.api_serializers.filtrar_queryset_por_escopo")
     def test_baixas_de_unidades_orcamentarias_diferentes_invalida(self, mock_escopo):
-        # Isolado do pré-filtro de escopo pelo mesmo motivo do teste
-        # equivalente em BaixaFisicaViewSetGerarNbbpmLoteTestCase.
+        # Isolado do pré-filtro de escopo — regra agora é mesma UA (antes UO)
         uo2 = criar_uo(codigo="200", nome="UO Dois", sigla="UOD")
         ua3 = criar_ua(uo=uo2, codigo="003", nome="UA Três", sigla="UAT2")
         operador3 = criar_usuario(
@@ -1695,7 +1378,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             self._data(baixas=[self.baixa1.id, baixa_uo2.id]), user=self.gestor
         )
         self.assertFalse(s.is_valid())
-        self.assertIn("Unidade Orçamentária", str(s.errors["baixas"]))
+        self.assertIn("Unidade Administrativa", str(s.errors["baixas"]))
 
     def test_baixa_ja_utilizada_em_nbbpm_invalida(self):
         nbbpm = NBBPM.objects.create(
@@ -1717,14 +1400,13 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         nbbpm = s.save()
 
         self.assertIsInstance(nbbpm, NBBPM)
-        self.assertEqual(nbbpm.criado_por, self.operador)
+        self.assertEqual(nbbpm.criado_por, self.gestor)
         self.assertEqual(
             set(nbbpm.baixas.values_list("id", flat=True)),
             {self.baixa1.id, self.baixa2.id},
         )
-        # a numeração não é responsabilidade do serializer — é feita
-        # explicitamente na view, após o save()
-        self.assertEqual(nbbpm.numero, "")
+        # serializer já gera número via serviço unificado
+        self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}\.\d{4}$")
 
 
 # ============================================================================

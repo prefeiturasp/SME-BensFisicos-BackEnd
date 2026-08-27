@@ -152,28 +152,27 @@ class TestGeracaoNumeroNBBPM(NBBPMTestBase):
         self.assertEqual(n2, f"287.0000002.{ano}")
 
     def test_sequencial_reinicia_ao_mudar_ano(self):
-        baixa_a = self.criar_baixa(data_baixa=timezone.localdate())
-        baixa_b = self.criar_baixa(
-            numero_processo_baixa="X/2", data_baixa=timezone.localdate()
-        )
+        # Testa reinício por ano considerando data_aprovacao (nova lógica por UA/ano)
+        baixa_a = self.criar_baixa()
+        baixa_b = self.criar_baixa(numero_processo_baixa="X/2")
 
-        dt_2024 = datetime(
-            2024, 12, 31, 23, 59, 59, tzinfo=timezone.get_current_timezone()
-        )
+        dt_2024 = datetime(2024, 12, 31, 23, 59, 59, tzinfo=timezone.get_current_timezone())
         dt_2025 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.get_current_timezone())
 
-        with patch("django.utils.timezone.localdate", return_value=dt_2024.date()):
+        with patch("django.utils.timezone.now", return_value=dt_2024):
+            baixa_a.data_aprovacao = dt_2024
             baixa_a.data_baixa = dt_2024.date()
-            baixa_a.save(update_fields=["data_baixa"])
+            baixa_a.save(update_fields=["data_aprovacao", "data_baixa"])
             n_2024 = gerar_numero_nbbpm(baixa_a)
             baixa_a.numero_nbbpm = n_2024
             baixa_a.save(update_fields=["numero_nbbpm"])
 
         self.assertEqual(n_2024, "287.0000001.2024")
 
-        with patch("django.utils.timezone.localdate", return_value=dt_2025.date()):
+        with patch("django.utils.timezone.now", return_value=dt_2025):
+            baixa_b.data_aprovacao = dt_2025
             baixa_b.data_baixa = dt_2025.date()
-            baixa_b.save(update_fields=["data_baixa"])
+            baixa_b.save(update_fields=["data_aprovacao", "data_baixa"])
             n_2025 = gerar_numero_nbbpm(baixa_b)
 
         self.assertEqual(n_2025, "287.0000001.2025")
@@ -216,7 +215,7 @@ class TestGeracaoPDFNBBPM(NBBPMTestBase):
 
     def test_mantem_numero_nbbpm_se_ja_existir(self):
         baixa = self.criar_baixa(status=constants.ACEITA)
-        baixa.numero_nbbpm = "287.0001234.2026"
+        baixa.numero_nbbpm = "016.0001234.2026"
         baixa.save(update_fields=["numero_nbbpm"])
 
         bem = self.criar_bem()
@@ -225,7 +224,7 @@ class TestGeracaoPDFNBBPM(NBBPMTestBase):
         buffer = gerar_pdf_nbbpm(baixa, usuario_gerador=self.operador)
         baixa.refresh_from_db()
 
-        self.assertEqual(baixa.numero_nbbpm, "287.0001234.2026")
+        self.assertEqual(baixa.numero_nbbpm, "016.0001234.2026")
         self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
 
     def test_edge_campos_vazios_nao_quebra(self):

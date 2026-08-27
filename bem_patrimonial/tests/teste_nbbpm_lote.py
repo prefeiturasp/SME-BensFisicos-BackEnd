@@ -122,7 +122,7 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero = gerar_numero_nbbpm_lote(nbbpm)
 
-        codigo_esperado = extrair_codigo_ua(self.uo.codigo)
+        codigo_esperado = extrair_codigo_ua(self.ua.codigo)
         ano_esperado = nbbpm.data_autorizacao.year
         self.assertEqual(numero, f"{codigo_esperado}.0000001.{ano_esperado}")
 
@@ -139,7 +139,7 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero2 = gerar_numero_nbbpm_lote(nbbpm2)
 
-        codigo_esperado = extrair_codigo_ua(self.uo.codigo)
+        codigo_esperado = extrair_codigo_ua(self.ua.codigo)
         self.assertEqual(numero2, f"{codigo_esperado}.0000002.{data.year}")
 
     def test_sequencial_reinicia_em_outro_ano(self):
@@ -158,12 +158,12 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero_novo = gerar_numero_nbbpm_lote(nbbpm_novo)
 
-        codigo_esperado = extrair_codigo_ua(self.uo.codigo)
+        codigo_esperado = extrair_codigo_ua(self.ua.codigo)
         self.assertEqual(
             numero_novo, f"{codigo_esperado}.0000001.{data_ano_atual.year}"
         )
 
-    def test_usa_codigo_da_unidade_orcamentaria_das_baixas_vinculadas(self):
+    def test_usa_codigo_da_unidade_administrativa_das_baixas_vinculadas(self):
         uo2 = criar_uo(codigo="287", nome="UO Dois", sigla="UOD")
         ua2 = criar_ua(uo=uo2, codigo="002", nome="UA Dois", sigla="UAD")
         usuario2 = criar_usuario("usuario_uo2", uo2, ua2)
@@ -175,7 +175,7 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero = gerar_numero_nbbpm_lote(nbbpm)
 
-        self.assertTrue(numero.startswith(f"{extrair_codigo_ua(uo2.codigo)}."))
+        self.assertTrue(numero.startswith(f"{extrair_codigo_ua(ua2.codigo)}."))
 
 
 # ============================================================================
