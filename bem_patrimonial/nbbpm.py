@@ -43,36 +43,46 @@ def obter_bens_baixa(baixa):
 
 
 def gerar_numero_nbbpm(baixa):
-    """
-    Modelo alinhado ao CIMBPM: <COD_UA>.<SEQ_7>.<ANO>
-    Ex: 287.0000001.2025
-    """
+    """Compatibilidade: delega ao serviço unificado por UA/ano."""
     if not isinstance(baixa, BaixaFisicaBemPatrimonial):
         raise ValidationError("Objeto inválido para geração de NBBPM.")
 
-    ano_baixa = baixa.data_baixa.year if baixa.data_baixa else timezone.localdate().year
-    codigo_ua = extrair_codigo_ua(getattr(baixa.unidade_administrativa_origem, "codigo", ""))
+    if getattr(baixa, "data_aprovacao", None):
+        try:
+            ano_baixa = baixa.data_aprovacao.year
+        except Exception:
+            ano_baixa = timezone.localdate().year
+    elif getattr(baixa, "data_baixa", None):
+        try:
+            ano_baixa = baixa.data_baixa.year
+        except Exception:
+            ano_baixa = timezone.localdate().year
+    else:
+        ano_baixa = timezone.localdate().year
 
-    with transaction.atomic():
-        qs = (
-            BaixaFisicaBemPatrimonial.objects.select_for_update()
-            .filter(
-                numero_nbbpm__endswith=f".{ano_baixa}",
-                numero_nbbpm__isnull=False,
+    from bem_patrimonial.services.nbbpm_numero import gerar_numero_para_ua_ano
+
+    ua = getattr(baixa, "unidade_administrativa_origem", None)
+    if not ua or not getattr(ua, "pk", None):
+        codigo_ua = extrair_codigo_ua(getattr(ua, "codigo", "") if ua else "")
+        with transaction.atomic():
+            qs = (
+                BaixaFisicaBemPatrimonial.objects.select_for_update()
+                .filter(
+                    numero_nbbpm__endswith=f".{ano_baixa}",
+                    numero_nbbpm__isnull=False,
+                )
+                .exclude(numero_nbbpm__exact="")
             )
-            .exclude(numero_nbbpm__exact="")
-        )
+            sequencial_raw = Substr("numero_nbbpm", 5, 7)
+            sequencial_digits = Replace(sequencial_raw, Value("."), Value(""))
+            ultimo_sequencial = qs.annotate(
+                sequencial_int=Cast(sequencial_digits, IntegerField())
+            ).aggregate(max_seq=Max("sequencial_int"))["max_seq"]
+            numero_sequencial = (ultimo_sequencial or 0) + 1
+        return f"{codigo_ua}.{numero_sequencial:07d}.{ano_baixa}"
 
-        sequencial_raw = Substr("numero_nbbpm", 5, 7)
-        sequencial_digits = Replace(sequencial_raw, Value("."), Value(""))
-
-        ultimo_sequencial = qs.annotate(
-            sequencial_int=Cast(sequencial_digits, IntegerField())
-        ).aggregate(max_seq=Max("sequencial_int"))["max_seq"]
-
-        numero_sequencial = (ultimo_sequencial or 0) + 1
-
-    return f"{codigo_ua}.{numero_sequencial:07d}.{ano_baixa}"
+    return gerar_numero_para_ua_ano(ua, ano_baixa)
 
 
 def gerar_pdf_nbbpm(baixa, usuario_gerador=None, data_geracao=None):

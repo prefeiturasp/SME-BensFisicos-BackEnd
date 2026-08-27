@@ -1,21 +1,8 @@
-# bem_patrimonial/nbbpm_lote.py
-#
-# NOVO — Geração da NBBPM consolidada, a partir da seleção de uma ou mais
-# Baixas Físicas aprovadas (status ACEITA) da mesma Unidade Orçamentária.
-#
-# Não altera nem substitui bem_patrimonial/nbbpm.py (geração individual,
-# uma NBBPM por Baixa Física) nem bem_patrimonial/laudo_avaliacao.py
-# (Laudo de Avaliação), que seguem intactos.
-
 from decimal import Decimal
 from io import BytesIO
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
-from django.db.models import IntegerField, Max, Value
-from django.db.models.functions import Cast, Replace, Substr
 from django.http import HttpResponse
-from django.utils import timezone
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -36,9 +23,7 @@ from bem_patrimonial.models import NBBPM
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
     criar_estilo_base,
-    extrair_codigo_ua,
     formatar_moeda_brasileira,
-    obter_rf_usuario,
     formatar_data,
 )
 from bem_patrimonial.documentos_pdf_utils import (
@@ -52,45 +37,14 @@ DATE_FMT_BR = "%d/%m/%Y"
 
 
 def gerar_numero_nbbpm_lote(nbbpm):
-    """
-    Gera o número sequencial da NBBPM consolidada, no mesmo formato usado
-    para a NBBPM individual: <COD_UO>.<SEQUENCIAL_7>.<ANO>.
-    O sequencial é reiniciado por ano e é exclusivo do modelo NBBPM (não
-    compartilha contador com `BaixaFisicaBemPatrimonial.numero_nbbpm`).
-    """
-    if not isinstance(nbbpm, NBBPM):
-        raise ValidationError("Objeto inválido para geração de número da NBBPM.")
+    """Compatibilidade: delega ao serviço unificado por UO/ano."""
+    from bem_patrimonial.services.nbbpm_numero import gerar_numero_nbbpm_unificado
 
-    ano = (
-        nbbpm.data_autorizacao.year
-        if nbbpm.data_autorizacao
-        else timezone.localdate().year
-    )
-    uo = nbbpm.unidade_orcamentaria
-    codigo_ua = extrair_codigo_ua(getattr(uo, "codigo", "") if uo else "")
-
-    with transaction.atomic():
-        qs = (
-            NBBPM.objects.select_for_update()
-            .filter(numero__endswith=f".{ano}", numero__isnull=False)
-            .exclude(numero__exact="")
-        )
-
-        sequencial_raw = Substr("numero", 5, 7)
-        sequencial_digits = Replace(sequencial_raw, Value("."), Value(""))
-
-        ultimo_sequencial = qs.annotate(
-            sequencial_int=Cast(sequencial_digits, IntegerField())
-        ).aggregate(max_seq=Max("sequencial_int"))["max_seq"]
-
-        numero_sequencial = (ultimo_sequencial or 0) + 1
-
-    return f"{codigo_ua}.{numero_sequencial:07d}.{ano}"
+    return gerar_numero_nbbpm_unificado(nbbpm)
 
 
 def obter_bens_nbbpm_lote(nbbpm):
-    """Retorna todos os bens de todas as Baixas Físicas vinculadas, ordenados
-    por número patrimonial."""
+    """Bens de todas as Baixas vinculadas, ordenados por patrimônio."""
     bens = []
     for baixa in nbbpm.baixas.prefetch_related("itens__bem").all():
         for item in baixa.itens.select_related("bem").all():
