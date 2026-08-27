@@ -11,7 +11,7 @@
   }
 
   function formatarNumeroPatrimonial(value) {
-    const digits = value.replace(/\D/g, '').slice(0, 13)
+    const digits = value.replaceAll(/\D/g, '').slice(0, 13)
     if (digits.length <= 3) return digits
     if (digits.length <= 12) return `${digits.slice(0, 3)}.${digits.slice(3)}`
     return `${digits.slice(0, 3)}.${digits.slice(3, 12)}-${digits.slice(12)}`
