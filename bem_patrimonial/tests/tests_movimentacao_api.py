@@ -602,7 +602,7 @@ class MovimentacaoApiTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["itens"][0]["id"], bem.id)
 
-    def test_resolver_itens_lote_retorna_bens_existentes_no_intervalo(self):
+    def test_resolver_itens_lote_rejeita_intervalo_com_numero_inexistente(self):
         inicio = self._criar_bem(
             "001.000000010-0",
             self.ua_origem,
@@ -629,10 +629,13 @@ class MovimentacaoApiTestCase(TestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            [item["id"] for item in response.data["itens"]],
-            [inicio.id, fim.id],
+            response.data["faixas"][0],
+            (
+                "O(s) Bem(ns) com Número Patrimonial 001.000000011-0 não pode ser "
+                "movimentado. Por favor, verifique para realizar a inclusão."
+            ),
         )
 
     def test_resolver_itens_lote_seleciona_todos_os_bens_aprovados_da_ua(self):
@@ -668,7 +671,7 @@ class MovimentacaoApiTestCase(TestCase):
         self.assertNotIn(self.bem_oculto.id, ids)
         self.assertNotIn(self.bem_visivel.id, ids)
 
-    def test_resolver_itens_lote_ignora_bem_com_movimentacao_pendente(self):
+    def test_resolver_itens_lote_rejeita_bem_com_movimentacao_pendente(self):
         bem_movimentavel = self._criar_bem(
             "001.000000021-0",
             self.ua_origem,
@@ -703,11 +706,45 @@ class MovimentacaoApiTestCase(TestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            [item["id"] for item in response.data["itens"]],
-            [bem_movimentavel.id],
+            response.data["faixas"][0],
+            (
+                f"O(s) Bem(ns) com Número Patrimonial {bem_pendente.numero_patrimonial} "
+                "não pode ser movimentado. Por favor, verifique para realizar a inclusão."
+            ),
         )
+
+    def test_resolver_itens_lote_rejeita_bem_bloqueado_no_intervalo(self):
+        inicio = self._criar_bem(
+            "001.000000040-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+        )
+        bloqueado = self._criar_bem(
+            "001.000000041-0",
+            self.ua_origem,
+            criado_por=self.operador_origem,
+            bloqueado_conciliacao=True,
+        )
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [
+                    {
+                        "numero_patrimonial_de": inicio.numero_patrimonial,
+                        "numero_patrimonial_ate": bloqueado.numero_patrimonial,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(bloqueado.numero_patrimonial, response.data["faixas"][0])
 
     def test_bens_movimentaveis_lista_apenas_bens_elegiveis(self):
         bem_bloqueado = self._criar_bem(
@@ -761,6 +798,34 @@ class MovimentacaoApiTestCase(TestCase):
         for bem in bens:
             bem.refresh_from_db()
             self.assertEqual(bem.status, constants.BLOQUEADO)
+
+    def test_criacao_remove_movimentacao_se_falhar_ao_salvar_item(self):
+        self._autenticar(self.operador_origem)
+        quantidade_inicial = MovimentacaoBemPatrimonial.objects.count()
+
+        with patch.object(
+            MovimentacaoBensItem.objects,
+            "create",
+            side_effect=RuntimeError("falha ao salvar item"),
+        ):
+            with patch(
+                "bem_patrimonial.models.envia_email_nova_solicitacao_movimentacao"
+            ):
+                with self.assertRaises(RuntimeError):
+                    self.client.post(
+                        reverse("movimentacoes-list"),
+                        {
+                            "unidade_administrativa_origem": self.ua_origem.id,
+                            "unidade_administrativa_destino": self.ua_destino.id,
+                            "itens": [{"bem": self.bem_api.id}],
+                        },
+                        format="json",
+                    )
+
+        self.assertEqual(
+            MovimentacaoBemPatrimonial.objects.count(),
+            quantidade_inicial,
+        )
 
     def test_criacao_aprovacao_historico_e_documento_cimbpm(self):
         self._autenticar(self.operador_origem)

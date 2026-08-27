@@ -10,6 +10,13 @@
     erro.textContent = message || ''
   }
 
+  function formatarNumeroPatrimonial(value) {
+    const digits = value.replace(/\D/g, '').slice(0, 13)
+    if (digits.length <= 3) return digits
+    if (digits.length <= 12) return `${digits.slice(0, 3)}.${digits.slice(3)}`
+    return `${digits.slice(0, 3)}.${digits.slice(3, 12)}-${digits.slice(12)}`
+  }
+
   function persist(hidden, state) {
     hidden.value = JSON.stringify({
       faixas: state.faixas.map(({ numero_patrimonial_de, numero_patrimonial_ate }) => ({
@@ -20,59 +27,19 @@
     })
   }
 
-  function createModal(root, hiddenId) {
-    const modal = document.createElement('div')
-    const content = document.createElement('div')
-    const title = document.createElement('h2')
-    const close = document.createElement('button')
-    const body = document.createElement('tbody')
-    const table = document.createElement('table')
-    const head = document.createElement('thead')
-    const headRow = document.createElement('tr')
-
-    modal.className = 'movimentacao-lote__modal'
-    modal.hidden = true
-    modal.setAttribute('role', 'dialog')
-    modal.setAttribute('aria-modal', 'true')
-    modal.setAttribute('aria-labelledby', `${hiddenId}-modal-title`)
-    content.className = 'movimentacao-lote__modal-content'
-    title.id = `${hiddenId}-modal-title`
-    title.textContent = 'Bens da movimentação'
-    close.type = 'button'
-    close.className = 'button'
-    close.textContent = 'Fechar'
-    close.addEventListener('click', () => {
-      modal.hidden = true
-    })
-    ;['Número Patrimonial', 'Nome do Bem', 'Status'].forEach((text) => {
-      const th = document.createElement('th')
-      th.textContent = text
-      headRow.appendChild(th)
-    })
-    head.appendChild(headRow)
-    table.className = 'movimentacao-lote__detalhes'
-    table.append(head, body)
-    content.append(title, close, table)
-    modal.appendChild(content)
-    root.appendChild(modal)
-
-    return { modal, title, body, close }
-  }
-
-  function showModal(modal, titulo, itens) {
-    modal.body.replaceChildren()
-    itens.forEach((item) => {
-      const tr = document.createElement('tr')
-      ;[item.numero_patrimonial, item.nome, item.status].forEach((text) => {
-        const td = document.createElement('td')
-        td.textContent = text
-        tr.appendChild(td)
-      })
-      modal.body.appendChild(tr)
-    })
-    modal.title.textContent = `Bens da movimentação: ${titulo}`
-    modal.modal.hidden = false
-    modal.close.focus()
+  function readState(hidden) {
+    try {
+      const value = JSON.parse(hidden.value || '{}')
+      return {
+        faixas: Array.isArray(value.faixas)
+          ? value.faixas.map((faixa) => ({ ...faixa, itens: [] }))
+          : [],
+        selecionar_todos: value.selecionar_todos === true,
+        todos: [],
+      }
+    } catch {
+      return { faixas: [], selecionar_todos: false, todos: [] }
+    }
   }
 
   function getRows(state) {
@@ -108,41 +75,35 @@
     state.faixas = state.faixas.filter((faixa) => faixa !== row.faixa)
   }
 
-  function createSummaryRow(row, state, controls, modal) {
+  function createSummaryRow(row, state, controls) {
     const tr = document.createElement('tr')
-    const visualizar = createButton(
-      '👁',
-      `Visualizar bens da faixa ${row.titulo}`,
-      () => showModal(modal, row.titulo, row.itens),
-    )
     const remover = createButton('Excluir', `Excluir faixa ${row.titulo}`, () => {
       removeRow(state, row, controls.selecionarTodos)
       persist(controls.hidden, state)
-      renderSummary(state, controls, modal)
+      renderSummary(state, controls)
     })
+    const nomes = row.itens.map((item) => item.nome).join(', ')
 
-    ;[row.titulo, `${row.itens.length} bem(ns) selecionado(s)`].forEach((text) => {
+    ;[row.titulo, nomes].forEach((text) => {
       const td = document.createElement('td')
       td.textContent = text
       tr.appendChild(td)
     })
     const action = document.createElement('td')
-    action.appendChild(visualizar)
+    action.appendChild(remover)
     tr.appendChild(action)
-    const apagar = document.createElement('td')
-    apagar.appendChild(remover)
-    tr.appendChild(apagar)
     return tr
   }
 
-  function renderSummary(state, controls, modal) {
+  function renderSummary(state, controls) {
     controls.resumo.replaceChildren()
     getRows(state).forEach((row) => {
-      controls.resumo.appendChild(createSummaryRow(row, state, controls, modal))
+      controls.resumo.appendChild(createSummaryRow(row, state, controls))
     })
     controls.de.disabled = state.selecionar_todos
     controls.ate.disabled = state.selecionar_todos
     controls.adicionar.disabled = state.selecionar_todos
+    controls.selecionarTodos.checked = state.selecionar_todos
     controls.root.classList.toggle('movimentacao-lote--todos', state.selecionar_todos)
   }
 
@@ -187,17 +148,34 @@
     controls.opcoes.hidden = body.itens.length === 0
   }
 
-  async function adicionarFaixa(state, controls, modal) {
+  function faixaDuplicada(state, faixa) {
+    return state.faixas.some(
+      (item) =>
+        item.numero_patrimonial_de === faixa.numero_patrimonial_de &&
+        item.numero_patrimonial_ate === faixa.numero_patrimonial_ate,
+    )
+  }
+
+  async function adicionarFaixa(state, controls) {
     if (!controls.origem.value || !controls.de.value.trim()) {
       setError(controls.erro, 'Informe a Unidade Administrativa de origem e o Número Patrimonial - De.')
       return
     }
+    const faixa = {
+      numero_patrimonial_de: controls.de.value.trim(),
+      numero_patrimonial_ate: controls.ate.value.trim(),
+    }
+    if (faixa.numero_patrimonial_ate && faixa.numero_patrimonial_ate < faixa.numero_patrimonial_de) {
+      setError(controls.erro, 'O Número Patrimonial Até deve ser maior ou igual ao Número Patrimonial De.')
+      return
+    }
+    if (faixaDuplicada(state, faixa)) {
+      setError(controls.erro, 'A faixa informada já foi adicionada à movimentação.')
+      return
+    }
+
     setError(controls.erro, '')
     try {
-      const faixa = {
-        numero_patrimonial_de: controls.de.value.trim(),
-        numero_patrimonial_ate: controls.ate.value.trim(),
-      }
       const itens = await resolver(controls.url, controls.origem, { faixas: [faixa] })
       const ids = new Set(state.faixas.flatMap((item) => item.itens.map((bem) => bem.id)))
       if (itens.some((item) => ids.has(item.id))) {
@@ -207,18 +185,18 @@
       controls.de.value = ''
       controls.ate.value = ''
       persist(controls.hidden, state)
-      renderSummary(state, controls, modal)
+      renderSummary(state, controls)
     } catch (error) {
       setError(controls.erro, error instanceof Error ? error.message : 'Não foi possível incluir os bens.')
     }
   }
 
-  async function atualizarSelecionarTodos(state, controls, modal) {
+  async function atualizarSelecionarTodos(state, controls) {
     if (!controls.selecionarTodos.checked) {
       state.selecionar_todos = false
       state.todos = []
       persist(controls.hidden, state)
-      renderSummary(state, controls, modal)
+      renderSummary(state, controls)
       return
     }
     if (!controls.origem.value) {
@@ -232,7 +210,7 @@
       state.faixas = []
       state.selecionar_todos = true
       persist(controls.hidden, state)
-      renderSummary(state, controls, modal)
+      renderSummary(state, controls)
     } catch (error) {
       controls.selecionarTodos.checked = false
       setError(controls.erro, error instanceof Error ? error.message : 'Não foi possível incluir os bens.')
@@ -242,20 +220,42 @@
   function connectNumberFields(controls) {
     ;[controls.de, controls.ate].forEach((input) => {
       input.addEventListener('focus', () => void carregarOpcoes(controls, input))
-      input.addEventListener('input', () => void carregarOpcoes(controls, input))
+      input.addEventListener('input', () => {
+        input.value = formatarNumeroPatrimonial(input.value)
+        void carregarOpcoes(controls, input)
+      })
       input.addEventListener('blur', () => {
         globalThis.setTimeout(hideOptions, 150, controls.opcoes)
       })
     })
   }
 
-  function resetOnOrigemChange(state, controls, modal) {
+  function resetOnOrigemChange(state, controls) {
     state.faixas = []
     state.todos = []
     state.selecionar_todos = false
     controls.selecionarTodos.checked = false
     persist(controls.hidden, state)
-    renderSummary(state, controls, modal)
+    renderSummary(state, controls)
+  }
+
+  async function restoreState(state, controls) {
+    if (!controls.origem.value) return
+    try {
+      if (state.selecionar_todos) {
+        state.todos = await resolver(controls.url, controls.origem, { selecionar_todos: true })
+      } else {
+        const itensPorFaixa = await Promise.all(
+          state.faixas.map((faixa) => resolver(controls.url, controls.origem, { faixas: [faixa] })),
+        )
+        state.faixas.forEach((faixa, index) => {
+          faixa.itens = itensPorFaixa[index]
+        })
+      }
+      renderSummary(state, controls)
+    } catch (error) {
+      setError(controls.erro, error instanceof Error ? error.message : 'Não foi possível restaurar os bens.')
+    }
   }
 
   function initialize(root) {
@@ -275,16 +275,15 @@
     }
     if (Object.values(controls).some((control) => !control)) return
 
-    const state = { faixas: [], selecionar_todos: false, todos: [] }
-    const modal = createModal(root, controls.hidden.id)
-    controls.adicionar.addEventListener('click', () => void adicionarFaixa(state, controls, modal))
+    const state = readState(controls.hidden)
+    controls.adicionar.addEventListener('click', () => void adicionarFaixa(state, controls))
     controls.selecionarTodos.addEventListener('change', () =>
-      void atualizarSelecionarTodos(state, controls, modal),
+      void atualizarSelecionarTodos(state, controls),
     )
-    controls.origem.addEventListener('change', () => resetOnOrigemChange(state, controls, modal))
+    controls.origem.addEventListener('change', () => resetOnOrigemChange(state, controls))
     connectNumberFields(controls)
-    persist(controls.hidden, state)
-    renderSummary(state, controls, modal)
+    renderSummary(state, controls)
+    void restoreState(state, controls)
   }
 
   function initializeAll() {

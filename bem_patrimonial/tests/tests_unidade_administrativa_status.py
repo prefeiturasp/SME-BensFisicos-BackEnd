@@ -116,12 +116,14 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("itens_lote", form.errors)
 
-    def test_widget_lote_exibe_colunas_de_visualizacao_e_exclusao(self):
+    def test_widget_lote_exibe_nome_do_bem_acao_e_mascara(self):
         html = MovimentacaoLoteWidget().render("itens_lote", "", {"id": "id_itens_lote"})
 
-        self.assertIn("Bens selecionados", html)
+        self.assertIn("Nome do Bem", html)
         self.assertIn("Ação", html)
-        self.assertIn("Apagar", html)
+        self.assertNotIn("Apagar", html)
+        self.assertEqual(html.count('placeholder="000.000000000-0"'), 2)
+        self.assertEqual(html.count('maxlength="15"'), 2)
 
     def test_endpoint_admin_resolve_selecao_de_todos_os_bens(self):
         admin_instance = MovimentacaoBemPatrimonialAdmin(
@@ -144,6 +146,32 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(str(self.bem.pk), response.content.decode())
+
+    def test_endpoint_admin_retorna_mensagem_de_erro_tratada(self):
+        admin_instance = MovimentacaoBemPatrimonialAdmin(
+            MovimentacaoBemPatrimonial,
+            AdminSite(),
+        )
+        request = self.factory.post(
+            "/admin/bem_patrimonial/movimentacaobempatrimonial/resolver-itens-lote/",
+            data=json.dumps(
+                {
+                    "unidade_administrativa_origem": self.ua_ativa_1.pk,
+                    "faixas": [],
+                }
+            ),
+            content_type="application/json",
+        )
+        request.user = self.gestor
+
+        response = admin_instance.resolver_itens_lote(request)
+        detail = json.loads(response.content)["detail"]
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            detail,
+            "Informe uma ou mais faixas ou selecione todos os bens da UA.",
+        )
 
     def test_endpoint_admin_lista_bens_aprovados_da_ua_de_origem(self):
         admin_instance = MovimentacaoBemPatrimonialAdmin(
@@ -217,6 +245,45 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
             MovimentacaoBensItem.objects.filter(
                 movimentacao=movimentacao,
                 bem=self.bem,
+            ).exists()
+        )
+
+    def test_save_related_desfaz_itens_se_ocorrer_erro(self):
+        segundo_bem = SetupUnidadeAdministrativaStatusData().create_bem_patrimonial(
+            self.operador_origem,
+            self.ua_origem,
+        )
+        form = SimpleNamespace(
+            instance=self.movimentacao,
+            cleaned_data={"bens_lote_resolvidos": [self.bem, segundo_bem]},
+        )
+        create_original = MovimentacaoBensItem.objects.create
+        chamadas = 0
+
+        def criar_item(*args, **kwargs):
+            nonlocal chamadas
+            chamadas += 1
+            if chamadas == 2:
+                raise RuntimeError("falha ao salvar item")
+            return create_original(*args, **kwargs)
+
+        with patch("django.contrib.admin.options.ModelAdmin.save_related"):
+            with patch.object(
+                MovimentacaoBensItem.objects,
+                "create",
+                side_effect=criar_item,
+            ):
+                with self.assertRaises(RuntimeError):
+                    self.admin.save_related(
+                        self._create_request_with_messages(self.gestor),
+                        form,
+                        [],
+                        False,
+                    )
+
+        self.assertFalse(
+            MovimentacaoBensItem.objects.filter(
+                movimentacao=self.movimentacao,
             ).exists()
         )
 

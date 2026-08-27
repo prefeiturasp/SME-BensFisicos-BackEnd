@@ -23,9 +23,11 @@ class MovimentacaoLoteWidget(Widget):
             '<div class="movimentacao-lote" data-resolver-url="{}" data-buscar-url="{}">'
             '<div class="movimentacao-lote__inputs">'
             '<div><label for="{}-de">Número Patrimonial - De</label>'
-            '<input id="{}-de" type="text" placeholder="000.000000000-0"></div>'
+            '<input id="{}-de" type="text" inputmode="numeric" maxlength="15" '
+            'placeholder="000.000000000-0"></div>'
             '<div><label for="{}-ate">Número Patrimonial - Até</label>'
-            '<input id="{}-ate" type="text" placeholder="000.000000000-0"></div>'
+            '<input id="{}-ate" type="text" inputmode="numeric" maxlength="15" '
+            'placeholder="000.000000000-0"></div>'
             '<button type="button" class="button movimentacao-lote__adicionar">Adicionar</button>'
             '</div>'
             '<ul class="movimentacao-lote__opcoes" hidden></ul>'
@@ -34,7 +36,7 @@ class MovimentacaoLoteWidget(Widget):
             ' Selecionar todos os Bens aprovados da UA de origem</label>'
             '<p class="movimentacao-lote__erro" role="alert"></p>'
             '<table class="movimentacao-lote__resumo">'
-            '<thead><tr><th>Número Patrimonial</th><th>Bens selecionados</th><th>Ação</th><th>Apagar</th></tr></thead>'
+            '<thead><tr><th>Número Patrimonial</th><th>Nome do Bem</th><th>Ação</th></tr></thead>'
             '<tbody></tbody></table>{}'
             '</div>',
             resolver_url,

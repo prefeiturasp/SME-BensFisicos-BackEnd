@@ -545,7 +545,10 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             context={"request": request},
         )
         if not serializer.is_valid():
-            return JsonResponse({"detail": str(serializer.errors)}, status=400)
+            return JsonResponse(
+                {"detail": self._obter_mensagem_erro(serializer.errors)},
+                status=400,
+            )
 
         itens = BemPatrimonialSimpleSerializer(
             serializer.validated_data["bens"],
@@ -576,6 +579,16 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         itens = BemPatrimonialSimpleSerializer(bens, many=True).data
         return JsonResponse({"itens": itens})
 
+    @staticmethod
+    def _obter_mensagem_erro(erros):
+        if isinstance(erros, dict):
+            return MovimentacaoBemPatrimonialAdmin._obter_mensagem_erro(
+                next(iter(erros.values()))
+            )
+        if isinstance(erros, (list, tuple)):
+            return MovimentacaoBemPatrimonialAdmin._obter_mensagem_erro(erros[0])
+        return str(erros)
+
     def get_queryset(self, request):
         qs = (
             super()
@@ -596,6 +609,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             obj.solicitado_por = request.user
         super().save_model(request, obj, form, change)
 
+    @transaction.atomic
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         if change:

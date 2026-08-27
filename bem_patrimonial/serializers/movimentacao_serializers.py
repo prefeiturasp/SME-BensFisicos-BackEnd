@@ -1,8 +1,10 @@
+import re
 from collections import defaultdict
 
 from django.contrib.auth import get_user_model
-from django.urls import reverse
+from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
+from django.urls import reverse
 from rest_framework import serializers
 
 from bem_patrimonial import constants
@@ -23,8 +25,8 @@ MENSAGEM_SEM_PONTO_CENTRAL = (
     "Não há ponto central cadastrado na Unidade Orçamentária de destino. "
     "Por favor, entrar em contato com o gestor."
 )
-MENSAGEM_SEM_BENS_MOVIMENTAVEIS = (
-    "Não há bens aptos para movimentação no intervalo informado."
+PADRAO_NUMERO_PATRIMONIAL = re.compile(
+    r"^(?P<prefixo>\d{3})\.(?P<sequencia>\d{9})-(?P<digito>\d)$"
 )
 
 
@@ -103,11 +105,45 @@ def queryset_bens_movimentaveis(unidade_administrativa):
     )
 
 
+def _dados_numero_patrimonial(numero_patrimonial):
+    match = PADRAO_NUMERO_PATRIMONIAL.fullmatch(numero_patrimonial)
+    if match:
+        corpo = f"{match.group('prefixo')}{match.group('sequencia')}"
+        return int(corpo), len(corpo), match.group("digito"), True
+    if numero_patrimonial.isdigit():
+        return int(numero_patrimonial), len(numero_patrimonial), "", False
+    return None
+
+
+def _formatar_numero_patrimonial(indice, largura, digito, formato_atual):
+    numero = str(indice).zfill(largura)
+    if formato_atual:
+        return f"{numero[:3]}.{numero[3:]}-{digito}"
+    return numero
+
+
+def _mensagem_bens_nao_movimentaveis(numeros_patrimoniais):
+    numeros = ", ".join(numeros_patrimoniais)
+    return (
+        f"O(s) Bem(ns) com Número Patrimonial {numeros} não pode ser movimentado. "
+        "Por favor, verifique para realizar a inclusão."
+    )
+
+
 def _resolver_bens_da_faixa(unidade_administrativa, faixa):
     numero_de = faixa["numero_patrimonial_de"].strip()
     numero_ate_informado = (faixa.get("numero_patrimonial_ate") or "").strip()
     numero_ate = numero_ate_informado or numero_de
-    if numero_ate < numero_de:
+    dados_de = _dados_numero_patrimonial(numero_de)
+    dados_ate = _dados_numero_patrimonial(numero_ate)
+    if not dados_de or not dados_ate or dados_de[3] != dados_ate[3]:
+        raise serializers.ValidationError(
+            {"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])}
+        )
+
+    indice_de, largura, digito, formato_atual = dados_de
+    indice_ate = dados_ate[0]
+    if indice_ate < indice_de:
         raise serializers.ValidationError(
             {
                 "faixas": (
@@ -116,17 +152,39 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
                 )
             }
         )
-    bens = list(
-        queryset_bens_movimentaveis(unidade_administrativa)
-        .filter(
-            numero_patrimonial__gte=numero_de,
-            numero_patrimonial__lte=numero_ate,
-        )
-        .order_by("numero_patrimonial", "id")
+
+    bens_da_ua = BemPatrimonial.objects.filter(
+        unidade_administrativa=unidade_administrativa,
+        numero_patrimonial__gte=numero_de,
+        numero_patrimonial__lte=numero_ate,
     )
-    if not bens:
+    bens_por_indice = {
+        dados[0]: bem
+        for bem in bens_da_ua.order_by("numero_patrimonial", "id")
+        if (dados := _dados_numero_patrimonial(bem.numero_patrimonial))
+    }
+    ids_movimentaveis = set(
+        queryset_bens_movimentaveis(unidade_administrativa)
+        .filter(id__in=[bem.id for bem in bens_por_indice.values()])
+        .values_list("id", flat=True)
+    )
+
+    numeros_invalidos = []
+    bens = []
+    for indice in range(indice_de, indice_ate + 1):
+        bem = bens_por_indice.get(indice)
+        if bem and bem.id in ids_movimentaveis:
+            bens.append(bem)
+            continue
+        numeros_invalidos.append(
+            bem.numero_patrimonial
+            if bem
+            else _formatar_numero_patrimonial(indice, largura, digito, formato_atual)
+        )
+
+    if numeros_invalidos:
         raise serializers.ValidationError(
-            {"faixas": MENSAGEM_SEM_BENS_MOVIMENTAVEIS}
+            {"faixas": _mensagem_bens_nao_movimentaveis(numeros_invalidos)}
         )
     return bens
 
@@ -507,6 +565,7 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         self._validar_bens(attrs["unidade_administrativa_origem"], attrs["itens"])
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         itens = validated_data.pop("itens")
         validated_data.pop("unidade_orcamentaria_destino", None)
