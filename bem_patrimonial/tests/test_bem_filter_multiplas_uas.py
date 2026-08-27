@@ -1,12 +1,14 @@
 """
-Testes do BemPatrimonialFilter para seleção múltipla de Unidades Administrativas.
+Testes do BemPatrimonialFilter para seleção múltipla de Unidades.
 
-Estes testes validam a lógica de filtragem inspecionando o queryset gerado pelo
+Validam a lógica de filtragem inspecionando o queryset gerado pelo
 django-filter (sem necessidade de acesso ao banco), cobrindo:
 
-- retrocompatibilidade com um único valor;
+- retrocompatibilidade com um único valor de UA;
 - seleção de múltiplas UAs (lista separada por vírgula);
-- ausência do parâmetro representando "Todas as UAs";
+- ausência dos parâmetros representando "Todas as UAs";
+- filtro por Unidade Orçamentária (otimização: UO inteira marcada);
+- união (OR) quando UA e UO são enviados juntos;
 - coexistência com os demais filtros da tela.
 """
 
@@ -26,13 +28,14 @@ def _sql(params):
     return str(filterset.qs.query).lower()
 
 
-class BemPatrimonialFilterMultiplasUAsTest(SimpleTestCase):
-    def test_campo_ua_usa_filtro_de_lista(self):
-        campo = BemPatrimonialFilter.base_filters["unidade_administrativa"]
-        self.assertIsInstance(campo, _NumberInFilter)
-        self.assertEqual(campo.lookup_expr, "in")
+class BemPatrimonialFilterMultiplasUnidadesTest(SimpleTestCase):
+    def test_campos_usam_filtro_de_lista(self):
+        ua = BemPatrimonialFilter.base_filters["unidade_administrativa"]
+        uo = BemPatrimonialFilter.base_filters["unidade_orcamentaria"]
+        self.assertIsInstance(ua, _NumberInFilter)
+        self.assertIsInstance(uo, _NumberInFilter)
 
-    def test_valor_unico_mantem_compatibilidade(self):
+    def test_valor_unico_de_ua_mantem_compatibilidade(self):
         sql = _sql({"unidade_administrativa": "5"})
         self.assertIn("unidade_administrativa_id", sql)
         self.assertIn(" in (", sql)
@@ -44,12 +47,23 @@ class BemPatrimonialFilterMultiplasUAsTest(SimpleTestCase):
         self.assertIn("5", sql)
         self.assertIn("8", sql)
 
-    def test_sem_parametro_nao_filtra_por_ua(self):
+    def test_sem_parametros_nao_filtra_por_unidade(self):
         sql = _sql({})
-        self.assertNotIn(
-            "unidade_administrativa_id\" in (",
-            sql.replace("`", '"'),
-        )
+        self.assertNotIn("unidade_administrativa_id\" in (", sql.replace("`", '"'))
+        self.assertNotIn("unidade_orcamentaria_id\" in (", sql.replace("`", '"'))
+
+    def test_filtro_por_unidade_orcamentaria(self):
+        sql = _sql({"unidade_orcamentaria": "3"})
+        self.assertIn("unidade_orcamentaria_id", sql)
+        self.assertIn(" in (", sql)
+        self.assertIn("3", sql)
+
+    def test_ua_e_uo_juntos_geram_uniao_or(self):
+        sql = _sql({"unidade_administrativa": "5,8", "unidade_orcamentaria": "3"})
+        # ambos os campos presentes, combinados por OR
+        self.assertIn("unidade_administrativa_id", sql)
+        self.assertIn("unidade_orcamentaria_id", sql)
+        self.assertIn(" or ", sql)
 
     def test_convive_com_filtro_de_status(self):
         sql = _sql({"unidade_administrativa": "5,8", "status": "aprovado"})

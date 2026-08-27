@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Subquery, Q
 from django.db import models, transaction
 
 import os
@@ -171,11 +171,22 @@ class BemPatrimonialFilter(FilterSet):
         * como lista separada por vírgula: ``?unidade_administrativa=5,8``
     - Quando o parâmetro não é enviado ("Todas as UAs"), o escopo padrão
       aplicado em ``get_queryset`` já restringe os bens à UO do usuário.
+
+    Otimização por Unidade Orçamentária:
+    - ``unidade_orcamentaria`` (também múltiplo) filtra os bens cujas UAs
+      pertencem às UOs informadas. É usado quando o usuário marca uma UO
+      inteira no filtro: em vez de enumerar todas as UAs daquela UO (o que
+      geraria uma URL muito longa), o frontend envia apenas o id da UO.
+    - Quando ``unidade_administrativa`` e ``unidade_orcamentaria`` são enviados
+      juntos, o resultado é a UNIÃO dos dois conjuntos (bens das UAs marcadas
+      OU bens das UOs marcadas), refletindo a seleção mista da tela.
     """
 
     unidade_administrativa = _NumberInFilter(
-        field_name="unidade_administrativa_id",
-        lookup_expr="in",
+        method="filtrar_por_unidades",
+    )
+    unidade_orcamentaria = _NumberInFilter(
+        method="filtrar_por_unidades",
     )
 
     class Meta:
@@ -186,7 +197,38 @@ class BemPatrimonialFilter(FilterSet):
             "numero_formato_antigo",
             "bloqueado_conciliacao",
             "unidade_administrativa",
+            "unidade_orcamentaria",
         ]
+
+    def filtrar_por_unidades(self, queryset, name, value):
+        """
+        Aplica UA e UO de forma combinada (união), independentemente da ordem
+        em que o django-filter chama cada campo.
+
+        Ambos os campos apontam para este mesmo método. Para evitar aplicar o
+        filtro duas vezes (uma por campo), consolidamos os dois valores a
+        partir de ``self.form.cleaned_data`` na primeira chamada e marcamos o
+        queryset como já processado.
+        """
+        if getattr(queryset, "_unidades_filtradas", False):
+            return queryset
+
+        cleaned = getattr(self.form, "cleaned_data", {})
+        uas = cleaned.get("unidade_administrativa") or []
+        uos = cleaned.get("unidade_orcamentaria") or []
+
+        if not uas and not uos:
+            return queryset
+
+        filtro = Q()
+        if uas:
+            filtro |= Q(unidade_administrativa_id__in=uas)
+        if uos:
+            filtro |= Q(unidade_administrativa__unidade_orcamentaria_id__in=uos)
+
+        queryset = queryset.filter(filtro)
+        queryset._unidades_filtradas = True
+        return queryset
 
 
 class BemPatrimonialViewSet(viewsets.ModelViewSet):
