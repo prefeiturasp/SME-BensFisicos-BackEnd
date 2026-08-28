@@ -627,18 +627,24 @@ class NBBPMGerarLoteSerializer(serializers.Serializer):
 
     def validate_baixas(self, baixas):
         if not baixas:
-            raise serializers.ValidationError(
-                "Selecione ao menos uma Baixa Física aprovada."
-            )
+            raise serializers.ValidationError("Selecione ao menos uma Baixa Física aprovada.")
+        self._validar_permissao_gerar_nbbpm()
+        self._validar_escopo_baixas(baixas)
+        self._validar_status_aceita(baixas)
+        self._validar_uo_unica(baixas)
+        self._validar_reuso_baixas(baixas)
+        return baixas
 
-        request = self.context["request"]
-        user = request.user
+    def _validar_permissao_gerar_nbbpm(self):
+        user = self.context["request"].user
+        if getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False):
+            return
+        from rest_framework.exceptions import PermissionDenied
 
-        if not (getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)):
-            from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("Apenas Gestor de Patrimônio pode gerar NBBPM.")
 
-            raise PermissionDenied("Apenas Gestor de Patrimônio pode gerar NBBPM.")
-
+    def _validar_escopo_baixas(self, baixas):
+        user = self.context["request"].user
         escopo_ids = set(
             filtrar_queryset_por_escopo(
                 usuario=user,
@@ -646,52 +652,42 @@ class NBBPMGerarLoteSerializer(serializers.Serializer):
                 campo_ua="unidade_administrativa_origem",
             ).values_list("id", flat=True)
         )
-
         fora_do_escopo = [b for b in baixas if b.id not in escopo_ids]
         if fora_do_escopo:
-            raise serializers.ValidationError(
-                "Uma ou mais Baixas selecionadas não pertencem ao seu escopo de acesso."
-            )
+            raise serializers.ValidationError("Uma ou mais Baixas selecionadas não pertencem ao seu escopo de acesso.")
 
+    def _validar_status_aceita(self, baixas):
         nao_aprovadas = [b for b in baixas if b.status != constants.ACEITA]
         if nao_aprovadas:
-            raise serializers.ValidationError(
-                "A NBBPM só pode ser gerada para Baixas Físicas com status Aprovado."
-            )
+            raise serializers.ValidationError("A NBBPM só pode ser gerada para Baixas Físicas com status Aprovado.")
 
-        unidades_orcamentarias = set()
-        for b in baixas:
-            ua = getattr(b, "unidade_administrativa_origem", None)
-            uo_id = None
-            if ua:
-                uo_id = getattr(ua, "unidade_orcamentaria_id", None)
-                if uo_id is None:
-                    try:
-                        uo = getattr(ua, "unidade_orcamentaria", None)
-                        uo_id = getattr(uo, "pk", None) or getattr(uo, "id", None)
-                    except Exception:
-                        uo_id = None
-            unidades_orcamentarias.add(uo_id)
+    def _validar_uo_unica(self, baixas):
+        unidades_orcamentarias = {self._extrair_uo_id(b) for b in baixas}
         if len(unidades_orcamentarias) > 1 or None in unidades_orcamentarias:
-            raise serializers.ValidationError(
-                "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária."
-            )
+            raise serializers.ValidationError("Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.")
 
+    def _extrair_uo_id(self, baixa):
+        ua = getattr(baixa, "unidade_administrativa_origem", None)
+        if not ua:
+            return None
+        uo_id = getattr(ua, "unidade_orcamentaria_id", None)
+        if uo_id is not None:
+            return uo_id
+        try:
+            uo = getattr(ua, "unidade_orcamentaria", None)
+            return getattr(uo, "pk", None) or getattr(uo, "id", None)
+        except Exception:
+            return None
+
+    def _validar_reuso_baixas(self, baixas):
         ja_utilizadas = [b for b in baixas if b.nbbpms_lote.exists()]
         if ja_utilizadas:
             ids = ", ".join(str(b.id) for b in ja_utilizadas)
-            raise serializers.ValidationError(
-                f"As Baixas {ids} já possuem NBBPM gerada."
-            )
-
+            raise serializers.ValidationError(f"As Baixas {ids} já possuem NBBPM gerada.")
         ja_com_numero_legado = [b for b in baixas if (b.numero_nbbpm or "").strip()]
         if ja_com_numero_legado:
             ids = ", ".join(str(b.id) for b in ja_com_numero_legado)
-            raise serializers.ValidationError(
-                f"As Baixas {ids} já possuem número NBBPM legado e não podem ser reutilizadas."
-            )
-
-        return baixas
+            raise serializers.ValidationError(f"As Baixas {ids} já possuem número NBBPM legado e não podem ser reutilizadas.")
 
     def create(self, validated_data):
         from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry

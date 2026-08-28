@@ -8,185 +8,210 @@ from django.db.models.functions import Substr
 PREFIXO_FIXO = "001"
 
 
-def migrar_baixa_para_nbbpm(apps, schema_editor):
-    Baixa = apps.get_model("bem_patrimonial", "BaixaFisicaBemPatrimonial")
-    NBBPM = apps.get_model("bem_patrimonial", "NBBPM")
-    Usuario = apps.get_model("usuario", "Usuario")
-    db_alias = schema_editor.connection.alias
+def _resolver_data_autorizacao(baixa):
+    data_aut = getattr(baixa, "data_aprovacao", None)
+    if data_aut:
+        try:
+            return data_aut.date() if hasattr(data_aut, "date") else data_aut
+        except Exception:
+            pass
+    data_aut = getattr(baixa, "data_baixa", None)
+    if data_aut:
+        return data_aut
+    from django.utils import timezone
 
-    baixas_com_numero = Baixa.objects.using(db_alias).filter(
-        numero_nbbpm__isnull=False
-    ).exclude(numero_nbbpm__exact="").exclude(numero_nbbpm__exact=None)
+    return timezone.now().date()
 
+
+def _resolver_responsavel_com_numero(baixa, usuario_model, db_alias):
+    responsavel = "SISTEMA"
+    criado_por_id = None
+    try:
+        if getattr(baixa, "aprovado_por_id", None):
+            try:
+                usuario = usuario_model.objects.using(db_alias).get(pk=baixa.aprovado_por_id)
+                responsavel = getattr(usuario, "username", None) or responsavel
+                criado_por_id = usuario.pk
+            except usuario_model.DoesNotExist:
+                pass
+        if not criado_por_id and getattr(baixa, "criado_por_id", None):
+            try:
+                usuario2 = usuario_model.objects.using(db_alias).get(pk=baixa.criado_por_id)
+                if responsavel == "SISTEMA":
+                    responsavel = getattr(usuario2, "username", None) or responsavel
+                criado_por_id = usuario2.pk
+            except usuario_model.DoesNotExist:
+                pass
+    except Exception:
+        pass
+    if not criado_por_id:
+        try:
+            primeiro = usuario_model.objects.using(db_alias).first()
+            if primeiro:
+                criado_por_id = primeiro.pk
+                if responsavel == "SISTEMA":
+                    responsavel = getattr(primeiro, "username", "SISTEMA")
+            else:
+                return None, None
+        except Exception:
+            return None, None
+    return responsavel, criado_por_id
+
+
+def _resolver_criador_sem_numero(baixa, usuario_model, db_alias):
+    criado_por_id = getattr(baixa, "aprovado_por_id", None) or getattr(baixa, "criado_por_id", None)
+    if criado_por_id:
+        try:
+            usuario = usuario_model.objects.using(db_alias).get(pk=criado_por_id)
+            return getattr(usuario, "username", "SISTEMA"), criado_por_id
+        except Exception:
+            pass
+        return "SISTEMA", criado_por_id
+    try:
+        primeiro = usuario_model.objects.using(db_alias).first()
+        if primeiro:
+            return getattr(primeiro, "username", "SISTEMA"), primeiro.pk
+    except Exception:
+        pass
+    return None, None
+
+
+def _calcular_max_sequencial(qs, campo):
+    from django.db.models import IntegerField, Max, Value
+    from django.db.models.functions import Cast, Replace, Substr
+
+    try:
+        seq_raw = Substr(campo, 5, 7)
+        seq_digits = Replace(seq_raw, Value("."), Value(""))
+        seq_digits = Replace(seq_digits, Value("/"), Value(""))
+        result = qs.annotate(seq_int=Cast(seq_digits, IntegerField())).aggregate(m=Max("seq_int"))["m"]
+        return result or 0
+    except Exception:
+        return 0
+
+
+def _obter_proximo_sequencial(db_alias, nbbpm_model, baixa_model, ano):
+    prefixo = PREFIXO_FIXO
+    qs_nbbpm = (
+        nbbpm_model.objects.using(db_alias)
+        .filter(numero__startswith=f"{prefixo}.")
+        .filter(Q(numero__endswith=f".{ano}") | Q(numero__endswith=f"/{ano}"))
+        .exclude(numero__exact="")
+    )
+    max_nbbpm = _calcular_max_sequencial(qs_nbbpm, "numero")
+    qs_baixa = (
+        baixa_model.objects.using(db_alias)
+        .filter(numero_nbbpm__startswith=f"{prefixo}.", numero_nbbpm__isnull=False)
+        .exclude(numero_nbbpm__exact="")
+        .filter(Q(numero_nbbpm__endswith=f".{ano}") | Q(numero_nbbpm__endswith=f"/{ano}"))
+    )
+    max_baixa = _calcular_max_sequencial(qs_baixa, "numero_nbbpm")
+    return max(max_nbbpm, max_baixa) + 1
+
+
+def _migrar_baixas_com_numero(db_alias, baixa_model, nbbpm_model, usuario_model):
+    baixas_com_numero = (
+        baixa_model.objects.using(db_alias)
+        .filter(numero_nbbpm__isnull=False)
+        .exclude(numero_nbbpm__exact="")
+        .exclude(numero_nbbpm__exact=None)
+    )
     for baixa in baixas_com_numero.iterator():
         numero = (baixa.numero_nbbpm or "").strip()
         if not numero:
             continue
-        if NBBPM.objects.using(db_alias).filter(numero=numero).exists():
-            try:
-                nbbpm_existente = NBBPM.objects.using(db_alias).filter(numero=numero).first()
-                if nbbpm_existente and not nbbpm_existente.baixas.filter(pk=baixa.pk).exists():
-                    nbbpm_existente.baixas.add(baixa)
-            except Exception:
-                pass
+        if nbbpm_model.objects.using(db_alias).filter(numero=numero).exists():
+            _vincular_existente(db_alias, nbbpm_model, baixa, numero)
             continue
+        _criar_nbbpm_preservando_numero(db_alias, baixa, numero, nbbpm_model, usuario_model)
 
-        num_proc = (getattr(baixa, "numero_processo_baixa", "") or "").strip()
-        if not num_proc:
-            num_proc = f"BAIXA-{baixa.pk}"
 
-        data_aut = None
-        if getattr(baixa, "data_aprovacao", None):
-            try:
-                data_aut = baixa.data_aprovacao.date() if hasattr(baixa.data_aprovacao, "date") else baixa.data_aprovacao
-            except Exception:
-                data_aut = None
-        if not data_aut:
-            data_aut = getattr(baixa, "data_baixa", None)
-        if not data_aut:
-            from django.utils import timezone
-            data_aut = timezone.now().date()
-
-        responsavel = "SISTEMA"
-        criado_por_id = None
-        try:
-            if getattr(baixa, "aprovado_por_id", None):
-                try:
-                    u = Usuario.objects.using(db_alias).get(pk=baixa.aprovado_por_id)
-                    responsavel = getattr(u, "username", None) or responsavel
-                    criado_por_id = u.pk
-                except Usuario.DoesNotExist:
-                    pass
-            if not criado_por_id and getattr(baixa, "criado_por_id", None):
-                try:
-                    u2 = Usuario.objects.using(db_alias).get(pk=baixa.criado_por_id)
-                    if responsavel == "SISTEMA":
-                        responsavel = getattr(u2, "username", None) or responsavel
-                    criado_por_id = u2.pk
-                except Usuario.DoesNotExist:
-                    pass
-        except Exception:
-            pass
-
-        if not criado_por_id:
-            try:
-                first_user = Usuario.objects.using(db_alias).first()
-                if first_user:
-                    criado_por_id = first_user.pk
-                    if responsavel == "SISTEMA":
-                        responsavel = getattr(first_user, "username", "SISTEMA")
-                else:
-                    continue
-            except Exception:
-                continue
-
-        try:
-            nbbpm = NBBPM.objects.using(db_alias).create(
-                numero=numero,
-                numero_processo_baixa=num_proc,
-                data_autorizacao=data_aut,
-                responsavel=responsavel[:255],
-                numero_processo_destinacao_final="",
-                criado_por_id=criado_por_id,
-            )
-            nbbpm.baixas.add(baixa)
-        except Exception:
-            continue
-
+def _vincular_existente(db_alias, nbbpm_model, baixa, numero):
     try:
-        baixas_sem_numero = Baixa.objects.using(db_alias).filter(
-            status="aceita"
-        ).filter(
-            Q(numero_nbbpm__isnull=True) | Q(numero_nbbpm__exact="")
-        )
-        for baixa in baixas_sem_numero.iterator():
-            if NBBPM.objects.using(db_alias).filter(baixas__in=[baixa]).exists():
-                continue
-            # prefixo fixo 001, sequencial global por ano
-            prefixo = PREFIXO_FIXO
-            data_aut = None
-            if getattr(baixa, "data_aprovacao", None):
-                try:
-                    data_aut = baixa.data_aprovacao.date() if hasattr(baixa.data_aprovacao, "date") else baixa.data_aprovacao
-                except Exception:
-                    data_aut = None
-            if not data_aut:
-                data_aut = getattr(baixa, "data_baixa", None)
-            if not data_aut:
-                from django.utils import timezone
-                data_aut = timezone.now().date()
-            ano = data_aut.year if hasattr(data_aut, "year") else 2026
-
-            from django.db.models import IntegerField, Max, Value
-            from django.db.models.functions import Cast, Replace, Substr
-            # considera tanto "." quanto "/" antes do ano para compatibilidade
-            qs_nbbpm = NBBPM.objects.using(db_alias).filter(numero__startswith=f"{prefixo}.").filter(Q(numero__endswith=f".{ano}") | Q(numero__endswith=f"/{ano}")).exclude(numero__exact="")
-            try:
-                seq_raw = Substr("numero", 5, 7)
-                seq_digits = Replace(seq_raw, Value("."), Value(""))
-                seq_digits = Replace(seq_digits, Value("/"), Value(""))
-                max_nbbpm = qs_nbbpm.annotate(seq_int=Cast(seq_digits, IntegerField())).aggregate(m=Max("seq_int"))["m"] or 0
-            except Exception:
-                max_nbbpm = 0
-            qs_baixa = Baixa.objects.using(db_alias).filter(
-                numero_nbbpm__startswith=f"{prefixo}.",
-                numero_nbbpm__isnull=False,
-            ).exclude(numero_nbbpm__exact="").filter(Q(numero_nbbpm__endswith=f".{ano}") | Q(numero_nbbpm__endswith=f"/{ano}"))
-            try:
-                seq_raw2 = Substr("numero_nbbpm", 5, 7)
-                seq_digits2 = Replace(seq_raw2, Value("."), Value(""))
-                seq_digits2 = Replace(seq_digits2, Value("/"), Value(""))
-                max_baixa = qs_baixa.annotate(seq_int=Cast(seq_digits2, IntegerField())).aggregate(m=Max("seq_int"))["m"] or 0
-            except Exception:
-                max_baixa = 0
-            proximo = max(max_nbbpm, max_baixa) + 1
-            numero_novo = f"{prefixo}.{proximo:07d}/{ano}"
-
-            if NBBPM.objects.using(db_alias).filter(numero=numero_novo).exists():
-                proximo += 1
-                numero_novo = f"{prefixo}.{proximo:07d}/{ano}"
-                if NBBPM.objects.using(db_alias).filter(numero=numero_novo).exists():
-                    continue
-
-            num_proc = (getattr(baixa, "numero_processo_baixa", "") or "").strip() or f"BAIXA-{baixa.pk}"
-            responsavel = "SISTEMA"
-            criado_por_id = getattr(baixa, "aprovado_por_id", None) or getattr(baixa, "criado_por_id", None)
-            if not criado_por_id:
-                try:
-                    fu = Usuario.objects.using(db_alias).first()
-                    if fu:
-                        criado_por_id = fu.pk
-                        responsavel = getattr(fu, "username", "SISTEMA")
-                except Exception:
-                    continue
-            else:
-                try:
-                    u = Usuario.objects.using(db_alias).get(pk=criado_por_id)
-                    responsavel = getattr(u, "username", "SISTEMA")
-                except Exception:
-                    pass
-
-            try:
-                nbbpm2 = NBBPM.objects.using(db_alias).create(
-                    numero=numero_novo,
-                    numero_processo_baixa=num_proc,
-                    data_autorizacao=data_aut,
-                    responsavel=responsavel[:255],
-                    numero_processo_destinacao_final="",
-                    criado_por_id=criado_por_id,
-                )
-                nbbpm2.baixas.add(baixa)
-                try:
-                    Baixa.objects.using(db_alias).filter(pk=baixa.pk).update(numero_nbbpm=numero_novo)
-                except Exception:
-                    pass
-            except Exception:
-                continue
+        existente = nbbpm_model.objects.using(db_alias).filter(numero=numero).first()
+        if existente and not existente.baixas.filter(pk=baixa.pk).exists():
+            existente.baixas.add(baixa)
     except Exception:
         pass
 
 
+def _criar_nbbpm_preservando_numero(db_alias, baixa, numero, nbbpm_model, usuario_model):
+    num_proc = (getattr(baixa, "numero_processo_baixa", "") or "").strip() or f"BAIXA-{baixa.pk}"
+    data_aut = _resolver_data_autorizacao(baixa)
+    responsavel, criado_por_id = _resolver_responsavel_com_numero(baixa, usuario_model, db_alias)
+    if not criado_por_id:
+        return
+    try:
+        nbbpm = nbbpm_model.objects.using(db_alias).create(
+            numero=numero,
+            numero_processo_baixa=num_proc,
+            data_autorizacao=data_aut,
+            responsavel=responsavel[:255],
+            numero_processo_destinacao_final="",
+            criado_por_id=criado_por_id,
+        )
+        nbbpm.baixas.add(baixa)
+    except Exception:
+        pass
+
+
+def _migrar_baixas_sem_numero(db_alias, baixa_model, nbbpm_model, usuario_model):
+    try:
+        baixas_sem_numero = baixa_model.objects.using(db_alias).filter(status="aceita").filter(
+            Q(numero_nbbpm__isnull=True) | Q(numero_nbbpm__exact="")
+        )
+        for baixa in baixas_sem_numero.iterator():
+            if nbbpm_model.objects.using(db_alias).filter(baixas__in=[baixa]).exists():
+                continue
+            _criar_nbbpm_com_sequencial(db_alias, baixa, nbbpm_model, baixa_model, usuario_model)
+    except Exception:
+        pass
+
+
+def _criar_nbbpm_com_sequencial(db_alias, baixa, nbbpm_model, baixa_model, usuario_model):
+    data_aut = _resolver_data_autorizacao(baixa)
+    ano = data_aut.year if hasattr(data_aut, "year") else 2026
+    proximo = _obter_proximo_sequencial(db_alias, nbbpm_model, baixa_model, ano)
+    numero_novo = f"{PREFIXO_FIXO}.{proximo:07d}/{ano}"
+    if nbbpm_model.objects.using(db_alias).filter(numero=numero_novo).exists():
+        proximo += 1
+        numero_novo = f"{PREFIXO_FIXO}.{proximo:07d}/{ano}"
+        if nbbpm_model.objects.using(db_alias).filter(numero=numero_novo).exists():
+            return
+    num_proc = (getattr(baixa, "numero_processo_baixa", "") or "").strip() or f"BAIXA-{baixa.pk}"
+    responsavel, criado_por_id = _resolver_criador_sem_numero(baixa, usuario_model, db_alias)
+    if not criado_por_id:
+        return
+    try:
+        nbbpm2 = nbbpm_model.objects.using(db_alias).create(
+            numero=numero_novo,
+            numero_processo_baixa=num_proc,
+            data_autorizacao=data_aut,
+            responsavel=responsavel[:255],
+            numero_processo_destinacao_final="",
+            criado_por_id=criado_por_id,
+        )
+        nbbpm2.baixas.add(baixa)
+        try:
+            baixa_model.objects.using(db_alias).filter(pk=baixa.pk).update(numero_nbbpm=numero_novo)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def migrar_baixa_para_nbbpm(apps, schema_editor):
+    baixa_model = apps.get_model("bem_patrimonial", "BaixaFisicaBemPatrimonial")
+    nbbpm_model = apps.get_model("bem_patrimonial", "NBBPM")
+    usuario_model = apps.get_model("usuario", "Usuario")
+    db_alias = schema_editor.connection.alias
+    _migrar_baixas_com_numero(db_alias, baixa_model, nbbpm_model, usuario_model)
+    _migrar_baixas_sem_numero(db_alias, baixa_model, nbbpm_model, usuario_model)
+
+
 def reverse_migracao(apps, schema_editor):
+    # Reversão intencionalmente vazia: dados criados (NBBPMs) não são removidos
+    # automaticamente para evitar perda de dados históricos. Remoção manual se necessário.
     pass
 
 

@@ -36,10 +36,12 @@ class BemPatrimonialConfig(AppConfig):
                     ordering = None
                 if ordering:
                     order_map = {name.lower(): idx for idx, name in enumerate(ordering)}
-                    def sort_key(m):
+
+                    def sort_key(m, order_map=order_map):
                         key = m["object_name"].lower()
                         idx = order_map.get(key, 999)
                         return (idx, m["name"].lower())
+
                     app["models"].sort(key=sort_key)
                 else:
                     app["models"].sort(key=lambda x: x["name"])

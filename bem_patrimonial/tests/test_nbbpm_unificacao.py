@@ -25,7 +25,7 @@ from rest_framework import status
 
 from dados_comuns.tests.factories import criar_ua
 from dados_comuns.models import UnidadeOrcamentaria as UO_Model
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
@@ -118,8 +118,8 @@ class TestExtrairCodigoUa(TestCase):
 class TestGeracaoPorUOAnoContinuidade(TestCase):
     def setUp(self):
         self.uo = criar_uo(codigo="01.16.10", nome="UO SME", sigla="SME")
-        self.ua1 = criar_ua(uo=self.uo, codigo="01.16.10.100", sigla="UA100", nome="UA 100")
-        self.ua2 = criar_ua(uo=self.uo, codigo="01.16.10.200", sigla="UA200", nome="UA 200")
+        self.ua1 = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 10, 100), sigla="UA100", nome="UA 100")
+        self.ua2 = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 10, 200), sigla="UA200", nome="UA 200")
         self.gestor = criar_usuario("gestor_cont", self.uo, self.ua1, grupos=[GRUPO_GESTOR_PATRIMONIO])
         self.bem = criar_bem(self.ua1, self.gestor)
 

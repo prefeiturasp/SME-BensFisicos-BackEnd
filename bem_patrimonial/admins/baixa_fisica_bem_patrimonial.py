@@ -81,48 +81,58 @@ class BaixaFisicaBensItemInlineForm(forms.ModelForm):
         bem = self.cleaned_data.get("bem")
         if not bem:
             return bem
-        from bem_patrimonial.models import BaixaFisicaBensItem as ItemModel
-        from bem_patrimonial import constants as bem_constants
+        self._validar_status_bem(bem)
+        self._validar_ua_bem(bem)
+        return bem
 
-        # Status bloqueados — igual API _STATUS_BEM_INVALIDOS_PARA_BAIXA
+    def _validar_status_bem(self, bem):
+        from bem_patrimonial import constants as bem_constants
+        from bem_patrimonial.models import BaixaFisicaBensItem as ItemModel
+
         bloqueados = {
             bem_constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
             bem_constants.BLOQUEADO,
             bem_constants.BAIXA_FISICA,
             bem_constants.TRANSFERIDO,
         }
-        if bem.status in bloqueados:
-            baixa_atual = getattr(self.instance, "baixa_id", None) or getattr(getattr(self, "_baixa_fk", None), "pk", None)
-            try:
-                parent_baixa = getattr(self, "parent_baixa", None)
-                if parent_baixa:
-                    baixa_atual = parent_baixa.pk
-            except Exception:
-                pass
-            if bem.status == bem_constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                existe_outra = ItemModel.objects.filter(
-                    bem=bem,
-                    baixa__status__in=[
-                        bem_constants.AGUARDANDO_ENVIO,
-                        bem_constants.SOLICITADA,
-                        bem_constants.ACEITA,
-                    ],
-                ).exclude(baixa_id=baixa_atual).exists()
-                if existe_outra:
-                    raise ValidationError(
-                        f"Bem {bem.numero_patrimonial or bem.nome} já está em outra Baixa Física pendente/aprovada."
-                    )
-            else:
-                raise ValidationError(
-                    f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
-                )
+        if bem.status not in bloqueados:
+            return
+        if bem.status != bem_constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+            raise ValidationError(
+                f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
+            )
+        baixa_atual = self._obter_baixa_atual_id()
+        existe_outra = ItemModel.objects.filter(
+            bem=bem,
+            baixa__status__in=[
+                bem_constants.AGUARDANDO_ENVIO,
+                bem_constants.SOLICITADA,
+                bem_constants.ACEITA,
+            ],
+        ).exclude(baixa_id=baixa_atual).exists()
+        if existe_outra:
+            raise ValidationError(
+                f"Bem {bem.numero_patrimonial or bem.nome} já está em outra Baixa Física pendente/aprovada."
+            )
+
+    def _obter_baixa_atual_id(self):
+        baixa_atual = getattr(self.instance, "baixa_id", None) or getattr(getattr(self, "_baixa_fk", None), "pk", None)
+        try:
+            parent_baixa = getattr(self, "parent_baixa", None)
+            if parent_baixa:
+                baixa_atual = parent_baixa.pk
+        except Exception:
+            pass
+        return baixa_atual
+
+    def _validar_ua_bem(self, bem):
         baixa = getattr(self.instance, "baixa", None)
-        if baixa and getattr(baixa, "unidade_administrativa_origem_id", None):
-            if bem.unidade_administrativa_id != baixa.unidade_administrativa_origem_id:
-                raise ValidationError(
-                    f"Bem {bem.numero_patrimonial} não pertence à UA da Baixa ({baixa.unidade_administrativa_origem})."
-                )
-        return bem
+        if not baixa or not getattr(baixa, "unidade_administrativa_origem_id", None):
+            return
+        if bem.unidade_administrativa_id != baixa.unidade_administrativa_origem_id:
+            raise ValidationError(
+                f"Bem {bem.numero_patrimonial} não pertence à UA da Baixa ({baixa.unidade_administrativa_origem})."
+            )
 
 
 class BaixaFisicaBensItemInlineFormSet(BaseInlineFormSet):
@@ -521,65 +531,72 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         Igual API: PATCH /baixa-fisica/{id}/ só permite `itens`.
         """
         super().save_related(request, form, formsets, change)
-
         baixa = form.instance
-
         if baixa.status != constants.AGUARDANDO_ENVIO:
             return
-
         for formset in formsets:
-
             if getattr(formset, "model", None) is not BaixaFisicaBensItem:
                 continue
+            self._reverter_bens_removidos(formset)
+            self._ativar_bens_novos(formset)
+            self._atualizar_bens_trocados(formset, baixa)
 
-            for item in formset.deleted_objects:
-                bem = item.bem
-                if bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                    bem.status = constants.APROVADO
-                    bem.save(update_fields=["status"])
+    def _reverter_bens_removidos(self, formset):
+        for item in formset.deleted_objects:
+            bem = item.bem
+            if bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+                bem.status = constants.APROVADO
+                bem.save(update_fields=["status"])
 
-            for item in getattr(formset, "new_objects", []):
-                bem = item.bem
-                if bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                    bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
-                    bem.save(update_fields=["status"])
+    def _ativar_bens_novos(self, formset):
+        for item in getattr(formset, "new_objects", []):
+            bem = item.bem
+            if bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+                bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+                bem.save(update_fields=["status"])
 
-            # Alteração de bem em linha existente (troca de patrimônio)
-            for form in getattr(formset, "forms", []):
-                if form in getattr(formset, "deleted_forms", []):
-                    continue
-                if "bem" not in getattr(form, "changed_data", []):
-                    continue
-                # Restaura bem antigo
-                old_bem_id = (form.initial or {}).get("bem")
-                if old_bem_id:
-                    try:
-                        from bem_patrimonial.models import BemPatrimonial
+    def _atualizar_bens_trocados(self, formset, baixa):
+        for form in getattr(formset, "forms", []):
+            if form in getattr(formset, "deleted_forms", []):
+                continue
+            if "bem" not in getattr(form, "changed_data", []):
+                continue
+            self._restaurar_bem_antigo(form, baixa)
+            self._garantir_bem_novo_em_aguardando(form)
 
-                        old_bem = BemPatrimonial.objects.get(pk=old_bem_id)
-                        if old_bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                            # Só restaura se não estiver em outra baixa pendente/aprovada
-                            ainda_vinculado = BaixaFisicaBensItem.objects.filter(
-                                bem=old_bem,
-                                baixa__status__in=[
-                                    constants.AGUARDANDO_ENVIO,
-                                    constants.SOLICITADA,
-                                    constants.ACEITA,
-                                ],
-                            ).exclude(baixa=baixa).exists()
-                            if not ainda_vinculado:
-                                old_bem.status = constants.APROVADO
-                                old_bem.save(update_fields=["status"])
-                    except Exception:
-                        pass
-                # Garante novo bem em aguardando aprovação
-                try:
-                    new_bem = form.cleaned_data.get("bem")
-                    if new_bem and new_bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                        new_bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
-                        new_bem.save(update_fields=["status"])
-                except Exception:
-                    pass
+    def _restaurar_bem_antigo(self, form, baixa):
+        old_bem_id = (form.initial or {}).get("bem")
+        if not old_bem_id:
+            return
+        try:
+            from bem_patrimonial.models import BemPatrimonial
+
+            old_bem = BemPatrimonial.objects.get(pk=old_bem_id)
+            if old_bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+                return
+            ainda_vinculado = BaixaFisicaBensItem.objects.filter(
+                bem=old_bem,
+                baixa__status__in=[
+                    constants.AGUARDANDO_ENVIO,
+                    constants.SOLICITADA,
+                    constants.ACEITA,
+                ],
+            ).exclude(baixa=baixa).exists()
+            if ainda_vinculado:
+                return
+            old_bem.status = constants.APROVADO
+            old_bem.save(update_fields=["status"])
+        except Exception:
+            pass
+
+    def _garantir_bem_novo_em_aguardando(self, form):
+        try:
+            new_bem = form.cleaned_data.get("bem")
+            if new_bem and new_bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+                new_bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+                new_bem.save(update_fields=["status"])
+        except Exception:
+            pass
 
     def has_view_permission(self, request, obj=None):
         user = request.user
@@ -844,29 +861,42 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
     acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"
 
     def acao_solicitar_correcao(self, request, queryset):
+        if not self._pode_solicitar_correcao(request, queryset):
+            return
+        solicitadas = self._obter_solicitadas_para_correcao(request, queryset)
+        if solicitadas is None:
+            return
+        if not self._validar_escopo_correcao(request, solicitadas):
+            return
+        if request.POST.get("apply_correcao"):
+            return self._handle_correcao_post(request, solicitadas)
+        form = SolicitarCorrecaoAdminForm()
+        return self._render_correcao(request, solicitadas, form)
+
+    def _pode_solicitar_correcao(self, request, queryset):
         user = request.user
         is_gestor = bool(user.is_gestor_patrimonio or user.is_superuser)
-        # Operador criador pode devolver sua própria baixa (além do gestor)
-        if not is_gestor:
-            nao_criadas = [b for b in queryset if b.criado_por_id != user.pk]
-            if nao_criadas:
-                self.message_user(request, "Apenas Gestor de Patrimônio ou o solicitante da baixa pode solicitar correção.", level=messages.ERROR)
-                return
+        if is_gestor:
+            return True
+        nao_criadas = [b for b in queryset if b.criado_por_id != user.pk]
+        if nao_criadas:
+            self.message_user(request, "Apenas Gestor de Patrimônio ou o solicitante da baixa pode solicitar correção.", level=messages.ERROR)
+            return False
+        return True
 
+    def _obter_solicitadas_para_correcao(self, request, queryset):
         solicitadas = queryset.filter(status=constants.SOLICITADA)
         nao_solicitadas = queryset.exclude(status=constants.SOLICITADA)
         if nao_solicitadas.exists():
             lista = ", ".join(f"#{b.pk} ({b.get_status_display()})" for b in nao_solicitadas[:10])
-            self.message_user(
-                request,
-                f"Solicitar correção só é permitido para Baixas com status 'Solicitada'. Não elegíveis: {lista}",
-                level=messages.ERROR,
-            )
-            return
+            self.message_user(request, f"Solicitar correção só é permitido para Baixas com status 'Solicitada'. Não elegíveis: {lista}", level=messages.ERROR)
+            return None
         if not solicitadas.exists():
             self.message_user(request, "Nenhuma Baixa selecionada com status 'Solicitada'.", level=messages.WARNING)
-            return
+            return None
+        return solicitadas
 
+    def _validar_escopo_correcao(self, request, solicitadas):
         escopo_ids = set(
             filtrar_queryset_por_escopo(
                 usuario=request.user,
@@ -877,50 +907,56 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         fora_escopo = [b for b in solicitadas if b.id not in escopo_ids]
         if fora_escopo:
             self.message_user(request, "Uma ou mais Baixas selecionadas não pertencem ao seu escopo.", level=messages.ERROR)
-            return
+            return False
+        return True
 
-        if request.POST.get("apply_correcao"):
-            form = SolicitarCorrecaoAdminForm(request.POST)
-            if form.is_valid():
-                motivo = form.cleaned_data["motivo"]
-                from bem_patrimonial.emails import envia_email_baixa_fisica_correcao_solicitada
+    def _handle_correcao_post(self, request, solicitadas):
+        form = SolicitarCorrecaoAdminForm(request.POST)
+        if not form.is_valid():
+            return self._render_correcao(request, solicitadas, form)
+        motivo = form.cleaned_data["motivo"]
+        count = self._executar_correcao(request, solicitadas, motivo)
+        self.message_user(request, f"{count} Baixa(s) retornada(s) para 'Em elaboração' para correção. Os bens permanecem em 'Aguardando aprovação' para reedição.", level=messages.SUCCESS)
+        return HttpResponseRedirect(request.get_full_path())
 
-                count = 0
-                for baixa in solicitadas:
-                    baixa.status = constants.AGUARDANDO_ENVIO
-                    baixa.save(update_fields=["status"])
-                    self.log_change(request, baixa, f"Correção solicitada: {motivo}")
-                    try:
-                        # Historico
-                        from dados_comuns.models import HistoricoGeral
-                        from django.contrib.contenttypes.models import ContentType
+    def _executar_correcao(self, request, solicitadas, motivo):
+        count = 0
+        for baixa in solicitadas:
+            baixa.status = constants.AGUARDANDO_ENVIO
+            baixa.save(update_fields=["status"])
+            self.log_change(request, baixa, f"Correção solicitada: {motivo}")
+            self._registrar_historico_correcao(request, baixa, motivo)
+            self._enviar_email_correcao(baixa, request.user)
+            count += 1
+        return count
 
-                        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
-                        HistoricoGeral.objects.create(
-                            content_type=ct,
-                            object_id=str(baixa.pk),
-                            campo="status",
-                            valor_antigo="Solicitada",
-                            valor_novo="Em elaboração",
-                            alterado_por=request.user,
-                            justificativa=f"Correção solicitada. Orientações: {motivo}",
-                        )
-                    except Exception:
-                        pass
-                    try:
-                        envia_email_baixa_fisica_correcao_solicitada(baixa, request.user)
-                    except Exception:
-                        pass
-                    count += 1
-                self.message_user(
-                    request,
-                    f"{count} Baixa(s) retornada(s) para 'Em elaboração' para correção. Os bens permanecem em 'Aguardando aprovação' para reedição.",
-                    level=messages.SUCCESS,
-                )
-                return HttpResponseRedirect(request.get_full_path())
-        else:
-            form = SolicitarCorrecaoAdminForm()
+    def _registrar_historico_correcao(self, request, baixa, motivo):
+        try:
+            from dados_comuns.models import HistoricoGeral
+            from django.contrib.contenttypes.models import ContentType
 
+            ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+            HistoricoGeral.objects.create(
+                content_type=ct,
+                object_id=str(baixa.pk),
+                campo="status",
+                valor_antigo="Solicitada",
+                valor_novo="Em elaboração",
+                alterado_por=request.user,
+                justificativa=f"Correção solicitada. Orientações: {motivo}",
+            )
+        except Exception:
+            pass
+
+    def _enviar_email_correcao(self, baixa, user):
+        try:
+            from bem_patrimonial.emails import envia_email_baixa_fisica_correcao_solicitada
+
+            envia_email_baixa_fisica_correcao_solicitada(baixa, user)
+        except Exception:
+            pass
+
+    def _render_correcao(self, request, solicitadas, form):
         context = dict(
             self.admin_site.each_context(request),
             title="Solicitar correção da Baixa",
@@ -935,44 +971,56 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
     acao_solicitar_correcao.short_description = "Solicitar correção (voltar para Em elaboração)"
 
     def gerar_nbbpm_action(self, request, queryset):
-        if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
-            self.message_user(request, "Apenas Gestor de Patrimônio pode gerar NBBPM.", level=messages.ERROR)
+        if not self._validar_perm_gerar_nbbpm(request):
             return
-
-        if not queryset.exists():
-            self.message_user(request, "Selecione ao menos uma Baixa Física.", level=messages.WARNING)
+        if not self._validar_queryset_nao_vazio(request, queryset):
             return
+        if not self._validar_baixas_aprovadas(request, queryset):
+            return
+        if not self._validar_baixas_sem_nbbpm(request, queryset):
+            return
+        if not self._validar_uo_unica(request, queryset):
+            return
+        if not self._validar_escopo_gerar(request, queryset):
+            return
+        return self._handle_gerar_nbbpm_form(request, queryset)
 
+    def _validar_perm_gerar_nbbpm(self, request):
+        if request.user.is_gestor_patrimonio or request.user.is_superuser:
+            return True
+        self.message_user(request, "Apenas Gestor de Patrimônio pode gerar NBBPM.", level=messages.ERROR)
+        return False
+
+    def _validar_queryset_nao_vazio(self, request, queryset):
+        if queryset.exists():
+            return True
+        self.message_user(request, "Selecione ao menos uma Baixa Física.", level=messages.WARNING)
+        return False
+
+    def _validar_baixas_aprovadas(self, request, queryset):
         nao_aprovadas = queryset.exclude(status=constants.ACEITA)
-        if nao_aprovadas.exists():
-            lista = ", ".join(f"#{b.pk} ({b.get_status_display()})" for b in nao_aprovadas[:10])
-            self.message_user(
-                request,
-                f"A NBBPM só pode ser gerada para Baixas com status Aprovado. Selecionadas não aprovadas: {lista}",
-                level=messages.ERROR,
-            )
-            return
+        if not nao_aprovadas.exists():
+            return True
+        lista = ", ".join(f"#{b.pk} ({b.get_status_display()})" for b in nao_aprovadas[:10])
+        self.message_user(request, f"A NBBPM só pode ser gerada para Baixas com status Aprovado. Selecionadas não aprovadas: {lista}", level=messages.ERROR)
+        return False
 
+    def _validar_baixas_sem_nbbpm(self, request, queryset):
         ja_com_nbbpm = [b for b in queryset.select_related("unidade_administrativa_origem") if b.nbbpms_lote.exists() or (b.numero_nbbpm or "").strip()]
-        if ja_com_nbbpm:
-            lista = ", ".join(str(b.pk) for b in ja_com_nbbpm[:10])
-            self.message_user(
-                request,
-                f"As Baixas {lista} já possuem NBBPM e não podem ser reutilizadas.",
-                level=messages.ERROR,
-            )
-            return
+        if not ja_com_nbbpm:
+            return True
+        lista = ", ".join(str(b.pk) for b in ja_com_nbbpm[:10])
+        self.message_user(request, f"As Baixas {lista} já possuem NBBPM e não podem ser reutilizadas.", level=messages.ERROR)
+        return False
 
+    def _validar_uo_unica(self, request, queryset):
         uos = set(queryset.values_list("unidade_administrativa_origem__unidade_orcamentaria_id", flat=True))
-        if len(uos) > 1 or None in uos:
-            self.message_user(
-                request,
-                "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.",
-                level=messages.ERROR,
-            )
-            return
+        if len(uos) <= 1 and None not in uos:
+            return True
+        self.message_user(request, "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.", level=messages.ERROR)
+        return False
 
-        # Verifica escopo (garante que todas estão no escopo do usuário)
+    def _validar_escopo_gerar(self, request, queryset):
         from dados_comuns.escopo import filtrar_queryset_por_escopo
 
         escopo_ids = set(
@@ -983,43 +1031,48 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             ).values_list("id", flat=True)
         )
         fora_escopo = [b for b in queryset if b.id not in escopo_ids]
-        if fora_escopo:
-            self.message_user(request, "Uma ou mais Baixas selecionadas não pertencem ao seu escopo de acesso.", level=messages.ERROR)
-            return
+        if not fora_escopo:
+            return True
+        self.message_user(request, "Uma ou mais Baixas selecionadas não pertencem ao seu escopo de acesso.", level=messages.ERROR)
+        return False
 
+    def _handle_gerar_nbbpm_form(self, request, queryset):
         if request.POST.get("apply"):
-            form = NBBPMGerarAdminForm(request.POST)
-            if form.is_valid():
-                try:
-                    from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+            return self._processar_gerar_nbbpm_post(request, queryset)
+        return self._render_gerar_nbbpm(request, queryset)
 
-                    baixas = list(queryset.select_related("unidade_administrativa_origem").prefetch_related("itens__bem"))
-                    nbbpm = criar_nbbpm_com_retry(
-                        baixas=baixas,
-                        criado_por=request.user,
-                        numero_processo_baixa=form.cleaned_data["numero_processo_baixa"],
-                        data_autorizacao=form.cleaned_data["data_autorizacao"],
-                        responsavel=form.cleaned_data["responsavel"],
-                        numero_processo_destinacao_final=form.cleaned_data.get("numero_processo_destinacao_final") or "",
-                    )
-                    self.message_user(
-                        request,
-                        f"NBBPM {nbbpm.numero} gerada com sucesso com {len(baixas)} baixa(s).",
-                        level=messages.SUCCESS,
-                    )
-                    return HttpResponseRedirect(reverse("admin:bem_patrimonial_nbbpm_change", args=[nbbpm.pk]))
-                except ValidationError as e:
-                    self.message_user(request, f"Erro de validação: {e.messages[0] if hasattr(e, 'messages') else str(e)}", level=messages.ERROR)
-                except Exception as e:
-                    self.message_user(request, f"Erro ao gerar NBBPM: {e}", level=messages.ERROR)
-        else:
+    def _processar_gerar_nbbpm_post(self, request, queryset):
+        form = NBBPMGerarAdminForm(request.POST)
+        if not form.is_valid():
+            return self._render_gerar_nbbpm(request, queryset, form)
+        try:
+            from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+
+            baixas = list(queryset.select_related("unidade_administrativa_origem").prefetch_related("itens__bem"))
+            nbbpm = criar_nbbpm_com_retry(
+                baixas=baixas,
+                criado_por=request.user,
+                numero_processo_baixa=form.cleaned_data["numero_processo_baixa"],
+                data_autorizacao=form.cleaned_data["data_autorizacao"],
+                responsavel=form.cleaned_data["responsavel"],
+                numero_processo_destinacao_final=form.cleaned_data.get("numero_processo_destinacao_final") or "",
+            )
+            self.message_user(request, f"NBBPM {nbbpm.numero} gerada com sucesso com {len(baixas)} baixa(s).", level=messages.SUCCESS)
+            return HttpResponseRedirect(reverse("admin:bem_patrimonial_nbbpm_change", args=[nbbpm.pk]))
+        except ValidationError as exc:
+            self.message_user(request, f"Erro de validação: {exc.messages[0] if hasattr(exc, 'messages') else str(exc)}", level=messages.ERROR)
+        except Exception as exc2:
+            self.message_user(request, f"Erro ao gerar NBBPM: {exc2}", level=messages.ERROR)
+        return self._render_gerar_nbbpm(request, queryset, form)
+
+    def _render_gerar_nbbpm(self, request, queryset, form=None):
+        if form is None:
             initial = {
                 "data_autorizacao": timezone.localdate(),
                 "responsavel": getattr(request.user, "nome", None) or request.user.username,
                 "numero_processo_baixa": (queryset.first().numero_processo_baixa or "") if queryset.count() == 1 else "",
             }
             form = NBBPMGerarAdminForm(initial=initial)
-
         context = dict(
             self.admin_site.each_context(request),
             title="Gerar NBBPM consolidada",

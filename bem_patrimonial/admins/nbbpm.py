@@ -54,7 +54,7 @@ class NBBPMAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         if obj:
-            return (
+            campos = (
                 "numero",
                 "numero_processo_baixa",
                 "data_autorizacao",
@@ -66,16 +66,20 @@ class NBBPMAdmin(admin.ModelAdmin):
                 "baixas_detail",
                 "bens_detail",
             )
-        return ("numero", "data_criacao")
+        else:
+            campos = ("numero", "data_criacao")
+        return campos
 
     def get_fieldsets(self, request, obj=None):
         if obj:
-            return (
+            fieldsets = (
                 ("Dados da NBBPM", {"fields": ("numero", "numero_processo_baixa", "data_autorizacao", "responsavel", "numero_processo_destinacao_final", "unidade_orcamentaria_display", "criado_por", "data_criacao")}),
                 ("Baixas vinculadas", {"fields": ("baixas_detail",)}),
                 ("Bens vinculados", {"fields": ("bens_detail",)}),
             )
-        return ((None, {"fields": ("numero", "data_criacao")}),)
+        else:
+            fieldsets = ((None, {"fields": ("numero", "data_criacao")}),)
+        return fieldsets
 
     def total_baixas(self, obj):
         return obj.baixas.count()
