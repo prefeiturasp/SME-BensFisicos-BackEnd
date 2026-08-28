@@ -168,75 +168,6 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
     autocomplete_fields = ("bem",)
     formset = BaixaFisicaBensItemInlineFormSet
 
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-
-        class ScopedForm(form):
-            def __init__(self_inner, *a, **kw):
-                super().__init__(*a, **kw)
-
-                if "unidade_administrativa_origem" in self_inner.fields:
-                    fld = self_inner.fields["unidade_administrativa_origem"]
-
-                    base_qs = UnidadeAdministrativa.objects.filter(
-                        status=UnidadeAdministrativa.ATIVA
-                    )
-
-                    fld.queryset = filtrar_ua_origem_por_escopo(request.user, base_qs)
-
-                    ua_user = getattr(request.user, "unidade_administrativa", None)
-                    if (
-                        ua_user
-                        and ua_user.is_ativa
-                        and not usuario_e_super_admin(request.user)
-                    ):
-                        fld.initial = ua_user.pk
-                        fld.disabled = True
-
-            def clean(self_inner):
-                cleaned = super().clean()
-                ua_origem = cleaned.get("unidade_administrativa_origem")
-
-                ua_user = getattr(request.user, "unidade_administrativa", None)
-                if (
-                    ua_user
-                    and ua_user.is_ativa
-                    and not usuario_e_super_admin(request.user)
-                ):
-                    cleaned["unidade_administrativa_origem"] = ua_user
-                    ua_origem = ua_user
-
-                if not ua_origem:
-                    raise ValidationError(
-                        {
-                            "unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."
-                        }
-                    )
-
-                if ua_origem.status != UnidadeAdministrativa.ATIVA:
-                    raise ValidationError(
-                        {
-                            "unidade_administrativa_origem": "A unidade de origem está inativa."
-                        }
-                    )
-
-                allowed = filtrar_ua_origem_por_escopo(
-                    request.user,
-                    UnidadeAdministrativa.objects.filter(
-                        status=UnidadeAdministrativa.ATIVA
-                    ),
-                )
-                if not allowed.filter(pk=ua_origem.pk).exists():
-                    raise ValidationError(
-                        {
-                            "unidade_administrativa_origem": "Você não tem permissão para usar esta Unidade Administrativa como origem."  # noqa: E501
-                        }
-                    )
-
-                return cleaned
-
-        return ScopedForm
-
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
 
@@ -1085,6 +1016,12 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/gerar_nbbpm.html", context)
 
     gerar_nbbpm_action.short_description = "Gerar NBBPM para Baixas aprovadas selecionadas"
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "unidade_administrativa_origem":
+            qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+            kwargs["queryset"] = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == "data_baixa":

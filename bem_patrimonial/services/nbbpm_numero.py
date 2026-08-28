@@ -86,41 +86,24 @@ def _gerar_numero_formatado(ano: int) -> str:
     return numero
 
 
-def gerar_numero_nbbpm_unificado(nbbpm, max_tentativas: int = 3):
+def gerar_numero_nbbpm_unificado(nbbpm, max_tentativas: int = 3):  # noqa: ARG001 - max_tentativas mantido por compatibilidade
     """Gera número NBBPM 001.YYYYYYY/ZZZZ com prefixo fixo 001 e sequencial global por ano."""
     from bem_patrimonial.models import NBBPM
 
     if not isinstance(nbbpm, NBBPM):
         raise ValidationError("Objeto inválido para geração de NBBPM.")
     ano = _extrair_ano_nbbpm(nbbpm) or timezone.localdate().year
-    return _tentar_gerar_numero(ano, max_tentativas)
+    return _gerar_numero_formatado(ano)
 
 
-def _tentar_gerar_numero(ano: int, max_tentativas: int):
-    last_exc = None
-    for tentativa in range(max_tentativas):
-        try:
-            with transaction.atomic():
-                return _gerar_numero_formatado(ano)
-        except IntegrityError as exc:
-            last_exc = exc
-            logger.warning(
-                "Conflito UNIQUE ao gerar NBBPM %s/%s tentativa %s: %s",
-                PREFIXO_FIXO,
-                ano,
-                tentativa + 1,
-                exc,
-            )
-            if tentativa == max_tentativas - 1:
-                raise
-    if last_exc:
-        raise last_exc
-    raise ValidationError("Falha ao gerar número NBBPM após tentativas.")
+def _tentar_gerar_numero(ano: int, max_tentativas: int = 1):  # noqa: ARG001 - mantido para compatibilidade com testes
+    """Compat: apenas formata número. Retry real está em criar_nbbpm_com_retry."""
+    return _gerar_numero_formatado(ano)
 
 
-def gerar_numero_para_ano(ano: int, max_tentativas: int = 3) -> str:
+def gerar_numero_para_ano(ano: int, max_tentativas: int = 3) -> str:  # noqa: ARG001
     """Gera número diretamente a partir de ano (prefixo fixo 001)."""
-    return _tentar_gerar_numero(ano, max_tentativas)
+    return _gerar_numero_formatado(ano)
 
 
 def _validar_uo_baixas(baixas):

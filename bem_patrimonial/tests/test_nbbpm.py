@@ -1,11 +1,12 @@
 from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, RequestFactory
 from django.utils import timezone
 
 from dados_comuns.models import UnidadeAdministrativa
@@ -18,6 +19,7 @@ from bem_patrimonial.models import (
     BemPatrimonial,
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
+    NBBPM,
 )
 from bem_patrimonial.nbbpm import (
     obter_bens_baixa,
@@ -26,6 +28,7 @@ from bem_patrimonial.nbbpm import (
     gerar_pdf_nbbpm,
     http_response_nbbpm,
 )
+from bem_patrimonial.admins.nbbpm import NBBPMAdmin
 
 
 class NBBPMTestBase(TestCase):
@@ -258,3 +261,113 @@ class TestGeracaoPDFNBBPM(NBBPMTestBase):
         self.assertIn("attachment", resp["Content-Disposition"])
 
         self.assertIn(f"NBBPM_{baixa.numero_nbbpm}.pdf", resp["Content-Disposition"])
+
+
+class TestNbbpmCoberturaExtra(NBBPMTestBase):
+    def test_gerar_numero_varias_datas_e_helpers(self):
+        self.baixa = self.criar_baixa()
+        self.baixa.data_aprovacao = timezone.now()
+        self.baixa.data_baixa = timezone.localdate()
+        n1 = gerar_numero_nbbpm(self.baixa)
+        self.assertRegex(n1, r"001\.\d{7}/\d{4}")
+        self.baixa.data_aprovacao = None
+        n2 = gerar_numero_nbbpm(self.baixa)
+        self.assertRegex(n2, r"001\.\d{7}/\d{4}")
+        self.baixa.data_baixa = None
+        n3 = gerar_numero_nbbpm(self.baixa)
+        self.assertRegex(n3, r"001\.\d{7}/\d{4}")
+        with self.assertRaises(ValidationError):
+            gerar_numero_nbbpm(object())
+        # helpers diretos
+        from bem_patrimonial.nbbpm import _criar_cabecalho_e_registro_nbbpm, _criar_informacoes_gerais, _criar_tabela_bens, _criar_total_bens
+        self.assertIsNotNone(_criar_cabecalho_e_registro_nbbpm(self.baixa))
+        self.assertIsNotNone(_criar_informacoes_gerais(self.baixa))
+        self.assertIsNotNone(_criar_tabela_bens(self.baixa))
+        self.assertIsNotNone(_criar_total_bens(self.baixa))
+        # rodape sem aprovado_por
+        self.baixa.aprovado_por = None
+        self.baixa.save(update_fields=["aprovado_por"])
+        self.assertIsNotNone(_criar_rodape_nbbpm(self.baixa))
+
+
+class TestNBBPMAdminCobertura(NBBPMTestBase):
+    def setUp(self):
+        super().setUp()
+        from dados_comuns.models import UnidadeOrcamentaria
+        self.uo = self.ua_origem.unidade_orcamentaria
+        self.uo2, _ = UnidadeOrcamentaria.objects.get_or_create(codigo="200", defaults={"nome": "UO2", "sigla": "UO2"})
+        self.ua2 = criar_ua(uo=self.uo2, codigo="200", sigla="UA200", nome="UA200")
+        self.gestor2 = self.gestor
+        self.oper2 = self.operador
+        self.super2 = Usuario.objects.create_user(username="super_nbb2", email="a2@t.com", **auth_kwargs("x"), unidade_administrativa=None, unidade_orcamentaria=self.uo, is_superuser=True, is_staff=True)
+        self.admin2 = NBBPMAdmin(NBBPM, AdminSite())
+        self.factory2 = RequestFactory()
+        self.baixa2 = self.criar_baixa()
+        self.vincular_bem_na_baixa(self.baixa2, self.criar_bem())
+        self.nbbpm2 = NBBPM.objects.create(numero="001.0000001/2026", numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        self.nbbpm2.baixas.set([self.baixa2])
+
+    def test_permissoes_e_queryset(self):
+        req = self.factory2.get("/")
+        req.user = self.gestor2
+        self.assertFalse(self.admin2.has_add_permission(req))
+        self.assertFalse(self.admin2.has_change_permission(req, self.nbbpm2))
+        self.assertFalse(self.admin2.has_delete_permission(req, self.nbbpm2))
+        self.assertTrue(self.admin2.has_view_permission(req))
+        req2 = self.factory2.get("/")
+        req2.user = MagicMock(is_authenticated=False, is_gestor_patrimonio=False, is_superuser=False, is_operador_inventario=False)
+        self.assertFalse(self.admin2.has_view_permission(req2))
+        for user in [self.gestor2, self.oper2]:
+            req.user = user
+            self.assertEqual(self.admin2.get_queryset(req).count(), 1)
+        req.user = self.super2
+        self.assertGreaterEqual(self.admin2.get_queryset(req).count(), 1)
+        from unittest.mock import patch
+        with patch("bem_patrimonial.admins.nbbpm.resolver_ids_escopo", return_value=(True, False, None, None)):
+            req.user = self.super2
+            self.assertGreaterEqual(self.admin2.get_queryset(req).count(), 1)
+        with patch("bem_patrimonial.admins.nbbpm.resolver_ids_escopo", return_value=(False, False, None, None)):
+            self.assertEqual(self.admin2.get_queryset(req).count(), 0)
+
+    def test_readonly_e_displays(self):
+        req = self.factory2.get("/")
+        req.user = self.gestor2
+        self.assertIn("numero", self.admin2.get_readonly_fields(req, None))
+        self.assertIn("baixas_detail", self.admin2.get_readonly_fields(req, self.nbbpm2))
+        self.assertEqual(len(self.admin2.get_fieldsets(req, None)), 1)
+        self.assertEqual(len(self.admin2.get_fieldsets(req, self.nbbpm2)), 3)
+        self.assertEqual(self.admin2.total_baixas(self.nbbpm2), 1)
+        disp = self.admin2.unidade_orcamentaria_display(self.nbbpm2)
+        self.assertTrue("01.16" in disp or "UO" in disp)
+        self.nbbpm2.baixas.clear()
+        self.assertEqual(self.admin2.unidade_orcamentaria_display(self.nbbpm2), "-")
+        self.nbbpm2.baixas.set([self.baixa2])
+        self.assertIn("PDF", self.admin2.pdf_link_list(self.nbbpm2))
+        self.assertIn("Baixa", self.admin2.baixas_detail(self.nbbpm2))
+        empty = NBBPM.objects.create(numero="001.0000002/2026", numero_processo_baixa="P2", data_autorizacao=timezone.localdate(), responsavel="G2", criado_por=self.gestor2)
+        self.assertEqual(self.admin2.baixas_detail(empty), "-")
+        self.assertIn("TOTAL GERAL", self.admin2.bens_detail(self.nbbpm2))
+        self.assertIn("Nenhum bem", self.admin2.bens_detail(empty))
+        self.assertIsNotNone(self.admin2.get_urls())
+
+    def test_pdf_view(self):
+        req = self.factory2.get("/")
+        req.user = self.gestor2
+        from django.http import Http404
+        with self.assertRaises(Http404):
+            self.admin2.pdf_view(req, 999999)
+        req.user = MagicMock(is_authenticated=False, is_gestor_patrimonio=False, is_superuser=False, is_operador_inventario=False)
+        with self.assertRaises(Exception):
+            self.admin2.pdf_view(req, self.nbbpm2.pk)
+        req.user = self.gestor2
+        # fora escopo
+        req.user = Usuario.objects.create_user(username="fora_nbb", email="f@t.com", **auth_kwargs("x"), unidade_administrativa=self.ua2, unidade_orcamentaria=self.uo2, is_staff=True)
+        from usuario.constants import GRUPO_GESTOR_PATRIMONIO as G
+        from django.contrib.auth.models import Group
+        g, _ = Group.objects.get_or_create(name=G)
+        req.user.groups.add(g)
+        with self.assertRaises(Exception):
+            self.admin2.pdf_view(req, self.nbbpm2.pk)
+        req.user = self.gestor2
+        resp = self.admin2.pdf_view(req, self.nbbpm2.pk)
+        self.assertEqual(resp["Content-Type"], "application/pdf")

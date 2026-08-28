@@ -801,3 +801,85 @@ class TestValidacaoVinculoEReuso(TestCase):
         resp = client.post(url)
         self.assertIn(resp.status_code, [status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN])
 
+
+class TestServiceNBBPMNumeroCoberturaExtra(TestCase):
+    def setUp(self):
+        self.uo = criar_uo(codigo="01.16.10", nome="UO SME", sigla="SME")
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 10, 40), sigla="UA40", nome="UA40")
+        self.gestor = criar_usuario("gest_svc2", self.uo, self.ua, grupos=[GRUPO_GESTOR_PATRIMONIO])
+        self.baixa = criar_baixa(self.ua, self.gestor)
+        BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=criar_bem(self.ua, self.gestor))
+
+    def test_max_e_proximo(self):
+        from bem_patrimonial.services import nbbpm_numero as svc
+        self.assertEqual(svc._max_sequencial_nbbpm_por_ano(2099), 0)
+        self.assertEqual(svc._max_sequencial_baixa_legado_por_ano(2099), 0)
+        self.assertEqual(svc.obter_proximo_sequencial_por_ano(2099), 1)
+        NBBPM.objects.create(numero="001.0000005/2099", numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        self.assertEqual(svc._max_sequencial_nbbpm_por_ano(2099), 5)
+        criar_baixa(self.ua, self.gestor, numero_nbbpm="001.0000007/2099")
+        self.assertEqual(svc._max_sequencial_baixa_legado_por_ano(2099), 7)
+        self.assertEqual(svc.obter_proximo_sequencial_por_ano(2099), 8)
+
+    def test_extrair_e_retry(self):
+        from bem_patrimonial.services import nbbpm_numero as svc
+        n = NBBPM(numero="", data_autorizacao=timezone.localdate(), numero_processo_baixa="P", responsavel="G", criado_por=self.gestor)
+        self.assertIsNotNone(svc._extrair_ano_nbbpm(n))
+        self.assertEqual(svc._extrair_ano_nbbpm(MagicMock(data_autorizacao=None, data_aprovacao="2022-01-01")), 2022)
+        self.assertIsNone(svc._extrair_ano_nbbpm(MagicMock(data_autorizacao=None, data_aprovacao=None)))
+        self.assertRegex(svc._gerar_numero_formatado(2100), r"001\.\d{7}/2100")
+        with self.assertRaises(ValidationError):
+            svc.gerar_numero_nbbpm_unificado(object())
+        self.assertRegex(svc.gerar_numero_nbbpm_unificado(n), r"001\.\d{7}/\d{4}")
+        self.assertRegex(svc.gerar_numero_para_ano(2101), r"001\.\d{7}/2101")
+        from django.db import IntegrityError
+        from unittest.mock import patch
+        with patch("bem_patrimonial.services.nbbpm_numero._gerar_numero_formatado", side_effect=IntegrityError("dup")):
+            with self.assertRaises(IntegrityError):
+                svc._tentar_gerar_numero(2102, 1)
+        # criar_nbbpm_com_retry - UO diferente e sucesso
+        from dados_comuns.tests.factories import criar_ua as cu
+        from dados_comuns.models import UnidadeOrcamentaria as UO2
+        uo_tmp, _ = UO2.objects.get_or_create(codigo="555", defaults={"nome": "UO555", "sigla": "UO555"})
+        ua2 = cu(uo=uo_tmp, codigo="555", sigla="U2", nome="U2")
+        b2 = criar_baixa(ua2, self.gestor)
+        BaixaFisicaBensItem.objects.create(baixa=b2, bem=criar_bem(ua2, self.gestor, numero_patrimonial="000.000000010-0"))
+        with self.assertRaises(ValidationError):
+            svc.criar_nbbpm_com_retry(baixas=[self.baixa, b2], numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        # sucesso
+        self.baixa.nbbpms_lote.clear()
+        self.baixa.numero_nbbpm = ""
+        self.baixa.save(update_fields=["numero_nbbpm"])
+        NBBPM.objects.filter(numero="001.0000001/2026").delete()
+        n = svc.criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        self.assertTrue(n.numero.startswith("001."))
+        # validar helpers
+        ua_sem_id = MagicMock(pk=1, unidade_orcamentaria_id=None, unidade_orcamentaria=MagicMock(pk=99))
+        b_mock = MagicMock(pk=1, unidade_administrativa_origem=ua_sem_id)
+        self.assertEqual(svc._validar_uo_baixas([b_mock]), {99})
+        lb1 = MagicMock(unidade_administrativa_origem=MagicMock(unidade_orcamentaria_id=1))
+        lb2 = MagicMock(unidade_administrativa_origem=MagicMock(unidade_orcamentaria_id=2))
+        with self.assertRaises(ValidationError):
+            svc._validar_uo_locked([lb1, lb2])
+        n2 = NBBPM.objects.create(numero="001.0000009/2026", numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        svc._registrar_historico_nbbpm(n2, self.gestor, {self.uo.pk}, 2026, [self.baixa])
+
+
+class TestMigration0044CoberturaExtra(TestCase):
+    def test_helpers(self):
+        import importlib.util
+        import pathlib
+        spec = importlib.util.spec_from_file_location("migr0044", str(pathlib.Path(__file__).resolve().parent.parent / "migrations/0044_unificar_nbbpm_ua_ano.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.reverse_migracao(MagicMock(), MagicMock())
+        m = MagicMock(data_aprovacao=timezone.now(), data_baixa=timezone.localdate())
+        self.assertIsNotNone(mod._resolver_data_autorizacao(m))
+        m2 = MagicMock(data_aprovacao=None, data_baixa=timezone.localdate())
+        self.assertIsNotNone(mod._resolver_data_autorizacao(m2))
+        m3 = MagicMock(data_aprovacao=None, data_baixa=None)
+        self.assertIsNotNone(mod._resolver_data_autorizacao(m3))
+        qs = NBBPM.objects.all()
+        self.assertEqual(mod._calcular_max_sequencial(qs, "numero"), 0)
+        self.assertTrue(hasattr(mod, "PREFIXO_FIXO"))
+
