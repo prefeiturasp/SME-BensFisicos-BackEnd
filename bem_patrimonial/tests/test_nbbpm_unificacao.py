@@ -1,10 +1,10 @@
 """
 Testes de cobertura da refatoração NBBPM unificada.
 Valida:
-- geração por UA/ano com continuidade (prefixo UA = último grupo)
-- unicidade, formato XXX.YYYYYYY.ZZZZ e prefixo UA
+- geração por ano com continuidade (prefixo fixo 001, sequencial global por ano)
+- unicidade, formato 001.YYYYYYY/ZZZZ e prefixo fixo
 - concorrência primeira NBBPM do ano e reuso mesma baixa
-- validações de vínculo, permissão gestor/superuser, visibilidade superuser
+- validações de vínculo por UO, permissão gestor/superuser, visibilidade superuser
 - data migration idempotente e tratamento ACEITA sem número via admin
 - PDF layout lote e export Excel buscando nova tabela
 """
@@ -128,9 +128,9 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         return baixa
 
     def test_continuidade_nao_reseta_para_0000001_quando_historico_grande(self):
-        # Legado da mesma UA (100) com sequencial grande
+        # Legado com prefixo fixo 001 e sequencial grande
         ano = 2026
-        legado_num = f"100.{1234:07d}.{ano}"
+        legado_num = f"001.{1234:07d}/{ano}"
         self._criar_baixa_aceita_com_legado(legado_num, self.ua1, ano=ano)
         baixa2 = criar_baixa(self.ua1, self.gestor, status=constants.ACEITA)
         BaixaFisicaBensItem.objects.create(baixa=baixa2, bem=self.bem)
@@ -143,20 +143,20 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         )
         nbbpm.baixas.set([baixa2])
         numero_gerado = gerar_numero_nbbpm_unificado(nbbpm)
-        self.assertEqual(numero_gerado, f"100.{1235:07d}.{ano}")
+        self.assertEqual(numero_gerado, f"001.{1235:07d}/{ano}")
 
     def test_sequencial_por_uo_isolado_entre_uos(self):
-        # UA 100 com histórico 0000005, UA 200 deve começar em 0000001 (isolado por UA)
+        # Sequencial global por ano com prefixo fixo 001 (não isolado por UA/UO)
         uo_b = criar_uo(codigo="200", nome="UO B", sigla="UOB")
         ua_b = criar_ua(uo=uo_b, codigo="200", sigla="UAB", nome="UA B")
         gestor_b = criar_usuario("gestor_b", uo_b, ua_b, grupos=[GRUPO_GESTOR_PATRIMONIO])
         bem_b = criar_bem(ua_b, gestor_b, numero_patrimonial="000.000000010-0")
 
         ano = 2026
-        # UA 100 tem 0000005
+        # 5 NBBPMs com prefixo 001
         for i in range(5):
-            criar_baixa(self.ua1, self.gestor, status=constants.ACEITA, numero_nbbpm=f"100.{i+1:07d}.{ano}")
-        # Gera para UA 200 -> deve ser 200.0000001.2026 (prefixo 200)
+            criar_baixa(self.ua1, self.gestor, status=constants.ACEITA, numero_nbbpm=f"001.{i+1:07d}/{ano}")
+        # Gera para UA 200 -> deve ser 001.0000006/2026 (global)
         baixa_b = criar_baixa(ua_b, gestor_b, status=constants.ACEITA)
         BaixaFisicaBensItem.objects.create(baixa=baixa_b, bem=bem_b)
         nbbpm_b = NBBPM.objects.create(
@@ -168,9 +168,12 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         )
         nbbpm_b.baixas.set([baixa_b])
         numero_b = gerar_numero_nbbpm_unificado(nbbpm_b)
-        self.assertEqual(numero_b, f"200.{1:07d}.{ano}")
+        self.assertEqual(numero_b, f"001.{6:07d}/{ano}")
+        # Persiste para que próximo seja 7 (global)
+        nbbpm_b.numero = numero_b
+        nbbpm_b.save(update_fields=["numero"])
 
-        # Gera para UA 100 -> deve ser 100.0000006.2026
+        # Gera para UA 100 -> deve ser 001.0000007/2026
         baixa_a2 = criar_baixa(self.ua1, self.gestor, status=constants.ACEITA)
         BaixaFisicaBensItem.objects.create(baixa=baixa_a2, bem=self.bem)
         nbbpm_a = NBBPM.objects.create(
@@ -182,12 +185,13 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         )
         nbbpm_a.baixas.set([baixa_a2])
         numero_a = gerar_numero_nbbpm_unificado(nbbpm_a)
-        self.assertEqual(numero_a, f"100.{6:07d}.{ano}")
+        # Como já criou 6 para b, agora é 7
+        self.assertEqual(numero_a, f"001.{7:07d}/{ano}")
 
     def test_ano_diferente_reseta_sequencial(self):
         ano1 = 2025
         ano2 = 2026
-        criar_baixa(self.ua1, self.gestor, status=constants.ACEITA, numero_nbbpm=f"100.{10:07d}.{ano1}")
+        criar_baixa(self.ua1, self.gestor, status=constants.ACEITA, numero_nbbpm=f"001.{10:07d}/{ano1}")
         baixa = criar_baixa(self.ua1, self.gestor, status=constants.ACEITA)
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
         nbbpm = NBBPM.objects.create(
@@ -196,7 +200,7 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         )
         nbbpm.baixas.set([baixa])
         num = gerar_numero_nbbpm_unificado(nbbpm)
-        self.assertEqual(num, f"100.{11:07d}.{ano1}")
+        self.assertEqual(num, f"001.{11:07d}/{ano1}")
         baixa2 = criar_baixa(self.ua1, self.gestor, status=constants.ACEITA)
         BaixaFisicaBensItem.objects.create(baixa=baixa2, bem=self.bem)
         nbbpm2 = NBBPM.objects.create(
@@ -205,7 +209,7 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         )
         nbbpm2.baixas.set([baixa2])
         num2 = gerar_numero_nbbpm_unificado(nbbpm2)
-        self.assertEqual(num2, f"100.{1:07d}.{ano2}")
+        self.assertEqual(num2, f"001.{1:07d}/{ano2}")
 
 
 # =====================================================================
@@ -228,8 +232,10 @@ class TestUnicidadeEFormato(TestCase):
         )
         nbbpm.baixas.set([baixa])
         numero = gerar_numero_nbbpm_unificado(nbbpm)
-        self.assertRegex(numero, r"^\d{3}\.\d{7}\.\d{4}$")
-        partes = numero.split(".")
+        self.assertRegex(numero, r"^\d{3}\.\d{7}[\./]\d{4}$")
+        # novo formato usa "/" antes do ano
+        self.assertIn("/", numero)
+        partes = numero.replace("/", ".").split(".")
         self.assertEqual(len(partes[0]), 3)
         self.assertEqual(len(partes[1]), 7)
         self.assertEqual(len(partes[2]), 4)
@@ -243,13 +249,13 @@ class TestUnicidadeEFormato(TestCase):
         )
         nbbpm.baixas.set([baixa])
         numero = gerar_numero_nbbpm_unificado(nbbpm)
-        # UA 001 -> prefixo 001
+        # prefixo fixo 001
         self.assertTrue(numero.startswith("001."))
 
     def test_unicidade_banco_impede_duplicata(self):
         # cria duas NBBPMs com mesmo número tentando salvar direto deve falhar na constraint
         NBBPM.objects.create(
-            numero="016.0000001.2026",
+            numero="001.0000001/2026",
             numero_processo_baixa="P1",
             data_autorizacao=timezone.localdate(),
             responsavel="G",
@@ -259,7 +265,7 @@ class TestUnicidadeEFormato(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 NBBPM.objects.create(
-                    numero="016.0000001.2026",
+                    numero="001.0000001/2026",
                     numero_processo_baixa="P2",
                     data_autorizacao=timezone.localdate(),
                     responsavel="G",
@@ -325,10 +331,10 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
         if len(resultados) == 2:
             self.assertEqual(len(set(resultados.values())), 2)
             nums = sorted(resultados.values())
-            # Devem ser sequenciais 0000001 e 0000002 com prefixo UA 001
+            # Devem ser sequenciais 0000001 e 0000002 com prefixo fixo 001
             self.assertTrue(nums[0].startswith("001."))
             self.assertTrue(nums[1].startswith("001."))
-            seqs = [int(n.split(".")[1]) for n in nums]
+            seqs = [int(n.replace("/", ".").split(".")[1]) for n in nums]
             self.assertEqual(sorted(seqs), [1, 2])
         else:
             self.assertLessEqual(len(resultados), 2)
@@ -344,7 +350,7 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
             responsavel="G",
             criado_por=self.gestor,
         )
-        self.assertEqual(n1.numero, "001.0000001." + str(timezone.localdate().year))
+        self.assertEqual(n1.numero, "001.0000001/" + str(timezone.localdate().year))
         n2 = criar_nbbpm_com_retry(
             baixas=[self.baixa2],
             numero_processo_baixa="PROC-2",
@@ -352,7 +358,7 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
             responsavel="G",
             criado_por=self.gestor,
         )
-        self.assertEqual(n2.numero, "001.0000002." + str(timezone.localdate().year))
+        self.assertEqual(n2.numero, "001.0000002/" + str(timezone.localdate().year))
 
 
 class TestReusoMesmaBaixaConcorrente(TransactionTestCase):
@@ -462,7 +468,7 @@ class TestPermissaoESuperuser(TestCase):
         }
         resp = client.post("/api/nbbpm/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertRegex(resp.data["numero"], r"^\d{3}\.\d{7}\.\d{4}$")
+        self.assertRegex(resp.data["numero"], r"^\d{3}\.\d{7}[\./]\d{4}$")
 
     def test_superuser_pode_gerar_nbbpm_via_api(self):
         baixa_nova = criar_baixa(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="P-NEW-SUPER")
@@ -582,7 +588,7 @@ class TestDataMigrationIdempotente(TestCase):
         migrar_baixa_para_nbbpm(real_apps, FakeSchemaEditor2())
         self.assertTrue(NBBPM.objects.filter(baixas__in=[baixa]).exists())
         nbbpm = NBBPM.objects.filter(baixas__in=[baixa]).first()
-        self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}\.\d{4}$")
+        self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}[\./]\d{4}$")
         self.assertTrue(nbbpm.numero.startswith("001."))
 
 

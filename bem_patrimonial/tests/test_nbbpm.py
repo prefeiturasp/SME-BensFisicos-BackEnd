@@ -130,9 +130,11 @@ class TestGeracaoNumeroNBBPM(NBBPMTestBase):
         baixa = self.criar_baixa()
         numero = gerar_numero_nbbpm(baixa)
 
-        partes = numero.split(".")
+        # novo formato 001.0000001/2026 com prefixo fixo 001
+        self.assertRegex(numero, r"^\d{3}\.\d{7}[\./]\d{4}$")
+        partes = numero.replace("/", ".").split(".")
         self.assertEqual(len(partes), 3)
-        self.assertEqual(partes[0], "287")
+        self.assertEqual(partes[0], "001")
         self.assertEqual(len(partes[1]), 7)
         self.assertEqual(len(partes[2]), 4)
 
@@ -148,11 +150,11 @@ class TestGeracaoNumeroNBBPM(NBBPMTestBase):
         n2 = gerar_numero_nbbpm(baixa2)
 
         ano = timezone.localdate().year
-        self.assertEqual(n1, f"287.0000001.{ano}")
-        self.assertEqual(n2, f"287.0000002.{ano}")
+        self.assertEqual(n1, f"001.0000001/{ano}")
+        self.assertEqual(n2, f"001.0000002/{ano}")
 
     def test_sequencial_reinicia_ao_mudar_ano(self):
-        # Testa reinício por ano considerando data_aprovacao (nova lógica por UA/ano)
+        # Testa reinício por ano considerando data_aprovacao (nova lógica global por ano)
         baixa_a = self.criar_baixa()
         baixa_b = self.criar_baixa(numero_processo_baixa="X/2")
 
@@ -167,7 +169,7 @@ class TestGeracaoNumeroNBBPM(NBBPMTestBase):
             baixa_a.numero_nbbpm = n_2024
             baixa_a.save(update_fields=["numero_nbbpm"])
 
-        self.assertEqual(n_2024, "287.0000001.2024")
+        self.assertEqual(n_2024, "001.0000001/2024")
 
         with patch("django.utils.timezone.now", return_value=dt_2025):
             baixa_b.data_aprovacao = dt_2025
@@ -175,7 +177,7 @@ class TestGeracaoNumeroNBBPM(NBBPMTestBase):
             baixa_b.save(update_fields=["data_aprovacao", "data_baixa"])
             n_2025 = gerar_numero_nbbpm(baixa_b)
 
-        self.assertEqual(n_2025, "287.0000001.2025")
+        self.assertEqual(n_2025, "001.0000001/2025")
 
     def test_objeto_invalido_dispara_validationerror(self):
         with self.assertRaises(ValidationError):

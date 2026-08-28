@@ -1359,7 +1359,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
 
     @patch("bem_patrimonial.api_serializers.filtrar_queryset_por_escopo")
     def test_baixas_de_unidades_orcamentarias_diferentes_invalida(self, mock_escopo):
-        # Isolado do pré-filtro de escopo — regra agora é mesma UA (antes UO)
+        # Isolado do pré-filtro de escopo — regra agora é mesma UO com prefixo fixo 001
         uo2 = criar_uo(codigo="200", nome="UO Dois", sigla="UOD")
         ua3 = criar_ua(uo=uo2, codigo="003", nome="UA Três", sigla="UAT2")
         operador3 = criar_usuario(
@@ -1378,7 +1378,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             self._data(baixas=[self.baixa1.id, baixa_uo2.id]), user=self.gestor
         )
         self.assertFalse(s.is_valid())
-        self.assertIn("Unidade Administrativa", str(s.errors["baixas"]))
+        self.assertIn("Unidade Orçamentária", str(s.errors["baixas"]))
 
     def test_baixa_ja_utilizada_em_nbbpm_invalida(self):
         nbbpm = NBBPM.objects.create(
@@ -1405,8 +1405,8 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             set(nbbpm.baixas.values_list("id", flat=True)),
             {self.baixa1.id, self.baixa2.id},
         )
-        # serializer já gera número via serviço unificado
-        self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}\.\d{4}$")
+        # serializer já gera número via serviço unificado (prefixo fixo 001)
+        self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}[\./]\d{4}$")
 
 
 # ============================================================================

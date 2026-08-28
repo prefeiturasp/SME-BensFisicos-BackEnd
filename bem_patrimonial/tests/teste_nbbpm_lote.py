@@ -16,7 +16,6 @@ from bem_patrimonial.models import (
     BemPatrimonial,
     NBBPM,
 )
-from bem_patrimonial.pdf_utils import extrair_codigo_ua
 from bem_patrimonial.nbbpm_lote import (
     gerar_numero_nbbpm_lote,
     gerar_pdf_nbbpm_lote,
@@ -122,9 +121,8 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero = gerar_numero_nbbpm_lote(nbbpm)
 
-        codigo_esperado = extrair_codigo_ua(self.ua.codigo)
         ano_esperado = nbbpm.data_autorizacao.year
-        self.assertEqual(numero, f"{codigo_esperado}.0000001.{ano_esperado}")
+        self.assertEqual(numero, f"001.0000001/{ano_esperado}")
 
     def test_sequencial_incrementa_dentro_do_mesmo_ano(self):
         data = timezone.localdate()
@@ -139,8 +137,7 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero2 = gerar_numero_nbbpm_lote(nbbpm2)
 
-        codigo_esperado = extrair_codigo_ua(self.ua.codigo)
-        self.assertEqual(numero2, f"{codigo_esperado}.0000002.{data.year}")
+        self.assertEqual(numero2, f"001.0000002/{data.year}")
 
     def test_sequencial_reinicia_em_outro_ano(self):
         data_ano_atual = timezone.localdate()
@@ -158,9 +155,8 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero_novo = gerar_numero_nbbpm_lote(nbbpm_novo)
 
-        codigo_esperado = extrair_codigo_ua(self.ua.codigo)
         self.assertEqual(
-            numero_novo, f"{codigo_esperado}.0000001.{data_ano_atual.year}"
+            numero_novo, f"001.0000001/{data_ano_atual.year}"
         )
 
     def test_usa_codigo_da_unidade_administrativa_das_baixas_vinculadas(self):
@@ -175,7 +171,7 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero = gerar_numero_nbbpm_lote(nbbpm)
 
-        self.assertTrue(numero.startswith(f"{extrair_codigo_ua(ua2.codigo)}."))
+        self.assertTrue(numero.startswith("001."))
 
 
 # ============================================================================
@@ -437,7 +433,7 @@ class HttpResponseNbbpmLoteTestCase(BaseSetup):
     def test_retorna_response_pdf_com_nome_de_arquivo_correto(self, mock_gerar_pdf):
         mock_gerar_pdf.return_value = BytesIO(b"%PDF-1.4 conteudo falso")
 
-        nbbpm = criar_nbbpm([self.baixa], self.usuario, numero="100.0000001.2026")
+        nbbpm = criar_nbbpm([self.baixa], self.usuario, numero="001.0000001/2026")
 
         response = http_response_nbbpm_lote(nbbpm, usuario_gerador=self.usuario)
 
@@ -445,7 +441,7 @@ class HttpResponseNbbpmLoteTestCase(BaseSetup):
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertEqual(
             response["Content-Disposition"],
-            'attachment; filename="NBBPM_100.0000001.2026.pdf"',
+            'attachment; filename="NBBPM_001.0000001/2026.pdf"',
         )
         self.assertEqual(response.content, b"%PDF-1.4 conteudo falso")
         mock_gerar_pdf.assert_called_once_with(nbbpm, usuario_gerador=self.usuario)
