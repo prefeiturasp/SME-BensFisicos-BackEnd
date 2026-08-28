@@ -1,103 +1,30 @@
-{% extends "admin/base_site.html" %}
-{% load i18n admin_urls static %}
+{% extends "admin/bem_patrimonial/baixa_fisica/_base_acao.html" %}
 
-{% block extrastyle %}
-{{ block.super }}
-<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
-<style>
-  #solicitar-correcao-form .submit-row {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    align-items: center;
-  }
-  #solicitar-correcao-form .submit-row input.default,
-  #solicitar-correcao-form .submit-row a.button {
-    height: 38px;
-    line-height: 38px;
-    padding: 0 20px;
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    vertical-align: middle;
-    margin: 0;
-  }
-</style>
-{% endblock %}
-
-{% block breadcrumbs %}
-<div class="breadcrumbs">
-    <a href="{% url 'admin:index' %}">Início</a> &rsaquo;
-    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a> &rsaquo;
-    <a href="{% url 'admin:bem_patrimonial_baixafisicabempatrimonial_changelist' %}">Baixas Físicas</a> &rsaquo;
-    {{ title }}
-</div>
-{% endblock %}
-
-{% block content_title %}{% endblock %}
-
-{% block content %}
-<div id="content-main">
-    <h1>{{ title }}</h1>
+{% block acao_desc %}
     <p>As <strong>{{ baixas|length }} Baixa(s)</strong> abaixo voltarão para <strong>Em elaboração</strong> para que o solicitante possa editar e reenviar. Os bens permanecerão em <em>Baixa Física - Aguardando aprovação</em>.</p>
+{% endblock %}
 
-    {% if form.errors %}
-    <p class="errornote">Corrija os erros abaixo.</p>
-    {% endif %}
-
-    <div class="module">
-        <h2>Baixas selecionadas</h2>
-        <div class="results">
-            <table id="result_list">
-                <thead>
-                    <tr>
+{% block tabela_head %}
                         <th scope="col">ID</th>
                         <th scope="col">Processo</th>
                         <th scope="col">Unidade Administrativa</th>
                         <th scope="col">Itens</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for baixa in baixas %}
-                    <tr class="{% cycle 'row1' 'row2' %}">
+{% endblock %}
+
+{% block tabela_row %}
                         <td>#{{ baixa.pk }}</td>
                         <td>{{ baixa.numero_processo_baixa|default:"-" }}</td>
                         <td>{{ baixa.unidade_administrativa_origem.sigla }} - {{ baixa.unidade_administrativa_origem.nome }}</td>
                         <td>{{ baixa.itens.count }}</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
+{% endblock %}
 
-    <form method="post" id="solicitar-correcao-form">
-        {% csrf_token %}
-        {% for baixa in baixas %}
-            <input type="hidden" name="{{ action_checkbox_name }}" value="{{ baixa.pk }}">
-        {% endfor %}
+{% block form_id %}solicitar-correcao-form{% endblock %}
+
+{% block form_hidden %}
         <input type="hidden" name="action" value="acao_solicitar_correcao">
         <input type="hidden" name="apply_correcao" value="1">
-
-        <fieldset class="module aligned">
-            <h2>Motivo da correção</h2>
-            {% for field in form %}
-                <div class="form-row{% if field.errors %} errors{% endif %}">
-                    <div>
-                        {{ field.label_tag }}
-                        {{ field }}
-                        {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
-                        {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-                    </div>
-                </div>
-            {% endfor %}
-        </fieldset>
-
-        <div class="submit-row">
-            <input type="submit" value="Confirmar solicitação de correção" class="default">
-            <a href="{% url 'admin:bem_patrimonial_baixafisicabempatrimonial_changelist' %}" class="button cancel-link" style="background: var(--close-button-bg); color: var(--button-fg) !important;">Cancelar</a>
-        </div>
-    </form>
-</div>
 {% endblock %}
+
+{% block fieldset_titulo %}Motivo da correção{% endblock %}
+
+{% block submit_label %}Confirmar solicitação de correção{% endblock %}
