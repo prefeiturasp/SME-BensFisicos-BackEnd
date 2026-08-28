@@ -1,9 +1,6 @@
 from io import BytesIO
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
-from django.db.models import IntegerField, Max, Value
-from django.db.models.functions import Cast, Substr, Replace
 from django.http import HttpResponse
 from django.utils import timezone
 
@@ -17,7 +14,6 @@ from bem_patrimonial import constants
 from bem_patrimonial.models import BaixaFisicaBemPatrimonial
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
-    extrair_codigo_ua,
     criar_estilo_base,
     obter_rf_usuario,
     formatar_data,
@@ -43,7 +39,7 @@ def obter_bens_baixa(baixa):
 
 
 def gerar_numero_nbbpm(baixa):
-    """Compatibilidade: delega ao serviço unificado por UA/ano."""
+    """Compatibilidade: delega ao serviço unificado (prefixo fixo 001, sequencial global por ano)."""
     if not isinstance(baixa, BaixaFisicaBemPatrimonial):
         raise ValidationError("Objeto inválido para geração de NBBPM.")
 
@@ -60,29 +56,9 @@ def gerar_numero_nbbpm(baixa):
     else:
         ano_baixa = timezone.localdate().year
 
-    from bem_patrimonial.services.nbbpm_numero import gerar_numero_para_ua_ano
+    from bem_patrimonial.services.nbbpm_numero import gerar_numero_para_ano
 
-    ua = getattr(baixa, "unidade_administrativa_origem", None)
-    if not ua or not getattr(ua, "pk", None):
-        codigo_ua = extrair_codigo_ua(getattr(ua, "codigo", "") if ua else "")
-        with transaction.atomic():
-            qs = (
-                BaixaFisicaBemPatrimonial.objects.select_for_update()
-                .filter(
-                    numero_nbbpm__endswith=f".{ano_baixa}",
-                    numero_nbbpm__isnull=False,
-                )
-                .exclude(numero_nbbpm__exact="")
-            )
-            sequencial_raw = Substr("numero_nbbpm", 5, 7)
-            sequencial_digits = Replace(sequencial_raw, Value("."), Value(""))
-            ultimo_sequencial = qs.annotate(
-                sequencial_int=Cast(sequencial_digits, IntegerField())
-            ).aggregate(max_seq=Max("sequencial_int"))["max_seq"]
-            numero_sequencial = (ultimo_sequencial or 0) + 1
-        return f"{codigo_ua}.{numero_sequencial:07d}.{ano_baixa}"
-
-    return gerar_numero_para_ua_ano(ua, ano_baixa)
+    return gerar_numero_para_ano(ano_baixa)
 
 
 def gerar_pdf_nbbpm(baixa, usuario_gerador=None, data_geracao=None):

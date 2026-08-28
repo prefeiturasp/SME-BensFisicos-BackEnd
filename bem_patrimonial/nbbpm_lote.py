@@ -37,7 +37,7 @@ DATE_FMT_BR = "%d/%m/%Y"
 
 
 def gerar_numero_nbbpm_lote(nbbpm):
-    """Compatibilidade: delega ao serviço unificado por UO/ano."""
+    """Compatibilidade: delega ao serviço unificado (prefixo fixo 001, sequencial global por ano)."""
     from bem_patrimonial.services.nbbpm_numero import gerar_numero_nbbpm_unificado
 
     return gerar_numero_nbbpm_unificado(nbbpm)
