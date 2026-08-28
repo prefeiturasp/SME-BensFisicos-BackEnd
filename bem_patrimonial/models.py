@@ -1099,7 +1099,7 @@ class BaixaFisicaBensItem(models.Model):
 # ============================================================================
 
 class NBBPM(models.Model):
-    """NBBPM consolidada a partir de Baixas ACEITA da mesma UA."""
+    """NBBPM consolidada a partir de Baixas ACEITA da mesma UO (prefixo fixo 001)."""
 
     numero = models.CharField(
         "Número da NBBPM",
@@ -1107,11 +1107,11 @@ class NBBPM(models.Model):
         blank=True,
         default="",
         db_index=True,
-        help_text="Gerado automaticamente, no formato <COD_UA>.<SEQUENCIAL_7>.<ANO>",
+        help_text="Gerado automaticamente, no formato 001.<SEQUENCIAL_7>/<ANO>",
         validators=[
             RegexValidator(
-                regex=r"^\d{3}\.\d{7}\.\d{4}$",
-                message="Número NBBPM deve estar no formato XXX.YYYYYYY.ZZZZ",
+                regex=r"^\d{3}\.\d{7}[\./]\d{4}$",
+                message="Número NBBPM deve estar no formato 001.YYYYYYY/ZZZZ",
             )
         ],
     )
@@ -1181,9 +1181,8 @@ class NBBPM(models.Model):
         """
         Unidade Administrativa da primeira baixa vinculada. Todas as
         baixas de uma mesma NBBPM pertencem obrigatoriamente à mesma
-        Unidade Administrativa (validado no serializer), então qualquer
-        uma delas serve de referência para exibir Prefixo/Órgão/Código
-        no documento.
+        Unidade Orçamentária (podendo ser UAs diferentes), então qualquer
+        uma delas serve de referência para exibir no documento.
         """
         primeira = self.baixas.select_related(
             "unidade_administrativa_origem",
