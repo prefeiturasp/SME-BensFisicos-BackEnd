@@ -9,7 +9,7 @@ from dados_comuns.escopo import resolver_ids_escopo
 
 @admin.register(NBBPM)
 class NBBPMAdmin(admin.ModelAdmin):
-    list_display = ("numero", "unidade_orcamentaria_display", "unidade_administrativa_display", "responsavel", "data_autorizacao", "total_baixas", "criado_por", "pdf_link_list")
+    list_display = ("numero", "unidade_orcamentaria_display", "responsavel", "data_autorizacao", "total_baixas", "criado_por", "pdf_link_list")
     list_filter = (("data_autorizacao", DateRangeFilter), ("data_criacao", DateRangeFilter))
     search_fields = (
         "numero",
@@ -63,7 +63,6 @@ class NBBPMAdmin(admin.ModelAdmin):
                 "criado_por",
                 "data_criacao",
                 "unidade_orcamentaria_display",
-                "unidade_administrativa_display",
                 "baixas_detail",
                 "bens_detail",
             )
@@ -72,7 +71,7 @@ class NBBPMAdmin(admin.ModelAdmin):
     def get_fieldsets(self, request, obj=None):
         if obj:
             return (
-                ("Dados da NBBPM", {"fields": ("numero", "numero_processo_baixa", "data_autorizacao", "responsavel", "numero_processo_destinacao_final", "unidade_orcamentaria_display", "unidade_administrativa_display", "criado_por", "data_criacao")}),
+                ("Dados da NBBPM", {"fields": ("numero", "numero_processo_baixa", "data_autorizacao", "responsavel", "numero_processo_destinacao_final", "unidade_orcamentaria_display", "criado_por", "data_criacao")}),
                 ("Baixas vinculadas", {"fields": ("baixas_detail",)}),
                 ("Bens vinculados", {"fields": ("bens_detail",)}),
             )
@@ -81,13 +80,6 @@ class NBBPMAdmin(admin.ModelAdmin):
     def total_baixas(self, obj):
         return obj.baixas.count()
     total_baixas.short_description = "Quantidade de Baixas"
-
-    def unidade_administrativa_display(self, obj):
-        ua = obj.unidade_administrativa_origem
-        if ua:
-            return f"{ua.sigla or ''} - {ua.nome or ''} ({ua.codigo or ''})".strip()
-        return "-"
-    unidade_administrativa_display.short_description = "Unidade Administrativa"
 
     def unidade_orcamentaria_display(self, obj):
         uo = obj.unidade_orcamentaria

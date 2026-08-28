@@ -963,11 +963,11 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             )
             return
 
-        uas = set(queryset.values_list("unidade_administrativa_origem_id", flat=True))
-        if len(uas) > 1 or None in uas:
+        uos = set(queryset.values_list("unidade_administrativa_origem__unidade_orcamentaria_id", flat=True))
+        if len(uos) > 1 or None in uos:
             self.message_user(
                 request,
-                "Todas as Baixas selecionadas devem pertencer à mesma Unidade Administrativa.",
+                "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.",
                 level=messages.ERROR,
             )
             return
