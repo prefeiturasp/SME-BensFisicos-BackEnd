@@ -1,19 +1,39 @@
 {% extends "admin/change_form.html" %}
 {% load i18n admin_urls %}
 
-{% block object-tools-items %}
-    {{ block.super }}
-    {% if original %}
-        {% if original.status == "aceita" %}
+{% block object-tools %}
+{% if change and not is_popup %}
+  <ul class="object-tools">
+    {% block object-tools-items %}
+      {{ block.super }}
+      {% if original %}
+        {% with nbbpm=original.nbbpms_lote.all|first %}
+          {% if nbbpm %}
             <li>
-                <a
-                    href="{% url 'admin:baixafisica_nbbpm' original.pk %}"
-                    class="button"
-                    style="background: #198754; border-color: #198754; color: #fff;"
-                >
-                    Baixar NBBPM
-                </a>
+              <a href="{% url 'admin:bem_patrimonial_nbbpm_change' nbbpm.pk %}" class="button" style="background:#0d6efd; border-color:#0d6efd; color:#fff !important;">
+                Ver NBBPM {{ nbbpm.numero }}
+              </a>
             </li>
+          {% endif %}
+        {% endwith %}
+        {% if original.status == "aceita" %}
+          <li>
+            <a href="{% url 'admin:baixafisica_laudo' original.pk %}" class="button" target="_blank" style="background:#198754; border-color:#198754; color:#fff !important;">
+              Baixar Laudo
+            </a>
+          </li>
+          {% with nbbpm=original.nbbpms_lote.all|first %}
+            {% if not nbbpm %}
+              <li>
+                <span class="button" style="background:#6c757d; border-color:#6c757d; color:#fff; cursor:default;">
+                  NBBPM: selecione na lista e use a ação “Gerar NBBPM”
+                </span>
+              </li>
+            {% endif %}
+          {% endwith %}
         {% endif %}
-    {% endif %}
+      {% endif %}
+    {% endblock %}
+  </ul>
+{% endif %}
 {% endblock %}
