@@ -580,7 +580,7 @@ class NBBPMSerializer(serializers.ModelSerializer):
 
 
 class NBBPMGerarLoteSerializer(serializers.Serializer):
-    """Valida e cria NBBPM consolidada a partir de Baixas ACEITA da mesma UA."""
+    """Valida e cria NBBPM consolidada a partir de Baixas ACEITA da mesma UO (prefixo fixo 001)."""
 
     baixas = serializers.PrimaryKeyRelatedField(
         queryset=BaixaFisicaBemPatrimonial.objects.all(),
@@ -659,12 +659,22 @@ class NBBPMGerarLoteSerializer(serializers.Serializer):
                 "A NBBPM só pode ser gerada para Baixas Físicas com status Aprovado."
             )
 
-        unidades_administrativas = {
-            getattr(b.unidade_administrativa_origem, "id", None) for b in baixas
-        }
-        if len(unidades_administrativas) > 1 or None in unidades_administrativas:
+        unidades_orcamentarias = set()
+        for b in baixas:
+            ua = getattr(b, "unidade_administrativa_origem", None)
+            uo_id = None
+            if ua:
+                uo_id = getattr(ua, "unidade_orcamentaria_id", None)
+                if uo_id is None:
+                    try:
+                        uo = getattr(ua, "unidade_orcamentaria", None)
+                        uo_id = getattr(uo, "pk", None) or getattr(uo, "id", None)
+                    except Exception:
+                        uo_id = None
+            unidades_orcamentarias.add(uo_id)
+        if len(unidades_orcamentarias) > 1 or None in unidades_orcamentarias:
             raise serializers.ValidationError(
-                "Todas as Baixas selecionadas devem pertencer à mesma Unidade Administrativa."
+                "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária."
             )
 
         ja_utilizadas = [b for b in baixas if b.nbbpms_lote.exists()]

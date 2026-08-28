@@ -92,7 +92,7 @@ class NBBPMViewSet(
     @extend_schema(
         tags=["NBBPM"],
         summary="Criar NBBPM consolidada",
-        description="Gera NBBPM consolidada via serviço unificado (prefixo UA, sequencial por UA/ano com continuidade).",
+        description="Gera NBBPM consolidada via serviço unificado (prefixo fixo 001, sequencial global por ano).",
         request=NBBPMGerarLoteSerializer,
         responses={201: NBBPMSerializer},
     )
