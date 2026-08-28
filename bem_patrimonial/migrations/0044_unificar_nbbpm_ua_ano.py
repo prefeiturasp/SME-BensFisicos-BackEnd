@@ -23,39 +23,39 @@ def _resolver_data_autorizacao(baixa):
     return timezone.now().date()
 
 
+def _buscar_usuario(usuario_model, db_alias, user_id):
+    if not user_id:
+        return None
+    try:
+        return usuario_model.objects.using(db_alias).get(pk=user_id)
+    except Exception:
+        return None
+
+
+def _obter_primeiro_usuario(usuario_model, db_alias):
+    try:
+        return usuario_model.objects.using(db_alias).first()
+    except Exception:
+        return None
+
+
 def _resolver_responsavel_com_numero(baixa, usuario_model, db_alias):
     responsavel = "SISTEMA"
-    criado_por_id = None
-    try:
-        if getattr(baixa, "aprovado_por_id", None):
-            try:
-                usuario = usuario_model.objects.using(db_alias).get(pk=baixa.aprovado_por_id)
-                responsavel = getattr(usuario, "username", None) or responsavel
-                criado_por_id = usuario.pk
-            except usuario_model.DoesNotExist:
-                pass
-        if not criado_por_id and getattr(baixa, "criado_por_id", None):
-            try:
-                usuario2 = usuario_model.objects.using(db_alias).get(pk=baixa.criado_por_id)
-                if responsavel == "SISTEMA":
-                    responsavel = getattr(usuario2, "username", None) or responsavel
-                criado_por_id = usuario2.pk
-            except usuario_model.DoesNotExist:
-                pass
-    except Exception:
-        pass
-    if not criado_por_id:
-        try:
-            primeiro = usuario_model.objects.using(db_alias).first()
-            if primeiro:
-                criado_por_id = primeiro.pk
-                if responsavel == "SISTEMA":
-                    responsavel = getattr(primeiro, "username", "SISTEMA")
-            else:
-                return None, None
-        except Exception:
-            return None, None
-    return responsavel, criado_por_id
+    usuario = _buscar_usuario(usuario_model, db_alias, getattr(baixa, "aprovado_por_id", None))
+    if usuario:
+        responsavel = getattr(usuario, "username", None) or responsavel
+        return responsavel, usuario.pk
+    usuario2 = _buscar_usuario(usuario_model, db_alias, getattr(baixa, "criado_por_id", None))
+    if usuario2:
+        if responsavel == "SISTEMA":
+            responsavel = getattr(usuario2, "username", None) or responsavel
+        return responsavel, usuario2.pk
+    primeiro = _obter_primeiro_usuario(usuario_model, db_alias)
+    if not primeiro:
+        return None, None
+    if responsavel == "SISTEMA":
+        responsavel = getattr(primeiro, "username", "SISTEMA")
+    return responsavel, primeiro.pk
 
 
 def _resolver_criador_sem_numero(baixa, usuario_model, db_alias):

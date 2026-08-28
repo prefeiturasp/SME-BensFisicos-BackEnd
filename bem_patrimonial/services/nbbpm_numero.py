@@ -86,8 +86,9 @@ def _gerar_numero_formatado(ano: int) -> str:
     return numero
 
 
-def gerar_numero_nbbpm_unificado(nbbpm, max_tentativas: int = 3):  # noqa: ARG001 - max_tentativas mantido por compatibilidade
+def gerar_numero_nbbpm_unificado(nbbpm, max_tentativas: int = 3):
     """Gera número NBBPM 001.YYYYYYY/ZZZZ com prefixo fixo 001 e sequencial global por ano."""
+    _ = max_tentativas
     from bem_patrimonial.models import NBBPM
 
     if not isinstance(nbbpm, NBBPM):
@@ -96,13 +97,15 @@ def gerar_numero_nbbpm_unificado(nbbpm, max_tentativas: int = 3):  # noqa: ARG00
     return _gerar_numero_formatado(ano)
 
 
-def _tentar_gerar_numero(ano: int, max_tentativas: int = 1):  # noqa: ARG001 - mantido para compatibilidade com testes
+def _tentar_gerar_numero(ano: int, max_tentativas: int = 1):
     """Compat: apenas formata número. Retry real está em criar_nbbpm_com_retry."""
+    _ = max_tentativas
     return _gerar_numero_formatado(ano)
 
 
-def gerar_numero_para_ano(ano: int, max_tentativas: int = 3) -> str:  # noqa: ARG001
+def gerar_numero_para_ano(ano: int, max_tentativas: int = 3) -> str:
     """Gera número diretamente a partir de ano (prefixo fixo 001)."""
+    _ = max_tentativas
     return _gerar_numero_formatado(ano)
 
 

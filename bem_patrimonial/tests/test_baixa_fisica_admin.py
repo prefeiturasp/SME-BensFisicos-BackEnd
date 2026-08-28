@@ -200,8 +200,8 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
             form3.clean_bem()
         # FormSet clean com formset real via inline
         from django.forms.models import inlineformset_factory
-        FormSet = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
-        fs2 = FormSet(instance=baixa, prefix="itens")
+        formset = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
+        fs2 = formset(instance=baixa, prefix="itens")
         fs2.forms = []
         with self.assertRaises(ValidationError):
             fs2.clean()
@@ -479,8 +479,8 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         item = BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem_old)
         # simula form com changed_data
         from django.forms.models import inlineformset_factory
-        FormSet = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
-        formset = FormSet(instance=baixa, prefix="itens")
+        formset_cls = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
+        formset = formset_cls(instance=baixa, prefix="itens")
         # cria um form mock com changed_data
         mock_form = MagicMock()
         mock_form.cleaned_data = {"bem": bem_new}
@@ -508,7 +508,7 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         mock_form2.initial = {"bem": bem_old.pk}
         mock_form2.changed_data = ["bem"]
         mock_form2.instance = item
-        formset2 = FormSet(instance=baixa, prefix="itens2")
+        formset2 = formset_cls(instance=baixa, prefix="itens2")
         formset2.forms = [mock_form2]
         formset2.deleted_objects = []
         formset2.new_objects = []
@@ -523,9 +523,9 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         item1 = BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem1)
         # simula formset com deleted e new
         from django.forms.models import inlineformset_factory
-        FormSet = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
+        formset_cls = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
         # deleted
-        formset = FormSet(instance=baixa, prefix="itens")
+        formset = formset_cls(instance=baixa, prefix="itens")
         formset.deleted_objects = [item1]
         formset.new_objects = []
         formset.forms = []
@@ -535,7 +535,7 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         self.assertEqual(bem1.status, constants.APROVADO)
         # new
         item2 = BaixaFisicaBensItem(baixa=baixa, bem=bem2)
-        formset2 = FormSet(instance=baixa, prefix="itens2")
+        formset2 = formset_cls(instance=baixa, prefix="itens2")
         formset2.deleted_objects = []
         formset2.new_objects = [item2]
         formset2.forms = []
