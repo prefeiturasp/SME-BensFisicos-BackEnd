@@ -1,0 +1,36 @@
+{% extends "admin/bem_patrimonial/baixa_fisica/_base_acao.html" %}
+
+{% block acao_desc %}
+    <p>Será gerada <strong>uma</strong> NBBPM consolidada para as <strong>{{ baixas|length }} Baixa(s)</strong> selecionada(s). Todas devem estar com status <strong>Aprovado (ACEITA)</strong> e da <strong>mesma Unidade Orçamentária</strong> (podendo ser UAs diferentes).</p>
+{% endblock %}
+
+{% block tabela_head %}
+                        <th scope="col">ID</th>
+                        <th scope="col">Processo</th>
+                        <th scope="col">Unidade Orçamentária</th>
+                        <th scope="col">Unidade Administrativa</th>
+                        <th scope="col">Itens</th>
+{% endblock %}
+
+{% block tabela_row %}
+                        <td>#{{ baixa.pk }}</td>
+                        <td>{{ baixa.numero_processo_baixa|default:"-" }}</td>
+                        <td>{{ baixa.unidade_administrativa_origem.unidade_orcamentaria.sigla|default:"-" }}{% if baixa.unidade_administrativa_origem.unidade_orcamentaria.codigo %} ({{ baixa.unidade_administrativa_origem.unidade_orcamentaria.codigo }}){% endif %}</td>
+                        <td>{{ baixa.unidade_administrativa_origem.sigla }} - {{ baixa.unidade_administrativa_origem.nome }}</td>
+                        <td>{{ baixa.itens.count }}</td>
+{% endblock %}
+
+{% block tabela_help %}
+        <p class="help" style="margin:8px 12px;">NBBPM nº será gerado automaticamente como <code>001.0000001/2026</code> (prefixo fixo <code>001</code> + sequencial 7 dígitos global por ano).</p>
+{% endblock %}
+
+{% block form_id %}nbbpm-form{% endblock %}
+
+{% block form_hidden %}
+        <input type="hidden" name="action" value="gerar_nbbpm_action">
+        <input type="hidden" name="apply" value="1">
+{% endblock %}
+
+{% block fieldset_titulo %}Dados para geração{% endblock %}
+
+{% block submit_label %}Gerar NBBPM{% endblock %}

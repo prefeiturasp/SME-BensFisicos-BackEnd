@@ -1,0 +1,30 @@
+{% extends "admin/bem_patrimonial/baixa_fisica/_base_acao.html" %}
+
+{% block acao_desc %}
+    <p>As <strong>{{ baixas|length }} Baixa(s)</strong> abaixo voltarão para <strong>Em elaboração</strong> para que o solicitante possa editar e reenviar. Os bens permanecerão em <em>Baixa Física - Aguardando aprovação</em>.</p>
+{% endblock %}
+
+{% block tabela_head %}
+                        <th scope="col">ID</th>
+                        <th scope="col">Processo</th>
+                        <th scope="col">Unidade Administrativa</th>
+                        <th scope="col">Itens</th>
+{% endblock %}
+
+{% block tabela_row %}
+                        <td>#{{ baixa.pk }}</td>
+                        <td>{{ baixa.numero_processo_baixa|default:"-" }}</td>
+                        <td>{{ baixa.unidade_administrativa_origem.sigla }} - {{ baixa.unidade_administrativa_origem.nome }}</td>
+                        <td>{{ baixa.itens.count }}</td>
+{% endblock %}
+
+{% block form_id %}solicitar-correcao-form{% endblock %}
+
+{% block form_hidden %}
+        <input type="hidden" name="action" value="acao_solicitar_correcao">
+        <input type="hidden" name="apply_correcao" value="1">
+{% endblock %}
+
+{% block fieldset_titulo %}Motivo da correção{% endblock %}
+
+{% block submit_label %}Confirmar solicitação de correção{% endblock %}

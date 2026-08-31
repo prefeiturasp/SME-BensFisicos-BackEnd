@@ -26,7 +26,7 @@ from bem_patrimonial.constants import (
 )
 from bem_patrimonial.models import BemPatrimonial, StatusBemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -1641,15 +1641,15 @@ class ImportacaoEndpointTest(_Base):
 
         fake_resource.import_data.side_effect = _import_data_raise
 
-        # Patchamos tanto o módulo admin quanto o módulo da view para cobrir
-        # qualquer caminho de importação que o repositório use.
+        # Patchamos o resource da API (usado pelo endpoint) e também o resource
+        # base no módulo do admin, para cobrir qualquer caminho de importação.
         patches = [
             mock_patch(
                 f"{self._RESOURCE_PATH}",
                 return_value=fake_resource,
             ),
             mock_patch(
-                "bem_patrimonial.views.BemPatrimonialResource",
+                "bem_patrimonial.views.BemPatrimonialAPIResource",
                 return_value=fake_resource,
             ),
         ]
@@ -1691,7 +1691,7 @@ class ImportacaoEndpointTest(_Base):
                 return_value=fake_resource,
             ),
             mock_patch(
-                "bem_patrimonial.api_views.BemPatrimonialResource",
+                "bem_patrimonial.views.BemPatrimonialAPIResource",
                 return_value=fake_resource,
             ),
         ]
@@ -1778,3 +1778,158 @@ class ImportacaoEndpointTest(_Base):
             ])
             resp = self._upload(self._client(), data)
         self.assertEqual(resp.status_code, 422)
+
+
+# ===========================================================================
+# Admin aplica as MESMAS regras da API (perfil + UA de destino)
+# ===========================================================================
+
+class AdminUsaResourceDaAPITest(_Base):
+    """
+    O Django Admin passou a usar BemPatrimonialAPIResource, replicando o fluxo
+    da API: status por perfil, histórico de aprovação e UA de destino escolhida
+    quando o usuário está logado numa UO.
+    """
+
+    def _resource_do_admin(self, request, form=None):
+        """Instancia o resource como o import_export faria a partir do Admin."""
+        resource_cls = self.admin.get_resource_classes()[0]
+        kwargs = self.admin.get_import_resource_kwargs(request, form=form)
+        kwargs.setdefault("request", request)
+        return resource_cls(**kwargs)
+
+    def test_admin_usa_resource_da_api(self):
+        from bem_patrimonial.resources_api import BemPatrimonialAPIResource
+        self.assertEqual(
+            self.admin.get_resource_classes()[0], BemPatrimonialAPIResource
+        )
+
+    def test_gestor_importa_pelo_admin_status_aprovado(self):
+        req = _request_with_messages(self.factory, self.gestor)
+        resource = self._resource_do_admin(req)
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000631-0"))
+        resource.import_data(ds, dry_run=False, raise_errors=True, use_transactions=True)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000631-0")
+        self.assertEqual(bem.status, APROVADO)
+        self.assertTrue(
+            bem.statusbempatrimonial_set.filter(status=APROVADO).exists()
+        )
+
+    def test_operador_importa_pelo_admin_status_aguardando(self):
+        req = _request_with_messages(self.factory, self.operador)
+        resource = self._resource_do_admin(req)
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000632-0"))
+        resource.import_data(ds, dry_run=False, raise_errors=True, use_transactions=True)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000632-0")
+        self.assertEqual(bem.status, AGUARDANDO_APROVACAO)
+
+    def test_form_de_import_exibe_ua_para_usuario_em_uo(self):
+        from bem_patrimonial.admins.forms.importacao_form import (
+            BemPatrimonialImportForm,
+        )
+        # Gestor em UO: sem UA direta.
+        uo = criar_uo(codigo=codigo_uo(2, 99, 99), nome="UO X", sigla="UOX")
+        ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 99, 99, 1), nome="UA X", sigla="UAX")
+        gestor_uo = Usuario.objects.create_user(
+            username="gestor_uo_admin", email="guoa@t.com", **auth_kwargs("x"),
+            nome="G", is_staff=True, unidade_orcamentaria=uo,
+        )
+        gestor_uo.groups.add(self.grupo_gestor)
+
+        form = BemPatrimonialImportForm(self.admin.get_import_formats(), user=gestor_uo)
+        self.assertIn("unidade_administrativa", form.fields)
+        self.assertTrue(form.fields["unidade_administrativa"].required)
+        self.assertIn(ua, list(form.fields["unidade_administrativa"].queryset))
+
+    def test_form_de_import_oculta_ua_para_usuario_em_ua(self):
+        from bem_patrimonial.admins.forms.importacao_form import (
+            BemPatrimonialImportForm,
+        )
+        # Gestor com UA direta.
+        form = BemPatrimonialImportForm(self.admin.get_import_formats(), user=self.gestor)
+        self.assertNotIn("unidade_administrativa", form.fields)
+
+    def test_ua_do_form_repassada_ao_resource(self):
+        uo = criar_uo(codigo=codigo_uo(2, 98, 98), nome="UO Y", sigla="UOY")
+        ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 98, 98, 1), nome="UA Y", sigla="UAY")
+        gestor_uo = Usuario.objects.create_user(
+            username="gestor_uo_admin2", email="guoa2@t.com", **auth_kwargs("x"),
+            nome="G", is_staff=True, unidade_orcamentaria=uo,
+        )
+        gestor_uo.groups.add(self.grupo_gestor)
+
+        req = _request_with_messages(self.factory, gestor_uo)
+
+        # Simula o form da 1ª etapa já validado com a UA escolhida.
+        class _FormFake:
+            cleaned_data = {"unidade_administrativa": ua}
+
+        resource = self._resource_do_admin(req, form=_FormFake())
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000633-0"))
+        resource.import_data(ds, dry_run=False, raise_errors=True, use_transactions=True)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000633-0")
+        self.assertEqual(bem.unidade_administrativa_id, ua.id)
+
+    def test_ua_persiste_entre_as_duas_etapas_do_admin(self):
+        """
+        Encadeamento real: a UA escolhida na 1ª etapa (ModelChoiceField) é
+        propagada para o formulário oculto da 2ª etapa (get_confirm_form_initial)
+        e, na confirmação, o id oculto é resolvido de volta para a UA correta,
+        chegando ao resource. Cobre o ponto de maior risco: persistência da UA
+        entre upload e confirmação.
+        """
+        uo = criar_uo(codigo=codigo_uo(2, 97, 97), nome="UO Z", sigla="UOZ")
+        ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 97, 97, 1), nome="UA Z", sigla="UAZ")
+        gestor_uo = Usuario.objects.create_user(
+            username="gestor_uo_admin3", email="guoa3@t.com", **auth_kwargs("x"),
+            nome="G", is_staff=True, unidade_orcamentaria=uo,
+        )
+        gestor_uo.groups.add(self.grupo_gestor)
+        req = _request_with_messages(self.factory, gestor_uo)
+
+        # 1ª etapa: form validado com a UA (instância). Inclui os campos que o
+        # get_confirm_form_initial da superclasse acessa.
+        class _FakeFile:
+            tmp_storage_name = "tmp_planilha.xlsx"
+            name = "planilha.xlsx"
+
+        class _ImportFormFake:
+            cleaned_data = {
+                "unidade_administrativa": ua,
+                "import_file": _FakeFile(),
+                "input_format": "0",
+                "resource": "",
+            }
+
+        # get_confirm_form_initial deve propagar o id da UA.
+        initial = self.admin.get_confirm_form_initial(req, _ImportFormFake())
+        self.assertEqual(initial.get("unidade_administrativa"), ua.id)
+
+        # 2ª etapa: confirm form carrega o id (int) no campo oculto.
+        class _ConfirmFormFake:
+            cleaned_data = {"unidade_administrativa": initial["unidade_administrativa"]}
+
+        resource = self._resource_do_admin(req, form=_ConfirmFormFake())
+        ds = _dataset_importacao(_linha_valida(numero_patrimonial="001.000000634-0"))
+        resource.import_data(ds, dry_run=False, raise_errors=True, use_transactions=True)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000634-0")
+        self.assertEqual(bem.unidade_administrativa_id, ua.id)
+
+    def test_ua_fora_do_escopo_no_form_nao_e_aplicada(self):
+        """
+        Se a UA vier de fora do escopo do usuário (ex.: manipulação do campo
+        oculto), _extrair_ua_do_form retorna None e o resource cai no fluxo
+        padrão (UA do usuário), sem gravar na UA indevida.
+        """
+        outra_uo = criar_uo(codigo=codigo_uo(2, 96, 96), nome="UO Fora", sigla="UOF")
+        ua_fora = criar_ua(
+            unidade_orcamentaria=outra_uo, codigo=codigo_ua(2, 96, 96, 1), nome="UA Fora", sigla="UAF"
+        )
+        # Gestor com UA direta (self.gestor): escopo é só a própria UA.
+        req = _request_with_messages(self.factory, self.gestor)
+
+        class _FormFake:
+            cleaned_data = {"unidade_administrativa": ua_fora.id}
+
+        ua_resolvida = self.admin._extrair_ua_do_form(req, _FormFake())
+        self.assertIsNone(ua_resolvida)

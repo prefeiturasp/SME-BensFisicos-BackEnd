@@ -387,7 +387,10 @@ ITEM_LIST_QUERY_PARAMETERS = [
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
         enum=[c[0] for c in constants.SITUACOES_ITEM_CONCILIACAO],
-        description="Filtra por situação do item.",
+        description=(
+            "Filtra por situação do item. Aceita um valor ou vários separados "
+            "por vírgula (ex.: divergente,nao_encontrado)."
+        ),
     ),
     OpenApiParameter(
         name="tem_ocorrencia",
@@ -457,6 +460,35 @@ class ConciliacaoUAFilter(django_filters.FilterSet):
         if len(valores) == 1:
             return queryset.filter(status=valores[0])
         return queryset.filter(status__in=valores)
+
+
+class ItemConciliacaoFilter(django_filters.FilterSet):
+    """
+    FilterSet customizado para ItemConciliacao.
+
+    Suporta:
+    - situacao: filtro exato ou lista (via valores separados por vírgula)
+    """
+
+    situacao = django_filters.CharFilter(method="filter_situacao")
+
+    class Meta:
+        model = ItemConciliacao
+        fields = ["situacao"]
+
+    def filter_situacao(self, queryset, name, value):
+        if not value:
+            return queryset
+        valores = [v.strip() for v in value.split(",") if v.strip()]
+        if not valores:
+            return queryset
+        valores_validos = {c[0] for c in constants.SITUACOES_ITEM_CONCILIACAO}
+        invalidos = [v for v in valores if v not in valores_validos]
+        if invalidos:
+            raise DRFValidationError(
+                {"situacao": f"Valor(es) inválido(s): {', '.join(invalidos)}"}
+            )
+        return queryset.filter(situacao__in=valores)
 
 
 class AuditHistoryConciliacaoMixin:
@@ -847,7 +879,7 @@ class ItemConciliacaoViewSet(
     lookup_url_kwarg = "item_id"
 
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["situacao"]
+    filterset_class = ItemConciliacaoFilter
     search_fields = [
         "bem__numero_patrimonial",
         "bem__nome",

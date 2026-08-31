@@ -1,8 +1,10 @@
+import re
 from collections import defaultdict
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import Exists, OuterRef, Q
 from django.urls import reverse
-from django.db.models import Q
 from rest_framework import serializers
 
 from bem_patrimonial import constants
@@ -23,6 +25,10 @@ MENSAGEM_SEM_PONTO_CENTRAL = (
     "Não há ponto central cadastrado na Unidade Orçamentária de destino. "
     "Por favor, entrar em contato com o gestor."
 )
+PADRAO_NUMERO_PATRIMONIAL = re.compile(
+    r"^(?P<prefixo>\d{3})\.(?P<sequencia>\d{9})-(?P<digito>\d)$"
+)
+LIMITE_BENS_POR_FAIXA = 500
 
 
 def obter_uo_referencia_do_usuario(usuario):
@@ -71,6 +77,220 @@ def obter_ua_ponto_central(unidade_orcamentaria):
     )
 
 
+def validar_ua_origem_movimentacao(usuario, unidade_administrativa):
+    if not unidade_administrativa:
+        raise serializers.ValidationError("Unidade administrativa de origem é obrigatória.")
+    if unidade_administrativa.status != UnidadeAdministrativa.ATIVA:
+        raise serializers.ValidationError("A unidade de origem está inativa.")
+    if getattr(usuario, "is_superuser", False):
+        return unidade_administrativa
+
+    qs_permitidas = filtrar_ua_origem_por_escopo(usuario, queryset_uas_ativas())
+    if not qs_permitidas.filter(pk=unidade_administrativa.pk).exists():
+        raise serializers.ValidationError("UA de origem fora do seu escopo de acesso.")
+    return unidade_administrativa
+
+
+def queryset_bens_movimentaveis(unidade_administrativa):
+    movimentacao_pendente = MovimentacaoBensItem.objects.filter(
+        bem_id=OuterRef("pk"),
+        movimentacao__status=constants.ENVIADA,
+    )
+    return (
+        BemPatrimonial.objects.filter(
+            unidade_administrativa=unidade_administrativa,
+            status=constants.APROVADO,
+            bloqueado_conciliacao=False,
+        )
+        .filter(~Exists(movimentacao_pendente))
+    )
+
+
+def _dados_numero_patrimonial(numero_patrimonial):
+    match = PADRAO_NUMERO_PATRIMONIAL.fullmatch(numero_patrimonial)
+    if match:
+        corpo = f"{match.group('prefixo')}{match.group('sequencia')}"
+        return int(corpo), len(corpo), match.group("digito"), True
+    if numero_patrimonial.isdigit():
+        return int(numero_patrimonial), len(numero_patrimonial), "", False
+    return None
+
+
+def _formatar_numero_patrimonial(indice, largura, digito, formato_atual):
+    numero = str(indice).zfill(largura)
+    if formato_atual:
+        return f"{numero[:3]}.{numero[3:]}-{digito}"
+    return numero
+
+
+def _mensagem_bens_nao_movimentaveis(numeros_patrimoniais):
+    numeros = ", ".join(numeros_patrimoniais)
+    return (
+        f"O(s) Bem(ns) com Número Patrimonial {numeros} não pode ser movimentado. "
+        "Por favor, verifique para realizar a inclusão."
+    )
+
+
+def obter_mensagem_erro_validacao(erros):
+    if isinstance(erros, dict):
+        return obter_mensagem_erro_validacao(next(iter(erros.values())))
+    if isinstance(erros, (list, tuple)):
+        return obter_mensagem_erro_validacao(erros[0])
+    return str(erros)
+
+
+def _resolver_bens_da_faixa(unidade_administrativa, faixa):
+    numero_de = faixa["numero_patrimonial_de"].strip()
+    numero_ate_informado = (faixa.get("numero_patrimonial_ate") or "").strip()
+    numero_ate = numero_ate_informado or numero_de
+    dados_de = _dados_numero_patrimonial(numero_de)
+    dados_ate = _dados_numero_patrimonial(numero_ate)
+    if not dados_de or not dados_ate or dados_de[3] != dados_ate[3]:
+        raise serializers.ValidationError(
+            {"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])}
+        )
+
+    indice_de, largura, digito, formato_atual = dados_de
+    indice_ate = dados_ate[0]
+    if indice_ate < indice_de:
+        raise serializers.ValidationError(
+            {
+                "faixas": (
+                    "O Número Patrimonial Até deve ser maior ou igual ao "
+                    "Número Patrimonial De."
+                )
+            }
+        )
+    if indice_ate - indice_de + 1 > LIMITE_BENS_POR_FAIXA:
+        raise serializers.ValidationError(
+            {"faixas": "Cada faixa pode conter no máximo 500 bens."}
+        )
+
+    bens_da_ua = BemPatrimonial.objects.filter(
+        unidade_administrativa=unidade_administrativa,
+        numero_patrimonial__gte=numero_de,
+        numero_patrimonial__lte=numero_ate,
+    )
+    bens_por_indice = {
+        dados[0]: bem
+        for bem in bens_da_ua.order_by("numero_patrimonial", "id")
+        if (dados := _dados_numero_patrimonial(bem.numero_patrimonial))
+    }
+    ids_movimentaveis = set(
+        queryset_bens_movimentaveis(unidade_administrativa)
+        .filter(id__in=[bem.id for bem in bens_por_indice.values()])
+        .values_list("id", flat=True)
+    )
+
+    numeros_invalidos = []
+    bens = []
+    for indice in range(indice_de, indice_ate + 1):
+        bem = bens_por_indice.get(indice)
+        if bem and bem.id in ids_movimentaveis:
+            bens.append(bem)
+            continue
+        numeros_invalidos.append(
+            bem.numero_patrimonial
+            if bem
+            else _formatar_numero_patrimonial(indice, largura, digito, formato_atual)
+        )
+
+    if numeros_invalidos:
+        raise serializers.ValidationError(
+            {"faixas": _mensagem_bens_nao_movimentaveis(numeros_invalidos)}
+        )
+    return bens
+
+
+def resolver_bens_movimentacao_lote(unidade_administrativa, faixas, selecionar_todos):
+    if selecionar_todos:
+        return list(
+            queryset_bens_movimentaveis(unidade_administrativa).order_by(
+                "numero_patrimonial", "id"
+            )
+        )
+
+    bens_por_id = {}
+    for faixa in faixas:
+        for bem in _resolver_bens_da_faixa(unidade_administrativa, faixa):
+            bens_por_id[bem.id] = bem
+    return list(bens_por_id.values())
+
+
+def validar_bens_movimentacao(unidade_administrativa, bens):
+    bens_pendentes = set(
+        MovimentacaoBensItem.objects.filter(
+            bem_id__in=[bem.id for bem in bens],
+            movimentacao__status=constants.ENVIADA,
+        ).values_list("bem_id", flat=True)
+    )
+    erros = {}
+    for idx, bem in enumerate(bens):
+        if bem.unidade_administrativa_id != unidade_administrativa.id:
+            erros[str(idx)] = {
+                "bem": "O bem selecionado não pertence à unidade administrativa de origem."
+            }
+            continue
+        if bem.status != constants.APROVADO:
+            erros[str(idx)] = {
+                "bem": (
+                    f"O bem '{bem.numero_patrimonial}' precisa estar com status 'Aprovado' "
+                    "para ser movimentado."
+                )
+            }
+            continue
+        if getattr(bem, "bloqueado_conciliacao", False):
+            erros[str(idx)] = {
+                "bem": (
+                    f"O bem '{bem.numero_patrimonial}' está bloqueado por inventário e não pode ser movimentado."
+                )
+            }
+            continue
+        if bem.id in bens_pendentes:
+            erros[str(idx)] = {
+                "bem": (
+                    f"O bem '{bem.numero_patrimonial}' já possui uma movimentação pendente."
+                )
+            }
+
+    if erros:
+        raise serializers.ValidationError({"itens": erros})
+
+
+class MovimentacaoFaixaNumeroPatrimonialSerializer(serializers.Serializer):
+    numero_patrimonial_de = serializers.CharField()
+    numero_patrimonial_ate = serializers.CharField(required=False, allow_blank=True)
+
+
+class MovimentacaoBensLotePreviewSerializer(serializers.Serializer):
+    unidade_administrativa_origem = serializers.PrimaryKeyRelatedField(
+        queryset=queryset_uas_ativas()
+    )
+    faixas = MovimentacaoFaixaNumeroPatrimonialSerializer(many=True, required=False)
+    selecionar_todos = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        ua_origem = validar_ua_origem_movimentacao(
+            self.context["request"].user,
+            attrs["unidade_administrativa_origem"],
+        )
+        faixas = attrs.get("faixas", [])
+        selecionar_todos = attrs.get("selecionar_todos", False)
+        if selecionar_todos == bool(faixas):
+            raise serializers.ValidationError(
+                "Informe uma ou mais faixas ou selecione todos os bens da UA."
+            )
+
+        bens = resolver_bens_movimentacao_lote(ua_origem, faixas, selecionar_todos)
+        if not bens:
+            raise serializers.ValidationError(
+                {"itens": "Nenhum bem aprovado foi encontrado na unidade administrativa de origem."}
+            )
+        validar_bens_movimentacao(ua_origem, bens)
+        attrs["bens"] = bens
+        return attrs
+
+
 class UnidadeOrcamentariaSimpleSerializer(serializers.ModelSerializer):
     class Meta:
         model = UnidadeOrcamentaria
@@ -112,6 +332,10 @@ class BemPatrimonialSimpleSerializer(serializers.ModelSerializer):
         model = BemPatrimonial
         fields = ["id", "numero_patrimonial", "nome", "status"]
         read_only_fields = fields
+
+
+class MovimentacaoBensLotePreviewResponseSerializer(serializers.Serializer):
+    itens = BemPatrimonialSimpleSerializer(many=True)
 
 
 class MovimentacaoBensItemSimpleSerializer(serializers.ModelSerializer):
@@ -239,7 +463,9 @@ class MovimentacaoBemPatrimonialDetailSerializer(
 
 
 class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
-    itens = MovimentacaoBensItemCreateSerializer(many=True)
+    itens = MovimentacaoBensItemCreateSerializer(many=True, required=False)
+    faixas = MovimentacaoFaixaNumeroPatrimonialSerializer(many=True, required=False)
+    selecionar_todos = serializers.BooleanField(required=False, default=False)
     unidade_orcamentaria_destino = serializers.PrimaryKeyRelatedField(
         queryset=queryset_uos_destino(), required=False
     )
@@ -255,6 +481,8 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
             "unidade_administrativa_destino",
             "observacao",
             "itens",
+            "faixas",
+            "selecionar_todos",
         ]
 
     def validate_itens(self, value):
@@ -266,53 +494,10 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_unidade_administrativa_origem(self, value):
-        if not value:
-            raise serializers.ValidationError("Unidade administrativa de origem é obrigatória.")
-        if value.status != UnidadeAdministrativa.ATIVA:
-            raise serializers.ValidationError("A unidade de origem está inativa.")
-
-        user = self.context["request"].user
-        if getattr(user, "is_superuser", False):
-            return value
-
-        qs_permitidas = filtrar_ua_origem_por_escopo(user, queryset_uas_ativas())
-        if not qs_permitidas.filter(pk=value.pk).exists():
-            raise serializers.ValidationError("UA de origem fora do seu escopo de acesso.")
-        return value
+        return validar_ua_origem_movimentacao(self.context["request"].user, value)
 
     def _validar_bens(self, ua_origem, itens):
-        erros = {}
-        for idx, item in enumerate(itens):
-            bem = item["bem"]
-            if bem.unidade_administrativa_id != ua_origem.id:
-                erros[str(idx)] = {
-                    "bem": "O bem selecionado não pertence à unidade administrativa de origem."
-                }
-                continue
-            if bem.status != constants.APROVADO:
-                erros[str(idx)] = {
-                    "bem": (
-                        f"O bem '{bem.numero_patrimonial}' precisa estar com status 'Aprovado' "
-                        "para ser movimentado."
-                    )
-                }
-                continue
-            if getattr(bem, "bloqueado_conciliacao", False):
-                erros[str(idx)] = {
-                    "bem": (
-                        f"O bem '{bem.numero_patrimonial}' está bloqueado por inventário e não pode ser movimentado."
-                    )
-                }
-                continue
-            if getattr(bem, "tem_movimentacao_pendente", False):
-                erros[str(idx)] = {
-                    "bem": (
-                        f"O bem '{bem.numero_patrimonial}' já possui uma movimentação pendente."
-                    )
-                }
-
-        if erros:
-            raise serializers.ValidationError({"itens": erros})
+        validar_bens_movimentacao(ua_origem, [item["bem"] for item in itens])
 
     def _resolver_destino(self, attrs):
         user = self.context["request"].user
@@ -362,9 +547,38 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         self._resolver_destino(attrs)
+        faixas = attrs.pop("faixas", [])
+        selecionar_todos = attrs.pop("selecionar_todos", False)
+        itens = attrs.get("itens", [])
+
+        if selecionar_todos and faixas:
+            raise serializers.ValidationError(
+                "Não informe faixas junto com a seleção de todos os bens."
+            )
+        if faixas or selecionar_todos:
+            if itens:
+                raise serializers.ValidationError(
+                    "Não informe itens junto com faixas ou seleção de todos os bens."
+                )
+            bens = resolver_bens_movimentacao_lote(
+                attrs["unidade_administrativa_origem"],
+                faixas,
+                selecionar_todos,
+            )
+            if not bens:
+                raise serializers.ValidationError(
+                    {"itens": "Nenhum bem aprovado foi encontrado na unidade administrativa de origem."}
+                )
+            attrs["itens"] = [{"bem": bem} for bem in bens]
+        elif not itens:
+            raise serializers.ValidationError(
+                {"itens": "Adicione ao menos um bem na movimentação."}
+            )
+
         self._validar_bens(attrs["unidade_administrativa_origem"], attrs["itens"])
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         itens = validated_data.pop("itens")
         validated_data.pop("unidade_orcamentaria_destino", None)
