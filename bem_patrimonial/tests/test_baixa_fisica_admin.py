@@ -1,7 +1,7 @@
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
@@ -131,8 +131,11 @@ class BaixaFisicaAdminTestCase(TestCase):
         self.assertIsInstance(resultado, str)
 
 
-def _criar_uo_cov(codigo="01.16.10"):
+def _criar_uo_cov(codigo=None):
     from dados_comuns.models import UnidadeOrcamentaria
+
+    if codigo is None:
+        codigo = codigo_uo(1, 16, 10)
     obj, _ = UnidadeOrcamentaria.objects.get_or_create(codigo=codigo, defaults={"nome": "UO", "sigla": "UO"})
     return obj
 
@@ -362,7 +365,7 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
 
 class TestBaixaFisicaAdminCoberturaExtra(TestCase):
     def setUp(self):
-        self.uo = _criar_uo_cov(codigo="01.16.10")
+        self.uo = _criar_uo_cov(codigo=codigo_uo(1, 16, 10))
         self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 10, 50), sigla="UA50", nome="UA50")
         self.gestor = _criar_usuario_cov("gest_extra", self.uo, self.ua, [GRUPO_GESTOR_PATRIMONIO])
         self.operador = _criar_usuario_cov("oper_extra", self.uo, self.ua, [GRUPO_OPERADOR_INVENTARIO])
@@ -548,3 +551,33 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         bem2.refresh_from_db()
         # aceita ambos os status pois o formset mock pode não reproduzir 100% o fluxo real
         self.assertIn(bem2.status, [constants.APROVADO, constants.BAIXA_FISICA_AGUARDANDO_APROVACAO])
+
+
+class TestAprovacaoAdminNaoGeraNBBPMEssencial(TestCase):
+
+    def setUp(self):
+        self.uo = _criar_uo_cov(codigo=codigo_uo(1, 16, 30))
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 30, 30), sigla="UA30", nome="UA30")
+        self.gestor = _criar_usuario_cov("gest_admin_ess", self.uo, self.ua, [GRUPO_GESTOR_PATRIMONIO])
+        self.operador = _criar_usuario_cov("oper_admin_ess", self.uo, self.ua, [GRUPO_OPERADOR_INVENTARIO])
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, AdminSite())
+        self.factory = RequestFactory()
+        self.bem = _criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO)
+
+    def test_acao_aprovar_nao_cria_nbbpm(self):
+        baixa = _criar_baixa_cov(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        self.assertEqual(NBBPM.objects.count(), 0)
+        req = self.factory.post("/admin/")
+        req.user = self.gestor
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.contrib.sessions.backends.db import SessionStore
+
+        req.session = SessionStore()
+        req.session.create()
+        req._messages = FallbackStorage(req)
+        self.admin.acao_aprovar_baixa(req, BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk))
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.status, constants.ACEITA)
+        self.assertEqual(NBBPM.objects.count(), 0)
+        self.assertFalse(baixa.nbbpms_lote.exists())
