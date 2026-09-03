@@ -125,19 +125,23 @@ Aprova a baixa física, autorizando a baixa definitiva dos bens.
 1. Valida que o status é **solicitada**
 2. Valida permissões do usuário (apenas Gestor de Patrimônio)
 3. Muda o status para **aceita**
-4. **Gera número NBBPM** automaticamente
-5. Registra **aprovador** e **data de aprovação**
-6. Atualiza status dos bens para **baixa_fisica**
-7. Atualiza **localização** dos bens com referência ao processo
-8. Limpa **número do processo** de incorporação dos bens
-9. Envia **email de notificação**
+4. Registra **aprovador** e **data de aprovação**
+5. Atualiza status dos bens para **baixa_fisica**
+6. Atualiza **localização** dos bens com referência ao processo
+7. Limpa **número do processo** de incorporação dos bens
+8. Envia **email de notificação**
+
+A NBBPM **não** é gerada automaticamente no aceite; deve ser gerada
+manualmente em lote (mesma Unidade Orçamentária) via módulo de NBBPM.
 
 ### Restrições
 
 - Só pode aprovar se status for **solicitada**
 - **Apenas Gestor de Patrimônio** pode executar esta ação
 
-Após a aprovação, é possível gerar o PDF da Nota NBBPM.
+Após a aprovação, o único documento gerado automaticamente é o
+**Laudo de Avaliação de Bens Patrimoniais Móveis Baixados Contabilmente para Descarte**,
+disponível em `GET /api/baixa-fisica/{id}/gerar-laudo/` (apenas para status **Aceita**).
 """)
 
 # API: /api/baixas-fisicas/{id}/recusar/ (POST)
