@@ -1,6 +1,6 @@
 # bem_patrimonial/laudo_avaliacao.py
 #
-# Gera o "Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis"
+# Gera o "Laudo de Avaliação de Bens Patrimoniais Móveis Baixados Contabilmente para Descarte"
 # conforme Artigo 20 do Decreto 53.484/2012.
 #
 # Documento distinto da NBBPM (nbbpm.py):
@@ -230,7 +230,7 @@ def _criar_titulo(styles) -> list:
     return [
         Spacer(1, 0.4 * cm),
         Paragraph(
-            "LAUDO DE AVALIAÇÃO PARA BAIXA DE BENS PATRIMONIAIS MÓVEIS",
+            "LAUDO DE AVALIAÇÃO DE BENS PATRIMONIAIS MÓVEIS BAIXADOS CONTABILMENTE PARA DESCARTE",
             estilo_titulo,
         ),
         Spacer(1, 0.4 * cm),
@@ -440,7 +440,7 @@ def gerar_pdf_laudo_avaliacao(
         # topMargin maior para acomodar o cabeçalho desenhado no canvas
         topMargin=PDFConfig.MARGEM_SUPERIOR + 0.5 * cm,
         bottomMargin=PDFConfig.MARGEM_INFERIOR,
-        title="Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis",
+        title="Laudo de Avaliação de Bens Patrimoniais Móveis Baixados Contabilmente para Descarte",
         author="Sistema de Bens Físicos - SME",
     )
 
