@@ -639,3 +639,30 @@ class LaudoAvaliacaoHelpersTestCase(BaseSetup):
         # Apenas o bem real deve aparecer
         self.assertEqual(len(bens), 1)
         self.assertEqual(bens[0], self.bem)
+
+
+class TituloLaudoNovoEssencialTestCase(BaseSetup):
+    TITULO_NOVO = "LAUDO DE AVALIAÇÃO DE BENS PATRIMONIAIS MÓVEIS BAIXADOS CONTABILMENTE PARA DESCARTE"
+
+    def test_criar_titulo_retorna_titulo_novo(self):
+        from bem_patrimonial.laudo_avaliacao import _criar_titulo
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        para = _criar_titulo(getSampleStyleSheet())[1]
+        self.assertEqual(para.text, self.TITULO_NOVO)
+
+    @patch("bem_patrimonial.laudo_avaliacao.carregar_logo")
+    def test_gerar_pdf_contem_titulo_novo_e_bens(self, mock_logo):
+        mock_logo.return_value = MagicMock(wrap=MagicMock(return_value=(50, 30)), drawOn=MagicMock())
+        from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao, _criar_titulo, _obter_bens_baixa
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA, numero_processo_baixa="PROC-ESSENCIAL")
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem2)
+        buffer = gerar_pdf_laudo_avaliacao(baixa)
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+        self.assertEqual(_criar_titulo(getSampleStyleSheet())[1].text, self.TITULO_NOVO)
+        bens = _obter_bens_baixa(baixa)
+        self.assertEqual(len(bens), 2)
+        self.assertIn(self.bem, bens)
