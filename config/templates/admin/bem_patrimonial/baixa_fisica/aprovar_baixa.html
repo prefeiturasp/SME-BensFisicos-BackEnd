@@ -1,0 +1,51 @@
+{% extends "admin/bem_patrimonial/baixa_fisica/_base_acao.html" %}
+
+{% block acao_desc %}
+    <p>As <strong>{{ baixas|length }} Baixa(s)</strong> selecionada(s) serão <strong>aprovadas</strong>. Informe o <strong>Número do Processo</strong> obrigatório no formato <code>XXXX.XXXX/XXXXXXX-X</code> (ex: <code>6016.2025/0117371-7</code>). O número será salvo na baixa e propagado para todos os bens vinculados.</p>
+{% endblock %}
+
+{% block tabela_head %}
+                        <th scope="col">ID</th>
+                        <th scope="col">Processo atual</th>
+                        <th scope="col">Unidade Administrativa</th>
+                        <th scope="col">Itens</th>
+                        <th scope="col">Status</th>
+{% endblock %}
+
+{% block tabela_row %}
+                        <td>#{{ baixa.pk }}</td>
+                        <td>{{ baixa.numero_processo_baixa|default:"-" }}</td>
+                        <td>{{ baixa.unidade_administrativa_origem.sigla }} - {{ baixa.unidade_administrativa_origem.nome }}</td>
+                        <td>{{ baixa.itens.count }}</td>
+                        <td>{{ baixa.get_status_display }}</td>
+{% endblock %}
+
+{% block form_id %}aprovar-baixa-form{% endblock %}
+
+{% block form_hidden %}
+        <input type="hidden" name="action" value="acao_aprovar_baixa">
+        <input type="hidden" name="apply_aprovar" value="1">
+{% endblock %}
+
+{% block fieldset_titulo %}Número do Processo para aprovação{% endblock %}
+
+{% block submit_label %}Aprovar{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var input = document.getElementById('id_numero_processo_baixa');
+  if (!input) return;
+  input.addEventListener('input', function(e) {
+    var v = e.target.value.replace(/\D/g, '');
+    var formatted = '';
+    if (v.length > 0) formatted = v.substring(0,4);
+    if (v.length >= 5) formatted += '.' + v.substring(4,8);
+    if (v.length >= 9) formatted += '/' + v.substring(8,15);
+    if (v.length >= 16) formatted += '-' + v.substring(15,16);
+    e.target.value = formatted.substring(0,18);
+  });
+});
+</script>
+{% endblock %}
