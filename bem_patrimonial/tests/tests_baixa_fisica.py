@@ -233,22 +233,23 @@ class BaixaFisicaFluxoEnvioAprovacaoTestCase(TestCase):
         self.baixa.save(update_fields=["status"])
 
         with self.assertRaises(ValidationError):
-            self.baixa.aprovar(self.gestor)
+            self.baixa.aprovar(self.gestor, numero_processo_baixa="6016.2025/0117371-7")
 
     def test_aprovar_atualiza_statuses_e_dados(self):
         # primeiro envia
         self.baixa.enviar_solicitacao()
         self.baixa.refresh_from_db()
 
-        self.baixa.aprovar(self.gestor)
+        self.baixa.aprovar(self.gestor, numero_processo_baixa="6016.2025/0117371-7")
         self.baixa.refresh_from_db()
         self.bem.refresh_from_db()
 
         self.assertEqual(self.baixa.status, ACEITA)
         self.assertEqual(self.baixa.aprovado_por, self.gestor)
         self.assertIsNotNone(self.baixa.data_aprovacao)
+        self.assertEqual(self.baixa.numero_processo_baixa, "6016.2025/0117371-7")
         self.assertEqual(self.bem.status, BAIXA_FISICA)
-        self.assertIsNone(self.bem.numero_processo)
+        self.assertEqual(self.bem.numero_processo, "6016.2025/0117371-7")
 
 
 # ---------------------------------------------------------------------------
@@ -448,13 +449,20 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
         self.baixa.refresh_from_db()
         self.assertNotEqual(self.baixa.status, ACEITA)
 
-        # gestor pode
-        request_gestor = self._request(self.gestor)
+        # gestor pode - precisa enviar processo válido via form intermediário
+        request_gestor = self.factory.post(
+            "/admin/",
+            {"apply_aprovar": "1", "numero_processo_baixa": "6016.2025/0117371-7"},
+        )
+        request_gestor.user = self.gestor
+        _add_messages_support(request_gestor)
         self.admin.acao_aprovar_baixa(request_gestor, qs)
 
         self.baixa.refresh_from_db()
         self.bem.refresh_from_db()
         self.assertEqual(self.baixa.status, ACEITA)
+        self.assertEqual(self.baixa.numero_processo_baixa, "6016.2025/0117371-7")
+        self.assertEqual(self.bem.numero_processo, "6016.2025/0117371-7")
         self.assertEqual(self.bem.status, BAIXA_FISICA)
         self.assertTrue(self._logentry_qs().exists())
 
@@ -490,9 +498,9 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
         )
 
     def test_acao_cancelar_nao_cancela_baixas_aceitas(self):
-        # envia e aprova
+        # envia e aprova com processo válido
         self.baixa.enviar_solicitacao()
-        self.baixa.aprovar(self.gestor)
+        self.baixa.aprovar(self.gestor, numero_processo_baixa="6016.2025/0117371-7")
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, ACEITA)
 

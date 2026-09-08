@@ -217,12 +217,15 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
         return req
 
     def _data(self, itens=None, data_baixa=None, ua=None):
-        return {
-            "numero_processo_baixa": "PROC-001",
+        data = {
             "unidade_administrativa_origem": (ua or self.ua).id,
-            "data_baixa": data_baixa or str(timezone.localdate()),
             "itens": itens if itens is not None else [{"bem": self.bem.id}],
         }
+        if data_baixa is not None:
+            data["data_baixa"] = data_baixa
+        else:
+            data["data_baixa"] = str(timezone.localdate())
+        return data
 
     def _serializer(self, data):
         return BaixaFisicaBemPatrimonialCreateSerializer(
@@ -241,10 +244,16 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
 
     def test_data_baixa_futura_invalida(self):
         from datetime import timedelta
+
         futura = str((timezone.localdate() + timedelta(days=1)))
         s = self._serializer(self._data(data_baixa=futura))
         self.assertFalse(s.is_valid())
         self.assertIn("data_baixa", s.errors)
+
+    def test_numero_processo_bloqueado_na_criacao(self):
+        s = self._serializer({**self._data(), "numero_processo_baixa": "6016.2025/0117371-7"})
+        self.assertFalse(s.is_valid())
+        self.assertIn("numero_processo_baixa", s.errors)
 
     def test_ua_inativa_invalida(self):
         from dados_comuns.models import UnidadeAdministrativa
@@ -376,18 +385,27 @@ class BaixaFisicaAprovarSerializerTestCase(BaseSetup):
         return {"baixa": self.baixa, "request": self._req(user)}
 
     def test_gestor_pode_aprovar(self):
-        s = BaixaFisicaAprovarSerializer(data={}, context=self._ctx(self.gestor))
+        s = BaixaFisicaAprovarSerializer(
+            data={"numero_processo_baixa": "6016.2025/0117371-7"},
+            context=self._ctx(self.gestor),
+        )
         self.assertTrue(s.is_valid(), s.errors)
 
     def test_operador_nao_pode_aprovar(self):
-        s = BaixaFisicaAprovarSerializer(data={}, context=self._ctx(self.operador))
+        s = BaixaFisicaAprovarSerializer(
+            data={"numero_processo_baixa": "6016.2025/0117371-7"},
+            context=self._ctx(self.operador),
+        )
         with self.assertRaises(PermissionDenied):
             s.is_valid(raise_exception=True)
 
     def test_invalido_quando_status_diferente_de_solicitada(self):
         self.baixa.status = constants.AGUARDANDO_ENVIO
         self.baixa.save()
-        s = BaixaFisicaAprovarSerializer(data={}, context=self._ctx(self.gestor))
+        s = BaixaFisicaAprovarSerializer(
+            data={"numero_processo_baixa": "6016.2025/0117371-7"},
+            context=self._ctx(self.gestor),
+        )
         self.assertFalse(s.is_valid())
 
 
@@ -695,13 +713,14 @@ class BaixaFisicaViewSetListTestCase(BaseAPISetup):
 
 class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
     def _payload(self, **kwargs):
-        return {
-            "numero_processo_baixa": "PROC-NOVO",
+        payload = {
             "unidade_administrativa_origem": self.ua.id,
-            "data_baixa": str(timezone.localdate()),
             "itens": [{"bem": self.bem.id}],
             **kwargs,
         }
+        if "data_baixa" not in kwargs:
+            payload["data_baixa"] = str(timezone.localdate())
+        return payload
 
     def test_criacao_sem_itens_retorna_400(self):
         self._auth(self.operador)
@@ -720,6 +739,13 @@ class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
         self._auth(self.operador)
         futura = str(timezone.localdate() + timedelta(days=2))
         resp = self.client.post(self.list_url, self._payload(data_baixa=futura), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_criacao_com_processo_retorna_400(self):
+        self._auth(self.operador)
+        resp = self.client.post(
+            self.list_url, self._payload(numero_processo_baixa="6016.2025/0117371-7"), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_criacao_atualiza_status_bem(self):
@@ -858,7 +884,11 @@ class BaixaFisicaViewSetEnviarSolicitacaoTestCase(BaseAPISetup):
         self._auth(self.operador)
         self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
         self._auth(self.gestor)
-        self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.ACEITA)
 
@@ -901,7 +931,11 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada")
     def test_gestor_aprova(self, mock_email):
         self._auth(self.gestor)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.ACEITA)
@@ -912,7 +946,11 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
     def test_aprovacao_nao_gera_nbbpm(self, mock_email):
         # NBBPM somente via tela de NBBPM (lote)
         self._auth(self.gestor)
-        self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.ACEITA)
         self.assertEqual((self.baixa.numero_nbbpm or "").strip(), "")
@@ -921,21 +959,33 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
 
     def test_operador_nao_pode_aprovar(self):
         self._auth(self.operador)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_aprovar_status_errado_retorna_400(self):
         self.baixa.status = constants.AGUARDANDO_ENVIO
         self.baixa.save()
         self._auth(self.gestor)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada",
            side_effect=Exception("Erro de email"))
     def test_falha_email_nao_impede_aprovacao(self, mock_email):
         self._auth(self.gestor)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
 
