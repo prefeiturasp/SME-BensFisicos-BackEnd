@@ -66,3 +66,9 @@ STATUS_BAIXA_FISICA = (
     (ACEITA, "Aceita"),
     (RECUSADA, "Recusada"),
 )
+
+# Validação de número de processo da Baixa Física (aceite)
+# Formato obrigatório: XXXX.XXXX/XXXXXXX-X  ex: 6016.2025/0117371-7
+PROCESSO_BAIXA_REGEX = r"^\d{4}\.\d{4}/\d{7}-\d$"
+PROCESSO_BAIXA_MESSAGE = "Formato inválido. Use XXXX.XXXX/XXXXXXX-X (ex: 6016.2025/0117371-7)"
+PROCESSO_BAIXA_EXEMPLO = "6016.2025/0117371-7"
