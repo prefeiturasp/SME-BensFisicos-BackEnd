@@ -1040,13 +1040,14 @@ class BaixaFisicaBemPatrimonial(models.Model):
             bem.save(update_fields=["status"])
 
     @transaction.atomic
-    def aprovar(self, usuario_aprovador):
+    def aprovar(self, usuario_aprovador, numero_processo_baixa=None):
         """
         Aprova a Baixa Física:
+        - exige numero_processo_baixa no formato XXXX.XXXX/XXXXXXX-X
         - status da baixa => ACEITA
         - status do bem => BAIXA_FISICA
-        - limpa 'numero_processo' (incorporação)
-        - localização usa numero_processo_baixa se preenchido, senão o ID da baixa
+        - propaga numero_processo_baixa para baixa e para todos os bens vinculados
+        - localização usa numero_processo_baixa
         - validação cruzada central: barra reuso se já tem NBBPM (nova tabela ou legado)
         """
         if self.status != constants.SOLICITADA:
@@ -1057,19 +1058,36 @@ class BaixaFisicaBemPatrimonial(models.Model):
         if self.nbbpms_lote.exists() or (self.numero_nbbpm or "").strip():
             raise ValidationError("Esta baixa já possui NBBPM gerada.")
 
+        processo = (numero_processo_baixa or self.numero_processo_baixa or "").strip()
+        if not processo:
+            raise ValidationError(
+                {"numero_processo_baixa": "Número do processo é obrigatório."}
+            )
+        if not re.fullmatch(constants.PROCESSO_BAIXA_REGEX, processo):
+            raise ValidationError(
+                {"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE}
+            )
+
+        self.numero_processo_baixa = processo
         self.status = constants.ACEITA
         self.aprovado_por = usuario_aprovador
         self.data_aprovacao = timezone.now()
-        self.save(update_fields=["status", "aprovado_por", "data_aprovacao"])
+        self.save(
+            update_fields=[
+                "numero_processo_baixa",
+                "status",
+                "aprovado_por",
+                "data_aprovacao",
+            ]
+        )
 
-        referencia = self.numero_processo_baixa or str(self.pk)
-        texto_localizacao = f"Baixa Física - {referencia}"
+        texto_localizacao = f"Baixa Física - {processo}"
 
         for item in self.itens.select_related("bem"):
             bem = item.bem
             bem.status = constants.BAIXA_FISICA
             bem.localizacao = texto_localizacao
-            bem.numero_processo = None
+            bem.numero_processo = processo
             bem.save(update_fields=["status", "numero_processo", "localizacao"])
 
 
