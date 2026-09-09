@@ -238,9 +238,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
         return obj.status == constants.AGUARDANDO_ENVIO
 
     def has_delete_permission(self, request, obj=None):
-        if obj is None:
-            return True
-        return obj.status == constants.AGUARDANDO_ENVIO
+        return self.has_add_permission(request, obj)
 
     def get_max_num(self, request, obj=None):
 
