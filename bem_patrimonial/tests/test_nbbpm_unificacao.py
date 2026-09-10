@@ -585,7 +585,11 @@ class TestValidacaoVinculoEReuso(TestCase):
         client.force_authenticate(user=self.gestor)
         baixa_solic = criar_baixa(self.ua, self.gestor, status=constants.SOLICITADA)
         self.nbbpm.baixas.add(baixa_solic)
-        resp = client.post(reverse("baixas-fisicas-aprovar", kwargs={"pk": baixa_solic.pk}))
+        resp = client.post(
+            reverse("baixas-fisicas-aprovar", kwargs={"pk": baixa_solic.pk}),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertIn(resp.status_code, [status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN])
 
 

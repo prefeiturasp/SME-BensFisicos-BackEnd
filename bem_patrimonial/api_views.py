@@ -513,7 +513,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         tags=["Baixas Físicas"],
         summary="Aprovar baixa física",
         description=APROVAR_BAIXA_FISICA_DOC,
-        request=None,
+        request=BaixaFisicaAprovarSerializer,
         responses={
             200: BaixaFisicaBemPatrimonialDetailSerializer,
             400: OpenApiResponse(description="Erro de validação"),
@@ -526,7 +526,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         baixa = self.get_object()
 
         serializer = self.get_serializer(
-            data={}, context={'baixa': baixa, 'request': request}
+            data=request.data, context={'baixa': baixa, 'request': request}
         )
         serializer.is_valid(raise_exception=True)
 
@@ -536,10 +536,14 @@ class BaixaFisicaBemPatrimonialViewSet(
             raise DRFValidationError({"detail": "Esta baixa já possui NBBPM gerada."})
 
         status_anterior = baixa.get_status_display()
+        numero_processo = serializer.validated_data["numero_processo_baixa"]
 
         with transaction.atomic():
             set_user(request.user)
-            baixa.aprovar(usuario_aprovador=request.user)
+            baixa.aprovar(
+                usuario_aprovador=request.user,
+                numero_processo_baixa=numero_processo,
+            )
 
         self._registrar_historico(
             baixa=baixa,
@@ -547,7 +551,7 @@ class BaixaFisicaBemPatrimonialViewSet(
             valor_antigo=status_anterior,
             valor_novo=baixa.get_status_display(),
             usuario=request.user,
-            justificativa="Baixa física aprovada",
+            justificativa=f"Baixa física aprovada. Processo: {numero_processo}",
         )
 
         try:

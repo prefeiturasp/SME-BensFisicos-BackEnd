@@ -286,10 +286,23 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         self.admin.acao_enviar_baixa(req, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b1.pk, b2.pk]))
         b1.refresh_from_db()
         self.assertEqual(b1.status, constants.SOLICITADA)
-        self._req_messages(req)
-        self.admin.acao_aprovar_baixa(req, BaixaFisicaBemPatrimonial.objects.filter(pk=b2.pk))
+        # aprovar agora exige processo válido via form intermediário
+        req_aprovar = self.factory.post(
+            "/",
+            {
+                "apply_aprovar": "1",
+                "numero_processo_baixa": "6016.2025/0117371-7",
+                "_selected_action": [b2.pk],
+            },
+        )
+        req_aprovar.user = self.gestor
+        self._req_messages(req_aprovar)
+        self.admin.acao_aprovar_baixa(
+            req_aprovar, BaixaFisicaBemPatrimonial.objects.filter(pk=b2.pk)
+        )
         b2.refresh_from_db()
         self.assertEqual(b2.status, constants.ACEITA)
+        self.assertEqual(b2.numero_processo_baixa, "6016.2025/0117371-7")
         self._req_messages(req)
         self.admin.acao_cancelar_baixa(req, BaixaFisicaBemPatrimonial.objects.filter(pk=b1.pk))
         self._req_messages(req)
@@ -337,10 +350,11 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
             BaixaFisicaBensItem.objects.create(baixa=b, bem=_criar_bem_cov(b.unidade_administrativa_origem, self.gestor, status=constants.APROVADO, numero_patrimonial=f"000.00000000{90+b.pk}-0"))
         self._req_messages(req5)
         self.admin.gerar_nbbpm_action(req5, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b8.pk, b9.pk]))
-        # get_readonly/fieldsets/formfield/urls/baixar
+        # get_readonly/fieldsets/formfield/urls/baixar - criação agora tem só UA e data (processo só no aceite)
         self.assertIn("status", self.admin.get_readonly_fields(req, None))
         self.assertIn("unidade_administrativa_origem", self.admin.get_readonly_fields(req, b5))
-        self.assertEqual(len(self.admin.get_fieldsets(req, None)[0][1]["fields"]), 3)
+        self.assertEqual(len(self.admin.get_fieldsets(req, None)[0][1]["fields"]), 2)
+        self.assertEqual(len(self.admin.get_fieldsets(req, b5)[0][1]["fields"]), 8)
         field = self.admin.formfield_for_dbfield(BaixaFisicaBemPatrimonial._meta.get_field("data_baixa"), req)
         self.assertIsNotNone(field)
         self.assertTrue(len(self.admin.get_urls()) >= 2)
@@ -576,8 +590,23 @@ class TestAprovacaoAdminNaoGeraNBBPMEssencial(TestCase):
         req.session = SessionStore()
         req.session.create()
         req._messages = FallbackStorage(req)
-        self.admin.acao_aprovar_baixa(req, BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk))
+        # primeiro chama sem processo para renderizar form
+        resp = self.admin.acao_aprovar_baixa(
+            req, BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk)
+        )
+        self.assertEqual(resp.status_code, 200)
+        # agora envia com processo válido
+        req2 = self.factory.post(
+            "/admin/",
+            {"apply_aprovar": "1", "numero_processo_baixa": "6016.2025/0117371-7"},
+        )
+        req2.user = self.gestor
+        req2.session = SessionStore()
+        req2.session.create()
+        req2._messages = FallbackStorage(req2)
+        self.admin.acao_aprovar_baixa(req2, BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk))
         baixa.refresh_from_db()
         self.assertEqual(baixa.status, constants.ACEITA)
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0117371-7")
         self.assertEqual(NBBPM.objects.count(), 0)
         self.assertFalse(baixa.nbbpms_lote.exists())
