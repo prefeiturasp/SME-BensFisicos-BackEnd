@@ -77,7 +77,7 @@ def criar_nbbpm(baixas, criado_por, **kwargs):
         numero=kwargs.pop("numero", ""),
         numero_processo_baixa=kwargs.pop("numero_processo_baixa", "6016.2025/0117371-7"),
         data_autorizacao=kwargs.pop("data_autorizacao", timezone.localdate()),
-        responsavel=kwargs.pop("responsavel", "Priscila Padovesi"),
+        responsavel=kwargs.pop("responsavel", "Responsavel Teste"),
         numero_processo_destinacao_final=kwargs.pop("numero_processo_destinacao_final", ""),
         criado_por=criado_por,
         **kwargs,
@@ -257,14 +257,14 @@ class CriarInformacoesGeraisTestCase(BaseSetup):
             [self.baixa],
             self.usuario,
             numero_processo_baixa="6016.2025/0117371-7",
-            responsavel="Priscila Padovesi",
+            responsavel="Responsavel Teste",
         )
 
         [tabela] = _criar_informacoes_gerais(nbbpm)
         textos = self._textos_da_tabela(tabela)
 
         self.assertIn("6016.2025/0117371-7", textos[5])
-        self.assertIn("PRISCILA PADOVESI", textos[5])
+        self.assertIn("RESPONSAVEL TESTE", textos[5])
 
     def test_nao_inclui_linha_de_destinacao_final_quando_ausente(self):
         nbbpm = criar_nbbpm(
@@ -455,3 +455,62 @@ class HttpResponseNbbpmLoteTestCase(BaseSetup):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.content.startswith(b"%PDF"))
+
+
+class ProcessoUnicoNBBPMTestCase(BaseSetup):
+    """Serviço de processo único: mesma regra usada por Admin e API."""
+
+    def test_normalizar_e_processos_de_strings_e_objetos(self):
+        from bem_patrimonial.services.nbbpm_numero import (
+            normalizar_processo,
+            processos_normalizados_de_baixas,
+        )
+
+        self.assertEqual(normalizar_processo(None), "")
+        self.assertEqual(normalizar_processo("  P1  "), "P1")
+        self.assertEqual(processos_normalizados_de_baixas(["  P1 ", "P1"]), {"P1"})
+        self.assertEqual(processos_normalizados_de_baixas([self.baixa]), {"PROC-BX-001"})
+
+    def test_obter_processo_unico_ok_divergente_e_vazio(self):
+        from bem_patrimonial.services.nbbpm_numero import obter_processo_unico_baixas
+
+        self.assertEqual(obter_processo_unico_baixas([self.baixa]), "PROC-BX-001")
+        self.assertEqual(obter_processo_unico_baixas([]), "")
+        outra = criar_baixa(self.ua, self.usuario, numero_processo_baixa="OUTRO")
+        with self.assertRaises(ValidationError) as ctx:
+            obter_processo_unico_baixas([self.baixa, outra])
+        self.assertIn("divergentes", str(ctx.exception))
+
+    def test_validar_payload_ok_strip_e_divergente(self):
+        from bem_patrimonial.services.nbbpm_numero import validar_processo_payload_baixas
+
+        self.assertEqual(
+            validar_processo_payload_baixas([self.baixa], "  PROC-BX-001  "),
+            "PROC-BX-001",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            validar_processo_payload_baixas([self.baixa], "DIFERENTE")
+        self.assertIn("diverge", str(ctx.exception))
+
+    def test_criar_nbbpm_com_retry_bloqueia_processo_divergente(self):
+        from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+
+        outra = criar_baixa(self.ua, self.usuario, numero_processo_baixa="OUTRO")
+        with self.assertRaises(ValidationError) as ctx:
+            criar_nbbpm_com_retry(
+                baixas=[self.baixa, outra],
+                numero_processo_baixa="PROC-BX-001",
+                data_autorizacao=timezone.localdate(),
+                responsavel="G",
+                criado_por=self.usuario,
+            )
+        self.assertIn("divergentes", str(ctx.exception))
+        with self.assertRaises(ValidationError) as ctx2:
+            criar_nbbpm_com_retry(
+                baixas=[self.baixa],
+                numero_processo_baixa="DIFERENTE",
+                data_autorizacao=timezone.localdate(),
+                responsavel="G",
+                criado_por=self.usuario,
+            )
+        self.assertIn("diverge", str(ctx2.exception))
