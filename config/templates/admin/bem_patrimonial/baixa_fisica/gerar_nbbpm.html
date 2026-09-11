@@ -4,8 +4,8 @@
     <p>Será gerada <strong>uma</strong> NBBPM consolidada para as <strong>{{ baixas|length }} Baixa(s)</strong> selecionada(s). Todas devem estar com status <strong>Aprovado (ACEITA)</strong>, da <strong>mesma Unidade Orçamentária</strong> (podendo ser UAs diferentes) e do <strong>mesmo Número de Processo</strong>.</p>
     <div class="form-row">
         <div>
-            <label>Gerado por (RF):</label>
-            <input type="text" value="{{ gerado_por_rf }}" disabled class="vTextField">
+            <label for="id_gerado_por_rf">Gerado por (RF):</label>
+            <input type="text" id="id_gerado_por_rf" value="{{ gerado_por_rf }}" disabled class="vTextField">
         </div>
     </div>
 {% endblock %}

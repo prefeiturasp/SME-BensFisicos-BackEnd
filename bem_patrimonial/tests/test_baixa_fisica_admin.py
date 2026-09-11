@@ -634,7 +634,7 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         return req
 
     def _mensagens(self, req):
-        return [str(m.message) for m in list(req._messages)]
+        return [str(m.message) for m in req._messages]
 
     def test_bloqueia_quando_processos_divergentes(self):
         b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7")
