@@ -109,6 +109,41 @@ def gerar_numero_para_ano(ano: int, max_tentativas: int = 3) -> str:
     return _gerar_numero_formatado(ano)
 
 
+def normalizar_processo(valor) -> str:
+    """Normaliza número de processo para comparação (strip, tolera None)."""
+    return (valor or "").strip()
+
+
+def processos_normalizados_de_baixas(baixas) -> set:
+    """Retorna set com processos normalizados das baixas (aceita objetos ou strings)."""
+    processos = set()
+    for item in baixas:
+        valor = item if isinstance(item, str) else getattr(item, "numero_processo_baixa", "")
+        processos.add(normalizar_processo(valor))
+    return processos
+
+
+def obter_processo_unico_baixas(baixas) -> str:
+    """Retorna processo único das baixas ou levanta ValidationError se divergir."""
+    from bem_patrimonial import constants
+
+    processos = processos_normalizados_de_baixas(baixas)
+    if len(processos) > 1:
+        raise ValidationError(constants.NBBPM_PROCESSO_DIVERGENTE)
+    return next(iter(processos)) if processos else ""
+
+
+def validar_processo_payload_baixas(baixas, numero_processo_baixa) -> str:
+    """Garante que o processo enviado é igual ao processo único das baixas."""
+    from bem_patrimonial import constants
+
+    unico = obter_processo_unico_baixas(baixas)
+    enviado = normalizar_processo(numero_processo_baixa)
+    if enviado != unico:
+        raise ValidationError(constants.NBBPM_PROCESSO_PAYLOAD_DIVERGENTE)
+    return enviado
+
+
 def _validar_uo_baixas(baixas):
     uo_ids = set()
     for baixa in baixas:
@@ -144,6 +179,11 @@ def _validar_uo_locked(locked_baixas):
         raise ValidationError("Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.")
 
 
+def _validar_processo_locked(locked_baixas, numero_processo_baixa):
+    obter_processo_unico_baixas(locked_baixas)
+    validar_processo_payload_baixas(locked_baixas, numero_processo_baixa)
+
+
 def _criar_nbbpm_atomico(baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final, ano, uo_ids, tentativa):
     from bem_patrimonial.models import NBBPM, BaixaFisicaBemPatrimonial
 
@@ -157,6 +197,7 @@ def _criar_nbbpm_atomico(baixas, numero_processo_baixa, data_autorizacao, respon
             pass
     _validar_bloqueio_baixas(locked)
     _validar_uo_locked(locked)
+    _validar_processo_locked(locked, numero_processo_baixa)
     numero = _gerar_numero_formatado(ano)
     nbbpm = NBBPM.objects.create(
         numero=numero,
@@ -200,6 +241,9 @@ def criar_nbbpm_com_retry(*, baixas, numero_processo_baixa, data_autorizacao, re
     if not primeira_ua or not getattr(primeira_ua, "pk", None):
         raise ValidationError("Unidade Administrativa não encontrada para as baixas.")
     uo_ids = _validar_uo_baixas(baixas)
+    numero_processo_baixa = normalizar_processo(numero_processo_baixa)
+    obter_processo_unico_baixas(baixas)
+    validar_processo_payload_baixas(baixas, numero_processo_baixa)
     ano = data_autorizacao.year if hasattr(data_autorizacao, "year") else timezone.localdate().year
     for tentativa in range(max_tentativas):
         try:
