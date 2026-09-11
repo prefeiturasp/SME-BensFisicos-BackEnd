@@ -321,7 +321,7 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         req3.user = self.gestor
         resp = self.admin.gerar_nbbpm_action(req3, BaixaFisicaBemPatrimonial.objects.filter(pk=b5.pk))
         self.assertEqual(resp.status_code, 200)
-        req4 = self.factory.post("/", {"apply": "1", "numero_processo_baixa": "PROC123", "data_autorizacao": str(timezone.localdate()), "responsavel": "G", "_selected_action": [b5.pk]})
+        req4 = self.factory.post("/", {"apply": "1", "numero_processo_baixa": "PROC", "data_autorizacao": str(timezone.localdate()), "responsavel": "G", "_selected_action": [b5.pk]})
         req4.user = self.gestor
         self._req_messages(req4)
         resp2 = self.admin.gerar_nbbpm_action(req4, BaixaFisicaBemPatrimonial.objects.filter(pk=b5.pk))
@@ -610,3 +610,84 @@ class TestAprovacaoAdminNaoGeraNBBPMEssencial(TestCase):
         self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0117371-7")
         self.assertEqual(NBBPM.objects.count(), 0)
         self.assertFalse(baixa.nbbpms_lote.exists())
+
+
+class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
+    """NBBPM só gera com Baixas do mesmo processo; form vem preenchido e travado."""
+
+    def setUp(self):
+        self.uo = _criar_uo_cov()
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 10, 60), sigla="UA60", nome="UA60")
+        self.gestor = _criar_usuario_cov("gest_proc_unico", self.uo, self.ua, [GRUPO_GESTOR_PATRIMONIO])
+        self.gestor.rf = "F123456"
+        self.gestor.save(update_fields=["rf"])
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, AdminSite())
+        self.factory = RequestFactory()
+
+    def _req_messages(self, req):
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.contrib.sessions.backends.db import SessionStore
+
+        req.session = SessionStore()
+        req.session.create()
+        req._messages = FallbackStorage(req)
+        return req
+
+    def _mensagens(self, req):
+        return [str(m.message) for m in list(req._messages)]
+
+    def test_bloqueia_quando_processos_divergentes(self):
+        b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7")
+        b2 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0999999-9")
+        req = self._req_messages(self.factory.get("/"))
+        req.user = self.gestor
+        resp = self.admin.gerar_nbbpm_action(
+            req, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b1.pk, b2.pk])
+        )
+        self.assertIsNone(resp)
+        self.assertIn(constants.NBBPM_PROCESSO_DIVERGENTE, self._mensagens(req))
+
+    def test_render_mesmo_processo_preenchido_readonly_e_gerado_por(self):
+        processo = "6016.2025/0117371-7"
+        b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa=processo)
+        b2 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa=processo)
+        req = self._req_messages(self.factory.get("/"))
+        req.user = self.gestor
+        resp = self.admin.gerar_nbbpm_action(
+            req, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b1.pk, b2.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        form = resp.context_data["form"]
+        self.assertEqual(form.initial["numero_processo_baixa"], processo)
+        self.assertTrue(form.fields["numero_processo_baixa"].widget.attrs.get("readonly"))
+        self.assertEqual(resp.context_data["gerado_por_rf"], "F123456")
+        self.assertNotIn("readonly", form.fields["responsavel"].widget.attrs)
+        self.assertNotIn("disabled", form.fields["responsavel"].widget.attrs)
+        self.assertNotIn("readonly", form.fields["data_autorizacao"].widget.attrs)
+        self.assertNotIn("disabled", form.fields["data_autorizacao"].widget.attrs)
+        resp.render()
+        conteudo = resp.content.decode()
+        self.assertIn("F123456", conteudo)
+        self.assertIn("disabled", conteudo)
+
+    def test_post_bloqueia_quando_payload_diverge_das_baixas(self):
+        b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7")
+        req = self._req_messages(
+            self.factory.post(
+                "/",
+                {
+                    "apply": "1",
+                    "numero_processo_baixa": "6016.2025/0999999-9",
+                    "data_autorizacao": str(timezone.localdate()),
+                    "responsavel": "G",
+                    "_selected_action": [b1.pk],
+                },
+            )
+        )
+        req.user = self.gestor
+        resp = self.admin.gerar_nbbpm_action(
+            req, BaixaFisicaBemPatrimonial.objects.filter(pk=b1.pk)
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(constants.NBBPM_PROCESSO_PAYLOAD_DIVERGENTE, self._mensagens(req))
+        self.assertEqual(NBBPM.objects.count(), 0)
