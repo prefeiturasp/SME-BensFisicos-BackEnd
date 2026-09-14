@@ -145,8 +145,22 @@ class UnidadeAdministrativaSimpleSerializerTestCase(BaseSetup):
 class UserSimpleSerializerTestCase(BaseSetup):
     def test_campos_retornados(self):
         data = UserSimpleSerializer(self.gestor).data
-        for campo in ["id", "username", "nome_completo", "email"]:
+        for campo in ["id", "username", "nome_completo", "email", "rf"]:
             self.assertIn(campo, data)
+
+    def test_expoe_rf_para_formato_nome_mais_rf(self):
+        """O RF é necessário para o front montar "Nome Completo (RF 1234567)"."""
+        self.gestor.rf = "F1234567"
+        self.gestor.save()
+        data = UserSimpleSerializer(self.gestor).data
+        self.assertEqual(data["rf"], "F1234567")
+
+    def test_rf_nulo_permanece_none(self):
+        """RF é opcional no modelo; o serializer não deve inventar valor."""
+        self.gestor.rf = None
+        self.gestor.save()
+        data = UserSimpleSerializer(self.gestor).data
+        self.assertIsNone(data["rf"])
 
     def test_nome_completo_fallback_username(self):
         data = UserSimpleSerializer(self.gestor).data
