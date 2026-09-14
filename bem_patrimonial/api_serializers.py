@@ -52,7 +52,9 @@ class UserSimpleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'nome_completo', 'email']
+        # O RF é exposto para que as telas de detalhe possam apresentar a
+        # autoria no formato padrão do sistema: "Nome Completo (RF 1234567)".
+        fields = ['id', 'username', 'nome_completo', 'email', 'rf']
         read_only_fields = fields
 
     def get_nome_completo(self, obj: User) -> str:
