@@ -20,7 +20,7 @@ def queryset_uos_destino_externas():
 
 class TransferenciaBemPatrimonialForm(forms.ModelForm):
     unidade_administrativa_filtro = forms.ModelChoiceField(
-        label="Filtrar bens por unidade administrativa",
+        label="Filtrar por Unidade Administrativa",
         queryset=UnidadeAdministrativa.objects.none(),
         required=False,
         empty_label="Todas as UAs da UO de origem",

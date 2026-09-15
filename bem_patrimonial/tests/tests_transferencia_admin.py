@@ -152,6 +152,10 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
 
         queryset = form.fields["unidade_administrativa_filtro"].queryset
         self.assertEqual(
+            form.fields["unidade_administrativa_filtro"].label,
+            "Filtrar por Unidade Administrativa",
+        )
+        self.assertEqual(
             list(queryset.values_list("id", flat=True)),
             [self.ua_origem.id, self.ua_origem_2.id],
         )

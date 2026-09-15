@@ -1,10 +1,15 @@
+import base64
+import re
+import zlib
 from decimal import Decimal
 from io import BytesIO
 from unittest.mock import patch
 
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
@@ -77,7 +82,7 @@ def criar_nbbpm(baixas, criado_por, **kwargs):
         numero=kwargs.pop("numero", ""),
         numero_processo_baixa=kwargs.pop("numero_processo_baixa", "6016.2025/0117371-7"),
         data_autorizacao=kwargs.pop("data_autorizacao", timezone.localdate()),
-        responsavel=kwargs.pop("responsavel", "Priscila Padovesi"),
+        responsavel=kwargs.pop("responsavel", "Responsavel Teste"),
         numero_processo_destinacao_final=kwargs.pop("numero_processo_destinacao_final", ""),
         criado_por=criado_por,
         **kwargs,
@@ -257,25 +262,28 @@ class CriarInformacoesGeraisTestCase(BaseSetup):
             [self.baixa],
             self.usuario,
             numero_processo_baixa="6016.2025/0117371-7",
-            responsavel="Priscila Padovesi",
+            responsavel="Responsavel Teste",
         )
 
         [tabela] = _criar_informacoes_gerais(nbbpm)
         textos = self._textos_da_tabela(tabela)
 
         self.assertIn("6016.2025/0117371-7", textos[5])
-        self.assertIn("PRISCILA PADOVESI", textos[5])
+        self.assertIn("RESPONSAVEL TESTE", textos[5])
 
-    def test_nao_inclui_linha_de_destinacao_final_quando_ausente(self):
+    def test_destinacao_final_na_mesma_linha_quando_ausente(self):
         nbbpm = criar_nbbpm(
             [self.baixa], self.usuario, numero_processo_destinacao_final=""
         )
 
         [tabela] = _criar_informacoes_gerais(nbbpm)
+        textos = self._textos_da_tabela(tabela)
 
         self.assertEqual(len(tabela._cellvalues), 6)
+        self.assertEqual(len(textos[5]), 4)
+        self.assertIn("-", textos[5])
 
-    def test_inclui_linha_de_destinacao_final_quando_informado(self):
+    def test_destinacao_final_na_mesma_linha_quando_informado(self):
         nbbpm = criar_nbbpm(
             [self.baixa],
             self.usuario,
@@ -285,8 +293,10 @@ class CriarInformacoesGeraisTestCase(BaseSetup):
         [tabela] = _criar_informacoes_gerais(nbbpm)
         textos = self._textos_da_tabela(tabela)
 
-        self.assertEqual(len(tabela._cellvalues), 8)
-        self.assertIn("6016.2025/9999999-9", textos[7])
+        self.assertEqual(len(tabela._cellvalues), 6)
+        self.assertEqual(len(textos[4]), 4)
+        self.assertEqual(len(textos[5]), 4)
+        self.assertIn("6016.2025/9999999-9", textos[5])
 
 
 class CriarTabelaBensTestCase(BaseSetup):
@@ -455,3 +465,238 @@ class HttpResponseNbbpmLoteTestCase(BaseSetup):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.content.startswith(b"%PDF"))
+
+
+# ============================================================================
+# Novo layout: cabeçalho, info 4 colunas, larguras padrão e assinaturas
+# ============================================================================
+
+
+def extrair_textos_por_pagina(pdf_bytes):
+    """Extrai texto de cada página sem dependência externa."""
+    paginas = []
+    for match in re.finditer(br"stream(.*?)endstream", pdf_bytes, re.S):
+        bruto = match.group(1).strip()
+        if bruto.endswith(b"~>"):
+            bruto = bruto[:-2].strip()
+        try:
+            decodificado = base64.a85decode(bruto, adobe=False)
+            pagina = zlib.decompress(decodificado)
+        except Exception:
+            continue
+        if b"BT" in pagina:
+            paginas.append(pagina.decode("latin-1"))
+    return paginas
+
+
+def criar_nbbpm_com_numero(baixas, usuario, **kwargs):
+    nbbpm = criar_nbbpm(baixas, usuario, **kwargs)
+    nbbpm.numero = gerar_numero_nbbpm_lote(nbbpm)
+    nbbpm.save(update_fields=["numero"])
+    return nbbpm
+
+
+class NovoLayoutNbbpmLoteTestCase(BaseSetup):
+    def test_info_quatro_colunas_responsavel_maior(self):
+        nbbpm = criar_nbbpm(
+            [self.baixa],
+            self.usuario,
+            numero_processo_baixa="6016.2025/0117371-7",
+            responsavel="Nome Completo Longo Para Teste",
+            numero_processo_destinacao_final="6016.2025/9999999-9",
+        )
+
+        [tabela] = _criar_informacoes_gerais(nbbpm)
+
+        self.assertEqual(len(tabela._argW), 4)
+        larguras = [float(w) for w in tabela._argW]
+        self.assertGreater(larguras[2], larguras[0])
+        self.assertGreater(larguras[2], larguras[1])
+        self.assertGreater(larguras[2], larguras[3])
+
+    def test_info_e_bens_mesma_largura_total(self):
+        from reportlab.lib.units import cm as cm_unit
+
+        nbbpm = criar_nbbpm([self.baixa], self.usuario)
+
+        [info] = _criar_informacoes_gerais(nbbpm)
+        [bens] = _criar_tabela_bens(nbbpm)
+
+        total_info = sum(float(w) for w in info._argW) / cm_unit
+        total_bens = sum(float(w) for w in bens._argW) / cm_unit
+
+        self.assertAlmostEqual(total_info, 18.0, places=1)
+        self.assertAlmostEqual(total_bens, 18.0, places=1)
+
+    def test_cabecalho_data_unica_mesclada_e_dupla_compativel(self):
+        from bem_patrimonial.documentos_pdf_utils import criar_cabecalho_registro_documento
+
+        [unica] = criar_cabecalho_registro_documento(
+            titulo_documento="DOC",
+            titulo_registro="REGISTRO",
+            label_data_1="DATA",
+            label_data_2="",
+            label_numero="NÚMERO",
+            valor_data_1="10/10/2025",
+            valor_data_2="",
+            valor_numero="001.0000001/2025",
+        )
+        registro_unica = unica._cellvalues[0][1]
+        self.assertEqual(len(registro_unica._cellvalues), 3)
+
+        [dupla] = criar_cabecalho_registro_documento(
+            titulo_documento="DOC",
+            titulo_registro="REGISTRO",
+            label_data_1="BAIXA",
+            label_data_2="APROVAÇÃO",
+            label_numero="NÚMERO",
+            valor_data_1="10/10/2025",
+            valor_data_2="11/10/2025",
+            valor_numero="001.0000001/2025",
+        )
+        registro_dupla = dupla._cellvalues[0][1]
+        self.assertEqual(len(registro_dupla._cellvalues), 4)
+
+    def test_rodape_final_tem_assinaturas_com_altura_manual(self):
+        from bem_patrimonial.nbbpm_lote import _criar_rodape_nbbpm
+
+        nbbpm = criar_nbbpm([self.baixa], self.usuario)
+        [tabela] = _criar_rodape_nbbpm(nbbpm)
+
+        self.assertEqual(len(tabela._argW), 2)
+        alturas = [float(h) for h in tabela._argH]
+        self.assertEqual(len(alturas), 3)
+        self.assertAlmostEqual(alturas[1], alturas[2])
+
+    def _criar_usuario_com_rf(self, username, rf):
+        usuario = criar_usuario(username, self.uo, self.ua)
+        usuario.rf = rf
+        usuario.save(update_fields=["rf"])
+        return usuario
+
+    def test_gerado_por_exibe_rf_em_pdf_de_uma_pagina(self):
+        usuario = self._criar_usuario_com_rf("gerador_rf1", "F123456")
+        nbbpm = criar_nbbpm_com_numero([self.baixa], usuario)
+
+        buffer = gerar_pdf_nbbpm_lote(nbbpm, usuario_gerador=usuario)
+        paginas = extrair_textos_por_pagina(buffer.getvalue())
+
+        self.assertEqual(len(paginas), 1)
+        self.assertIn("Gerado por F123456", paginas[0])
+        self.assertIn("CONTADOR", paginas[0])
+        self.assertIn("TITULAR", paginas[0])
+        self.assertIn("gina", paginas[0])
+
+    def test_assinaturas_so_na_ultima_pagina_com_tres_paginas(self):
+        usuario = self._criar_usuario_com_rf("gerador_rf3", "F654321")
+        for idx in range(100, 190):
+            bem = criar_bem(
+                self.ua,
+                usuario,
+                numero_patrimonial=f"000.{idx:09d}-0",
+                nome=f"Bem teste numero {idx} com descricao longa para ocupar espaco",
+            )
+            criar_item(bem, self.baixa)
+        nbbpm = criar_nbbpm_com_numero([self.baixa], usuario)
+
+        buffer = gerar_pdf_nbbpm_lote(nbbpm, usuario_gerador=usuario)
+        paginas = extrair_textos_por_pagina(buffer.getvalue())
+
+        self.assertGreaterEqual(len(paginas), 3)
+        for texto in paginas:
+            self.assertIn("Gerado por F654321", texto)
+            self.assertIn("gina", texto)
+        for texto in paginas[:-1]:
+            self.assertNotIn("CONTADOR", texto)
+            self.assertNotIn("TITULAR", texto)
+        self.assertIn("CONTADOR", paginas[-1])
+        self.assertIn("TITULAR", paginas[-1])
+
+    def test_modelo_antigo_ainda_gera_sem_erro(self):
+        from bem_patrimonial.nbbpm import gerar_pdf_nbbpm
+
+        bem = criar_bem(self.ua, self.usuario, numero_patrimonial="000.000000099-0")
+        criar_item(bem, self.baixa)
+        self.baixa.status = constants.ACEITA
+        self.baixa.save(update_fields=["status"])
+
+        buffer = gerar_pdf_nbbpm(self.baixa, usuario_gerador=self.usuario)
+
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+
+    def test_api_pdf_retorna_200_com_rf_do_usuario(self):
+        from usuario.constants import GRUPO_GESTOR_PATRIMONIO
+
+        grupo, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        gestor = self._criar_usuario_com_rf("gestor_api_rf", "F777888")
+        gestor.groups.add(grupo)
+        nbbpm = criar_nbbpm_com_numero([self.baixa], gestor)
+
+        client = APIClient()
+        client.force_authenticate(user=gestor)
+        resposta = client.get(f"/api/nbbpm/{nbbpm.id}/pdf/")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "application/pdf")
+        paginas = extrair_textos_por_pagina(resposta.content)
+        self.assertTrue(paginas)
+        self.assertIn("Gerado por F777888", paginas[0])
+
+
+class ProcessoUnicoNBBPMTestCase(BaseSetup):
+    """Serviço de processo único: mesma regra usada por Admin e API."""
+
+    def test_normalizar_e_processos_de_strings_e_objetos(self):
+        from bem_patrimonial.services.nbbpm_numero import (
+            normalizar_processo,
+            processos_normalizados_de_baixas,
+        )
+
+        self.assertEqual(normalizar_processo(None), "")
+        self.assertEqual(normalizar_processo("  P1  "), "P1")
+        self.assertEqual(processos_normalizados_de_baixas(["  P1 ", "P1"]), {"P1"})
+        self.assertEqual(processos_normalizados_de_baixas([self.baixa]), {"PROC-BX-001"})
+
+    def test_obter_processo_unico_ok_divergente_e_vazio(self):
+        from bem_patrimonial.services.nbbpm_numero import obter_processo_unico_baixas
+
+        self.assertEqual(obter_processo_unico_baixas([self.baixa]), "PROC-BX-001")
+        self.assertEqual(obter_processo_unico_baixas([]), "")
+        outra = criar_baixa(self.ua, self.usuario, numero_processo_baixa="OUTRO")
+        with self.assertRaises(ValidationError) as ctx:
+            obter_processo_unico_baixas([self.baixa, outra])
+        self.assertIn("divergentes", str(ctx.exception))
+
+    def test_validar_payload_ok_strip_e_divergente(self):
+        from bem_patrimonial.services.nbbpm_numero import validar_processo_payload_baixas
+
+        self.assertEqual(
+            validar_processo_payload_baixas([self.baixa], "  PROC-BX-001  "),
+            "PROC-BX-001",
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            validar_processo_payload_baixas([self.baixa], "DIFERENTE")
+        self.assertIn("diverge", str(ctx.exception))
+
+    def test_criar_nbbpm_com_retry_bloqueia_processo_divergente(self):
+        from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+
+        outra = criar_baixa(self.ua, self.usuario, numero_processo_baixa="OUTRO")
+        with self.assertRaises(ValidationError) as ctx:
+            criar_nbbpm_com_retry(
+                baixas=[self.baixa, outra],
+                numero_processo_baixa="PROC-BX-001",
+                data_autorizacao=timezone.localdate(),
+                responsavel="G",
+                criado_por=self.usuario,
+            )
+        self.assertIn("divergentes", str(ctx.exception))
+        with self.assertRaises(ValidationError) as ctx2:
+            criar_nbbpm_com_retry(
+                baixas=[self.baixa],
+                numero_processo_baixa="DIFERENTE",
+                data_autorizacao=timezone.localdate(),
+                responsavel="G",
+                criado_por=self.usuario,
+            )
+        self.assertIn("diverge", str(ctx2.exception))

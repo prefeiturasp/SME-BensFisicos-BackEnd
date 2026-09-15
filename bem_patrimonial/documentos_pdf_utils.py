@@ -145,46 +145,79 @@ def criar_cabecalho_registro_documento(
         )
     )
 
-    registro_data = [
-        [Paragraph(titulo_registro, label_style), "", ""],
-        [Paragraph("DATA", label_style), "", Paragraph(label_numero, label_style)],
-        [Paragraph(label_data_1, label_style), Paragraph(label_data_2, label_style), ""],
-        [
-            Paragraph(valor_data_1, value_style),
-            Paragraph(valor_data_2, value_style),
-            Paragraph(valor_numero, value_style),
-        ],
-    ]
+    data_unica = not str(label_data_2 or "").strip() and not str(valor_data_2 or "").strip()
+
+    if data_unica:
+        registro_data = [
+            [Paragraph(titulo_registro, label_style), "", ""],
+            [Paragraph("DATA", label_style), "", Paragraph(label_numero, label_style)],
+            [
+                Paragraph(valor_data_1, value_style),
+                "",
+                Paragraph(valor_numero, value_style),
+            ],
+        ]
+        registro_alturas = [0.55 * cm, 0.45 * cm, 1.0 * cm]
+        registro_larguras = [1.5 * cm, 1.5 * cm, 3.9 * cm]
+        registro_estilo = [
+            ("SPAN", (0, 0), (2, 0)),
+            ("BACKGROUND", (0, 0), (2, 0), config_cls.COR_HEADER),
+            ("FONTNAME", (0, 0), (2, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (2, 0), 8),
+            ("SPAN", (0, 1), (1, 1)),
+            ("SPAN", (0, 2), (1, 2)),
+            ("BACKGROUND", (0, 1), (1, 1), config_cls.COR_CINZA_CLARO),
+            ("BACKGROUND", (2, 1), (2, 1), config_cls.COR_CINZA_CLARO),
+            ("BACKGROUND", (0, 2), (2, 2), colors.white),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOX", (0, 0), (-1, -1), 1, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ]
+    else:
+        registro_data = [
+            [Paragraph(titulo_registro, label_style), "", ""],
+            [Paragraph("DATA", label_style), "", Paragraph(label_numero, label_style)],
+            [Paragraph(label_data_1, label_style), Paragraph(label_data_2, label_style), ""],
+            [
+                Paragraph(valor_data_1, value_style),
+                Paragraph(valor_data_2, value_style),
+                Paragraph(valor_numero, value_style),
+            ],
+        ]
+        registro_alturas = [0.55 * cm, 0.45 * cm, 0.45 * cm, 0.55 * cm]
+        registro_larguras = [1.8 * cm, 1.8 * cm, 3.3 * cm]
+        registro_estilo = [
+            ("SPAN", (0, 0), (2, 0)),
+            ("BACKGROUND", (0, 0), (2, 0), config_cls.COR_HEADER),
+            ("FONTNAME", (0, 0), (2, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (2, 0), 8),
+            ("SPAN", (0, 1), (1, 1)),
+            ("BACKGROUND", (0, 1), (1, 1), config_cls.COR_CINZA_CLARO),
+            ("BACKGROUND", (2, 1), (2, 1), config_cls.COR_CINZA_CLARO),
+            ("SPAN", (2, 1), (2, 2)),
+            ("BACKGROUND", (0, 2), (1, 2), config_cls.COR_CINZA_MEDIO),
+            ("BACKGROUND", (0, 3), (2, 3), colors.white),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOX", (0, 0), (-1, -1), 1, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ]
 
     registro_table = Table(
         registro_data,
-        colWidths=[1.8 * cm, 1.8 * cm, 3.3 * cm],
-        rowHeights=[0.55 * cm, 0.45 * cm, 0.45 * cm, 0.55 * cm],
+        colWidths=registro_larguras,
+        rowHeights=registro_alturas,
     )
-    registro_table.setStyle(
-        TableStyle(
-            [
-                ("SPAN", (0, 0), (2, 0)),
-                ("BACKGROUND", (0, 0), (2, 0), config_cls.COR_HEADER),
-                ("FONTNAME", (0, 0), (2, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (2, 0), 8),
-                ("SPAN", (0, 1), (1, 1)),
-                ("BACKGROUND", (0, 1), (1, 1), config_cls.COR_CINZA_CLARO),
-                ("BACKGROUND", (2, 1), (2, 1), config_cls.COR_CINZA_CLARO),
-                ("SPAN", (2, 1), (2, 2)),
-                ("BACKGROUND", (0, 2), (1, 2), config_cls.COR_CINZA_MEDIO),
-                ("BACKGROUND", (0, 3), (2, 3), colors.white),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("BOX", (0, 0), (-1, -1), 1, colors.black),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-            ]
-        )
-    )
+    registro_table.setStyle(TableStyle(registro_estilo))
 
     main_table = Table([[header_table, registro_table]], colWidths=[11.1 * cm, 6.9 * cm])
     main_table.setStyle(
@@ -426,6 +459,7 @@ def criar_tabela_rodape_responsaveis(
     valor_esquerda,
     valor_direita,
     config_cls=PDFConfigBase,
+    alturas_linhas=None,
 ):
     styles = getSampleStyleSheet()
 
@@ -461,7 +495,7 @@ def criar_tabela_rodape_responsaveis(
     rodape_table = Table(
         rodape_data,
         colWidths=[9 * cm, 9 * cm],
-        rowHeights=[0.5 * cm, 0.5 * cm, 1.2 * cm],
+        rowHeights=alturas_linhas or [0.5 * cm, 0.5 * cm, 1.2 * cm],
     )
     rodape_table.setStyle(
         TableStyle(

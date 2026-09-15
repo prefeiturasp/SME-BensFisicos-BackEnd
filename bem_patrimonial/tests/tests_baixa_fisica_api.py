@@ -145,8 +145,22 @@ class UnidadeAdministrativaSimpleSerializerTestCase(BaseSetup):
 class UserSimpleSerializerTestCase(BaseSetup):
     def test_campos_retornados(self):
         data = UserSimpleSerializer(self.gestor).data
-        for campo in ["id", "username", "nome_completo", "email"]:
+        for campo in ["id", "username", "nome_completo", "email", "rf"]:
             self.assertIn(campo, data)
+
+    def test_expoe_rf_para_formato_nome_mais_rf(self):
+        """O RF é necessário para o front montar "Nome Completo (RF 1234567)"."""
+        self.gestor.rf = "F1234567"
+        self.gestor.save()
+        data = UserSimpleSerializer(self.gestor).data
+        self.assertEqual(data["rf"], "F1234567")
+
+    def test_rf_nulo_permanece_none(self):
+        """RF é opcional no modelo; o serializer não deve inventar valor."""
+        self.gestor.rf = None
+        self.gestor.save()
+        data = UserSimpleSerializer(self.gestor).data
+        self.assertIsNone(data["rf"])
 
     def test_nome_completo_fallback_username(self):
         data = UserSimpleSerializer(self.gestor).data
@@ -217,12 +231,15 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
         return req
 
     def _data(self, itens=None, data_baixa=None, ua=None):
-        return {
-            "numero_processo_baixa": "PROC-001",
+        data = {
             "unidade_administrativa_origem": (ua or self.ua).id,
-            "data_baixa": data_baixa or str(timezone.localdate()),
             "itens": itens if itens is not None else [{"bem": self.bem.id}],
         }
+        if data_baixa is not None:
+            data["data_baixa"] = data_baixa
+        else:
+            data["data_baixa"] = str(timezone.localdate())
+        return data
 
     def _serializer(self, data):
         return BaixaFisicaBemPatrimonialCreateSerializer(
@@ -241,10 +258,16 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
 
     def test_data_baixa_futura_invalida(self):
         from datetime import timedelta
+
         futura = str((timezone.localdate() + timedelta(days=1)))
         s = self._serializer(self._data(data_baixa=futura))
         self.assertFalse(s.is_valid())
         self.assertIn("data_baixa", s.errors)
+
+    def test_numero_processo_bloqueado_na_criacao(self):
+        s = self._serializer({**self._data(), "numero_processo_baixa": "6016.2025/0117371-7"})
+        self.assertFalse(s.is_valid())
+        self.assertIn("numero_processo_baixa", s.errors)
 
     def test_ua_inativa_invalida(self):
         from dados_comuns.models import UnidadeAdministrativa
@@ -376,18 +399,27 @@ class BaixaFisicaAprovarSerializerTestCase(BaseSetup):
         return {"baixa": self.baixa, "request": self._req(user)}
 
     def test_gestor_pode_aprovar(self):
-        s = BaixaFisicaAprovarSerializer(data={}, context=self._ctx(self.gestor))
+        s = BaixaFisicaAprovarSerializer(
+            data={"numero_processo_baixa": "6016.2025/0117371-7"},
+            context=self._ctx(self.gestor),
+        )
         self.assertTrue(s.is_valid(), s.errors)
 
     def test_operador_nao_pode_aprovar(self):
-        s = BaixaFisicaAprovarSerializer(data={}, context=self._ctx(self.operador))
+        s = BaixaFisicaAprovarSerializer(
+            data={"numero_processo_baixa": "6016.2025/0117371-7"},
+            context=self._ctx(self.operador),
+        )
         with self.assertRaises(PermissionDenied):
             s.is_valid(raise_exception=True)
 
     def test_invalido_quando_status_diferente_de_solicitada(self):
         self.baixa.status = constants.AGUARDANDO_ENVIO
         self.baixa.save()
-        s = BaixaFisicaAprovarSerializer(data={}, context=self._ctx(self.gestor))
+        s = BaixaFisicaAprovarSerializer(
+            data={"numero_processo_baixa": "6016.2025/0117371-7"},
+            context=self._ctx(self.gestor),
+        )
         self.assertFalse(s.is_valid())
 
 
@@ -695,13 +727,14 @@ class BaixaFisicaViewSetListTestCase(BaseAPISetup):
 
 class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
     def _payload(self, **kwargs):
-        return {
-            "numero_processo_baixa": "PROC-NOVO",
+        payload = {
             "unidade_administrativa_origem": self.ua.id,
-            "data_baixa": str(timezone.localdate()),
             "itens": [{"bem": self.bem.id}],
             **kwargs,
         }
+        if "data_baixa" not in kwargs:
+            payload["data_baixa"] = str(timezone.localdate())
+        return payload
 
     def test_criacao_sem_itens_retorna_400(self):
         self._auth(self.operador)
@@ -720,6 +753,13 @@ class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
         self._auth(self.operador)
         futura = str(timezone.localdate() + timedelta(days=2))
         resp = self.client.post(self.list_url, self._payload(data_baixa=futura), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_criacao_com_processo_retorna_400(self):
+        self._auth(self.operador)
+        resp = self.client.post(
+            self.list_url, self._payload(numero_processo_baixa="6016.2025/0117371-7"), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_criacao_atualiza_status_bem(self):
@@ -858,7 +898,11 @@ class BaixaFisicaViewSetEnviarSolicitacaoTestCase(BaseAPISetup):
         self._auth(self.operador)
         self.client.post(self.action_url(self.baixa.id, "enviar-solicitacao"))
         self._auth(self.gestor)
-        self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.ACEITA)
 
@@ -901,7 +945,11 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada")
     def test_gestor_aprova(self, mock_email):
         self._auth(self.gestor)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.ACEITA)
@@ -912,7 +960,11 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
     def test_aprovacao_nao_gera_nbbpm(self, mock_email):
         # NBBPM somente via tela de NBBPM (lote)
         self._auth(self.gestor)
-        self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.ACEITA)
         self.assertEqual((self.baixa.numero_nbbpm or "").strip(), "")
@@ -921,21 +973,33 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
 
     def test_operador_nao_pode_aprovar(self):
         self._auth(self.operador)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_aprovar_status_errado_retorna_400(self):
         self.baixa.status = constants.AGUARDANDO_ENVIO
         self.baixa.save()
         self._auth(self.gestor)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada",
            side_effect=Exception("Erro de email"))
     def test_falha_email_nao_impede_aprovacao(self, mock_email):
         self._auth(self.gestor)
-        resp = self.client.post(self.action_url(self.baixa.id, "aprovar"))
+        resp = self.client.post(
+            self.action_url(self.baixa.id, "aprovar"),
+            {"numero_processo_baixa": "6016.2025/0117371-7"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
 
@@ -1275,11 +1339,11 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         super().setUp()
         self.baixa1 = criar_baixa(
             self.ua, self.operador, status=constants.ACEITA,
-            numero_processo_baixa="P1",
+            numero_processo_baixa="6016.2025/0117371-7",
         )
         self.baixa2 = criar_baixa(
             self.ua, self.operador, status=constants.ACEITA,
-            numero_processo_baixa="P2",
+            numero_processo_baixa="6016.2025/0117371-7",
         )
 
     def _req(self, user):
@@ -1292,7 +1356,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             "baixas": [self.baixa1.id, self.baixa2.id],
             "numero_processo_baixa": "6016.2025/0117371-7",
             "data_autorizacao": str(timezone.localdate()),
-            "responsavel": "Priscila Padovesi",
+            "responsavel": "Responsavel Teste",
         }
         data.update(overrides)
         return data
@@ -1315,9 +1379,9 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         )
 
     def test_strip_no_responsavel(self):
-        s = self._serializer(self._data(responsavel="  Priscila Padovesi  "))
+        s = self._serializer(self._data(responsavel="  Responsavel Teste  "))
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data["responsavel"], "Priscila Padovesi")
+        self.assertEqual(s.validated_data["responsavel"], "Responsavel Teste")
 
     def test_strip_no_numero_processo_destinacao_final(self):
         s = self._serializer(
@@ -1342,7 +1406,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
     def test_baixa_fora_do_escopo_invalida(self):
         baixa_ua2 = criar_baixa(
             self.ua2, self.operador2, status=constants.ACEITA,
-            numero_processo_baixa="P-UA2",
+            numero_processo_baixa="6016.2025/0117371-7",
         )
         s = self._serializer(
             self._data(baixas=[self.baixa1.id, baixa_ua2.id]), user=self.gestor
@@ -1366,7 +1430,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             "operador3_serializer", uo2, ua3, grupos=[GRUPO_OPERADOR_INVENTARIO]
         )
         baixa_uo2 = criar_baixa(
-            ua3, operador3, status=constants.ACEITA, numero_processo_baixa="P-UO2"
+            ua3, operador3, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7"
         )
 
         mock_escopo.return_value = BaixaFisicaBemPatrimonial.objects.all()
@@ -1409,6 +1473,85 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}[\./]\d{4}$")
 
 
+class NBBPMProcessoUnicoTestCase(BaseAPISetup):
+    """NBBPM só gera com Baixas do mesmo processo; payload deve ser igual."""
+
+    PROCESSO = "6016.2025/0117371-7"
+
+    def setUp(self):
+        super().setUp()
+        self.baixa1 = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=self.PROCESSO,
+        )
+        self.baixa2 = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=self.PROCESSO,
+        )
+        self.baixa_outro_processo = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0999999-9",
+        )
+
+    def _req(self, user=None):
+        req = MagicMock()
+        req.user = user or self.gestor
+        return req
+
+    def _payload(self, baixas, numero=None, **overrides):
+        data = {
+            "baixas": [b.id for b in baixas],
+            "numero_processo_baixa": numero if numero is not None else self.PROCESSO,
+            "data_autorizacao": str(timezone.localdate()),
+            "responsavel": "Responsavel Teste",
+        }
+        data.update(overrides)
+        return data
+
+    def test_serializer_bloqueia_processos_divergentes(self):
+        s = NBBPMGerarLoteSerializer(
+            data=self._payload([self.baixa1, self.baixa_outro_processo]),
+            context={"request": self._req()},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("baixas", s.errors)
+        self.assertIn("divergentes", str(s.errors["baixas"]))
+
+    def test_serializer_bloqueia_payload_divergente_das_baixas(self):
+        s = NBBPMGerarLoteSerializer(
+            data=self._payload([self.baixa1, self.baixa2], numero="6016.2025/0000000-0"),
+            context={"request": self._req()},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("numero_processo_baixa", s.errors)
+        self.assertIn("diverge", str(s.errors["numero_processo_baixa"]))
+
+    def test_serializer_ok_com_mesmo_processo_e_strip(self):
+        s = NBBPMGerarLoteSerializer(
+            data=self._payload([self.baixa1, self.baixa2], numero=f"  {self.PROCESSO}  "),
+            context={"request": self._req()},
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_post_bloqueia_processos_divergentes(self):
+        self._auth(self.gestor)
+        resp = self.client.post("/api/nbbpm/", self._payload([self.baixa1, self.baixa_outro_processo]), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("divergentes", str(resp.data))
+
+    def test_post_bloqueia_payload_divergente(self):
+        self._auth(self.gestor)
+        resp = self.client.post("/api/nbbpm/", self._payload([self.baixa1], numero="6016.2025/0000000-0"), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("diverge", str(resp.data))
+
+    def test_post_gera_201_com_mesmo_processo(self):
+        self._auth(self.gestor)
+        resp = self.client.post("/api/nbbpm/", self._payload([self.baixa1, self.baixa2]), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["numero_processo_baixa"], self.PROCESSO)
+
+
 # ============================================================================
 # TESTES DE SERIALIZER — NBBPMSerializer
 # ============================================================================
@@ -1424,7 +1567,7 @@ class NBBPMSerializerTestCase(BaseSetup):
             numero="001.0000001.2026",
             numero_processo_baixa="6016.2025/0117371-7",
             data_autorizacao=timezone.localdate(),
-            responsavel="Priscila Padovesi",
+            responsavel="Responsavel Teste",
             numero_processo_destinacao_final="6016.2025/9999999-9",
             criado_por=self.operador,
         )
@@ -1443,7 +1586,7 @@ class NBBPMSerializerTestCase(BaseSetup):
         data = NBBPMSerializer(self.nbbpm).data
         self.assertEqual(data["numero"], "001.0000001.2026")
         self.assertEqual(data["numero_processo_baixa"], "6016.2025/0117371-7")
-        self.assertEqual(data["responsavel"], "Priscila Padovesi")
+        self.assertEqual(data["responsavel"], "Responsavel Teste")
         self.assertEqual(
             data["numero_processo_destinacao_final"], "6016.2025/9999999-9"
         )
