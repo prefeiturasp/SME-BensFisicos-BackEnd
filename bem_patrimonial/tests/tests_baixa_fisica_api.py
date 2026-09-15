@@ -145,8 +145,22 @@ class UnidadeAdministrativaSimpleSerializerTestCase(BaseSetup):
 class UserSimpleSerializerTestCase(BaseSetup):
     def test_campos_retornados(self):
         data = UserSimpleSerializer(self.gestor).data
-        for campo in ["id", "username", "nome_completo", "email"]:
+        for campo in ["id", "username", "nome_completo", "email", "rf"]:
             self.assertIn(campo, data)
+
+    def test_expoe_rf_para_formato_nome_mais_rf(self):
+        """O RF é necessário para o front montar "Nome Completo (RF 1234567)"."""
+        self.gestor.rf = "F1234567"
+        self.gestor.save()
+        data = UserSimpleSerializer(self.gestor).data
+        self.assertEqual(data["rf"], "F1234567")
+
+    def test_rf_nulo_permanece_none(self):
+        """RF é opcional no modelo; o serializer não deve inventar valor."""
+        self.gestor.rf = None
+        self.gestor.save()
+        data = UserSimpleSerializer(self.gestor).data
+        self.assertIsNone(data["rf"])
 
     def test_nome_completo_fallback_username(self):
         data = UserSimpleSerializer(self.gestor).data
@@ -1325,11 +1339,11 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         super().setUp()
         self.baixa1 = criar_baixa(
             self.ua, self.operador, status=constants.ACEITA,
-            numero_processo_baixa="P1",
+            numero_processo_baixa="6016.2025/0117371-7",
         )
         self.baixa2 = criar_baixa(
             self.ua, self.operador, status=constants.ACEITA,
-            numero_processo_baixa="P2",
+            numero_processo_baixa="6016.2025/0117371-7",
         )
 
     def _req(self, user):
@@ -1342,7 +1356,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             "baixas": [self.baixa1.id, self.baixa2.id],
             "numero_processo_baixa": "6016.2025/0117371-7",
             "data_autorizacao": str(timezone.localdate()),
-            "responsavel": "Priscila Padovesi",
+            "responsavel": "Responsavel Teste",
         }
         data.update(overrides)
         return data
@@ -1365,9 +1379,9 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         )
 
     def test_strip_no_responsavel(self):
-        s = self._serializer(self._data(responsavel="  Priscila Padovesi  "))
+        s = self._serializer(self._data(responsavel="  Responsavel Teste  "))
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(s.validated_data["responsavel"], "Priscila Padovesi")
+        self.assertEqual(s.validated_data["responsavel"], "Responsavel Teste")
 
     def test_strip_no_numero_processo_destinacao_final(self):
         s = self._serializer(
@@ -1392,7 +1406,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
     def test_baixa_fora_do_escopo_invalida(self):
         baixa_ua2 = criar_baixa(
             self.ua2, self.operador2, status=constants.ACEITA,
-            numero_processo_baixa="P-UA2",
+            numero_processo_baixa="6016.2025/0117371-7",
         )
         s = self._serializer(
             self._data(baixas=[self.baixa1.id, baixa_ua2.id]), user=self.gestor
@@ -1416,7 +1430,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
             "operador3_serializer", uo2, ua3, grupos=[GRUPO_OPERADOR_INVENTARIO]
         )
         baixa_uo2 = criar_baixa(
-            ua3, operador3, status=constants.ACEITA, numero_processo_baixa="P-UO2"
+            ua3, operador3, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7"
         )
 
         mock_escopo.return_value = BaixaFisicaBemPatrimonial.objects.all()
@@ -1459,6 +1473,85 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         self.assertRegex(nbbpm.numero, r"^\d{3}\.\d{7}[\./]\d{4}$")
 
 
+class NBBPMProcessoUnicoTestCase(BaseAPISetup):
+    """NBBPM só gera com Baixas do mesmo processo; payload deve ser igual."""
+
+    PROCESSO = "6016.2025/0117371-7"
+
+    def setUp(self):
+        super().setUp()
+        self.baixa1 = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=self.PROCESSO,
+        )
+        self.baixa2 = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=self.PROCESSO,
+        )
+        self.baixa_outro_processo = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0999999-9",
+        )
+
+    def _req(self, user=None):
+        req = MagicMock()
+        req.user = user or self.gestor
+        return req
+
+    def _payload(self, baixas, numero=None, **overrides):
+        data = {
+            "baixas": [b.id for b in baixas],
+            "numero_processo_baixa": numero if numero is not None else self.PROCESSO,
+            "data_autorizacao": str(timezone.localdate()),
+            "responsavel": "Responsavel Teste",
+        }
+        data.update(overrides)
+        return data
+
+    def test_serializer_bloqueia_processos_divergentes(self):
+        s = NBBPMGerarLoteSerializer(
+            data=self._payload([self.baixa1, self.baixa_outro_processo]),
+            context={"request": self._req()},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("baixas", s.errors)
+        self.assertIn("divergentes", str(s.errors["baixas"]))
+
+    def test_serializer_bloqueia_payload_divergente_das_baixas(self):
+        s = NBBPMGerarLoteSerializer(
+            data=self._payload([self.baixa1, self.baixa2], numero="6016.2025/0000000-0"),
+            context={"request": self._req()},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("numero_processo_baixa", s.errors)
+        self.assertIn("diverge", str(s.errors["numero_processo_baixa"]))
+
+    def test_serializer_ok_com_mesmo_processo_e_strip(self):
+        s = NBBPMGerarLoteSerializer(
+            data=self._payload([self.baixa1, self.baixa2], numero=f"  {self.PROCESSO}  "),
+            context={"request": self._req()},
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_post_bloqueia_processos_divergentes(self):
+        self._auth(self.gestor)
+        resp = self.client.post("/api/nbbpm/", self._payload([self.baixa1, self.baixa_outro_processo]), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("divergentes", str(resp.data))
+
+    def test_post_bloqueia_payload_divergente(self):
+        self._auth(self.gestor)
+        resp = self.client.post("/api/nbbpm/", self._payload([self.baixa1], numero="6016.2025/0000000-0"), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("diverge", str(resp.data))
+
+    def test_post_gera_201_com_mesmo_processo(self):
+        self._auth(self.gestor)
+        resp = self.client.post("/api/nbbpm/", self._payload([self.baixa1, self.baixa2]), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["numero_processo_baixa"], self.PROCESSO)
+
+
 # ============================================================================
 # TESTES DE SERIALIZER — NBBPMSerializer
 # ============================================================================
@@ -1474,7 +1567,7 @@ class NBBPMSerializerTestCase(BaseSetup):
             numero="001.0000001.2026",
             numero_processo_baixa="6016.2025/0117371-7",
             data_autorizacao=timezone.localdate(),
-            responsavel="Priscila Padovesi",
+            responsavel="Responsavel Teste",
             numero_processo_destinacao_final="6016.2025/9999999-9",
             criado_por=self.operador,
         )
@@ -1493,7 +1586,7 @@ class NBBPMSerializerTestCase(BaseSetup):
         data = NBBPMSerializer(self.nbbpm).data
         self.assertEqual(data["numero"], "001.0000001.2026")
         self.assertEqual(data["numero_processo_baixa"], "6016.2025/0117371-7")
-        self.assertEqual(data["responsavel"], "Priscila Padovesi")
+        self.assertEqual(data["responsavel"], "Responsavel Teste")
         self.assertEqual(
             data["numero_processo_destinacao_final"], "6016.2025/9999999-9"
         )

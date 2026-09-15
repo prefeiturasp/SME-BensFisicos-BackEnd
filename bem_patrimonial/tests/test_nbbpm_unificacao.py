@@ -278,7 +278,7 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
 
         def criar(baixa, key):
             try:
-                resultados[key] = criar_nbbpm_com_retry(baixas=[baixa], numero_processo_baixa=f"PROC-{key}", data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
+                resultados[key] = criar_nbbpm_com_retry(baixas=[baixa], numero_processo_baixa=baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
             except Exception as e:
                 erros.append(str(e))
 
@@ -302,9 +302,9 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
 
     def test_unicidade_via_retry_em_integrity_error(self):
         NBBPM.objects.all().delete()
-        n1 = criar_nbbpm_com_retry(baixas=[self.baixa1], numero_processo_baixa="PROC-1", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        n1 = criar_nbbpm_com_retry(baixas=[self.baixa1], numero_processo_baixa=self.baixa1.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
         self.assertEqual(n1.numero, "001.0000001/" + str(timezone.localdate().year))
-        n2 = criar_nbbpm_com_retry(baixas=[self.baixa2], numero_processo_baixa="PROC-2", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        n2 = criar_nbbpm_com_retry(baixas=[self.baixa2], numero_processo_baixa=self.baixa2.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
         self.assertEqual(n2.numero, "001.0000002/" + str(timezone.localdate().year))
 
 
@@ -321,7 +321,7 @@ class TestReusoMesmaBaixaConcorrente(TransactionTestCase):
 
         def tentar(key):
             try:
-                resultados[key] = criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa=f"PROC-{key}", data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
+                resultados[key] = criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa=self.baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
             except Exception as e:
                 erros.append(str(e))
 
@@ -359,7 +359,7 @@ class TestPermissaoESuperuser(TestCase):
     def _post_nbbpm(self, user, baixa):
         client = APIClient()
         client.force_authenticate(user=user)
-        payload = {"baixas": [baixa.id], "numero_processo_baixa": "PROC-NOVO", "data_autorizacao": str(timezone.localdate()), "responsavel": "X"}
+        payload = {"baixas": [baixa.id], "numero_processo_baixa": baixa.numero_processo_baixa, "data_autorizacao": str(timezone.localdate()), "responsavel": "X"}
         return client.post("/api/nbbpm/", payload, format="json")
 
     def test_operador_nao_pode_gerar_nbbpm_via_api(self):
@@ -545,7 +545,7 @@ class TestDesativacaoRotasAntigas(TestCase):
 
     def test_nova_api_nbbpm_funciona(self):
         baixa_nova, _ = _nova_baixa_com_item(self.ua, self.gestor, numero_processo_baixa="P-NOVA", bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000009-0"))
-        payload = {"baixas": [baixa_nova.id], "numero_processo_baixa": "PROC-NEW", "data_autorizacao": str(timezone.localdate()), "responsavel": "Gestor"}
+        payload = {"baixas": [baixa_nova.id], "numero_processo_baixa": "P-NOVA", "data_autorizacao": str(timezone.localdate()), "responsavel": "Gestor"}
         resp = self.client.post("/api/nbbpm/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         resp_pdf = self.client.get(f"/api/nbbpm/{resp.data['id']}/pdf/")
@@ -566,7 +566,7 @@ class TestValidacaoVinculoEReuso(TestCase):
         self.nbbpm = _novo_nbbpm_com_baixas("016.0000001.2026", [self.baixa], self.gestor)
 
     def _assert_serializer_invalido(self, baixa):
-        data = {"baixas": [baixa.id], "numero_processo_baixa": "PROC-NEW", "data_autorizacao": str(timezone.localdate()), "responsavel": "G"}
+        data = {"baixas": [baixa.id], "numero_processo_baixa": baixa.numero_processo_baixa, "data_autorizacao": str(timezone.localdate()), "responsavel": "G"}
         req = MagicMock()
         req.user = self.gestor
         serializer = NBBPMGerarLoteSerializer(data=data, context={"request": req})
@@ -627,12 +627,12 @@ class TestServiceNBBPMNumeroCoberturaExtra(TestCase):
         b2 = criar_baixa(ua2, self.gestor)
         BaixaFisicaBensItem.objects.create(baixa=b2, bem=criar_bem(ua2, self.gestor, numero_patrimonial="000.000000010-0"))
         with self.assertRaises(ValidationError):
-            svc.criar_nbbpm_com_retry(baixas=[self.baixa, b2], numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+            svc.criar_nbbpm_com_retry(baixas=[self.baixa, b2], numero_processo_baixa=self.baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
         self.baixa.nbbpms_lote.clear()
         self.baixa.numero_nbbpm = ""
         self.baixa.save(update_fields=["numero_nbbpm"])
         NBBPM.objects.filter(numero="001.0000001/2026").delete()
-        n = svc.criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        n = svc.criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa=self.baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
         self.assertTrue(n.numero.startswith("001."))
         ua_sem_id = MagicMock(pk=1, unidade_orcamentaria_id=None, unidade_orcamentaria=MagicMock(pk=99))
         b_mock = MagicMock(pk=1, unidade_administrativa_origem=ua_sem_id)

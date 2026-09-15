@@ -975,6 +975,8 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             return
         if not self._validar_uo_unica(request, queryset):
             return
+        if not self._validar_processo_unico(request, queryset):
+            return
         if not self._validar_escopo_gerar(request, queryset):
             return
         return self._handle_gerar_nbbpm_form(request, queryset)
@@ -1014,6 +1016,17 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         self.message_user(request, "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.", level=messages.ERROR)
         return False
 
+    def _validar_processo_unico(self, request, queryset):
+        from bem_patrimonial.services.nbbpm_numero import processos_normalizados_de_baixas
+
+        processos = processos_normalizados_de_baixas(
+            queryset.values_list("numero_processo_baixa", flat=True)
+        )
+        if len(processos) > 1:
+            self.message_user(request, constants.NBBPM_PROCESSO_DIVERGENTE, level=messages.ERROR)
+            return False
+        return True
+
     def _validar_escopo_gerar(self, request, queryset):
         from dados_comuns.escopo import filtrar_queryset_por_escopo
 
@@ -1039,10 +1052,26 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         form = NBBPMGerarAdminForm(request.POST)
         if not form.is_valid():
             return self._render_gerar_nbbpm(request, queryset, form)
-        try:
-            from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+        from bem_patrimonial.services.nbbpm_numero import (
+            criar_nbbpm_com_retry,
+            obter_processo_unico_baixas,
+            validar_processo_payload_baixas,
+        )
 
-            baixas = list(queryset.select_related("unidade_administrativa_origem").prefetch_related("itens__bem"))
+        baixas = list(queryset.select_related("unidade_administrativa_origem").prefetch_related("itens__bem"))
+        try:
+            obter_processo_unico_baixas(baixas)
+        except ValidationError as exc:
+            detalhe = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            self.message_user(request, detalhe, level=messages.ERROR)
+            return self._render_gerar_nbbpm(request, queryset, form)
+        try:
+            validar_processo_payload_baixas(baixas, form.cleaned_data["numero_processo_baixa"])
+        except ValidationError as exc:
+            detalhe = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            self.message_user(request, detalhe, level=messages.ERROR)
+            return self._render_gerar_nbbpm(request, queryset, form)
+        try:
             nbbpm = criar_nbbpm_com_retry(
                 baixas=baixas,
                 criado_por=request.user,
@@ -1060,13 +1089,20 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         return self._render_gerar_nbbpm(request, queryset, form)
 
     def _render_gerar_nbbpm(self, request, queryset, form=None):
+        from bem_patrimonial.services.nbbpm_numero import processos_normalizados_de_baixas
+
+        processos = processos_normalizados_de_baixas(
+            queryset.values_list("numero_processo_baixa", flat=True)
+        )
+        processo_unico = next(iter(processos)) if len(processos) == 1 else ""
         if form is None:
             initial = {
                 "data_autorizacao": timezone.localdate(),
                 "responsavel": getattr(request.user, "nome", None) or request.user.username,
-                "numero_processo_baixa": (queryset.first().numero_processo_baixa or "") if queryset.count() == 1 else "",
+                "numero_processo_baixa": processo_unico,
             }
             form = NBBPMGerarAdminForm(initial=initial)
+        form.fields["numero_processo_baixa"].widget.attrs["readonly"] = True
         context = dict(
             self.admin_site.each_context(request),
             title="Gerar NBBPM consolidada",
@@ -1075,6 +1111,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             opts=self.model._meta,
             action_checkbox_name=ACTION_CHECKBOX_NAME,
             media=self.media,
+            gerado_por_rf=getattr(request.user, "rf", "") or "",
         )
         return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/gerar_nbbpm.html", context)
 
