@@ -2,7 +2,7 @@ from rest_framework import viewsets, status, filters, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter, DateFilter, ChoiceFilter
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet
 from django.http import HttpResponse
 from django.db import transaction
 from openpyxl import Workbook
@@ -15,7 +15,7 @@ import django_filters
 from dados_comuns.models import HistoricoGeral
 from django.contrib.contenttypes.models import ContentType
 
-from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, NBBPM
+from .models import BaixaFisicaBemPatrimonial
 from .api_serializers import (
     BaixaFisicaBemPatrimonialListSerializer,
     BaixaFisicaBemPatrimonialDetailSerializer,
@@ -25,8 +25,6 @@ from .api_serializers import (
     BaixaFisicaAprovarSerializer,
     BaixaFisicaCancelarSerializer,
     BaixaFisicaSolicitarCorrecaoSerializer,
-    NBBPMGerarLoteSerializer,
-    NBBPMSerializer,
 )
 from .api_docs import (
     LIST_BAIXAS_FISICAS_DOC,
@@ -37,7 +35,6 @@ from .api_docs import (
     APROVAR_BAIXA_FISICA_DOC,
     CANCELAR_BAIXA_FISICA_DOC,
     SOLICITAR_CORRECAO_DOC,
-    GERAR_NBBPM_DOC,
     EXPORTAR_EXCEL_DOC,
 )
 from .emails import (
@@ -45,11 +42,6 @@ from .emails import (
     envia_email_baixa_fisica_aprovada,
     envia_email_baixa_fisica_cancelada,
     envia_email_baixa_fisica_correcao_solicitada,
-)
-from .nbbpm import http_response_nbbpm, gerar_numero_nbbpm
-from .nbbpm_lote import (
-    http_response_nbbpm_lote,
-    gerar_numero_nbbpm_lote,
 )
 from .laudo_avaliacao import http_response_laudo_avaliacao
 from . import constants
@@ -147,8 +139,6 @@ class BaixaFisicaBemPatrimonialViewSet(
     - POST   /api/baixa-fisica/{id}/aprovar/            → Aprovar
     - POST   /api/baixa-fisica/{id}/recusar/            → Cancelar/Recusar
     - POST   /api/baixa-fisica/{id}/solicitar/          → Enviar para aprovação
-    - GET    /api/baixa-fisica/{id}/gerar-nbbpm/        → Gerar PDF NBBPM
-    - POST   /api/baixa-fisica/gerar-nbbpm-lote/        → Gerar PDF NBBPM consolidada (NOVO)
     - GET    /api/baixa-fisica/{id}/gerar-laudo/        → Gerar PDF Laudo de Avaliação
     - GET    /api/baixa-fisica/{id}/historico/          → Histórico de alterações
     - GET    /api/baixa-fisica/exportar-excel/          → Exportar Excel
@@ -161,6 +151,7 @@ class BaixaFisicaBemPatrimonialViewSet(
     search_fields = (
         "numero_processo_baixa",
         "numero_nbbpm",
+        "nbbpms_lote__numero",
         "unidade_administrativa_origem__nome",
         "unidade_administrativa_origem__sigla",
         "unidade_administrativa_origem__codigo",
@@ -175,7 +166,6 @@ class BaixaFisicaBemPatrimonialViewSet(
         'data_criacao',
         'data_aprovacao',
         'status',
-        'numero_nbbpm',
         'unidade_administrativa_origem__sigla',
         'numero_processo_baixa',
     ]
@@ -183,16 +173,18 @@ class BaixaFisicaBemPatrimonialViewSet(
 
     def get_queryset(self):
         queryset = BaixaFisicaBemPatrimonial.objects.all()
+        user = self.request.user
         queryset = filtrar_queryset_por_escopo(
-            usuario=self.request.user,
+            usuario=user,
             queryset=queryset,
             campo_ua='unidade_administrativa_origem'
         )
         queryset = queryset.select_related(
             'unidade_administrativa_origem',
+            'unidade_administrativa_origem__unidade_orcamentaria',
             'criado_por',
             'aprovado_por'
-        ).prefetch_related('itens__bem')
+        ).prefetch_related('itens__bem', 'nbbpms_lote')
         return queryset.distinct()
 
     def get_serializer_class(self):
@@ -212,8 +204,6 @@ class BaixaFisicaBemPatrimonialViewSet(
             return BaixaFisicaCancelarSerializer
         elif self.action == 'solicitar_correcao':
             return BaixaFisicaSolicitarCorrecaoSerializer
-        elif self.action == 'gerar_nbbpm_lote':
-            return NBBPMGerarLoteSerializer
         return BaixaFisicaBemPatrimonialDetailSerializer
 
     def _detail_response(self, baixa, request, http_status=status.HTTP_200_OK):
@@ -540,20 +530,17 @@ class BaixaFisicaBemPatrimonialViewSet(
         )
         serializer.is_valid(raise_exception=True)
 
+        if baixa.nbbpms_lote.exists() or (baixa.numero_nbbpm or "").strip():
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            raise DRFValidationError({"detail": "Esta baixa já possui NBBPM gerada."})
+
         status_anterior = baixa.get_status_display()
-        nbbpm_anterior = baixa.numero_nbbpm
 
         with transaction.atomic():
             set_user(request.user)
             baixa.aprovar(usuario_aprovador=request.user)
 
-            nbbpm_gerado = None
-            if not baixa.numero_nbbpm:
-                nbbpm_gerado = gerar_numero_nbbpm(baixa)
-                baixa.numero_nbbpm = nbbpm_gerado
-                baixa.save(update_fields=['numero_nbbpm'])
-
-        # Registra mudança de status
         self._registrar_historico(
             baixa=baixa,
             campo="status",
@@ -562,17 +549,6 @@ class BaixaFisicaBemPatrimonialViewSet(
             usuario=request.user,
             justificativa="Baixa física aprovada",
         )
-
-        # Registra geração do NBBPM se ocorreu
-        if nbbpm_gerado:
-            self._registrar_historico(
-                baixa=baixa,
-                campo="numero_nbbpm",
-                valor_antigo=nbbpm_anterior or "",
-                valor_novo=nbbpm_gerado,
-                usuario=request.user,
-                justificativa="Número NBBPM gerado automaticamente na aprovação",
-            )
 
         try:
             envia_email_baixa_fisica_aprovada(baixa)
@@ -702,75 +678,6 @@ class BaixaFisicaBemPatrimonialViewSet(
                 bem.save(update_fields=['status'])
 
     # =========================================================
-    # GERAR NBBPM
-    # =========================================================
-
-    @extend_schema(
-        tags=["Baixas Físicas"],
-        summary="Gerar PDF NBBPM",
-        description=GERAR_NBBPM_DOC,
-        request=None,
-        responses={
-            200: OpenApiResponse(description="PDF da Nota NBBPM"),
-            400: OpenApiResponse(description="Baixa não aprovada ou sem NBBPM"),
-            404: OpenApiResponse(description="Baixa física não encontrada"),
-        },
-    )
-    @action(detail=True, methods=['get'], url_path='gerar-nbbpm')
-    def gerar_nbbpm(self, request, pk=None):
-        baixa = self.get_object()
-
-        if baixa.status != constants.ACEITA:
-            return Response(
-                {'detail': 'A Nota NBBPM só pode ser gerada para baixas aprovadas.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if not baixa.numero_nbbpm:
-            return Response(
-                {'detail': 'Esta baixa não possui número NBBPM.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        return http_response_nbbpm(baixa)
-
-    # =========================================================
-    # GERAR NBBPM CONSOLIDADA (LOTE) — NOVO
-    # =========================================================
-    #
-    # Fluxo da tela "Baixas Físicas de Bens Patrimoniais": o usuário
-    # seleciona uma ou mais Baixas com status Aprovado (ACEITA) da sua
-    # Unidade Orçamentária, informa Número do processo de Baixa, Data da
-    # Autorização, Responsável e (opcionalmente) o Número do processo de
-    # destinação final, e o sistema gera um único PDF consolidado.
-
-    @extend_schema(
-        tags=["Baixas Físicas"],
-        summary="Gerar PDF NBBPM consolidada (lote)",
-        description=(
-            "Gera uma NBBPM consolidada a partir de uma ou mais Baixas "
-            "Físicas aprovadas (status ACEITA) da mesma Unidade "
-            "Orçamentária do usuário logado."
-        ),
-        request=NBBPMGerarLoteSerializer,
-        responses={
-            200: OpenApiResponse(description="PDF da NBBPM consolidada"),
-            400: OpenApiResponse(description="Seleção inválida de Baixas Físicas"),
-        },
-    )
-    @action(detail=False, methods=['post'], url_path='gerar-nbbpm-lote')
-    def gerar_nbbpm_lote(self, request):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        with transaction.atomic():
-            nbbpm = serializer.save()
-            nbbpm.numero = gerar_numero_nbbpm_lote(nbbpm)
-            nbbpm.save(update_fields=['numero'])
-
-        return http_response_nbbpm_lote(nbbpm, usuario_gerador=request.user)
-
-    # =========================================================
     # GERAR LAUDO DE AVALIAÇÃO
     # =========================================================
 
@@ -779,7 +686,6 @@ class BaixaFisicaBemPatrimonialViewSet(
         summary="Gerar PDF do Laudo de Avaliação",
         description=(
             "Gera o Laudo de Avaliação para Baixa de Bens Patrimoniais Móveis "
-            "conforme Artigo 20 do Decreto 53.484/2012. "
             "Disponível apenas para baixas com status 'Aceita'."
         ),
         request=None,
@@ -826,6 +732,7 @@ class BaixaFisicaBemPatrimonialViewSet(
             ids_list = self._parse_ids(ids_param)
             if ids_list:
                 queryset = queryset.filter(id__in=ids_list)
+        queryset = queryset.prefetch_related('nbbpms_lote', 'itens__bem')
         return queryset
 
     def _parse_ids(self, ids_param: str) -> list:
@@ -894,7 +801,17 @@ class BaixaFisicaBemPatrimonialViewSet(
         ws.cell(row=row_num, column=2).value = bem.numero_patrimonial if bem else '-'
         ws.cell(row=row_num, column=3).value = bem.nome if bem else '-'
         ws.cell(row=row_num, column=4).value = baixa.get_status_display()
-        ws.cell(row=row_num, column=5).value = baixa.numero_nbbpm or '-'
+        nbbpm = None
+        try:
+            if hasattr(baixa, '_prefetched_objects_cache') and 'nbbpms_lote' in baixa._prefetched_objects_cache:
+                lotes = baixa._prefetched_objects_cache['nbbpms_lote']
+                nbbpm = lotes[0] if lotes else None
+            else:
+                nbbpm = baixa.nbbpms_lote.first()
+        except Exception:
+            nbbpm = None
+        numero_nbbpm = nbbpm.numero if nbbpm and nbbpm.numero else (baixa.numero_nbbpm or '-')
+        ws.cell(row=row_num, column=5).value = numero_nbbpm
         ws.cell(row=row_num, column=6).value = str(baixa.criado_por) if baixa.criado_por else '-'
         ws.cell(row=row_num, column=7).value = str(baixa.aprovado_por) if baixa.aprovado_por else '-'
         ws.cell(row=row_num, column=8).value = data_aprovacao

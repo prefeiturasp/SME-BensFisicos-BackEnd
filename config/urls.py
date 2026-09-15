@@ -58,6 +58,8 @@ urlpatterns = [
     path("api/user/", include("usuario.urls")),
     # API de Baixa-física
     path("api/baixa-fisica/", include("bem_patrimonial.api_urls")),
+    # API de NBBPM (unificada)
+    path("api/nbbpm/", include("bem_patrimonial.nbbpm_urls")),
     # API de Transferências
     path("api/transferencias/", include("bem_patrimonial.transferencia_urls")),
     path("api/", include("bem_patrimonial.movimentacoes_urls")),

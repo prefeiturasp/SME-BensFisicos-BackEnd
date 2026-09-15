@@ -3,8 +3,16 @@ import json
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Q
+from django.urls import reverse
+from rest_framework.exceptions import ValidationError as DRFValidationError
 
+from bem_patrimonial.admins.widgets.movimentacao_lote_widget import MovimentacaoLoteWidget
 from bem_patrimonial.models import MovimentacaoBemPatrimonial
+from bem_patrimonial.serializers.movimentacao_serializers import (
+    obter_mensagem_erro_validacao,
+    resolver_bens_movimentacao_lote,
+    validar_bens_movimentacao,
+)
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 
 from dados_comuns.escopo import (
@@ -102,6 +110,11 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         queryset=queryset_uos_destino().none(),
         required=False,
     )
+    itens_lote = forms.CharField(
+        label="Itens de movimentação",
+        required=True,
+        widget=MovimentacaoLoteWidget(),
+    )
 
     class Meta:
         model = MovimentacaoBemPatrimonial
@@ -119,6 +132,14 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         if "unidade_administrativa_destino" in self.fields:
             self.fields["unidade_administrativa_destino"].required = False
             self.fields["unidade_administrativa_destino"].widget = forms.Select()
+        if "itens_lote" in self.fields:
+            self.fields["itens_lote"].required = self.instance.pk is None
+            self.fields["itens_lote"].widget.attrs["data-resolver-url"] = reverse(
+                "admin:bem_patrimonial_movimentacaobempatrimonial_resolver_itens_lote"
+            )
+            self.fields["itens_lote"].widget.attrs["data-buscar-url"] = reverse(
+                "admin:bem_patrimonial_movimentacaobempatrimonial_buscar_bens_lote"
+            )
         self._configure_dynamic_fields()
 
     def _get_user(self):
@@ -432,6 +453,7 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         is_editing = self.instance.pk is not None
         if not is_editing:
             self._validate_ua_origem_destino_new(cleaned_data, user)
+            self._validar_itens_lote(cleaned_data)
         elif self.instance.unidade_administrativa_destino_id:
             cleaned_data["unidade_orcamentaria_destino"] = (
                 self.instance.unidade_administrativa_destino.unidade_orcamentaria
@@ -442,3 +464,38 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                     "Não é permitido alterar uma movimentação solicitada por outro usuário."
                 )
         return cleaned_data
+
+    def _validar_itens_lote(self, cleaned_data):
+        valor = cleaned_data.get("itens_lote")
+        if not valor:
+            return
+
+        try:
+            dados = json.loads(valor)
+        except (TypeError, json.JSONDecodeError) as error:
+            raise ValidationError({"itens_lote": "Itens de movimentação inválidos."}) from error
+
+        faixas = dados.get("faixas", [])
+        selecionar_todos = dados.get("selecionar_todos", False)
+        if selecionar_todos == bool(faixas):
+            raise ValidationError(
+                {"itens_lote": "Informe uma ou mais faixas ou selecione todos os bens da UA."}
+            )
+
+        try:
+            bens = resolver_bens_movimentacao_lote(
+                cleaned_data["unidade_administrativa_origem"],
+                faixas,
+                selecionar_todos,
+            )
+            if not bens:
+                raise ValidationError(
+                    {"itens_lote": "Nenhum bem aprovado foi encontrado na unidade administrativa de origem."}
+                )
+            validar_bens_movimentacao(cleaned_data["unidade_administrativa_origem"], bens)
+        except DRFValidationError as error:
+            raise ValidationError(
+                {"itens_lote": obter_mensagem_erro_validacao(error.detail)}
+            ) from error
+
+        cleaned_data["bens_lote_resolvidos"] = bens

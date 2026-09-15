@@ -373,10 +373,10 @@ e identificar que um ou mais itens precisam de ajuste antes da aprovação.
   corrigido (obrigatório, não pode ser vazio)
  
 ### Comportamento
- 
-1. Valida que o status atual da baixa é **Solicitada**
-2. Valida que o usuário é Gestor de Patrimônio (ou superuser)
-3. Altera o status da baixa para **Em elaboração**
+
+ 1. Valida que o status atual da baixa é **Solicitada**
+ 2. Valida que o usuário é Gestor de Patrimônio, superuser **ou o solicitante (criado_por)** — permite withdraw pelo operador
+ 3. Altera o status da baixa para **Em elaboração**
 4. Registra o motivo no histórico da baixa
 5. Notifica o solicitante original por e-mail (melhor esforço,
    falhas de envio não impedem a operação)

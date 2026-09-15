@@ -15,6 +15,8 @@ from bem_patrimonial.models import (
 )
 from .admins.bem_patrimonial import BemPatrimonialAdmin
 from .admins.movimentacao_bem_patrimonial import MovimentacaoBemPatrimonialAdmin
+# Registra NBBPMAdmin via import (decorator)
+import bem_patrimonial.admins.nbbpm  # noqa: F401
 
 admin.site.register(BemPatrimonial, BemPatrimonialAdmin)
 admin.site.register(MovimentacaoBemPatrimonial, MovimentacaoBemPatrimonialAdmin)

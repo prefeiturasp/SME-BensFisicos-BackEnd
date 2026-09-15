@@ -6,6 +6,45 @@ def usuario_e_super_admin(usuario):
     return bool(getattr(usuario, "is_superuser", False))
 
 
+def uas_acessiveis_para_importacao(usuario, queryset_ua=None):
+    """
+    UAs em que o usuário pode importar bens, seguindo a MESMA regra que popula
+    o seletor de escopo do frontend (get_opcoes_escopo):
+    - superuser: todas as UAs ativas;
+    - gestor de patrimônio: UAs ativas da sua UO;
+    - operador de inventário: as UAs ativas às quais está vinculado (M2M);
+    - se o usuário já tem uma UA direta, restringe a ela.
+
+    Diferente de filtrar_ua_origem_por_escopo (regra de movimentação, que ignora
+    superuser e operador), esta função garante que o backend aceite exatamente
+    as UAs que o frontend ofereceu na importação.
+    """
+    if queryset_ua is None:
+        queryset_ua = UnidadeAdministrativa.objects.filter(
+            status=UnidadeAdministrativa.ATIVA
+        )
+
+    ua_id = getattr(usuario, "unidade_administrativa_id", None)
+    if ua_id:
+        return queryset_ua.filter(id=ua_id)
+
+    if getattr(usuario, "is_superuser", False):
+        return queryset_ua
+
+    uo_id = obter_unidade_orcamentaria_id_do_usuario(usuario)
+
+    if getattr(usuario, "is_gestor_patrimonio", False):
+        if uo_id:
+            return queryset_ua.filter(unidade_orcamentaria_id=uo_id)
+        return queryset_ua.none()
+
+    if getattr(usuario, "is_operador_inventario", False):
+        ids = usuario.unidades_administrativas.values_list("id", flat=True)
+        return queryset_ua.filter(id__in=list(ids))
+
+    return queryset_ua.none()
+
+
 def obter_unidade_orcamentaria_id_do_usuario(usuario):
     """
     Retorna o ID da UO do usuário:

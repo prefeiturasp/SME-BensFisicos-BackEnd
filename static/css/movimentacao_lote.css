@@ -1,0 +1,76 @@
+.movimentacao-lote__inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.movimentacao-lote__inputs label,
+.movimentacao-lote__todos {
+  display: block;
+  font-weight: 600;
+}
+
+.movimentacao-lote__inputs input {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.movimentacao-lote__opcoes {
+  max-height: 240px;
+  margin: 4px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid #bbb;
+  background: #fff;
+}
+
+.movimentacao-lote__opcoes button {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.movimentacao-lote__opcoes button:hover,
+.movimentacao-lote__opcoes button:focus {
+  background: #f0f7f3;
+}
+
+.movimentacao-lote__todos {
+  margin-top: 16px;
+}
+
+.movimentacao-lote__erro {
+  min-height: 20px;
+  margin: 8px 0;
+  color: #ba2121;
+}
+
+.movimentacao-lote__resumo {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.movimentacao-lote__resumo th,
+.movimentacao-lote__resumo td {
+  padding: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.movimentacao-lote--todos .movimentacao-lote__inputs {
+  opacity: 0.55;
+}
+
+@media (max-width: 767px) {
+  .movimentacao-lote__inputs {
+    grid-template-columns: 1fr;
+  }
+}

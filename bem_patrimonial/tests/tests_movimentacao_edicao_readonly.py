@@ -181,12 +181,29 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
             nome="Ponto Central",
             sigla="PC",
         )
+        bem_disponivel = BemPatrimonial.objects.create(
+            nome="Bem disponível",
+            descricao="Descrição",
+            valor_unitario=100.00,
+            marca="Marca",
+            modelo="Modelo",
+            numero_processo="PROC-002",
+            numero_patrimonial="000.000000099-0",
+            status=APROVADO,
+            unidade_administrativa=self.ua1,
+            criado_por=self.operador_ua1,
+        )
 
         form = MovimentacaoBemPatrimonialForm(
             data={
                 "unidade_administrativa_origem": self.ua1.pk,
                 "unidade_orcamentaria_destino": outra_uo.pk,
                 "observacao": "Teste UO externa",
+                "itens_lote": (
+                    '{"faixas":[{"numero_patrimonial_de":"'
+                    f"{bem_disponivel.numero_patrimonial}"
+                    '"}],"selecionar_todos":false}'
+                ),
             },
             request=type("obj", (object,), {"user": self.gestor})(),
         )

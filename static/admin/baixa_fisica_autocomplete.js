@@ -43,7 +43,7 @@
             function isStatusAguardandoEnvio() {
                 if (!isEdicao) return false;
                 const txt = ($statusReadonly.text() || '').trim().toLowerCase();
-                return txt === 'aguardando envio';
+                return txt === 'aguardando envio' || txt === 'em elaboração' || txt === 'em elaboracao';
             }
 
             function enableAdd($addButton) {

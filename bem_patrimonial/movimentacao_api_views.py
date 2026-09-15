@@ -33,6 +33,9 @@ from bem_patrimonial.emails import (
 from bem_patrimonial.models import MovimentacaoBemPatrimonial
 from bem_patrimonial.models import MovimentacaoBensItem
 from bem_patrimonial.serializers.movimentacao_serializers import (
+    BemPatrimonialSimpleSerializer,
+    MovimentacaoBensLotePreviewResponseSerializer,
+    MovimentacaoBensLotePreviewSerializer,
     MovimentacaoBemPatrimonialCreateSerializer,
     MovimentacaoBemPatrimonialDetailSerializer,
     MovimentacaoBemPatrimonialListSerializer,
@@ -40,10 +43,12 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     MovimentacaoHistoricoGrupoSerializer,
     MovimentacaoUoCadastroOptionSerializer,
     obter_ua_ponto_central,
+    queryset_bens_movimentaveis,
+    validar_ua_origem_movimentacao,
 )
 from dados_comuns.context import audit_as
 from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
-from dados_comuns.models import HistoricoGeral, UnidadeOrcamentaria
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.permissions import MovimentacaoBemPatrimonialPermission
 
 logger = logging.getLogger(__name__)
@@ -263,6 +268,67 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return MovimentacaoBemPatrimonialCreateSerializer
         return MovimentacaoBemPatrimonialDetailSerializer
+
+    @extend_schema(
+        tags=["Movimentações"],
+        summary="Resolver bens para movimentação em lote",
+        description=(
+            "Valida uma ou mais faixas de números patrimoniais, ou todos os bens "
+            "aprovados da UA de origem, antes da criação da movimentação."
+        ),
+        request=MovimentacaoBensLotePreviewSerializer,
+        responses={200: MovimentacaoBensLotePreviewResponseSerializer},
+    )
+    @action(detail=False, methods=["post"], url_path="resolver-itens-lote")
+    def resolver_itens_lote(self, request):
+        serializer = MovimentacaoBensLotePreviewSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        response_serializer = MovimentacaoBensLotePreviewResponseSerializer(
+            {"itens": serializer.validated_data["bens"]}
+        )
+        return Response(response_serializer.data)
+
+    @extend_schema(
+        tags=["Movimentações"],
+        summary="Listar bens aptos para movimentação em lote",
+        parameters=[
+            OpenApiParameter(
+                name="unidade_administrativa_origem",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Identificador da UA de origem.",
+            ),
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Filtra pelo número patrimonial.",
+            ),
+        ],
+        responses={200: BemPatrimonialSimpleSerializer(many=True)},
+    )
+    @action(detail=False, methods=["get"], url_path="bens-movimentaveis")
+    def bens_movimentaveis(self, request):
+        ua_origem = validar_ua_origem_movimentacao(
+            request.user,
+            UnidadeAdministrativa.objects.filter(
+                pk=request.query_params.get("unidade_administrativa_origem")
+            ).first(),
+        )
+        busca = request.query_params.get("search", "").strip()
+        bens = queryset_bens_movimentaveis(ua_origem)
+        if busca:
+            bens = bens.filter(numero_patrimonial__icontains=busca)
+        serializer = BemPatrimonialSimpleSerializer(
+            bens.order_by("numero_patrimonial", "id")[:100],
+            many=True,
+        )
+        return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="opcoes-cadastro")
     def opcoes_cadastro(self, request):
