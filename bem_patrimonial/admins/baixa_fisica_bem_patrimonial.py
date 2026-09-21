@@ -137,28 +137,38 @@ class BaixaFisicaBemPatrimonialChangeForm(forms.ModelForm):
 
     def clean_numero_processo_baixa(self):
         valor = (self.cleaned_data.get("numero_processo_baixa") or "").strip()
-        instance = getattr(self, "instance", None)
-        if instance and instance.pk:
-            try:
-                original = BaixaFisicaBemPatrimonial.objects.get(pk=instance.pk)
-            except BaixaFisicaBemPatrimonial.DoesNotExist:
-                original = None
-            if original is not None and valor != (original.numero_processo_baixa or ""):
-                if original.status != constants.ACEITA:
-                    raise ValidationError(
-                        "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
-                    )
-                try:
-                    tem_nbbpm = original.nbbpms_lote.exists()
-                except Exception:
-                    tem_nbbpm = False
-                if tem_nbbpm or (original.numero_nbbpm or "").strip():
-                    raise ValidationError(
-                        "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
-                    )
-                if not valor:
-                    raise ValidationError(NUMERO_PROCESSO_OBRIGATORIO)
+        original = self._baixa_original_para_correcao()
+        if original is not None and valor != (original.numero_processo_baixa or ""):
+            self._validar_correcao_processo(original, valor)
         return valor
+
+    def _baixa_original_para_correcao(self):
+        instance = getattr(self, "instance", None)
+        if not instance or not instance.pk:
+            return None
+        try:
+            return BaixaFisicaBemPatrimonial.objects.get(pk=instance.pk)
+        except BaixaFisicaBemPatrimonial.DoesNotExist:
+            return None
+
+    def _validar_correcao_processo(self, original, valor):
+        if original.status != constants.ACEITA:
+            raise ValidationError(
+                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+            )
+        if self._tem_nota_vinculada(original):
+            raise ValidationError(
+                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+            )
+        if not valor:
+            raise ValidationError(NUMERO_PROCESSO_OBRIGATORIO)
+
+    @staticmethod
+    def _tem_nota_vinculada(original):
+        try:
+            return original.nbbpms_lote.exists() or bool((original.numero_nbbpm or "").strip())
+        except Exception:
+            return bool((original.numero_nbbpm or "").strip())
 
 
 class BaixaFisicaBensItemInlineForm(forms.ModelForm):
