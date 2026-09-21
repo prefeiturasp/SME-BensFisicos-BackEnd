@@ -37,6 +37,9 @@ from dados_comuns.models import UnidadeAdministrativa
 from django.core.validators import RegexValidator
 
 
+NUMERO_PROCESSO_OBRIGATORIO = "Número do processo é obrigatório."
+
+
 class NBBPMGerarAdminForm(forms.Form):
     numero_processo_baixa = forms.CharField(
         label="Número do processo de Baixa",
@@ -96,7 +99,7 @@ class AprovarBaixaAdminForm(forms.Form):
     def clean_numero_processo_baixa(self):
         valor = (self.cleaned_data.get("numero_processo_baixa") or "").strip()
         if not valor:
-            raise ValidationError("Número do processo é obrigatório.")
+            raise ValidationError(NUMERO_PROCESSO_OBRIGATORIO)
         return valor
 
 
@@ -122,33 +125,39 @@ class BaixaFisicaBemPatrimonialChangeForm(forms.ModelForm):
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
-        fields = "__all__"
+        fields = (
+            "unidade_administrativa_origem",
+            "numero_processo_baixa",
+            "status",
+            "criado_por",
+            "data_baixa",
+            "aprovado_por",
+            "data_aprovacao",
+        )
 
     def clean_numero_processo_baixa(self):
         valor = (self.cleaned_data.get("numero_processo_baixa") or "").strip()
         instance = getattr(self, "instance", None)
-        if not instance or not instance.pk:
-            return valor
-        try:
-            original = BaixaFisicaBemPatrimonial.objects.get(pk=instance.pk)
-        except BaixaFisicaBemPatrimonial.DoesNotExist:
-            return valor
-        if valor == (original.numero_processo_baixa or ""):
-            return valor
-        if original.status != constants.ACEITA:
-            raise ValidationError(
-                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
-            )
-        try:
-            tem_nbbpm = original.nbbpms_lote.exists()
-        except Exception:
-            tem_nbbpm = False
-        if tem_nbbpm or (original.numero_nbbpm or "").strip():
-            raise ValidationError(
-                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
-            )
-        if not valor:
-            raise ValidationError("Número do processo é obrigatório.")
+        if instance and instance.pk:
+            try:
+                original = BaixaFisicaBemPatrimonial.objects.get(pk=instance.pk)
+            except BaixaFisicaBemPatrimonial.DoesNotExist:
+                original = None
+            if original is not None and valor != (original.numero_processo_baixa or ""):
+                if original.status != constants.ACEITA:
+                    raise ValidationError(
+                        "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+                    )
+                try:
+                    tem_nbbpm = original.nbbpms_lote.exists()
+                except Exception:
+                    tem_nbbpm = False
+                if tem_nbbpm or (original.numero_nbbpm or "").strip():
+                    raise ValidationError(
+                        "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+                    )
+                if not valor:
+                    raise ValidationError(NUMERO_PROCESSO_OBRIGATORIO)
         return valor
 
 
@@ -600,7 +609,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 )
                 obj.numero_processo_baixa = antigo
             elif not novo:
-                self.message_user(request, "Número do processo é obrigatório.", level=messages.ERROR)
+                self.message_user(request, NUMERO_PROCESSO_OBRIGATORIO, level=messages.ERROR)
                 obj.numero_processo_baixa = antigo
             elif not _re.fullmatch(constants.PROCESSO_BAIXA_REGEX, novo):
                 self.message_user(request, constants.PROCESSO_BAIXA_MESSAGE, level=messages.ERROR)
