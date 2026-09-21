@@ -19,7 +19,7 @@ from django.apps import apps as django_apps
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, connection, transaction
+from django.db import IntegrityError, connection, connections, transaction
 from django.test import RequestFactory, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -281,6 +281,8 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
                 resultados[key] = criar_nbbpm_com_retry(baixas=[baixa], numero_processo_baixa=baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
             except Exception as e:
                 erros.append(str(e))
+            finally:
+                connections.close_all()
 
         t1 = threading.Thread(target=criar, args=(self.baixa1, "t1"))
         t2 = threading.Thread(target=criar, args=(self.baixa2, "t2"))
@@ -324,6 +326,8 @@ class TestReusoMesmaBaixaConcorrente(TransactionTestCase):
                 resultados[key] = criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa=self.baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
             except Exception as e:
                 erros.append(str(e))
+            finally:
+                connections.close_all()
 
         t1 = threading.Thread(target=tentar, args=("t1",))
         t2 = threading.Thread(target=tentar, args=("t2",))
