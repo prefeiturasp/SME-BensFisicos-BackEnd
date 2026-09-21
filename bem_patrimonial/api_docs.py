@@ -150,6 +150,32 @@ Após a aprovação, o único documento gerado automaticamente é o
 disponível em `GET /api/baixa-fisica/{id}/gerar-laudo/` (apenas para status **Aceita**).
 """)
 
+# API: /api/baixas-fisicas/{id}/corrigir-processo/ (POST)
+CORRIGIR_PROCESSO_DOC = dedent("""
+Corrige o número do processo de uma Baixa Física aprovada, sem reiniciar o processo.
+
+### Parâmetros obrigatórios
+
+- **numero_processo_baixa** (string) → novo número no formato `XXXX.XXXX/XXXXXXX-X` (ex: `6016.2025/0117371-7`).
+
+### Comportamento
+
+1. Valida que o status é **aceita**
+2. Valida permissões do usuário (apenas Gestor de Patrimônio)
+3. Valida **numero_processo_baixa** no mesmo padrão do aceite
+4. Bloqueia quando já existe Nota (NBBPM consolidada ou número legado)
+5. Salva só o campo **numero_processo_baixa** na própria baixa, em transação
+6. Não cria nova solicitação, não altera bens vinculados e não registra histórico
+
+### Restrições
+
+- Só baixa **Aceita** sem Nota gerada pode ser corrigida; caso contrário retorna `400`
+- Formato inválido retorna `400` com mensagem clara
+- Laudo e PDF da NBBPM em lote gerados após a correção usam o número atualizado
+
+Somente usuários **Gestor de Patrimônio** podem executar esta operação.
+""")
+
 # API: /api/baixas-fisicas/{id}/recusar/ (POST)
 CANCELAR_BAIXA_FISICA_DOC = dedent("""
 Recusa a baixa física, restaurando o status dos bens.
