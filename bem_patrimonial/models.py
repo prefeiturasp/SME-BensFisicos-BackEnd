@@ -1017,6 +1017,9 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
         if not self.pk:
             return
+        if self.status in (constants.ACEITA, constants.RECUSADA):
+            # Itens congelados após a decisão; bens já estão BAIXA_FISICA por desenho.
+            return
         itens = list(self.itens.select_related("bem", "bem__unidade_administrativa"))
         if not itens:
             raise ValidationError("Não é possível manter uma Baixa Física sem itens.")
