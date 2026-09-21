@@ -691,3 +691,138 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(constants.NBBPM_PROCESSO_PAYLOAD_DIVERGENTE, self._mensagens(req))
         self.assertEqual(NBBPM.objects.count(), 0)
+
+
+class TestCorrigirProcessoAdmin(TestCase):
+    """Correção pontual do número do processo em Baixa Aceita sem Nota."""
+
+    def setUp(self):
+        self.uo = _criar_uo_cov(codigo=codigo_uo(1, 16, 40))
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 40, 40), sigla="UA40", nome="UA40")
+        self.gestor = _criar_usuario_cov("gest_corr_proc", self.uo, self.ua, [GRUPO_GESTOR_PATRIMONIO])
+        self.operador = _criar_usuario_cov("oper_corr_proc", self.uo, self.ua, [GRUPO_OPERADOR_INVENTARIO])
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, AdminSite())
+        self.factory = RequestFactory()
+
+    def _req(self, user):
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.contrib.sessions.backends.db import SessionStore
+
+        req = self.factory.get("/")
+        req.user = user
+        req.session = SessionStore()
+        req.session.create()
+        req._messages = FallbackStorage(req)
+        return req
+
+    def test_exibe_valor_atual_no_fieldset(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        req = self._req(self.gestor)
+        fieldsets = self.admin.get_fieldsets(req, baixa)
+        campos = fieldsets[0][1]["fields"]
+        self.assertIn("numero_processo_baixa", campos)
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0117371-7")
+
+    def test_permitir_editar_antes_da_nota(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        req = self._req(self.gestor)
+        readonly = self.admin.get_readonly_fields(req, baixa)
+        self.assertNotIn("numero_processo_baixa", readonly)
+        self.assertIn("unidade_administrativa_origem", readonly)
+        self.assertIn("data_baixa", readonly)
+
+    def test_bloquear_apos_nota_m2m(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000099/2026", numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([baixa])
+        req = self._req(self.gestor)
+        readonly = self.admin.get_readonly_fields(req, baixa)
+        self.assertIn("numero_processo_baixa", readonly)
+
+    def test_bloquear_apos_nota_legado(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7", numero_nbbpm="001.0000001/2026",
+        )
+        req = self._req(self.gestor)
+        readonly = self.admin.get_readonly_fields(req, baixa)
+        self.assertIn("numero_processo_baixa", readonly)
+
+    def test_bloquear_quando_nao_aceita_e_quando_operador(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.SOLICITADA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        self.assertIn("numero_processo_baixa", self.admin.get_readonly_fields(self._req(self.gestor), baixa))
+        baixa.status = constants.ACEITA
+        baixa.save(update_fields=["status"])
+        self.assertIn("numero_processo_baixa", self.admin.get_readonly_fields(self._req(self.operador), baixa))
+
+    def test_form_valida_formato_e_bloqueio(self):
+        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
+            BaixaFisicaBemPatrimonialChangeForm,
+        )
+
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        bem = _criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        form = BaixaFisicaBemPatrimonialChangeForm(
+            data={
+                "unidade_administrativa_origem": self.ua.pk,
+                "numero_processo_baixa": "FORMATO-RUIM",
+                "data_baixa": str(timezone.localdate()),
+                "status": baixa.status,
+                "criado_por": self.gestor.pk,
+            },
+            instance=baixa,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("numero_processo_baixa", form.errors)
+
+        form_ok = BaixaFisicaBemPatrimonialChangeForm(
+            data={
+                "unidade_administrativa_origem": self.ua.pk,
+                "numero_processo_baixa": "6016.2025/0222222-2",
+                "data_baixa": str(timezone.localdate()),
+                "status": baixa.status,
+                "criado_por": self.gestor.pk,
+            },
+            instance=baixa,
+        )
+        self.assertTrue(form_ok.is_valid(), form_ok.errors)
+
+    def test_save_model_corrige_e_bloqueia_apos_nota(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        req = self._req(self.gestor)
+        baixa.numero_processo_baixa = "6016.2025/0222222-2"
+        self.admin.save_model(req, baixa, None, True)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0222222-2")
+
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000098/2026", numero_processo_baixa="6016.2025/0222222-2",
+            data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([baixa])
+        baixa.numero_processo_baixa = "6016.2025/0333333-3"
+        self.admin.save_model(req, baixa, None, True)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0222222-2")

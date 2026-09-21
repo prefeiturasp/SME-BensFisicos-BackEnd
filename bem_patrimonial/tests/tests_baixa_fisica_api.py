@@ -1610,3 +1610,233 @@ class NBBPMSerializerTestCase(BaseSetup):
         )
         data = NBBPMSerializer(nbbpm_sem_baixas).data
         self.assertIsNone(data["unidade_administrativa_origem"])
+
+
+# ============================================================================
+# TESTES — CORRIGIR NÚMERO DO PROCESSO (Baixa Aceita, sem Nota)
+# ============================================================================
+
+class BaixaFisicaCorrigirProcessoSerializerTestCase(BaseSetup):
+    def setUp(self):
+        super().setUp()
+        from bem_patrimonial.api_serializers import BaixaFisicaCorrigirProcessoSerializer
+
+        self.Serializer = BaixaFisicaCorrigirProcessoSerializer
+        self.baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+
+    def _req(self, user):
+        req = MagicMock()
+        req.user = user
+        return req
+
+    def test_valido_gestor_aceita_sem_nota(self):
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_formato_invalido(self):
+        s = self.Serializer(
+            data={"numero_processo_baixa": "FORMATO-RUIM"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("numero_processo_baixa", s.errors)
+
+    def test_operador_sem_permissao(self):
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.operador)},
+        )
+        with self.assertRaises(PermissionDenied):
+            s.is_valid(raise_exception=True)
+
+    def test_status_nao_aceita_invalido(self):
+        self.baixa.status = constants.SOLICITADA
+        self.baixa.save()
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertFalse(s.is_valid())
+
+    def test_com_nbbpm_vinculada_invalido(self):
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000001/2026",
+            numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([self.baixa])
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertFalse(s.is_valid())
+
+
+class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
+    PROCESSO_ANTIGO = "6016.2025/0117371-7"
+    PROCESSO_NOVO = "6016.2025/0222222-2"
+
+    def _criar_baixa_aceita_com_bem(self, processo=None):
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=processo or self.PROCESSO_ANTIGO,
+        )
+        baixa.aprovado_por = self.gestor
+        baixa.data_aprovacao = timezone.now()
+        baixa.save(update_fields=["aprovado_por", "data_aprovacao"])
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        self.bem.status = constants.BAIXA_FISICA
+        self.bem.numero_processo = baixa.numero_processo_baixa
+        self.bem.localizacao = f"Baixa Física - {baixa.numero_processo_baixa}"
+        self.bem.save(update_fields=["status", "numero_processo", "localizacao"])
+        return baixa
+
+    def _contar_historico(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).count()
+
+    def test_corrige_valido_salva_so_na_baixa(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        bem_processo_antes = self.bem.numero_processo
+        bem_localizacao_antes = self.bem.localizacao
+        total_antes = BaixaFisicaBemPatrimonial.objects.count()
+        historico_antes = self._contar_historico(baixa)
+
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": self.PROCESSO_NOVO},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["numero_processo_baixa"], self.PROCESSO_NOVO)
+
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_NOVO)
+        self.assertEqual(baixa.status, constants.ACEITA)
+        self.assertEqual(BaixaFisicaBemPatrimonial.objects.count(), total_antes)
+
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.numero_processo, bem_processo_antes)
+        self.assertEqual(self.bem.localizacao, bem_localizacao_antes)
+        self.assertEqual(self.bem.status, constants.BAIXA_FISICA)
+        self.assertEqual(self._contar_historico(baixa), historico_antes)
+
+    def test_formato_invalido_retorna_400_sem_alterar(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": "NUMERO-RUIM"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+
+    def test_apos_nbbpm_vinculada_retorna_400(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000002/2026",
+            numero_processo_baixa=self.PROCESSO_ANTIGO,
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([baixa])
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": self.PROCESSO_NOVO},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+
+    def test_apos_numero_legado_retorna_400(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        baixa.numero_nbbpm = "001.0000003/2026"
+        baixa.save(update_fields=["numero_nbbpm"])
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": self.PROCESSO_NOVO},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+
+    def test_status_nao_aceita_retorna_400(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": self.PROCESSO_NOVO},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_operador_nao_pode_corrigir_403(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.operador)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": self.PROCESSO_NOVO},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+
+
+class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
+    def test_corrigir_valido_nao_propaga_para_bens(self):
+        from django.core.exceptions import ValidationError
+
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        self.bem.numero_processo = "6016.2025/0117371-7"
+        self.bem.localizacao = "Baixa Física - 6016.2025/0117371-7"
+        self.bem.status = constants.BAIXA_FISICA
+        self.bem.save(update_fields=["numero_processo", "localizacao", "status"])
+
+        baixa.corrigir_numero_processo("6016.2025/0333333-3")
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0333333-3")
+        self.assertEqual(self.bem.numero_processo, "6016.2025/0117371-7")
+        self.assertEqual(self.bem.localizacao, "Baixa Física - 6016.2025/0117371-7")
+
+    def test_corrigir_status_invalido_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+
+        baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        with self.assertRaises(ValidationError):
+            baixa.corrigir_numero_processo("6016.2025/0333333-3")
+
+    def test_corrigir_formato_invalido_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        with self.assertRaises(ValidationError):
+            baixa.corrigir_numero_processo("RUIM")
