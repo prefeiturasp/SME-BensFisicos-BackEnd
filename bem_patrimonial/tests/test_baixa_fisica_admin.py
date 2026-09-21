@@ -806,6 +806,30 @@ class TestCorrigirProcessoAdmin(TestCase):
         )
         self.assertTrue(form_ok.is_valid(), form_ok.errors)
 
+    def test_form_aceita_correcao_com_bens_ja_baixados(self):
+        # Correção do processo com bens já baixados não pode falhar com "já foi baixado".
+        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
+            BaixaFisicaBemPatrimonialChangeForm,
+        )
+
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        bem = _criar_bem_cov(self.ua, self.gestor, status=constants.BAIXA_FISICA)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        form = BaixaFisicaBemPatrimonialChangeForm(
+            data={
+                "unidade_administrativa_origem": self.ua.pk,
+                "numero_processo_baixa": "6016.2025/0222222-2",
+                "data_baixa": str(timezone.localdate()),
+                "status": baixa.status,
+                "criado_por": self.gestor.pk,
+            },
+            instance=baixa,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
     def test_save_model_corrige_e_bloqueia_apos_nota(self):
         baixa = _criar_baixa_cov(
             self.ua, self.gestor, status=constants.ACEITA,
