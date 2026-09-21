@@ -502,6 +502,47 @@ class BaixaFisicaAprovarSerializer(serializers.Serializer):
         return attrs
 
 
+class BaixaFisicaCorrigirProcessoSerializer(serializers.Serializer):
+    numero_processo_baixa = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=64,
+        help_text=f"Número do processo no formato XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})",
+    )
+
+    def validate_numero_processo_baixa(self, value: str) -> str:
+        valor = (value or "").strip()
+        if not valor:
+            raise serializers.ValidationError("Número do processo é obrigatório.")
+        if not re.fullmatch(constants.PROCESSO_BAIXA_REGEX, valor):
+            raise serializers.ValidationError(constants.PROCESSO_BAIXA_MESSAGE)
+        return valor
+
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        baixa = self.context['baixa']
+        user = self.context['request'].user
+
+        if not (getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)):
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied(
+                "Apenas Gestor de Patrimônio pode corrigir o número do processo."
+            )
+        if baixa.status != constants.ACEITA:
+            raise serializers.ValidationError(
+                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+            )
+        try:
+            tem_nbbpm = baixa.nbbpms_lote.exists()
+        except Exception:
+            tem_nbbpm = False
+        if tem_nbbpm or (getattr(baixa, "numero_nbbpm", "") or "").strip():
+            raise serializers.ValidationError(
+                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+            )
+        return attrs
+
+
 class BaixaFisicaCancelarSerializer(serializers.Serializer):
     motivo = serializers.CharField(
         required=False,

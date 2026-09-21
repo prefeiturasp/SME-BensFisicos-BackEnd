@@ -153,6 +153,14 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             baixa.clean()
         self.assertIn("já foi baixado", str(ctx.exception))
 
+    def test_clean_nao_revalida_itens_em_baixa_aceita(self):
+        # Baixa Aceita com bens BAIXA_FISICA não pode falhar com "já foi baixado".
+        self.bem.status = BAIXA_FISICA
+        self.bem.save()
+
+        baixa = self._cria_baixa_com_item(status=ACEITA)
+        baixa.clean()
+
     def test_clean_impede_bem_em_outra_baixa_em_andamento(self):
         # primeira baixa enviada
         baixa1 = self._cria_baixa_com_item(status=SOLICITADA)

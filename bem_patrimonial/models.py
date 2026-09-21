@@ -1017,6 +1017,9 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
         if not self.pk:
             return
+        if self.status in (constants.ACEITA, constants.RECUSADA):
+            # Itens congelados após a decisão; bens já estão BAIXA_FISICA por desenho.
+            return
         itens = list(self.itens.select_related("bem", "bem__unidade_administrativa"))
         if not itens:
             raise ValidationError("Não é possível manter uma Baixa Física sem itens.")
@@ -1089,6 +1092,50 @@ class BaixaFisicaBemPatrimonial(models.Model):
             bem.localizacao = texto_localizacao
             bem.numero_processo = processo
             bem.save(update_fields=["status", "numero_processo", "localizacao"])
+
+    @property
+    def possui_nota_gerada(self):
+        """True quando já existe Nota (NBBPM consolidada via M2M ou número legado)."""
+        try:
+            if self.nbbpms_lote.exists():
+                return True
+        except Exception:
+            pass
+        return bool((self.numero_nbbpm or "").strip())
+
+    @property
+    def pode_corrigir_processo(self):
+        """Permite correção pontual só quando Aceita e sem Nota gerada."""
+        return self.status == constants.ACEITA and not self.possui_nota_gerada
+
+    @transaction.atomic
+    def corrigir_numero_processo(self, novo_numero):
+        """
+        Corrige o número do processo da Baixa Física aprovada, sem gerar
+        nova solicitação e sem propagar para bens ou histórico.
+
+        Só permite quando status for Aceita e sem NBBPM vinculada
+        (consolidada ou legado), com mesma regra de formato do aceite.
+        """
+        if self.status != constants.ACEITA:
+            raise ValidationError(
+                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+            )
+        if self.possui_nota_gerada:
+            raise ValidationError(
+                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+            )
+        processo = (novo_numero or "").strip()
+        if not processo:
+            raise ValidationError(
+                {"numero_processo_baixa": "Número do processo é obrigatório."}
+            )
+        if not re.fullmatch(constants.PROCESSO_BAIXA_REGEX, processo):
+            raise ValidationError(
+                {"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE}
+            )
+        self.numero_processo_baixa = processo
+        self.save(update_fields=["numero_processo_baixa"])
 
 
 class BaixaFisicaBensItem(models.Model):

@@ -14,6 +14,7 @@ import django_filters
 
 from dados_comuns.models import HistoricoGeral
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 
 from .models import BaixaFisicaBemPatrimonial
 from .api_serializers import (
@@ -24,6 +25,7 @@ from .api_serializers import (
     BaixaFisicaEnviarSolicitacaoSerializer,
     BaixaFisicaAprovarSerializer,
     BaixaFisicaCancelarSerializer,
+    BaixaFisicaCorrigirProcessoSerializer,
     BaixaFisicaSolicitarCorrecaoSerializer,
 )
 from .api_docs import (
@@ -34,6 +36,7 @@ from .api_docs import (
     ENVIAR_SOLICITACAO_DOC,
     APROVAR_BAIXA_FISICA_DOC,
     CANCELAR_BAIXA_FISICA_DOC,
+    CORRIGIR_PROCESSO_DOC,
     SOLICITAR_CORRECAO_DOC,
     EXPORTAR_EXCEL_DOC,
 )
@@ -202,6 +205,8 @@ class BaixaFisicaBemPatrimonialViewSet(
             return BaixaFisicaAprovarSerializer
         elif self.action == 'recusar':
             return BaixaFisicaCancelarSerializer
+        elif self.action == 'corrigir_processo':
+            return BaixaFisicaCorrigirProcessoSerializer
         elif self.action == 'solicitar_correcao':
             return BaixaFisicaSolicitarCorrecaoSerializer
         return BaixaFisicaBemPatrimonialDetailSerializer
@@ -609,6 +614,47 @@ class BaixaFisicaBemPatrimonialViewSet(
         except Exception:
             pass
 
+        return self._detail_response(baixa, request)
+
+    # =========================================================
+    # CORRIGIR NÚMERO DO PROCESSO (Baixa Aceita, sem Nota)
+    # =========================================================
+
+    @extend_schema(
+        tags=["Baixas Físicas"],
+        summary="Corrigir número do processo",
+        description=CORRIGIR_PROCESSO_DOC,
+        request=BaixaFisicaCorrigirProcessoSerializer,
+        responses={
+            200: BaixaFisicaBemPatrimonialDetailSerializer,
+            400: OpenApiResponse(description="Erro de validação"),
+            403: OpenApiResponse(description="Sem permissão"),
+            404: OpenApiResponse(description="Baixa física não encontrada"),
+        },
+    )
+    @action(detail=True, methods=['post'], url_path='corrigir-processo')
+    def corrigir_processo(self, request, pk=None):
+        baixa = self.get_object()
+
+        serializer = self.get_serializer(
+            data=request.data, context={'baixa': baixa, 'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        novo_numero = serializer.validated_data["numero_processo_baixa"]
+
+        try:
+            with transaction.atomic():
+                baixa.corrigir_numero_processo(novo_numero)
+        except ValidationError as exc:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            if hasattr(exc, "message_dict"):
+                raise DRFValidationError(exc.message_dict)
+            detalhe = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+            raise DRFValidationError({"detail": detalhe})
+
+        baixa.refresh_from_db()
         return self._detail_response(baixa, request)
 
     # =========================================================
