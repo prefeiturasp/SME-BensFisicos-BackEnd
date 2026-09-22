@@ -835,11 +835,21 @@ class TestCorrigirProcessoAdmin(TestCase):
             self.ua, self.gestor, status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
+        bem = _criar_bem_cov(
+            self.ua, self.gestor, status=constants.BAIXA_FISICA,
+            numero_processo="6016.2025/0117371-7",
+            localizacao="Baixa Física - 6016.2025/0117371-7",
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
         req = self._req(self.gestor)
         baixa.numero_processo_baixa = "6016.2025/0222222-2"
         self.admin.save_model(req, baixa, None, True)
         baixa.refresh_from_db()
+        bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0222222-2")
+        self.assertEqual(bem.numero_processo, "6016.2025/0222222-2")
+        self.assertEqual(bem.localizacao, "Baixa Física - 6016.2025/0222222-2")
+        self.assertEqual(bem.status, constants.BAIXA_FISICA)
 
         nbbpm = NBBPM.objects.create(
             numero="001.0000098/2026", numero_processo_baixa="6016.2025/0222222-2",
@@ -849,4 +859,31 @@ class TestCorrigirProcessoAdmin(TestCase):
         baixa.numero_processo_baixa = "6016.2025/0333333-3"
         self.admin.save_model(req, baixa, None, True)
         baixa.refresh_from_db()
+        bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0222222-2")
+        self.assertEqual(bem.numero_processo, "6016.2025/0222222-2")
+
+    def test_save_model_corrige_dois_bens_sem_alterar_status(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        bens = []
+        for i, num in enumerate(["000.000000071-0", "000.000000072-0"]):
+            bem = _criar_bem_cov(
+                self.ua, self.gestor, status=constants.BAIXA_FISICA,
+                numero_patrimonial=num,
+                numero_processo="6016.2025/0117371-7",
+                localizacao="Baixa Física - 6016.2025/0117371-7",
+            )
+            BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+            bens.append(bem)
+        req = self._req(self.gestor)
+        baixa.numero_processo_baixa = "6016.2025/0222222-2"
+        self.admin.save_model(req, baixa, None, True)
+        for bem in bens:
+            bem.refresh_from_db()
+            self.assertEqual(bem.numero_processo, "6016.2025/0222222-2")
+            self.assertEqual(bem.localizacao, "Baixa Física - 6016.2025/0222222-2")
+            self.assertEqual(bem.status, constants.BAIXA_FISICA)
+        self.assertEqual(baixa.itens.count(), 2)

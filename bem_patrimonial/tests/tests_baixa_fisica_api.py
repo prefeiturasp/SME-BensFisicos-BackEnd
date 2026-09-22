@@ -1706,10 +1706,26 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
         return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).count()
 
-    def test_corrige_valido_salva_so_na_baixa(self):
+    def _criar_baixa_aceita_com_dois_bens(self, processo=None):
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=processo or self.PROCESSO_ANTIGO,
+        )
+        baixa.aprovado_por = self.gestor
+        baixa.data_aprovacao = timezone.now()
+        baixa.save(update_fields=["aprovado_por", "data_aprovacao"])
+        for bem in (self.bem, self.bem2):
+            BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+            bem.status = constants.BAIXA_FISICA
+            bem.numero_processo = baixa.numero_processo_baixa
+            bem.localizacao = f"Baixa Física - {baixa.numero_processo_baixa}"
+            bem.save(update_fields=["status", "numero_processo", "localizacao"])
+        return baixa
+
+    def test_corrige_valido_propaga_para_bens(self):
         baixa = self._criar_baixa_aceita_com_bem()
-        bem_processo_antes = self.bem.numero_processo
-        bem_localizacao_antes = self.bem.localizacao
+        nome_antes = self.bem.nome
+        status_bem_antes = self.bem.status
         total_antes = BaixaFisicaBemPatrimonial.objects.count()
         historico_antes = self._contar_historico(baixa)
 
@@ -1728,10 +1744,94 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.assertEqual(BaixaFisicaBemPatrimonial.objects.count(), total_antes)
 
         self.bem.refresh_from_db()
-        self.assertEqual(self.bem.numero_processo, bem_processo_antes)
-        self.assertEqual(self.bem.localizacao, bem_localizacao_antes)
-        self.assertEqual(self.bem.status, constants.BAIXA_FISICA)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_NOVO)
+        self.assertEqual(self.bem.localizacao, f"Baixa Física - {self.PROCESSO_NOVO}")
+        self.assertEqual(self.bem.status, status_bem_antes)
+        self.assertEqual(self.bem.nome, nome_antes)
+        self.assertTrue(
+            BaixaFisicaBensItem.objects.filter(baixa=baixa, bem=self.bem).exists()
+        )
         self.assertEqual(self._contar_historico(baixa), historico_antes)
+
+    def test_corrige_valido_com_dois_bens_e_preserva_outra_baixa(self):
+        baixa = self._criar_baixa_aceita_com_dois_bens()
+        outra = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0999999-9",
+        )
+        bem_outra = criar_bem(
+            self.ua, self.operador, numero_patrimonial="000.000000009-0",
+            status=constants.BAIXA_FISICA, numero_processo="6016.2025/0999999-9",
+            localizacao="Baixa Física - 6016.2025/0999999-9",
+        )
+        BaixaFisicaBensItem.objects.create(baixa=outra, bem=bem_outra)
+        nome1, nome2 = self.bem.nome, self.bem2.nome
+
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": self.PROCESSO_NOVO},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
+        bem_outra.refresh_from_db()
+        outra.refresh_from_db()
+        for bem in (self.bem, self.bem2):
+            self.assertEqual(bem.numero_processo, self.PROCESSO_NOVO)
+            self.assertEqual(bem.localizacao, f"Baixa Física - {self.PROCESSO_NOVO}")
+            self.assertEqual(bem.status, constants.BAIXA_FISICA)
+        self.assertEqual(self.bem.nome, nome1)
+        self.assertEqual(self.bem2.nome, nome2)
+        self.assertEqual(baixa.itens.count(), 2)
+        self.assertEqual(bem_outra.numero_processo, "6016.2025/0999999-9")
+        self.assertEqual(outra.numero_processo_baixa, "6016.2025/0999999-9")
+
+    def test_detalhe_e_lista_exibem_numero_atualizado(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": self.PROCESSO_NOVO},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        detalhe = self.client.get(self.detail_url(baixa.id))
+        self.assertEqual(detalhe.status_code, status.HTTP_200_OK)
+        self.assertEqual(detalhe.data["numero_processo_baixa"], self.PROCESSO_NOVO)
+        lista = self.client.get(self.list_url)
+        self.assertEqual(lista.status_code, status.HTTP_200_OK)
+        resultados = lista.data.get("results", lista.data)
+        item = next(b for b in resultados if b["id"] == baixa.id)
+        self.assertEqual(item["numero_processo_baixa"], self.PROCESSO_NOVO)
+
+    def test_falha_em_um_bem_reverte_tudo(self):
+        baixa = self._criar_baixa_aceita_com_dois_bens()
+        self._auth(self.gestor)
+        original_save = BemPatrimonial.save
+
+        def _side(inst_self, *args, **kwargs):
+            if inst_self.pk == self.bem2.pk:
+                raise RuntimeError("falha simulada no bem")
+            return original_save(inst_self, *args, **kwargs)
+
+        with patch.object(BemPatrimonial, "save", autospec=True) as mock_save:
+            mock_save.side_effect = _side
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    self.action_url(baixa.id, "corrigir-processo"),
+                    {"numero_processo_baixa": self.PROCESSO_NOVO},
+                    format="json",
+                )
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem2.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.localizacao, f"Baixa Física - {self.PROCESSO_ANTIGO}")
 
     def test_formato_invalido_retorna_400_sem_alterar(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1743,7 +1843,9 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         baixa.refresh_from_db()
+        self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
 
     def test_apos_nbbpm_vinculada_retorna_400(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1763,7 +1865,9 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         baixa.refresh_from_db()
+        self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
 
     def test_apos_numero_legado_retorna_400(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1777,11 +1881,14 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         baixa.refresh_from_db()
+        self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
 
     def test_status_nao_aceita_retorna_400(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        processo_antes = self.bem.numero_processo
         self._auth(self.gestor)
         resp = self.client.post(
             self.action_url(baixa.id, "corrigir-processo"),
@@ -1789,6 +1896,8 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.numero_processo, processo_antes)
 
     def test_operador_nao_pode_corrigir_403(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1800,11 +1909,13 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
         baixa.refresh_from_db()
+        self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
 
 
 class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
-    def test_corrigir_valido_nao_propaga_para_bens(self):
+    def test_corrigir_valido_propaga_para_bens(self):
         from django.core.exceptions import ValidationError
 
         baixa = criar_baixa(
@@ -1812,17 +1923,57 @@ class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
             numero_processo_baixa="6016.2025/0117371-7",
         )
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
-        self.bem.numero_processo = "6016.2025/0117371-7"
-        self.bem.localizacao = "Baixa Física - 6016.2025/0117371-7"
-        self.bem.status = constants.BAIXA_FISICA
-        self.bem.save(update_fields=["numero_processo", "localizacao", "status"])
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem2)
+        for bem in (self.bem, self.bem2):
+            bem.numero_processo = "6016.2025/0117371-7"
+            bem.localizacao = "Baixa Física - 6016.2025/0117371-7"
+            bem.status = constants.BAIXA_FISICA
+            bem.save(update_fields=["numero_processo", "localizacao", "status"])
+        nome_antes = self.bem.nome
 
         baixa.corrigir_numero_processo("6016.2025/0333333-3")
         baixa.refresh_from_db()
         self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0333333-3")
+        self.assertEqual(baixa.status, constants.ACEITA)
+        for bem in (self.bem, self.bem2):
+            self.assertEqual(bem.numero_processo, "6016.2025/0333333-3")
+            self.assertEqual(bem.localizacao, "Baixa Física - 6016.2025/0333333-3")
+            self.assertEqual(bem.status, constants.BAIXA_FISICA)
+        self.assertEqual(self.bem.nome, nome_antes)
+        self.assertEqual(baixa.itens.count(), 2)
+
+    def test_corrigir_falha_em_bem_reverte_tudo(self):
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem2)
+        for bem in (self.bem, self.bem2):
+            bem.numero_processo = "6016.2025/0117371-7"
+            bem.localizacao = "Baixa Física - 6016.2025/0117371-7"
+            bem.status = constants.BAIXA_FISICA
+            bem.save(update_fields=["numero_processo", "localizacao", "status"])
+
+        original_save = BemPatrimonial.save
+
+        def _falha(inst_self, *args, **kwargs):
+            if inst_self.pk == self.bem2.pk:
+                raise RuntimeError("falha simulada")
+            return original_save(inst_self, *args, **kwargs)
+
+        with patch.object(BemPatrimonial, "save", autospec=True) as mock_save:
+            mock_save.side_effect = lambda inst_self, *a, **k: _falha(inst_self, *a, **k)
+            with self.assertRaises(RuntimeError):
+                baixa.corrigir_numero_processo("6016.2025/0333333-3")
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0117371-7")
         self.assertEqual(self.bem.numero_processo, "6016.2025/0117371-7")
-        self.assertEqual(self.bem.localizacao, "Baixa Física - 6016.2025/0117371-7")
+        self.assertEqual(self.bem2.numero_processo, "6016.2025/0117371-7")
 
     def test_corrigir_status_invalido_levanta_erro(self):
         from django.core.exceptions import ValidationError
