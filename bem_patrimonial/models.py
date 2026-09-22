@@ -95,7 +95,7 @@ class BemPatrimonial(BaseModel):
     descricao = models.TextField("Descrição", null=False, blank=False)
     observacao = models.TextField("Observação", null=True, blank=True)  # NOSONAR
     numero_processo = models.CharField(
-        "Número do processo de incorporação",
+        "Número do processo",
         max_length=64,
         null=True,  # NOSONAR
         blank=True,
@@ -1112,10 +1112,12 @@ class BaixaFisicaBemPatrimonial(models.Model):
     def corrigir_numero_processo(self, novo_numero):
         """
         Corrige o número do processo da Baixa Física aprovada, sem gerar
-        nova solicitação e sem propagar para bens ou histórico.
+        nova solicitação, propagando para todos os bens vinculados.
 
         Só permite quando status for Aceita e sem NBBPM vinculada
         (consolidada ou legado), com mesma regra de formato do aceite.
+        Em transação única atualiza a baixa e todos os itens vinculados
+        (numero_processo e localizacao do bem), sem alterar vínculo ou status.
         """
         if self.status != constants.ACEITA:
             raise ValidationError(
@@ -1136,6 +1138,12 @@ class BaixaFisicaBemPatrimonial(models.Model):
             )
         self.numero_processo_baixa = processo
         self.save(update_fields=["numero_processo_baixa"])
+        texto_localizacao = f"Baixa Física - {processo}"
+        for item in self.itens.select_related("bem"):
+            bem = item.bem
+            bem.numero_processo = processo
+            bem.localizacao = texto_localizacao
+            bem.save(update_fields=["numero_processo", "localizacao"])
 
 
 class BaixaFisicaBensItem(models.Model):
