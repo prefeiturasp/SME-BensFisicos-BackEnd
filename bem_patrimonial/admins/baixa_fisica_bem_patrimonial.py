@@ -578,58 +578,63 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             ),
         )
 
+    def _motivo_bloqueio_correcao(self, request, original, novo):
+        user = request.user
+        is_gestor = bool(
+            getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)
+        )
+        if not is_gestor:
+            return "Apenas Gestor de Patrimônio pode corrigir o número do processo."
+        if original.status != constants.ACEITA:
+            return "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+        if self._baixa_possui_nota(original):
+            return "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+        if not novo:
+            return NUMERO_PROCESSO_OBRIGATORIO
+        import re as _re
+
+        if not _re.fullmatch(constants.PROCESSO_BAIXA_REGEX, novo):
+            return constants.PROCESSO_BAIXA_MESSAGE
+        return None
+
+    def _registrar_e_propagar_correcao(self, request, obj, antigo, novo):
+        self.log_change(
+            request, obj, f"Número do processo corrigido de {antigo} para {novo}."
+        )
+        texto_localizacao = f"Baixa Física - {novo}"
+        for item in obj.itens.select_related("bem"):
+            bem = item.bem
+            bem.numero_processo = novo
+            bem.localizacao = texto_localizacao
+            bem.save(update_fields=["numero_processo", "localizacao"])
+
     def save_model(self, request, obj, form, change):
         if not change or not obj.criado_por_id:
             obj.criado_por = request.user
             super().save_model(request, obj, form, change)
             return
-        try:
-            original = BaixaFisicaBemPatrimonial.objects.get(pk=obj.pk)
-        except BaixaFisicaBemPatrimonial.DoesNotExist:
-            super().save_model(request, obj, form, change)
-            return
-        novo = (obj.numero_processo_baixa or "").strip()
-        antigo = (original.numero_processo_baixa or "")
-        if novo != antigo:
-            import re as _re
+        from django.db import transaction as _transaction
 
-            user = request.user
-            is_gestor = bool(
-                getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)
-            )
-            if not is_gestor:
-                self.message_user(
-                    request,
-                    "Apenas Gestor de Patrimônio pode corrigir o número do processo.",
-                    level=messages.ERROR,
-                )
-                obj.numero_processo_baixa = antigo
-            elif original.status != constants.ACEITA:
-                self.message_user(
-                    request,
-                    "Só é possível corrigir o número do processo de baixas com status 'Aceita'.",
-                    level=messages.ERROR,
-                )
-                obj.numero_processo_baixa = antigo
-            elif self._baixa_possui_nota(original):
-                self.message_user(
-                    request,
-                    "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado.",
-                    level=messages.ERROR,
-                )
-                obj.numero_processo_baixa = antigo
-            elif not novo:
-                self.message_user(request, NUMERO_PROCESSO_OBRIGATORIO, level=messages.ERROR)
-                obj.numero_processo_baixa = antigo
-            elif not _re.fullmatch(constants.PROCESSO_BAIXA_REGEX, novo):
-                self.message_user(request, constants.PROCESSO_BAIXA_MESSAGE, level=messages.ERROR)
-                obj.numero_processo_baixa = antigo
-            else:
-                obj.numero_processo_baixa = novo
-                self.log_change(
-                    request, obj, f"Número do processo corrigido de {antigo} para {novo}."
-                )
-        super().save_model(request, obj, form, change)
+        with _transaction.atomic():
+            try:
+                original = BaixaFisicaBemPatrimonial.objects.get(pk=obj.pk)
+            except BaixaFisicaBemPatrimonial.DoesNotExist:
+                super().save_model(request, obj, form, change)
+                return
+            novo = (obj.numero_processo_baixa or "").strip()
+            antigo = (original.numero_processo_baixa or "")
+            correcao_permitida = False
+            if novo != antigo:
+                motivo = self._motivo_bloqueio_correcao(request, original, novo)
+                if motivo:
+                    self.message_user(request, motivo, level=messages.ERROR)
+                    obj.numero_processo_baixa = antigo
+                else:
+                    obj.numero_processo_baixa = novo
+                    correcao_permitida = True
+            super().save_model(request, obj, form, change)
+            if correcao_permitida:
+                self._registrar_e_propagar_correcao(request, obj, antigo, novo)
 
     def save_related(self, request, form, formsets, change):
         """
