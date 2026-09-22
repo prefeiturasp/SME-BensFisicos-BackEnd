@@ -164,8 +164,8 @@ Corrige o número do processo de uma Baixa Física aprovada, sem reiniciar o pro
 2. Valida permissões do usuário (apenas Gestor de Patrimônio)
 3. Valida **numero_processo_baixa** no mesmo padrão do aceite
 4. Bloqueia quando já existe Nota (NBBPM consolidada ou número legado)
-5. Salva só o campo **numero_processo_baixa** na própria baixa, em transação
-6. Não cria nova solicitação, não altera bens vinculados e não registra histórico
+5. Em transação única atualiza **numero_processo_baixa** na baixa e propaga o novo número para todos os bens vinculados (`numero_processo` e `localizacao` como `Baixa Física - <processo>`), sem alterar vínculo ou status
+6. Não cria nova solicitação e não altera status da baixa ou dos bens
 
 ### Restrições
 
