@@ -43,17 +43,23 @@ class UnidadeOrcamentariaDetailSerializer(UnidadeOrcamentariaListSerializer):
         }
 
 
-class UnidadeOrcamentariaHistoricoAcaoSerializer(serializers.Serializer):
+class HistoricoConsultaAcaoSerializer(serializers.Serializer):
     campo = serializers.CharField()
     valor_antigo = serializers.CharField(allow_null=True)
     valor_novo = serializers.CharField(allow_null=True)
+    justificativa = serializers.CharField(allow_null=True, required=False)
 
 
-class UnidadeOrcamentariaHistoricoGrupoSerializer(serializers.Serializer):
+class HistoricoConsultaGrupoSerializer(serializers.Serializer):
     alterado_em = serializers.DateTimeField()
     alterado_por = serializers.IntegerField(allow_null=True)
     alterado_por_nome = serializers.CharField(allow_null=True)
-    acoes = UnidadeOrcamentariaHistoricoAcaoSerializer(many=True)
+    alterado_por_rf = serializers.CharField(allow_null=True)
+    acoes = HistoricoConsultaAcaoSerializer(many=True)
+
+
+class UnidadeOrcamentariaHistoricoGrupoSerializer(HistoricoConsultaGrupoSerializer):
+    pass
 
 
 class UnidadeOrcamentariaExportQuerySerializer(serializers.Serializer):
@@ -180,17 +186,8 @@ class UnidadeAdministrativaExportSerializer(serializers.ModelSerializer):
         fields = ["codigo", "sigla", "nome", "status_display"]
 
 
-class UnidadeAdministrativaHistoricoAcaoSerializer(serializers.Serializer):
-    campo = serializers.CharField()
-    valor_antigo = serializers.CharField(allow_null=True)
-    valor_novo = serializers.CharField(allow_null=True)
-
-
-class UnidadeAdministrativaHistoricoGrupoSerializer(serializers.Serializer):
-    alterado_em = serializers.DateTimeField()
-    alterado_por = serializers.IntegerField(allow_null=True)
-    alterado_por_nome = serializers.CharField(allow_null=True)
-    acoes = UnidadeAdministrativaHistoricoAcaoSerializer(many=True)
+class UnidadeAdministrativaHistoricoGrupoSerializer(HistoricoConsultaGrupoSerializer):
+    pass
 
 
 class UnidadeAdministrativaExportQuerySerializer(serializers.Serializer):
