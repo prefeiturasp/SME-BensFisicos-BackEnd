@@ -646,7 +646,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         try:
             with transaction.atomic():
                 set_user(request.user)
-                baixa.corrigir_numero_processo(novo_numero)
+                baixa.corrigir_numero_processo(novo_numero, usuario=request.user)
         except ValidationError as exc:
             from rest_framework.exceptions import ValidationError as DRFValidationError
 
