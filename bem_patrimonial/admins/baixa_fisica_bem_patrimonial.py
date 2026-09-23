@@ -607,6 +607,22 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             bem.numero_processo = novo
             bem.localizacao = texto_localizacao
             bem.save(update_fields=["numero_processo", "localizacao"])
+        try:
+            from dados_comuns.models import HistoricoGeral
+            from django.contrib.contenttypes.models import ContentType
+
+            ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+            HistoricoGeral.objects.create(
+                content_type=ct,
+                object_id=str(obj.pk),
+                campo="numero_processo_baixa",
+                valor_antigo=antigo or "",
+                valor_novo=novo or "",
+                alterado_por=request.user,
+                justificativa=f"Número do processo corrigido de {antigo} para {novo}.",
+            )
+        except Exception:
+            pass
 
     def save_model(self, request, obj, form, change):
         if not change or not obj.criado_por_id:
