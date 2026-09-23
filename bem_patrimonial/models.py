@@ -1109,7 +1109,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
         return self.status == constants.ACEITA and not self.possui_nota_gerada
 
     @transaction.atomic
-    def corrigir_numero_processo(self, novo_numero):
+    def corrigir_numero_processo(self, novo_numero, usuario=None):
         """
         Corrige o número do processo da Baixa Física aprovada, sem gerar
         nova solicitação, propagando para todos os bens vinculados.
@@ -1118,6 +1118,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
         (consolidada ou legado), com mesma regra de formato do aceite.
         Em transação única atualiza a baixa e todos os itens vinculados
         (numero_processo e localizacao do bem), sem alterar vínculo ou status.
+        Cada edição válida gera um registro novo e imutável em HistoricoGeral
+        com número anterior, número novo, responsável e data/hora automática.
         """
         if self.status != constants.ACEITA:
             raise ValidationError(
@@ -1136,6 +1138,9 @@ class BaixaFisicaBemPatrimonial(models.Model):
             raise ValidationError(
                 {"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE}
             )
+        numero_antigo = self.numero_processo_baixa or ""
+        if processo == (numero_antigo or "").strip():
+            return
         self.numero_processo_baixa = processo
         self.save(update_fields=["numero_processo_baixa"])
         texto_localizacao = f"Baixa Física - {processo}"
@@ -1144,6 +1149,18 @@ class BaixaFisicaBemPatrimonial(models.Model):
             bem.numero_processo = processo
             bem.localizacao = texto_localizacao
             bem.save(update_fields=["numero_processo", "localizacao"])
+        alterado_por = usuario if usuario is not None else get_user()
+        if alterado_por is not None and getattr(alterado_por, "is_anonymous", False):
+            alterado_por = None
+        HistoricoGeral.objects.create(
+            content_type=ContentType.objects.get_for_model(type(self)),
+            object_id=str(self.pk),
+            campo="numero_processo_baixa",
+            valor_antigo=numero_antigo,
+            valor_novo=processo,
+            alterado_por=alterado_por,
+            justificativa=f"Número do processo corrigido de {numero_antigo} para {processo}.",
+        )
 
 
 class BaixaFisicaBensItem(models.Model):
