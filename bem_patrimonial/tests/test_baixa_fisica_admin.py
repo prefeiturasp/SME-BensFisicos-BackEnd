@@ -830,6 +830,13 @@ class TestCorrigirProcessoAdmin(TestCase):
         )
         self.assertTrue(form.is_valid(), form.errors)
 
+    def _historicos(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).order_by("id")
+
     def test_save_model_corrige_e_bloqueia_apos_nota(self):
         baixa = _criar_baixa_cov(
             self.ua, self.gestor, status=constants.ACEITA,
@@ -850,6 +857,13 @@ class TestCorrigirProcessoAdmin(TestCase):
         self.assertEqual(bem.numero_processo, "6016.2025/0222222-2")
         self.assertEqual(bem.localizacao, "Baixa Física - 6016.2025/0222222-2")
         self.assertEqual(bem.status, constants.BAIXA_FISICA)
+        historicos = list(self._historicos(baixa))
+        self.assertEqual(len(historicos), 1)
+        self.assertEqual(historicos[0].campo, "numero_processo_baixa")
+        self.assertEqual(historicos[0].valor_antigo, "6016.2025/0117371-7")
+        self.assertEqual(historicos[0].valor_novo, "6016.2025/0222222-2")
+        self.assertEqual(historicos[0].alterado_por, self.gestor)
+        self.assertIsNotNone(historicos[0].alterado_em)
 
         nbbpm = NBBPM.objects.create(
             numero="001.0000098/2026", numero_processo_baixa="6016.2025/0222222-2",
@@ -862,6 +876,53 @@ class TestCorrigirProcessoAdmin(TestCase):
         bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0222222-2")
         self.assertEqual(bem.numero_processo, "6016.2025/0222222-2")
+        self.assertEqual(self._historicos(baixa).count(), 1)
+
+    def test_save_model_segunda_correcao_gera_novo_registro_imutavel(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        bem = _criar_bem_cov(
+            self.ua, self.gestor, status=constants.BAIXA_FISICA,
+            numero_processo="6016.2025/0117371-7",
+            localizacao="Baixa Física - 6016.2025/0117371-7",
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        req = self._req(self.gestor)
+        baixa.numero_processo_baixa = "6016.2025/0222222-2"
+        self.admin.save_model(req, baixa, None, True)
+        primeiro = list(self._historicos(baixa))[0]
+        baixa.numero_processo_baixa = "6016.2025/0333333-3"
+        self.admin.save_model(req, baixa, None, True)
+        historicos = list(self._historicos(baixa))
+        self.assertEqual(len(historicos), 2)
+        primeiro.refresh_from_db()
+        self.assertEqual(primeiro.valor_antigo, "6016.2025/0117371-7")
+        self.assertEqual(primeiro.valor_novo, "6016.2025/0222222-2")
+        self.assertEqual(historicos[1].valor_antigo, "6016.2025/0222222-2")
+        self.assertEqual(historicos[1].valor_novo, "6016.2025/0333333-3")
+        self.assertEqual(historicos[1].alterado_por, self.gestor)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0333333-3")
+
+    def test_save_model_formato_invalido_nao_cria_historico(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        bem = _criar_bem_cov(
+            self.ua, self.gestor, status=constants.BAIXA_FISICA,
+            numero_processo="6016.2025/0117371-7",
+            localizacao="Baixa Física - 6016.2025/0117371-7",
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        req = self._req(self.gestor)
+        baixa.numero_processo_baixa = "FORMATO-RUIM"
+        self.admin.save_model(req, baixa, None, True)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0117371-7")
+        self.assertEqual(self._historicos(baixa).count(), 0)
 
     def test_save_model_corrige_dois_bens_sem_alterar_status(self):
         baixa = _criar_baixa_cov(
@@ -887,3 +948,8 @@ class TestCorrigirProcessoAdmin(TestCase):
             self.assertEqual(bem.localizacao, "Baixa Física - 6016.2025/0222222-2")
             self.assertEqual(bem.status, constants.BAIXA_FISICA)
         self.assertEqual(baixa.itens.count(), 2)
+        historicos = list(self._historicos(baixa))
+        self.assertEqual(len(historicos), 1)
+        self.assertEqual(historicos[0].campo, "numero_processo_baixa")
+        self.assertEqual(historicos[0].valor_antigo, "6016.2025/0117371-7")
+        self.assertEqual(historicos[0].valor_novo, "6016.2025/0222222-2")

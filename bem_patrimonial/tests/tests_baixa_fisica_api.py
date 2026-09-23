@@ -1726,6 +1726,17 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
             format="json",
         )
 
+    def _obter_historicos(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return list(
+            HistoricoGeral.objects.filter(
+                content_type=ct, object_id=str(baixa.pk)
+            ).order_by("id")
+        )
+
     def test_corrige_valido_propaga_para_bens(self):
         baixa = self._criar_baixa_aceita_com_bem()
         nome_antes = self.bem.nome
@@ -1751,7 +1762,57 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.assertTrue(
             BaixaFisicaBensItem.objects.filter(baixa=baixa, bem=self.bem).exists()
         )
-        self.assertEqual(self._contar_historico(baixa), historico_antes)
+        self.assertEqual(self._contar_historico(baixa), historico_antes + 1)
+        historicos = self._obter_historicos(baixa)
+        registro = historicos[-1]
+        self.assertEqual(registro.campo, "numero_processo_baixa")
+        self.assertEqual(registro.valor_antigo, self.PROCESSO_ANTIGO)
+        self.assertEqual(registro.valor_novo, self.PROCESSO_NOVO)
+        self.assertEqual(registro.alterado_por, self.gestor)
+        self.assertIsNotNone(registro.alterado_em)
+
+    def test_segunda_correcao_cria_segundo_registro_sem_alterar_primeiro(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp1 = self._post_corrigir(baixa)
+        self.assertEqual(resp1.status_code, status.HTTP_200_OK)
+        primeiro = self._obter_historicos(baixa)[-1]
+        primeiro_id = primeiro.id
+        valor_primeiro_novo = primeiro.valor_novo
+
+        segundo_numero = "6016.2025/0333333-3"
+        resp2 = self._post_corrigir(baixa, numero=segundo_numero)
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, segundo_numero)
+
+        historicos = self._obter_historicos(baixa)
+        self.assertEqual(len(historicos), 2)
+        primeiro_db = [h for h in historicos if h.id == primeiro_id][0]
+        self.assertEqual(primeiro_db.valor_antigo, self.PROCESSO_ANTIGO)
+        self.assertEqual(primeiro_db.valor_novo, valor_primeiro_novo)
+        segundo = historicos[-1]
+        self.assertEqual(segundo.campo, "numero_processo_baixa")
+        self.assertEqual(segundo.valor_antigo, self.PROCESSO_NOVO)
+        self.assertEqual(segundo.valor_novo, segundo_numero)
+        self.assertEqual(segundo.alterado_por, self.gestor)
+        self.assertIsNotNone(segundo.alterado_em)
+
+    def test_historico_endpoint_exibe_correcao_com_usuario_e_data(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        hist = self.client.get(self.action_url(baixa.id, "historico"))
+        self.assertEqual(hist.status_code, status.HTTP_200_OK)
+        self.assertTrue(hist.data)
+        correcao = [r for r in hist.data if r["campo"] == "numero_processo_baixa"]
+        self.assertTrue(correcao)
+        registro = correcao[0]
+        self.assertEqual(registro["valor_antigo"], self.PROCESSO_ANTIGO)
+        self.assertEqual(registro["valor_novo"], self.PROCESSO_NOVO)
+        self.assertEqual(registro["alterado_por"], self.gestor.username)
+        self.assertIsNotNone(registro["data_alteracao"])
 
     def test_corrige_valido_com_dois_bens_e_preserva_outra_baixa(self):
         baixa = self._criar_baixa_aceita_com_dois_bens()
@@ -1834,6 +1895,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
         self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
 
     def test_apos_nbbpm_vinculada_retorna_400(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1852,6 +1914,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
         self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
 
     def test_apos_numero_legado_retorna_400(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1864,6 +1927,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
         self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
 
     def test_status_nao_aceita_retorna_400(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
@@ -1874,6 +1938,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.numero_processo, processo_antes)
+        self.assertEqual(self._contar_historico(baixa), 0)
 
     def test_operador_nao_pode_corrigir_403(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1884,6 +1949,24 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.bem.refresh_from_db()
         self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
         self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
+
+    def test_falha_em_um_bem_reverte_tudo_sem_historico(self):
+        baixa = self._criar_baixa_aceita_com_dois_bens()
+        historico_antes = self._contar_historico(baixa)
+        self._auth(self.gestor)
+        original_save = BemPatrimonial.save
+
+        def _side(inst_self, *args, **kwargs):
+            if inst_self.pk == self.bem2.pk:
+                raise RuntimeError("falha simulada no bem")
+            return original_save(inst_self, *args, **kwargs)
+
+        with patch.object(BemPatrimonial, "save", autospec=True) as mock_save:
+            mock_save.side_effect = _side
+            with self.assertRaises(RuntimeError):
+                self._post_corrigir(baixa)
+        self.assertEqual(self._contar_historico(baixa), historico_antes)
 
 
 class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
@@ -1900,13 +1983,20 @@ class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
             bem.save(update_fields=["numero_processo", "localizacao", "status"])
         return baixa
 
+    def _contar_historico(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk))
+
     def test_corrigir_valido_propaga_para_bens(self):
         from django.core.exceptions import ValidationError
 
         baixa = self._baixa_aceita_com_bens_baixados()
         nome_antes = self.bem.nome
 
-        baixa.corrigir_numero_processo("6016.2025/0333333-3")
+        baixa.corrigir_numero_processo("6016.2025/0333333-3", usuario=self.gestor)
         baixa.refresh_from_db()
         self.bem.refresh_from_db()
         self.bem2.refresh_from_db()
@@ -1918,6 +2008,29 @@ class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
             self.assertEqual(bem.status, constants.BAIXA_FISICA)
         self.assertEqual(self.bem.nome, nome_antes)
         self.assertEqual(baixa.itens.count(), 2)
+        historicos = list(self._contar_historico(baixa).order_by("id"))
+        self.assertEqual(len(historicos), 1)
+        registro = historicos[0]
+        self.assertEqual(registro.campo, "numero_processo_baixa")
+        self.assertEqual(registro.valor_antigo, "6016.2025/0117371-7")
+        self.assertEqual(registro.valor_novo, "6016.2025/0333333-3")
+        self.assertEqual(registro.alterado_por, self.gestor)
+        self.assertIsNotNone(registro.alterado_em)
+
+    def test_segunda_correcao_gera_novo_registro_imutavel(self):
+        baixa = self._baixa_aceita_com_bens_baixados()
+        baixa.corrigir_numero_processo("6016.2025/0333333-3", usuario=self.gestor)
+        primeiro = list(self._contar_historico(baixa).order_by("id"))[0]
+        baixa.corrigir_numero_processo("6016.2025/0444444-4", usuario=self.gestor)
+        historicos = list(self._contar_historico(baixa).order_by("id"))
+        self.assertEqual(len(historicos), 2)
+        primeiro.refresh_from_db()
+        self.assertEqual(primeiro.valor_antigo, "6016.2025/0117371-7")
+        self.assertEqual(primeiro.valor_novo, "6016.2025/0333333-3")
+        segundo = historicos[1]
+        self.assertEqual(segundo.valor_antigo, "6016.2025/0333333-3")
+        self.assertEqual(segundo.valor_novo, "6016.2025/0444444-4")
+        self.assertEqual(segundo.alterado_por, self.gestor)
 
     def test_corrigir_falha_em_bem_reverte_tudo(self):
         baixa = self._baixa_aceita_com_bens_baixados()
