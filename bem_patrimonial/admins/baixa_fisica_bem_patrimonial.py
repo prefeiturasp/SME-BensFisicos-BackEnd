@@ -34,6 +34,7 @@ from dados_comuns.escopo import (
     usuario_e_super_admin,
 )
 from dados_comuns.models import UnidadeAdministrativa
+from django.core.validators import RegexValidator
 
 
 class NBBPMGerarAdminForm(forms.Form):
@@ -70,6 +71,33 @@ class SolicitarCorrecaoAdminForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 4, "class": "vLargeTextField", "placeholder": "Descreva o que precisa ser corrigido..."}),
         help_text="O motivo será registrado no histórico e a baixa voltará para 'Em elaboração' para edição.",
     )
+
+
+class AprovarBaixaAdminForm(forms.Form):
+    numero_processo_baixa = forms.CharField(
+        label="Número do processo",
+        max_length=64,
+        required=True,
+        widget=forms.TextInput(
+            attrs={
+                "class": "vTextField",
+                "placeholder": constants.PROCESSO_BAIXA_EXEMPLO,
+            }
+        ),
+        help_text=f"Formato obrigatório: XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})",
+        validators=[
+            RegexValidator(
+                regex=constants.PROCESSO_BAIXA_REGEX,
+                message=constants.PROCESSO_BAIXA_MESSAGE,
+            )
+        ],
+    )
+
+    def clean_numero_processo_baixa(self):
+        valor = (self.cleaned_data.get("numero_processo_baixa") or "").strip()
+        if not valor:
+            raise ValidationError("Número do processo é obrigatório.")
+        return valor
 
 
 class BaixaFisicaBensItemInlineForm(forms.ModelForm):
@@ -210,9 +238,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
         return obj.status == constants.AGUARDANDO_ENVIO
 
     def has_delete_permission(self, request, obj=None):
-        if obj is None:
-            return True
-        return obj.status == constants.AGUARDANDO_ENVIO
+        return self.has_add_permission(request, obj)
 
     def get_max_num(self, request, obj=None):
 
@@ -416,20 +442,25 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         }
 
     def get_readonly_fields(self, request, obj=None):
-        # Após criação, processo e data_baixa ficam readonly; em elaboração só itens são editáveis via inline
+        # Criação: UA e data_baixa editáveis; processo só no aceite (não no formulário de criação)
+        # Após criação, processo/data/UA ficam readonly
         base_audit = ("status", "criado_por", "data_criacao", "aprovado_por", "data_aprovacao")
         if obj is None:
-            # Criação: permite editar UA, processo e data_baixa
             return base_audit
-        # Em elaboração ou qualquer status posterior: trava processo/data/UA
         return base_audit + ("unidade_administrativa_origem", "numero_processo_baixa", "data_baixa")
 
     def get_fieldsets(self, request, obj=None):
-        campos_basicos = (
-            "unidade_administrativa_origem",
-            "numero_processo_baixa",
-            "data_baixa",
-        )
+        if obj is None:
+            campos_basicos = (
+                "unidade_administrativa_origem",
+                "data_baixa",
+            )
+        else:
+            campos_basicos = (
+                "unidade_administrativa_origem",
+                "numero_processo_baixa",
+                "data_baixa",
+            )
 
         if obj:
             campos = campos_basicos + (
@@ -677,38 +708,70 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             )
             return
 
+        if request.POST.get("apply_aprovar"):
+            return self._processar_aprovar_baixa_post(request, baixas_solicitadas)
+        return self._render_aprovar_baixa(request, baixas_solicitadas)
+
+    def _render_aprovar_baixa(self, request, baixas, form=None):
+        if form is None:
+            form = AprovarBaixaAdminForm()
+        context = dict(
+            self.admin_site.each_context(request),
+            title="Aprovar Baixa Física",
+            baixas=baixas.select_related(
+                "unidade_administrativa_origem",
+                "unidade_administrativa_origem__unidade_orcamentaria",
+                "criado_por",
+            ).prefetch_related("itens__bem"),
+            form=form,
+            opts=self.model._meta,
+            action_checkbox_name=ACTION_CHECKBOX_NAME,
+            media=self.media,
+        )
+        return TemplateResponse(
+            request, "admin/bem_patrimonial/baixa_fisica/aprovar_baixa.html", context
+        )
+
+    def _processar_aprovar_baixa_post(self, request, baixas):
+        form = AprovarBaixaAdminForm(request.POST)
+        if not form.is_valid():
+            return self._render_aprovar_baixa(request, baixas, form)
+        numero = form.cleaned_data["numero_processo_baixa"]
         aprovadas = 0
-        for baixa in baixas_solicitadas:
+        for baixa in baixas:
             try:
-                baixa.aprovar(usuario_aprovador=request.user)
-            except ValidationError as e:
+                baixa.aprovar(
+                    usuario_aprovador=request.user,
+                    numero_processo_baixa=numero,
+                )
+            except ValidationError as exc:
+                detalhe = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+                if hasattr(exc, "message_dict") and "numero_processo_baixa" in exc.message_dict:
+                    detalhe = exc.message_dict["numero_processo_baixa"][0]
                 self.message_user(
                     request,
-                    f"Baixa #{baixa.pk}: {e.messages[0] if hasattr(e, 'messages') else str(e)}",
+                    f"Baixa #{baixa.pk}: {detalhe}",
                     level=messages.ERROR,
                 )
                 continue
-            except Exception as e:
+            except Exception as exc2:
                 self.message_user(
                     request,
-                    f"Baixa #{baixa.pk}: erro ao aprovar: {e}",
+                    f"Baixa #{baixa.pk}: erro ao aprovar: {exc2}",
                     level=messages.ERROR,
                 )
                 continue
-            self.log_change(
-                request,
-                baixa,
-                "Baixa Física aprovada.",
-            )
+            self.log_change(request, baixa, f"Baixa Física aprovada. Processo: {numero}")
             envia_email_baixa_fisica_aprovada(baixa)
             aprovadas += 1
 
         if aprovadas:
             self.message_user(
                 request,
-                f"{aprovadas} Baixa(s) Física(s) aprovada(s) com sucesso. Selecione as aprovadas e use 'Gerar NBBPM' para emitir a nota.",
+                f"{aprovadas} Baixa(s) Física(s) aprovada(s) com sucesso. Processo {numero} propagado para a baixa e para os bens. Selecione as aprovadas e use 'Gerar NBBPM' para emitir a nota.",
                 level=messages.SUCCESS,
             )
+        return HttpResponseRedirect(request.get_full_path())
 
     acao_aprovar_baixa.short_description = "Aprovar Baixa Física selecionadas"
 
@@ -912,6 +975,8 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             return
         if not self._validar_uo_unica(request, queryset):
             return
+        if not self._validar_processo_unico(request, queryset):
+            return
         if not self._validar_escopo_gerar(request, queryset):
             return
         return self._handle_gerar_nbbpm_form(request, queryset)
@@ -951,6 +1016,17 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         self.message_user(request, "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.", level=messages.ERROR)
         return False
 
+    def _validar_processo_unico(self, request, queryset):
+        from bem_patrimonial.services.nbbpm_numero import processos_normalizados_de_baixas
+
+        processos = processos_normalizados_de_baixas(
+            queryset.values_list("numero_processo_baixa", flat=True)
+        )
+        if len(processos) > 1:
+            self.message_user(request, constants.NBBPM_PROCESSO_DIVERGENTE, level=messages.ERROR)
+            return False
+        return True
+
     def _validar_escopo_gerar(self, request, queryset):
         from dados_comuns.escopo import filtrar_queryset_por_escopo
 
@@ -976,10 +1052,26 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         form = NBBPMGerarAdminForm(request.POST)
         if not form.is_valid():
             return self._render_gerar_nbbpm(request, queryset, form)
-        try:
-            from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+        from bem_patrimonial.services.nbbpm_numero import (
+            criar_nbbpm_com_retry,
+            obter_processo_unico_baixas,
+            validar_processo_payload_baixas,
+        )
 
-            baixas = list(queryset.select_related("unidade_administrativa_origem").prefetch_related("itens__bem"))
+        baixas = list(queryset.select_related("unidade_administrativa_origem").prefetch_related("itens__bem"))
+        try:
+            obter_processo_unico_baixas(baixas)
+        except ValidationError as exc:
+            detalhe = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            self.message_user(request, detalhe, level=messages.ERROR)
+            return self._render_gerar_nbbpm(request, queryset, form)
+        try:
+            validar_processo_payload_baixas(baixas, form.cleaned_data["numero_processo_baixa"])
+        except ValidationError as exc:
+            detalhe = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            self.message_user(request, detalhe, level=messages.ERROR)
+            return self._render_gerar_nbbpm(request, queryset, form)
+        try:
             nbbpm = criar_nbbpm_com_retry(
                 baixas=baixas,
                 criado_por=request.user,
@@ -997,13 +1089,20 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         return self._render_gerar_nbbpm(request, queryset, form)
 
     def _render_gerar_nbbpm(self, request, queryset, form=None):
+        from bem_patrimonial.services.nbbpm_numero import processos_normalizados_de_baixas
+
+        processos = processos_normalizados_de_baixas(
+            queryset.values_list("numero_processo_baixa", flat=True)
+        )
+        processo_unico = next(iter(processos)) if len(processos) == 1 else ""
         if form is None:
             initial = {
                 "data_autorizacao": timezone.localdate(),
                 "responsavel": getattr(request.user, "nome", None) or request.user.username,
-                "numero_processo_baixa": (queryset.first().numero_processo_baixa or "") if queryset.count() == 1 else "",
+                "numero_processo_baixa": processo_unico,
             }
             form = NBBPMGerarAdminForm(initial=initial)
+        form.fields["numero_processo_baixa"].widget.attrs["readonly"] = True
         context = dict(
             self.admin_site.each_context(request),
             title="Gerar NBBPM consolidada",
@@ -1012,6 +1111,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             opts=self.model._meta,
             action_checkbox_name=ACTION_CHECKBOX_NAME,
             media=self.media,
+            gerado_por_rf=getattr(request.user, "rf", "") or "",
         )
         return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/gerar_nbbpm.html", context)
 

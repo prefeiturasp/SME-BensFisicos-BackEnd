@@ -1,9 +1,11 @@
-from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from django.utils import timezone
-from django.urls import reverse
-from django.db import transaction
+import re
 from typing import Dict, Any
+
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.urls import reverse
+from django.utils import timezone
+from rest_framework import serializers
 
 from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial, NBBPM
 from dados_comuns.models import UnidadeAdministrativa
@@ -50,7 +52,9 @@ class UserSimpleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'nome_completo', 'email']
+        # O RF é exposto para que as telas de detalhe possam apresentar a
+        # autoria no formato padrão do sistema: "Nome Completo (RF 1234567)".
+        fields = ['id', 'username', 'nome_completo', 'email', 'rf']
         read_only_fields = fields
 
     def get_nome_completo(self, obj: User) -> str:
@@ -271,14 +275,11 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = BaixaFisicaBemPatrimonial
         fields = [
-            # numero_processo_baixa e data_baixa agora são opcionais no novo fluxo
-            'numero_processo_baixa',
             'unidade_administrativa_origem',
             'data_baixa',
             'itens',
         ]
         extra_kwargs = {
-            'numero_processo_baixa': {'required': False, 'allow_blank': True, 'default': ''},
             'data_baixa': {'required': False, 'allow_null': True, 'default': None},
         }
 
@@ -290,11 +291,8 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_data_baixa(self, value):
-        # data_baixa é opcional; valida apenas se informada
         if value and value > timezone.now().date():
-            raise serializers.ValidationError(
-                "A data de baixa não pode ser futura."
-            )
+            raise serializers.ValidationError("A data de baixa não pode ser futura.")
         return value
 
     def validate_unidade_administrativa_origem(self, value: UnidadeAdministrativa) -> UnidadeAdministrativa:
@@ -319,9 +317,13 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        # Segurança: numero_processo só pode ser definido no aceite pelo gestor
+        if "numero_processo_baixa" in (self.initial_data or {}):
+            raise serializers.ValidationError(
+                {"numero_processo_baixa": "Este campo não pode ser enviado na criação. Será definido no aceite pelo gestor."}
+            )
         ua_origem = attrs.get('unidade_administrativa_origem')
         itens = attrs.get('itens', [])
-
         if ua_origem and itens:
             for item_data in itens:
                 bem = item_data.get('bem')
@@ -468,6 +470,21 @@ class BaixaFisicaEnviarSolicitacaoSerializer(serializers.Serializer):
 
 
 class BaixaFisicaAprovarSerializer(serializers.Serializer):
+    numero_processo_baixa = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=64,
+        help_text=f"Número do processo obrigatório no formato XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})",
+    )
+
+    def validate_numero_processo_baixa(self, value: str) -> str:
+        valor = (value or "").strip()
+        if not valor:
+            raise serializers.ValidationError("Número do processo é obrigatório.")
+        if not re.fullmatch(constants.PROCESSO_BAIXA_REGEX, valor):
+            raise serializers.ValidationError(constants.PROCESSO_BAIXA_MESSAGE)
+        return valor
+
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         baixa = self.context['baixa']
         user = self.context['request'].user
@@ -478,6 +495,7 @@ class BaixaFisicaAprovarSerializer(serializers.Serializer):
             )
         if not (user.is_gestor_patrimonio or user.is_superuser):
             from rest_framework.exceptions import PermissionDenied
+
             raise PermissionDenied(
                 "Apenas Gestor de Patrimônio pode aprovar baixas físicas."
             )
@@ -580,7 +598,7 @@ class NBBPMSerializer(serializers.ModelSerializer):
 
 
 class NBBPMGerarLoteSerializer(serializers.Serializer):
-    """Valida e cria NBBPM consolidada a partir de Baixas ACEITA da mesma UO (prefixo fixo 001)."""
+    """Valida e cria NBBPM consolidada a partir de Baixas ACEITA da mesma UO e mesmo processo (prefixo fixo 001)."""
 
     baixas = serializers.PrimaryKeyRelatedField(
         queryset=BaixaFisicaBemPatrimonial.objects.all(),
@@ -632,8 +650,16 @@ class NBBPMGerarLoteSerializer(serializers.Serializer):
         self._validar_escopo_baixas(baixas)
         self._validar_status_aceita(baixas)
         self._validar_uo_unica(baixas)
+        self._validar_processo_unico(baixas)
         self._validar_reuso_baixas(baixas)
         return baixas
+
+    def validate(self, attrs):
+        baixas = attrs.get("baixas")
+        numero = attrs.get("numero_processo_baixa")
+        if baixas and numero is not None:
+            self._validar_processo_payload(baixas, numero)
+        return attrs
 
     def _validar_permissao_gerar_nbbpm(self):
         user = self.context["request"].user
@@ -665,6 +691,28 @@ class NBBPMGerarLoteSerializer(serializers.Serializer):
         unidades_orcamentarias = {self._extrair_uo_id(b) for b in baixas}
         if len(unidades_orcamentarias) > 1 or None in unidades_orcamentarias:
             raise serializers.ValidationError("Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.")
+
+    def _validar_processo_unico(self, baixas):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from bem_patrimonial.services.nbbpm_numero import obter_processo_unico_baixas
+
+        try:
+            obter_processo_unico_baixas(baixas)
+        except DjangoValidationError as exc:
+            detalhe = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            raise serializers.ValidationError(detalhe)
+
+    def _validar_processo_payload(self, baixas, numero_processo_baixa):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from bem_patrimonial.services.nbbpm_numero import validar_processo_payload_baixas
+
+        try:
+            validar_processo_payload_baixas(baixas, numero_processo_baixa)
+        except DjangoValidationError as exc:
+            detalhe = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            raise serializers.ValidationError({"numero_processo_baixa": detalhe})
 
     def _extrair_uo_id(self, baixa):
         ua = getattr(baixa, "unidade_administrativa_origem", None)

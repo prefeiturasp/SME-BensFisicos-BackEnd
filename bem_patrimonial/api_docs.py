@@ -120,24 +120,34 @@ Somente usuários **Gestor de Patrimônio** ou **Operador de Inventário** podem
 APROVAR_BAIXA_FISICA_DOC = dedent("""
 Aprova a baixa física, autorizando a baixa definitiva dos bens.
 
+### Parâmetros obrigatórios
+
+- **numero_processo_baixa** (string) → Número do processo no formato obrigatório `XXXX.XXXX/XXXXXXX-X` (ex: `6016.2025/0117371-7`). O número é salvo na baixa e propagado para todos os bens vinculados.
+
 ### Comportamento
 
 1. Valida que o status é **solicitada**
 2. Valida permissões do usuário (apenas Gestor de Patrimônio)
-3. Muda o status para **aceita**
-4. **Gera número NBBPM** automaticamente
-5. Registra **aprovador** e **data de aprovação**
+3. Valida **numero_processo_baixa** obrigatório e no padrão `XXXX.XXXX/XXXXXXX-X`
+4. Muda o status para **aceita**
+5. Registra **aprovador**, **data de aprovação** e **número do processo** na baixa
 6. Atualiza status dos bens para **baixa_fisica**
-7. Atualiza **localização** dos bens com referência ao processo
-8. Limpa **número do processo** de incorporação dos bens
+7. Atualiza **localização** dos bens com referência ao processo (`Baixa Física - <processo>`)
+8. Propaga **numero_processo_baixa** para o campo `numero_processo` de cada bem vinculado
 9. Envia **email de notificação**
+
+A NBBPM **não** é gerada automaticamente no aceite; deve ser gerada
+manualmente em lote (mesma Unidade Orçamentária) via módulo de NBBPM.
 
 ### Restrições
 
 - Só pode aprovar se status for **solicitada**
 - **Apenas Gestor de Patrimônio** pode executar esta ação
+- **numero_processo_baixa** é obrigatório e deve estar no formato `XXXX.XXXX/XXXXXXX-X`; caso contrário retorna `400`
 
-Após a aprovação, é possível gerar o PDF da Nota NBBPM.
+Após a aprovação, o único documento gerado automaticamente é o
+**Laudo de Avaliação de Bens Patrimoniais Móveis Baixados Contabilmente para Descarte**,
+disponível em `GET /api/baixa-fisica/{id}/gerar-laudo/` (apenas para status **Aceita**).
 """)
 
 # API: /api/baixas-fisicas/{id}/recusar/ (POST)
