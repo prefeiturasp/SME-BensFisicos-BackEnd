@@ -354,7 +354,7 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         self.assertIn("status", self.admin.get_readonly_fields(req, None))
         self.assertIn("unidade_administrativa_origem", self.admin.get_readonly_fields(req, b5))
         self.assertEqual(len(self.admin.get_fieldsets(req, None)[0][1]["fields"]), 2)
-        self.assertEqual(len(self.admin.get_fieldsets(req, b5)[0][1]["fields"]), 8)
+        self.assertEqual(len(self.admin.get_fieldsets(req, b5)[0][1]["fields"]), 9)
         field = self.admin.formfield_for_dbfield(BaixaFisicaBemPatrimonial._meta.get_field("data_baixa"), req)
         self.assertIsNotNone(field)
         self.assertTrue(len(self.admin.get_urls()) >= 2)
@@ -725,6 +725,25 @@ class TestCorrigirProcessoAdmin(TestCase):
         campos = fieldsets[0][1]["fields"]
         self.assertIn("numero_processo_baixa", campos)
         self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0117371-7")
+
+    def test_detalhe_exibe_nbbpm_igual_listagem_com_link(self):
+        baixa = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        req = self._req(self.gestor)
+        campos = self.admin.get_fieldsets(req, baixa)[0][1]["fields"]
+        self.assertIn("numero_nbbpm_display", campos)
+        self.assertIn("numero_nbbpm_display", self.admin.get_readonly_fields(req, baixa))
+        self.assertEqual(self.admin.numero_nbbpm_display(baixa), "-")
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000100/2026", numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([baixa])
+        display = self.admin.numero_nbbpm_display(baixa)
+        self.assertIn("001.0000100/2026", display)
+        self.assertIn(str(nbbpm.pk), display)
 
     def test_permitir_editar_antes_da_nota(self):
         baixa = _criar_baixa_cov(
