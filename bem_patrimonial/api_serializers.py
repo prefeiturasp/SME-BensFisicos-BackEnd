@@ -21,19 +21,29 @@ _STATUS_BEM_INVALIDOS_PARA_BAIXA = {
 }
 
 
-def _resolver_numero_nbbpm(obj) -> str:
-    """Retorna número da NBBPM consolidada (M2M) com fallback no legado Baixa.numero_nbbpm."""
+def _resolver_nbbpm_obj(obj):
+    """Retorna a NBBPM consolidada vinculada (M2M) ou None (sem fallback legado)."""
     try:
         if hasattr(obj, '_prefetched_objects_cache') and 'nbbpms_lote' in obj._prefetched_objects_cache:
             lotes = obj._prefetched_objects_cache['nbbpms_lote']
-            nbbpm = lotes[0] if lotes else None
-        else:
-            nbbpm = obj.nbbpms_lote.first()
-        if nbbpm and nbbpm.numero:
-            return nbbpm.numero
+            return lotes[0] if lotes else None
+        return obj.nbbpms_lote.first()
     except Exception:
-        pass
+        return None
+
+
+def _resolver_numero_nbbpm(obj) -> str:
+    """Retorna número da NBBPM consolidada (M2M) com fallback no legado Baixa.numero_nbbpm."""
+    nbbpm = _resolver_nbbpm_obj(obj)
+    if nbbpm and getattr(nbbpm, "numero", None):
+        return nbbpm.numero
     return obj.numero_nbbpm or ""
+
+
+def _resolver_nbbpm_id(obj):
+    """Retorna o identificador da NBBPM vinculada (M2M) ou None para link de download."""
+    nbbpm = _resolver_nbbpm_obj(obj)
+    return getattr(nbbpm, "id", None) if nbbpm else None
 
 
 # ============================================================================
@@ -124,6 +134,7 @@ class BaixaFisicaBemPatrimonialListSerializer(serializers.ModelSerializer):
     status_display = serializers.SerializerMethodField()
     total_itens = serializers.SerializerMethodField()
     numero_nbbpm = serializers.SerializerMethodField()
+    nbbpm_id = serializers.SerializerMethodField()
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
@@ -131,6 +142,7 @@ class BaixaFisicaBemPatrimonialListSerializer(serializers.ModelSerializer):
             'id',
             'numero_processo_baixa',
             'numero_nbbpm',
+            'nbbpm_id',
             'unidade_administrativa_origem',
             'status',
             'status_display',
@@ -154,6 +166,9 @@ class BaixaFisicaBemPatrimonialListSerializer(serializers.ModelSerializer):
     def get_numero_nbbpm(self, obj: BaixaFisicaBemPatrimonial) -> str:
         return _resolver_numero_nbbpm(obj)
 
+    def get_nbbpm_id(self, obj: BaixaFisicaBemPatrimonial):
+        return _resolver_nbbpm_id(obj)
+
 
 class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
@@ -162,6 +177,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     status_display = serializers.SerializerMethodField()
     itens = BaixaFisicaBensItemSerializer(many=True, read_only=True)
     numero_nbbpm = serializers.SerializerMethodField()
+    nbbpm_id = serializers.SerializerMethodField()
 
     url_solicitar = serializers.SerializerMethodField()
     url_aprovar = serializers.SerializerMethodField()
@@ -176,6 +192,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             'id',
             'numero_processo_baixa',
             'numero_nbbpm',
+            'nbbpm_id',
             'unidade_administrativa_origem',
             'status',
             'status_display',
@@ -196,6 +213,9 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
 
     def get_numero_nbbpm(self, obj: BaixaFisicaBemPatrimonial) -> str:
         return _resolver_numero_nbbpm(obj)
+
+    def get_nbbpm_id(self, obj: BaixaFisicaBemPatrimonial):
+        return _resolver_nbbpm_id(obj)
 
     def get_status_display(self, obj: BaixaFisicaBemPatrimonial) -> str:
         if obj.status == constants.AGUARDANDO_ENVIO:
@@ -247,16 +267,9 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
     def get_url_gerar_nbbpm(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status != constants.ACEITA:
             return None
-        try:
-            if hasattr(obj, '_prefetched_objects_cache') and 'nbbpms_lote' in obj._prefetched_objects_cache:
-                lotes = obj._prefetched_objects_cache['nbbpms_lote']
-                nbbpm = lotes[0] if lotes else None
-            else:
-                nbbpm = obj.nbbpms_lote.first()
-            if nbbpm:
-                return self._build_url('nbbpm-pdf', nbbpm.id)
-        except Exception:
-            pass
+        nbbpm = _resolver_nbbpm_obj(obj)
+        if nbbpm:
+            return self._build_url('nbbpm-pdf', nbbpm.id)
         return None
 
     def get_url_gerar_laudo(self, obj: BaixaFisicaBemPatrimonial):
