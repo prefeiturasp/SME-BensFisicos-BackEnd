@@ -671,6 +671,9 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         self.assertIn("disabled", conteudo)
         self.assertIn("após a geração da NBBPM, as Baixas Físicas selecionadas não poderão mais ser editadas", conteudo)
         self.assertIn("Confirmar geração da NBBPM", conteudo)
+        self.assertIn("form.addEventListener('submit'", conteudo)
+        self.assertIn("window.confirm('Após a geração da NBBPM", conteudo)
+        self.assertIn("event.preventDefault()", conteudo)
         self.assertEqual(NBBPM.objects.count(), 0)
 
     def test_post_bloqueia_quando_payload_diverge_das_baixas(self):
