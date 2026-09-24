@@ -24,6 +24,8 @@ from urllib.parse import urlencode
 from django.utils import timezone
 from django.views.generic import TemplateView
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
+from dados_comuns.historico_consulta import consultar_historico
 from dados_comuns.utils import dict_changes
 import logging
 from django.contrib.auth import get_user_model
@@ -710,40 +712,14 @@ class UsuarioViewSet(
         summary="Histórico de alterações do usuário",
         description="Retorna o histórico de alterações registradas para o usuário informado.",
         responses={
-            200: OpenApiResponse(description="Lista de registros do histórico"),
+            200: HistoricoConsultaGrupoSerializer(many=True),
             404: OpenApiResponse(description="Usuário não encontrado"),
         },
     )
     @action(detail=True, methods=["get"], url_path="historico")
     def historico(self, request, pk=None):
-
-        # Garante que o usuário existe e que o solicitante tem escopo para acessá-lo
         instance = self.get_object()
-
-        ct = ContentType.objects.get_for_model(User)
-
-        registros = (
-            HistoricoGeral.objects
-            .filter(content_type=ct, object_id=str(instance.pk))
-            .select_related("alterado_por")
-            .order_by("-id")
-        )
-
-        data = [
-            {
-                "id": r.id,
-                "campo": r.campo,
-                "valor_antigo": r.valor_antigo,
-                "valor_novo": r.valor_novo,
-                "justificativa": r.justificativa,
-                "alterado_por": (
-                    r.alterado_por.username if r.alterado_por else None
-                ),
-                "data_alteracao": r.created_at if hasattr(r, "created_at") else None,
-            }
-            for r in registros
-        ]
-
-        return Response(data, status=status.HTTP_200_OK)
+        registros = consultar_historico(User, instance.pk)
+        return Response(HistoricoConsultaGrupoSerializer(registros, many=True).data)
 
 

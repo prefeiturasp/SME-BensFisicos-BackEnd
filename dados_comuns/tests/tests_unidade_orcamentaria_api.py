@@ -1,12 +1,14 @@
 from unittest.mock import patch
 
+from django.contrib.admin.models import ADDITION, LogEntry
 from django.contrib.auth.models import Group
+from django.contrib.contenttypes.models import ContentType
 from django.db.models.deletion import ProtectedError
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
@@ -265,6 +267,84 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
                 for acao in grupo["acoes"]
             )
         )
+
+    def test_historico_sem_evidencia_nao_inventa_criacao(self):
+        self._auth(self.superuser)
+
+        response = self.client.get(
+            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_historico_exibe_autor_rf_e_valores_da_alteracao(self):
+        self._auth(self.superuser)
+        self.superuser.rf = "F123456"
+        self.superuser.save(update_fields=["rf"])
+        HistoricoGeral.objects.create(
+            content_type=ContentType.objects.get_for_model(UnidadeOrcamentaria),
+            object_id=str(self.uo1.id),
+            campo="nome",
+            valor_antigo="Nome Antigo",
+            valor_novo=self.uo1.nome,
+            alterado_por=self.superuser,
+        )
+
+        response = self.client.get(
+            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        grupo = response.data[0]
+        self.assertEqual(grupo["alterado_por_nome"], self.superuser.nome)
+        self.assertEqual(grupo["alterado_por_rf"], "F123456")
+        self.assertEqual(grupo["acoes"][0]["valor_antigo"], "Nome Antigo")
+        self.assertEqual(grupo["acoes"][0]["valor_novo"], self.uo1.nome)
+        self.assertIsNotNone(grupo["alterado_em"])
+
+    def test_historico_sem_usuario_preserva_autoria_ausente(self):
+        self._auth(self.superuser)
+        HistoricoGeral.objects.create(
+            content_type=ContentType.objects.get_for_model(UnidadeOrcamentaria),
+            object_id=str(self.uo1.id),
+            campo="nome",
+            valor_novo=self.uo1.nome,
+        )
+
+        response = self.client.get(
+            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        grupo = response.data[0]
+        self.assertIsNone(grupo["alterado_por"])
+        self.assertIsNone(grupo["alterado_por_nome"])
+        self.assertIsNone(grupo["alterado_por_rf"])
+
+    def test_historico_reutiliza_criacao_comprovada_no_admin(self):
+        self._auth(self.superuser)
+        self.superuser.rf = "F123456"
+        self.superuser.save(update_fields=["rf"])
+        LogEntry.objects.create(
+            user=self.superuser,
+            content_type=ContentType.objects.get_for_model(UnidadeOrcamentaria),
+            object_id=str(self.uo1.id),
+            object_repr=str(self.uo1),
+            action_flag=ADDITION,
+            change_message="",
+        )
+
+        response = self.client.get(
+            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        grupo = response.data[0]
+        self.assertEqual(grupo["alterado_por_nome"], self.superuser.nome)
+        self.assertEqual(grupo["alterado_por_rf"], "F123456")
+        self.assertEqual(grupo["acoes"][0]["valor_novo"], "criado")
+        self.assertEqual(grupo["acoes"][0]["valor_antigo"], "")
 
     def test_criacao_com_erro_de_validacao(self):
         self._auth(self.superuser)
