@@ -540,12 +540,13 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
         # Criação: UA e data_baixa editáveis; processo só no aceite (não no formulário de criação)
         # Após criação, processo/data/UA ficam readonly, exceto correção pontual:
         # numero_processo_baixa editável quando Aceita, sem Nota e usuário gestor.
+        # numero_nbbpm_display espelha a listagem no detalhe (com link para a NBBPM).
         base_audit = ("status", "criado_por", "data_criacao", "aprovado_por", "data_aprovacao")
         if obj is None:
             return base_audit
         if self._pode_editar_processo(request, obj):
-            return base_audit + ("unidade_administrativa_origem", "data_baixa")
-        return base_audit + ("unidade_administrativa_origem", "numero_processo_baixa", "data_baixa")
+            return base_audit + ("unidade_administrativa_origem", "data_baixa", "numero_nbbpm_display")
+        return base_audit + ("unidade_administrativa_origem", "numero_processo_baixa", "data_baixa", "numero_nbbpm_display")
 
     def get_fieldsets(self, request, obj=None):
         if obj is None:
@@ -567,6 +568,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 "aprovado_por",
                 "data_aprovacao",
                 "status",
+                "numero_nbbpm_display",
             )
         else:
             campos = campos_basicos
@@ -1247,6 +1249,8 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 responsavel=form.cleaned_data["responsavel"],
                 numero_processo_destinacao_final=form.cleaned_data.get("numero_processo_destinacao_final") or "",
             )
+            for baixa in baixas:
+                self.log_change(request, baixa, f"NBBPM {nbbpm.numero} gerada e vinculada à baixa.")
             self.message_user(request, f"NBBPM {nbbpm.numero} gerada com sucesso com {len(baixas)} baixa(s).", level=messages.SUCCESS)
             return HttpResponseRedirect(reverse("admin:bem_patrimonial_nbbpm_change", args=[nbbpm.pk]))
         except ValidationError as exc:
