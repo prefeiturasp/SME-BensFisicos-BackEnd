@@ -672,7 +672,7 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         self.assertIn("após a geração da NBBPM, as Baixas Físicas selecionadas não poderão mais ser editadas", conteudo)
         self.assertIn("Confirmar geração da NBBPM", conteudo)
         self.assertIn("form.addEventListener('submit'", conteudo)
-        self.assertIn("globalThis.confirm('Após a geração da NBBPM", conteudo)
+        self.assertIn("confirm('Após a geração da NBBPM", conteudo)
         self.assertIn("event.preventDefault()", conteudo)
         self.assertEqual(NBBPM.objects.count(), 0)
 
