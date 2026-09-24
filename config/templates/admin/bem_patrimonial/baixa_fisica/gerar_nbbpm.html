@@ -6,7 +6,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('nbbpm-form');
     form.addEventListener('submit', function (event) {
-        if (!window.confirm('Após a geração da NBBPM, as Baixas Físicas selecionadas não poderão mais ser editadas, incluindo o número do processo e os bens vinculados. Deseja confirmar a geração?')) {
+        if (!globalThis.confirm('Após a geração da NBBPM, as Baixas Físicas selecionadas não poderão mais ser editadas, incluindo o número do processo e os bens vinculados. Deseja confirmar a geração?')) {
             event.preventDefault();
         }
     });
