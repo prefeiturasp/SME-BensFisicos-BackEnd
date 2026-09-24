@@ -1,3 +1,5 @@
+import re
+from collections import Counter
 from decimal import Decimal
 
 from reportlab.lib import colors
@@ -15,6 +17,55 @@ from bem_patrimonial.pdf_utils import (
     criar_info_geracao_paragraph,
     obter_rf_usuario,
 )
+
+
+PADRAO_NUMERO_PATRIMONIAL = re.compile(r"^(\d{3})\.(\d{9})-(\d)$")
+
+
+def _chave_sequencia(bem):
+    if bem.numero_formato_antigo or bem.sem_numeracao:
+        return None
+    match = PADRAO_NUMERO_PATRIMONIAL.fullmatch(bem.numero_patrimonial or "")
+    if not match:
+        return None
+    return match.group(1), int(match.group(2))
+
+
+def _caracteristicas_bem(bem):
+    return (
+        bem.nome,
+        bem.descricao,
+        bem.marca,
+        bem.modelo,
+        bem.valor_unitario,
+    )
+
+
+def agrupar_bens_documento(bens):
+    """Agrupa somente sequências inequívocas, sem alterar os itens do documento."""
+    ordenados = sorted(bens, key=lambda bem: bem.numero_patrimonial or "")
+    chaves = [_chave_sequencia(bem) for bem in ordenados]
+    frequencias = Counter(chave for chave in chaves if chave is not None)
+    grupos = []
+
+    for bem, chave in zip(ordenados, chaves):
+        if grupos:
+            anterior = grupos[-1][-1]
+            chave_anterior = _chave_sequencia(anterior)
+            if (
+                chave is not None
+                and chave_anterior is not None
+                and frequencias[chave] == 1
+                and frequencias[chave_anterior] == 1
+                and chave[0] == chave_anterior[0]
+                and chave[1] == chave_anterior[1] + 1
+                and _caracteristicas_bem(bem) == _caracteristicas_bem(anterior)
+            ):
+                grupos[-1].append(bem)
+                continue
+        grupos.append([bem])
+
+    return grupos
 
 
 def desenhar_tabela_no_canvas(canvas, doc, tabela, y_top):
@@ -327,24 +378,33 @@ def criar_tabela_bens_padrao(
     )
 
     headers = [
-        Paragraph("<b>NÚMERO DE CHAPA<br/>DE IDENTIFICAÇÃO</b>", header_style),
+        Paragraph("<b>NÚMERO DE CHAPA DE IDENTIFICAÇÃO</b>", header_style),
+        "",
         Paragraph("<b>DISCRIMINAÇÃO</b>", header_style),
         Paragraph("<b>QUANTIDADE</b>", header_style),
         Paragraph("<b>VALOR<br/>UNITÁRIO</b>", header_style),
     ]
+    subheaders = [
+        Paragraph("<b>DE</b>", header_style),
+        Paragraph("<b>ATÉ</b>", header_style),
+        "", "", "",
+    ]
 
-    data = [headers]
+    data = [headers, subheaders]
 
-    for bem in bens:
-        numero_pat = str(getattr(bem, "numero_patrimonial", None) or "-")
+    for grupo in agrupar_bens_documento(bens):
+        bem = grupo[0]
+        numero_de = str(bem.numero_patrimonial or "-")
+        numero_ate = str(grupo[-1].numero_patrimonial) if len(grupo) > 1 else ""
         descricao = descricao_fn(bem)
-        valor_unitario = getattr(bem, "valor_unitario", None) or Decimal("0.00")
+        valor_unitario = bem.valor_unitario or Decimal("0.00")
 
         data.append(
             [
-                Paragraph(numero_pat, cell_style_center),
+                Paragraph(numero_de, cell_style_center),
+                Paragraph(numero_ate, cell_style_center),
                 Paragraph(descricao, cell_style),
-                Paragraph("1", cell_style_center),
+                Paragraph(str(len(grupo)), cell_style_center),
                 Paragraph(formatar_moeda_brasileira(valor_unitario), cell_style_center),
             ]
         )
@@ -352,33 +412,38 @@ def criar_tabela_bens_padrao(
     bens_table = Table(
         data,
         colWidths=[
-            config_cls.COL_NUMERO_CHAPA,
+            config_cls.COL_NUMERO_DE,
+            config_cls.COL_NUMERO_ATE,
             config_cls.COL_DISCRIMINACAO,
             config_cls.COL_QUANTIDADE,
             config_cls.COL_VALOR,
         ],
-        repeatRows=1,
+        repeatRows=2,
     )
     bens_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), config_cls.COR_HEADER),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, 0), config_cls.FONTE_PADRAO),
-                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
-                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 1), (-1, -1), config_cls.FONTE_PADRAO),
-                ("ALIGN", (0, 1), (0, -1), "CENTER"),
-                ("ALIGN", (2, 1), (3, -1), "CENTER"),
-                ("VALIGN", (0, 1), (-1, -1), "TOP"),
+                ("SPAN", (0, 0), (1, 0)),
+                ("SPAN", (2, 0), (2, 1)),
+                ("SPAN", (3, 0), (3, 1)),
+                ("SPAN", (4, 0), (4, 1)),
+                ("BACKGROUND", (0, 0), (-1, 1), config_cls.COR_HEADER),
+                ("FONTNAME", (0, 0), (-1, 1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 1), config_cls.FONTE_PADRAO),
+                ("ALIGN", (0, 0), (-1, 1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, 1), "MIDDLE"),
+                ("FONTNAME", (0, 2), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 2), (-1, -1), config_cls.FONTE_PADRAO),
+                ("ALIGN", (0, 2), (1, -1), "CENTER"),
+                ("ALIGN", (3, 2), (4, -1), "CENTER"),
+                ("VALIGN", (0, 2), (-1, -1), "TOP"),
                 ("BOX", (0, 0), (-1, -1), 1, colors.black),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ("LEFTPADDING", (0, 0), (-1, -1), 3),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 3),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, config_cls.COR_CINZA_ZEBRA]),
+                ("ROWBACKGROUNDS", (0, 2), (-1, -1), [colors.white, config_cls.COR_CINZA_ZEBRA]),
             ]
         )
     )
@@ -410,6 +475,7 @@ def criar_tabela_total_bens(*, bens, config_cls=PDFConfigBase):
     total_data = [
         [
             Paragraph("", cell_style),
+            Paragraph("", cell_style),
             Paragraph("<b>TOTAL GERAL</b>", header_style),
             Paragraph(f"<b>{quantidade_total}</b>", header_style),
             Paragraph(f"<b>{formatar_moeda_brasileira(valor_total_geral)}</b>", header_style),
@@ -419,7 +485,8 @@ def criar_tabela_total_bens(*, bens, config_cls=PDFConfigBase):
     total_table = Table(
         total_data,
         colWidths=[
-            config_cls.COL_NUMERO_CHAPA,
+            config_cls.COL_NUMERO_DE,
+            config_cls.COL_NUMERO_ATE,
             config_cls.COL_DISCRIMINACAO,
             config_cls.COL_QUANTIDADE,
             config_cls.COL_VALOR,
@@ -430,8 +497,8 @@ def criar_tabela_total_bens(*, bens, config_cls=PDFConfigBase):
             [
                 ("BACKGROUND", (0, 0), (-1, 0), config_cls.COR_CINZA_CLARO),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-                ("ALIGN", (2, 0), (3, 0), "CENTER"),
+                ("ALIGN", (2, 0), (2, 0), "RIGHT"),
+                ("ALIGN", (3, 0), (4, 0), "CENTER"),
                 ("BOX", (0, 0), (-1, -1), 1, colors.black),
                 ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ("LEFTPADDING", (0, 0), (-1, -1), 3),
