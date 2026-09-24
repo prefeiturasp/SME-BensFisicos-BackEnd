@@ -184,6 +184,26 @@ def _validar_processo_locked(locked_baixas, numero_processo_baixa):
     validar_processo_payload_baixas(locked_baixas, numero_processo_baixa)
 
 
+def _formatar_data_br(data):
+    try:
+        return data.strftime("%d/%m/%Y") if data else "-"
+    except Exception:
+        return str(data or "-")
+
+
+def _rotulo_uo_de_baixa(baixa):
+    try:
+        ua = getattr(baixa, "unidade_administrativa_origem", None)
+        uo = getattr(ua, "unidade_orcamentaria", None) if ua else None
+        codigo = (getattr(uo, "codigo", None) or "").strip() if uo else ""
+        nome = (getattr(uo, "nome", None) or "").strip() if uo else ""
+        if codigo or nome:
+            return f"{codigo} - {nome}".strip(" -")
+    except Exception:
+        pass
+    return "-"
+
+
 def _criar_nbbpm_atomico(baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final, ano, uo_ids, tentativa):
     from bem_patrimonial.models import NBBPM, BaixaFisicaBemPatrimonial
 
@@ -214,22 +234,61 @@ def _criar_nbbpm_atomico(baixas, numero_processo_baixa, data_autorizacao, respon
 
 
 def _registrar_historico_nbbpm(nbbpm, criado_por, uo_ids, ano, locked):
-    try:
-        from dados_comuns.models import HistoricoGeral
-        from django.contrib.contenttypes.models import ContentType
+    from dados_comuns.models import HistoricoGeral
+    from django.contrib.contenttypes.models import ContentType
 
-        ct = ContentType.objects.get_for_model(nbbpm.__class__)
-        HistoricoGeral.objects.create(
-            content_type=ct,
-            object_id=str(nbbpm.pk),
-            campo="numero",
-            valor_antigo="",
-            valor_novo=nbbpm.numero,
-            alterado_por=criado_por,
-            justificativa=f"NBBPM {nbbpm.numero} gerada UO {list(uo_ids)[0]} ano {ano} com {len(locked)} baixa(s)",
+    _ = uo_ids
+    uo_label = _rotulo_uo_de_baixa(locked[0]) if locked else "-"
+    ct = ContentType.objects.get_for_model(nbbpm.__class__)
+    HistoricoGeral.objects.create(
+        content_type=ct,
+        object_id=str(nbbpm.pk),
+        campo="numero",
+        valor_antigo="",
+        valor_novo=nbbpm.numero,
+        alterado_por=criado_por,
+        justificativa=f"NBBPM {nbbpm.numero} gerada UO {uo_label} ano {ano} com {len(locked)} baixa(s)",
+    )
+    _registrar_historico_baixas_nbbpm(nbbpm, criado_por, uo_ids, locked)
+
+
+def _registrar_historico_baixas_nbbpm(nbbpm, criado_por, uo_ids, locked):
+    """Evento imutável por baixa vinculada à NBBPM (consulta histórica, reemissão e bloqueio)."""
+    from dados_comuns.models import HistoricoGeral
+    from django.contrib.contenttypes.models import ContentType
+
+    from bem_patrimonial.models import BaixaFisicaBemPatrimonial
+
+    ct_baixa = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+    _ = uo_ids
+    nome_usuario = getattr(criado_por, "username", None) or str(criado_por or "-")
+    data_br = _formatar_data_br(getattr(nbbpm, "data_autorizacao", None))
+    registros = []
+    for baixa in locked:
+        try:
+            ua = getattr(baixa, "unidade_administrativa_origem", None)
+        except Exception:
+            ua = None
+        ua_label = str(ua) if ua else f"UA {getattr(baixa, 'unidade_administrativa_origem_id', '-')}"
+        uo_label = _rotulo_uo_de_baixa(baixa)
+        registros.append(
+            HistoricoGeral(
+                content_type=ct_baixa,
+                object_id=str(baixa.pk),
+                campo="nbbpm",
+                valor_antigo="",
+                valor_novo=nbbpm.numero or "",
+                alterado_por=criado_por,
+                justificativa=(
+                    f"NBBPM {nbbpm.numero} gerada por {nome_usuario} "
+                    f"em {data_br} - UO {uo_label} - {ua_label} - "
+                    f"Processo {nbbpm.numero_processo_baixa} - "
+                    f"Responsável {nbbpm.responsavel}"
+                ),
+            )
         )
-    except Exception:
-        pass
+    if registros:
+        HistoricoGeral.objects.bulk_create(registros)
 
 
 def criar_nbbpm_com_retry(*, baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final="", max_tentativas=3):
