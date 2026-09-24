@@ -669,6 +669,12 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         conteudo = resp.content.decode()
         self.assertIn("F123456", conteudo)
         self.assertIn("disabled", conteudo)
+        self.assertIn("após a geração da NBBPM, as Baixas Físicas selecionadas não poderão mais ser editadas", conteudo)
+        self.assertIn("Confirmar geração da NBBPM", conteudo)
+        self.assertIn("form.addEventListener('submit'", conteudo)
+        self.assertIn("confirm('Após a geração da NBBPM", conteudo)
+        self.assertIn("event.preventDefault()", conteudo)
+        self.assertEqual(NBBPM.objects.count(), 0)
 
     def test_post_bloqueia_quando_payload_diverge_das_baixas(self):
         b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7")
