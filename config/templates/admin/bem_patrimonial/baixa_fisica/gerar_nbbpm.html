@@ -2,6 +2,7 @@
 
 {% block acao_desc %}
     <p>Será gerada <strong>uma</strong> NBBPM consolidada para as <strong>{{ baixas|length }} Baixa(s)</strong> selecionada(s). Todas devem estar com status <strong>Aprovado (ACEITA)</strong>, da <strong>mesma Unidade Orçamentária</strong> (podendo ser UAs diferentes) e do <strong>mesmo Número de Processo</strong>.</p>
+    <p><strong>Atenção:</strong> após a geração da NBBPM, as Baixas Físicas selecionadas não poderão mais ser editadas, incluindo o número do processo e os bens vinculados. Confirme apenas se deseja prosseguir.</p>
     <div class="form-row">
         <div>
             <label for="id_gerado_por_rf">Gerado por (RF):</label>
@@ -39,4 +40,4 @@
 
 {% block fieldset_titulo %}Dados para geração{% endblock %}
 
-{% block submit_label %}Gerar NBBPM{% endblock %}
+{% block submit_label %}Confirmar geração da NBBPM{% endblock %}
