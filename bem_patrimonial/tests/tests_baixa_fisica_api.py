@@ -2069,3 +2069,127 @@ class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
         )
         with self.assertRaises(ValidationError):
             baixa.corrigir_numero_processo("RUIM")
+
+
+class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
+    """Cobre: identificador na baixa e evento por baixa."""
+
+    PROCESSO = "6016.2025/0117371-7"
+
+    def _nova_baixa_aceita_com_bem(self, processo=None, npat="000.000000001-0"):
+        bem = criar_bem(self.ua, self.operador, numero_patrimonial=npat)
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=processo or self.PROCESSO,
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        return baixa, bem
+
+    def _payload(self, baixas):
+        return {
+            "baixas": [b.id for b in baixas],
+            "numero_processo_baixa": self.PROCESSO,
+            "data_autorizacao": str(timezone.localdate()),
+            "responsavel": "Gestor Teste",
+        }
+
+    def _historicos_baixa(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).order_by("id")
+
+    def test_geracao_cria_vinculo_historico_identificador_e_reemissao(self):
+        baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000021-0")
+        baixa2, _ = self._nova_baixa_aceita_com_bem(npat="000.000000022-0")
+        baixa_sem_nota = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
+        self._auth(self.gestor)
+
+        resp = self.client.post("/api/nbbpm/", self._payload([baixa1, baixa2]), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        numero = resp.data["numero"]
+        nbbpm_id = resp.data["id"]
+
+        for baixa in (baixa1, baixa2):
+            baixa.refresh_from_db()
+            self.assertTrue(baixa.nbbpms_lote.filter(pk=nbbpm_id).exists())
+
+        data_br = timezone.localdate().strftime("%d/%m/%Y")
+        rotulo_uo = f"{self.uo.codigo} - {self.uo.nome}"
+        for baixa in (baixa1, baixa2):
+            eventos = [h for h in self._historicos_baixa(baixa) if h.campo == "nbbpm"]
+            self.assertEqual(len(eventos), 1)
+            ev = eventos[0]
+            self.assertEqual(ev.valor_novo, numero)
+            self.assertEqual(ev.alterado_por, self.gestor)
+            self.assertIsNotNone(ev.alterado_em)
+            self.assertIn(numero, ev.justificativa)
+            self.assertIn(self.PROCESSO, ev.justificativa)
+            self.assertIn(data_br, ev.justificativa)
+            self.assertIn(rotulo_uo, ev.justificativa)
+
+        lista = self.client.get(self.list_url)
+        item = next(b for b in lista.data.get("results", lista.data) if b["id"] == baixa1.id)
+        self.assertEqual(item["numero_nbbpm"], numero)
+        self.assertEqual(item["nbbpm_id"], nbbpm_id)
+
+        detalhe = self.client.get(self.detail_url(baixa1.id))
+        self.assertEqual(detalhe.data["numero_nbbpm"], numero)
+        self.assertEqual(detalhe.data["nbbpm_id"], nbbpm_id)
+        self.assertTrue(detalhe.data["itens"])
+        self.assertIsNotNone(detalhe.data["url_gerar_nbbpm"])
+
+        hist = self.client.get(self.action_url(baixa1.id, "historico"))
+        evento_api = next(r for r in hist.data if r["campo"] == "nbbpm")
+        self.assertEqual(evento_api["valor_novo"], numero)
+        self.assertEqual(evento_api["alterado_por"], self.gestor.username)
+
+        hist_antes = self._historicos_baixa(baixa1).count()
+        pdf = self.client.get(f"/api/nbbpm/{nbbpm_id}/pdf/")
+        self.assertEqual(pdf.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
+
+        detalhe_sem_nota = self.client.get(self.detail_url(baixa_sem_nota.id))
+        self.assertIsNone(detalhe_sem_nota.data["nbbpm_id"])
+        self.assertEqual(detalhe_sem_nota.data["numero_nbbpm"], "")
+
+    def test_segunda_geracao_400_mantem_vinculo_e_historico(self):
+        baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000031-0")
+        baixa2, _ = self._nova_baixa_aceita_com_bem(npat="000.000000032-0")
+        self._auth(self.gestor)
+
+        resp1 = self.client.post("/api/nbbpm/", self._payload([baixa1, baixa2]), format="json")
+        self.assertEqual(resp1.status_code, status.HTTP_201_CREATED)
+        nbbpm_id1 = resp1.data["id"]
+        hist_antes = self._historicos_baixa(baixa1).count()
+        total_antes = NBBPM.objects.count()
+
+        resp2 = self.client.post("/api/nbbpm/", self._payload([baixa1]), format="json")
+        self.assertEqual(resp2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(NBBPM.objects.count(), total_antes)
+        baixa1.refresh_from_db()
+        self.assertEqual(list(baixa1.nbbpms_lote.values_list("id", flat=True)), [nbbpm_id1])
+        self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
+
+    def test_falha_no_historico_desfaz_nbbpm_e_vinculo(self):
+        from dados_comuns.models import HistoricoGeral
+        from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+
+        baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000033-0")
+        total_antes = NBBPM.objects.count()
+        hist_antes = self._historicos_baixa(baixa1).count()
+
+        with patch.object(HistoricoGeral.objects, "bulk_create", side_effect=RuntimeError("falha historico")):
+            with self.assertRaises(RuntimeError):
+                criar_nbbpm_com_retry(
+                    baixas=[baixa1],
+                    numero_processo_baixa=self.PROCESSO,
+                    data_autorizacao=timezone.localdate(),
+                    responsavel="Gestor Teste",
+                    criado_por=self.gestor,
+                )
+        self.assertEqual(NBBPM.objects.count(), total_antes)
+        baixa1.refresh_from_db()
+        self.assertFalse(baixa1.nbbpms_lote.exists())
+        self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
