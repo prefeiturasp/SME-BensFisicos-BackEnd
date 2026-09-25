@@ -34,7 +34,6 @@ def _chave_sequencia(bem):
 def _caracteristicas_bem(bem):
     return (
         bem.nome,
-        bem.descricao,
         bem.marca,
         bem.modelo,
         bem.valor_unitario,
