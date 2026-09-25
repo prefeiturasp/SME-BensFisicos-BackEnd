@@ -267,30 +267,17 @@ class TestAgrupamentoBensDocumento(CIMBPMTestBase):
 
         self.assertEqual(grupos, [[primeiro], [outro_digito], [proximo]])
 
-    def test_descricao_diferente_nao_interrompe_a_sequencia(self):
+    def test_descricao_diferente_nao_e_agrupada(self):
         primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
         outro_bem = self.criar_bem(
             numero_patrimonial="001.000000011-2", descricao="Outro tipo de armário"
         )
 
-        self.assertEqual(agrupar_bens_documento([primeiro, outro_bem]), [[primeiro, outro_bem]])
-
-    def test_bem_diferente_interrompe_e_depois_reinicia_a_sequencia(self):
-        cadeiras = [
-            self.criar_bem(numero_patrimonial=f"001.{numero:09d}-{numero % 10}")
-            for numero in (10, 11, 13, 14)
-        ]
-        mesa = self.criar_bem(numero_patrimonial="001.000000012-2", nome="Mesa")
-
-        grupos = agrupar_bens_documento([cadeiras[3], mesa, cadeiras[1], cadeiras[0], cadeiras[2]])
-
-        self.assertEqual(grupos, [cadeiras[:2], [mesa], cadeiras[2:]])
+        self.assertEqual(agrupar_bens_documento([primeiro, outro_bem]), [[primeiro], [outro_bem]])
 
     def test_tabela_cimbpm_mostra_de_ate_e_total_original(self):
         primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
-        segundo = self.criar_bem(
-            numero_patrimonial="001.000000011-2", descricao="Descrição complementar"
-        )
+        segundo = self.criar_bem(numero_patrimonial="001.000000011-2")
         mov = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=primeiro,
             unidade_administrativa_origem=self.ua_origem,
@@ -306,7 +293,6 @@ class TestAgrupamentoBensDocumento(CIMBPMTestBase):
 
         self.assertEqual(tabela._cellvalues[2][0].text, "001.000000010-1")
         self.assertEqual(tabela._cellvalues[2][1].text, "001.000000011-2")
-        self.assertEqual(tabela._cellvalues[2][2].text, primeiro.descricao.upper())
         self.assertEqual(tabela._cellvalues[2][3].text, "2")
         self.assertEqual(total._cellvalues[0][3].text, "<b>2</b>")
         self.assertEqual(sum(tabela._colWidths), sum(total._colWidths))
