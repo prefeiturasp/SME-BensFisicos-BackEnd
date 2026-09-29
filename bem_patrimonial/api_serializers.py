@@ -329,6 +329,14 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def _erro_baixas_abertas(self, existentes: list):
+        return serializers.ValidationError(
+            {
+                "unidade_administrativa_origem": BaixaFisicaBemPatrimonial.mensagem_baixas_abertas(existentes),
+                "baixas_existentes": [b.pk for b in existentes],
+            }
+        )
+
     def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
         # Segurança: numero_processo só pode ser definido no aceite pelo gestor
         if "numero_processo_baixa" in (self.initial_data or {}):
@@ -345,6 +353,10 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
                         f"O bem '{bem.numero_patrimonial}' não pertence à unidade "
                         f"administrativa de origem selecionada."
                     )
+        if ua_origem:
+            existentes = BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(ua_origem.pk)
+            if existentes:
+                raise self._erro_baixas_abertas(existentes)
         return attrs
 
     def _atualizar_status_bem(self, bem: BemPatrimonial, novo_status: str) -> None:
@@ -355,6 +367,16 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data: Dict[str, Any]) -> BaixaFisicaBemPatrimonial:
         itens_data = validated_data.pop('itens')
         user = self.context['request'].user
+        ua_origem = validated_data.get('unidade_administrativa_origem')
+
+        if ua_origem is not None:
+            try:
+                UnidadeAdministrativa.objects.select_for_update().get(pk=ua_origem.pk)
+            except UnidadeAdministrativa.DoesNotExist:
+                pass
+            existentes = BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(ua_origem.pk)
+            if existentes:
+                raise self._erro_baixas_abertas(existentes)
 
         baixa = BaixaFisicaBemPatrimonial.objects.create(
             **validated_data,

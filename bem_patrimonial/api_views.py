@@ -490,9 +490,11 @@ class BaixaFisicaBemPatrimonialViewSet(
         serializer.is_valid(raise_exception=True)
 
         status_anterior = baixa.get_status_display()
+        solicitante_anterior_id = baixa.criado_por_id
+        solicitante_anterior_nome = str(baixa.criado_por) if baixa.criado_por_id else ""
 
         set_user(request.user)
-        baixa.enviar_solicitacao()
+        baixa.enviar_solicitacao(solicitante=request.user)
 
         self._registrar_historico(
             baixa=baixa,
@@ -502,6 +504,15 @@ class BaixaFisicaBemPatrimonialViewSet(
             usuario=request.user,
             justificativa="Solicitação de baixa enviada para aprovação",
         )
+        if solicitante_anterior_id and solicitante_anterior_id != baixa.criado_por_id:
+            self._registrar_historico(
+                baixa=baixa,
+                campo="criado_por",
+                valor_antigo=solicitante_anterior_nome,
+                valor_novo=str(baixa.criado_por),
+                usuario=request.user,
+                justificativa="Solicitante atualizado ao enviar solicitação",
+            )
 
         try:
             envia_email_baixa_fisica_solicitada(baixa)
