@@ -508,6 +508,136 @@ class TestNBBPMRetrieve(TestCase):
 
 
 # =====================================================================
+# 5c. Reemissão da NBBPM (POST /api/nbbpm/{id}/reemitir/)
+# =====================================================================
+
+class TestNBBPMReemitir(TestCase):
+    def setUp(self):
+        self.uo, self.ua, self.gestor = _setup_uo_ua_gestor("gestor_reemissao")
+        self.ua2 = criar_ua(uo=self.uo, codigo="004", nome="UA Reemissao 2", sigla="UAT-REE2")
+
+        self.baixa, self.bem = _nova_baixa_com_item(
+            self.ua,
+            self.gestor,
+            numero_processo_baixa="P-REE-1",
+            numero_nbbpm="001.0000042/2026",
+            bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000201-0"),
+        )
+        self.nbbpm = _novo_nbbpm_com_baixas(
+            "001.0000042/2026", [self.baixa], self.gestor, numero_processo_baixa="P-REE-1"
+        )
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.gestor)
+        self.url = f"/api/nbbpm/{self.nbbpm.id}/reemitir/"
+
+    def test_reemite_o_pdf_da_nbbpm_existente_com_o_mesmo_numero(self):
+        resp = self.client.post(self.url)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+        self.assertIn("NBBPM_001.0000042/2026.pdf", resp["Content-Disposition"])
+        self.assertTrue(resp.content.startswith(b"%PDF"))
+
+    def test_nao_consome_sequencial_nem_cria_registros(self):
+        nbbpms_antes = NBBPM.objects.count()
+        baixas_antes = BaixaFisicaBemPatrimonial.objects.count()
+
+        with patch(
+            "bem_patrimonial.services.nbbpm_numero.gerar_numero_nbbpm_unificado"
+        ) as gerar_numero, patch(
+            "bem_patrimonial.nbbpm_api_views.criar_nbbpm_com_retry"
+        ) as criar_nbbpm:
+            resp = self.client.post(self.url)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        gerar_numero.assert_not_called()
+        criar_nbbpm.assert_not_called()
+        self.assertEqual(NBBPM.objects.count(), nbbpms_antes)
+        self.assertEqual(BaixaFisicaBemPatrimonial.objects.count(), baixas_antes)
+
+    def test_preserva_numero_dados_e_vinculo_com_a_baixa_fisica(self):
+        self.client.post(self.url)
+        self.client.post(self.url)
+
+        self.nbbpm.refresh_from_db()
+        self.baixa.refresh_from_db()
+        self.assertEqual(self.nbbpm.numero, "001.0000042/2026")
+        self.assertEqual(self.nbbpm.numero_processo_baixa, "P-REE-1")
+        self.assertEqual(self.nbbpm.criado_por_id, self.gestor.id)
+        self.assertEqual(list(self.nbbpm.baixas.values_list("id", flat=True)), [self.baixa.id])
+        self.assertEqual(self.baixa.numero_nbbpm, "001.0000042/2026")
+        self.assertEqual(NBBPM.objects.filter(numero="001.0000042/2026").count(), 1)
+
+    def test_listagem_nao_duplica_a_nbbpm_apos_reemitir(self):
+        self.client.post(self.url)
+
+        resp = self.client.get("/api/nbbpm/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["count"], 1)
+
+    def test_expoe_pode_reemitir_na_listagem_e_no_detalhe(self):
+        lista = self.client.get("/api/nbbpm/")
+        detalhe = self.client.get(f"/api/nbbpm/{self.nbbpm.id}/")
+
+        self.assertTrue(lista.data["results"][0]["pode_reemitir"])
+        self.assertTrue(detalhe.data["pode_reemitir"])
+
+    def test_nbbpm_sem_numero_nao_pode_ser_reemitida(self):
+        sem_numero = _novo_nbbpm_com_baixas("", [self.baixa], self.gestor)
+
+        detalhe = self.client.get(f"/api/nbbpm/{sem_numero.id}/")
+        resp = self.client.post(f"/api/nbbpm/{sem_numero.id}/reemitir/")
+
+        self.assertFalse(detalhe.data["pode_reemitir"])
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_operador_de_inventario_nao_pode_reemitir(self):
+        operador = criar_usuario(
+            "operador_reemissao", self.uo, self.ua, grupos=[GRUPO_OPERADOR_INVENTARIO]
+        )
+        client = APIClient()
+        client.force_authenticate(user=operador)
+
+        resp = client.post(self.url)
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_usuario_nao_autenticado_nao_pode_reemitir(self):
+        resp = APIClient().post(self.url)
+
+        self.assertIn(resp.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
+
+    def test_gestor_de_outra_ua_nao_alcanca_a_nbbpm(self):
+        gestor_outra_ua = criar_usuario(
+            "gestor_outra_ua_ree", self.uo, self.ua2, grupos=[GRUPO_GESTOR_PATRIMONIO]
+        )
+        client = APIClient()
+        client.force_authenticate(user=gestor_outra_ua)
+
+        resp = client.post(self.url)
+
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_superuser_pode_reemitir(self):
+        superuser = criar_usuario(
+            "superuser_reemissao", self.uo, self.ua, grupos=[GRUPO_GESTOR_PATRIMONIO], is_superuser=True
+        )
+        client = APIClient()
+        client.force_authenticate(user=superuser)
+
+        resp = client.post(self.url)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_reemissao_so_aceita_post(self):
+        resp = self.client.get(self.url)
+
+        self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+# =====================================================================
 # 6. Data migration idempotente
 # =====================================================================
 

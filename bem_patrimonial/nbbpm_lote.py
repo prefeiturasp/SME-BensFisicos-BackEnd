@@ -44,6 +44,14 @@ def gerar_numero_nbbpm_lote(nbbpm):
     return gerar_numero_nbbpm_unificado(nbbpm)
 
 
+def nbbpm_pode_ser_reemitida(nbbpm):
+    """
+    Regra de processo da reemissão: só uma NBBPM já numerada pode ter o
+    documento reemitido (a reemissão reaproveita o número, nunca gera outro).
+    """
+    return bool(getattr(nbbpm, "numero", ""))
+
+
 def obter_bens_nbbpm_lote(nbbpm):
     """Bens de todas as Baixas vinculadas, ordenados por patrimônio."""
     bens = []

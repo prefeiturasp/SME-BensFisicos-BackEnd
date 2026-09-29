@@ -1,13 +1,14 @@
 from rest_framework import viewsets, status, filters, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 import django_filters
 
 from bem_patrimonial.models import NBBPM
 from bem_patrimonial.api_serializers import NBBPMSerializer, NBBPMDetailSerializer, NBBPMGerarLoteSerializer
-from bem_patrimonial.nbbpm_lote import http_response_nbbpm_lote
+from bem_patrimonial.nbbpm_lote import http_response_nbbpm_lote, nbbpm_pode_ser_reemitida
 from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
 from dados_comuns.escopo import resolver_ids_escopo
 
@@ -142,4 +143,31 @@ class NBBPMViewSet(
     @action(detail=True, methods=["get"], url_path="pdf")
     def pdf(self, request, pk=None):
         nbbpm = self.get_object()
+        return http_response_nbbpm_lote(nbbpm, usuario_gerador=request.user)
+
+    @extend_schema(
+        tags=["NBBPM"],
+        summary="Reemitir NBBPM",
+        description=(
+            "Reemite o documento de uma NBBPM já gerada. Usa o mesmo número da "
+            "NBBPM original: não consome novo sequencial, não cria Nota de Baixa "
+            "nem novo registro de NBBPM, não altera o vínculo com as Baixas "
+            "Físicas nem os dados da nota. Respeita o escopo (UO/UA) e o perfil "
+            "de acesso da consulta de NBBPMs."
+        ),
+        request=None,
+        responses={
+            200: OpenApiResponse(description="PDF da NBBPM reemitida"),
+            400: OpenApiResponse(description="NBBPM não pode ser reemitida"),
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="reemitir")
+    def reemitir(self, request, pk=None):
+        # get_object aplica o escopo (UO/UA): NBBPM fora do escopo -> 404.
+        nbbpm = self.get_object()
+
+        if not nbbpm_pode_ser_reemitida(nbbpm):
+            raise ValidationError("Esta NBBPM não pode ser reemitida: ainda não possui número gerado.")
+
+        # Somente leitura: apenas renderiza o documento da NBBPM existente.
         return http_response_nbbpm_lote(nbbpm, usuario_gerador=request.user)

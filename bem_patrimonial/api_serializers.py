@@ -633,6 +633,7 @@ class NBBPMSerializer(serializers.ModelSerializer):
     baixas = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     criado_por = UserSimpleSerializer(read_only=True)
     unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
+    pode_reemitir = serializers.SerializerMethodField()
 
     class Meta:
         model = NBBPM
@@ -647,8 +648,14 @@ class NBBPMSerializer(serializers.ModelSerializer):
             'numero_processo_destinacao_final',
             'criado_por',
             'data_criacao',
+            'pode_reemitir',
         ]
         read_only_fields = fields
+
+    def get_pode_reemitir(self, obj: NBBPM) -> bool:
+        from bem_patrimonial.nbbpm_lote import nbbpm_pode_ser_reemitida
+
+        return nbbpm_pode_ser_reemitida(obj)
 
 
 class NBBPMBaixaDetailSerializer(serializers.ModelSerializer):
@@ -688,6 +695,7 @@ class NBBPMDetailSerializer(serializers.ModelSerializer):
     """
     baixas = serializers.SerializerMethodField()
     criado_por = UserSimpleSerializer(read_only=True)
+    pode_reemitir = serializers.SerializerMethodField()
 
     class Meta:
         model = NBBPM
@@ -701,8 +709,14 @@ class NBBPMDetailSerializer(serializers.ModelSerializer):
             'numero_processo_destinacao_final',
             'criado_por',
             'data_criacao',
+            'pode_reemitir',
         ]
         read_only_fields = fields
+
+    def get_pode_reemitir(self, obj: NBBPM) -> bool:
+        from bem_patrimonial.nbbpm_lote import nbbpm_pode_ser_reemitida
+
+        return nbbpm_pode_ser_reemitida(obj)
 
     def get_baixas(self, obj: NBBPM):
         # `.all()` reaproveita o prefetch_related feito em
