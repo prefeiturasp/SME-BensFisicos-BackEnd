@@ -413,6 +413,101 @@ class TestPermissaoESuperuser(TestCase):
 
 
 # =====================================================================
+# 5b. Detalhe da NBBPM (GET /api/nbbpm/{id}/) — tela de visualização
+# =====================================================================
+
+class TestNBBPMRetrieve(TestCase):
+    def setUp(self):
+        self.uo, self.ua, self.gestor = _setup_uo_ua_gestor("gestor_detalhe")
+        self.ua2 = criar_ua(uo=self.uo, codigo="003", nome="UA Detalhe 2", sigla="UAT-DET2")
+
+        self.baixa1, self.bem1 = _nova_baixa_com_item(
+            self.ua,
+            self.gestor,
+            numero_processo_baixa="P-DET-1",
+            bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000101-0"),
+        )
+        self.baixa2, self.bem2 = _nova_baixa_com_item(
+            self.ua2,
+            self.gestor,
+            numero_processo_baixa="P-DET-2",
+            bem=criar_bem(self.ua2, self.gestor, numero_patrimonial="000.000000102-0"),
+        )
+
+        self.nbbpm = _novo_nbbpm_com_baixas(
+            "016.0000010.2026",
+            [self.baixa1, self.baixa2],
+            self.gestor,
+            numero_processo_baixa="PROC-DET",
+        )
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.gestor)
+
+    def test_retorna_identificacao_da_nbbpm(self):
+        resp = self.client.get(f"/api/nbbpm/{self.nbbpm.id}/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["numero"], "016.0000010.2026")
+        self.assertEqual(resp.data["numero_processo_baixa"], "PROC-DET")
+        self.assertEqual(resp.data["criado_por"]["username"], self.gestor.username)
+
+    def test_traz_cada_baixa_com_sua_propria_ua_e_bens(self):
+        resp = self.client.get(f"/api/nbbpm/{self.nbbpm.id}/")
+
+        baixas = resp.data["baixas"]
+        self.assertEqual(len(baixas), 2)
+
+        baixa_1_data = next(b for b in baixas if b["id"] == self.baixa1.id)
+        baixa_2_data = next(b for b in baixas if b["id"] == self.baixa2.id)
+
+        self.assertEqual(baixa_1_data["unidade_administrativa_origem"]["id"], self.ua.id)
+        self.assertEqual(baixa_1_data["numero_processo_baixa"], "P-DET-1")
+        self.assertEqual(len(baixa_1_data["itens"]), 1)
+        self.assertEqual(
+            baixa_1_data["itens"][0]["bem"]["numero_patrimonial"], "000.000000101-0"
+        )
+
+        # UAs diferentes na mesma NBBPM — a UA vem por Baixa, não pela nota inteira
+        self.assertEqual(baixa_2_data["unidade_administrativa_origem"]["id"], self.ua2.id)
+        self.assertNotEqual(
+            baixa_1_data["unidade_administrativa_origem"]["id"],
+            baixa_2_data["unidade_administrativa_origem"]["id"],
+        )
+        self.assertEqual(
+            baixa_2_data["itens"][0]["bem"]["numero_patrimonial"], "000.000000102-0"
+        )
+
+    def test_baixas_vem_ordenadas_por_id(self):
+        resp = self.client.get(f"/api/nbbpm/{self.nbbpm.id}/")
+
+        ids = [b["id"] for b in resp.data["baixas"]]
+        self.assertEqual(ids, sorted(ids))
+
+    def test_operador_nao_pode_acessar_o_detalhe(self):
+        operador_outra_ua = criar_usuario(
+            "operador_fora", self.uo, self.ua2, grupos=[GRUPO_OPERADOR_INVENTARIO]
+        )
+        client = APIClient()
+        client.force_authenticate(user=operador_outra_ua)
+
+        resp = client.get(f"/api/nbbpm/{self.nbbpm.id}/")
+
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_superuser_acessa_o_detalhe_de_qualquer_nbbpm(self):
+        superuser = criar_usuario(
+            "superuser_detalhe", self.uo, None, grupos=[GRUPO_GESTOR_PATRIMONIO], is_superuser=True
+        )
+        client = APIClient()
+        client.force_authenticate(user=superuser)
+
+        resp = client.get(f"/api/nbbpm/{self.nbbpm.id}/")
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+
+# =====================================================================
 # 6. Data migration idempotente
 # =====================================================================
 

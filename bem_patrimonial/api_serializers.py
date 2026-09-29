@@ -651,6 +651,67 @@ class NBBPMSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class NBBPMBaixaDetailSerializer(serializers.ModelSerializer):
+    """
+    Uma Baixa Física vinculada à NBBPM, com sua própria Unidade
+    Administrativa e os bens que a compunham (`itens`). Uma mesma NBBPM
+    pode reunir Baixas de UAs diferentes, então a UA vem por Baixa, e não
+    uma única vez para a nota inteira.
+
+    Os `itens` são lidos diretamente do relacionamento vivo
+    (`BaixaFisicaBensItem`) porque uma Baixa só pode compor uma NBBPM
+    quando está com status ACEITA — a partir daí a composição de bens não
+    é mais editável (ver `BaixaFisicaBemPatrimonialViewSet`), então o
+    relacionamento atual já corresponde à composição registrada no
+    momento da geração da nota.
+    """
+    unidade_administrativa_origem = UnidadeAdministrativaSimpleSerializer(read_only=True)
+    itens = BaixaFisicaBensItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = BaixaFisicaBemPatrimonial
+        fields = [
+            'id',
+            'numero_processo_baixa',
+            'unidade_administrativa_origem',
+            'itens',
+        ]
+        read_only_fields = fields
+
+
+class NBBPMDetailSerializer(serializers.ModelSerializer):
+    """
+    Detalhe de uma NBBPM: identificação da nota e as Baixas Físicas
+    vinculadas, cada uma com sua Unidade Administrativa e os bens que a
+    compunham. Somente leitura — nenhum campo é editável a partir do
+    detalhe.
+    """
+    baixas = serializers.SerializerMethodField()
+    criado_por = UserSimpleSerializer(read_only=True)
+
+    class Meta:
+        model = NBBPM
+        fields = [
+            'id',
+            'numero',
+            'baixas',
+            'numero_processo_baixa',
+            'data_autorizacao',
+            'responsavel',
+            'numero_processo_destinacao_final',
+            'criado_por',
+            'data_criacao',
+        ]
+        read_only_fields = fields
+
+    def get_baixas(self, obj: NBBPM):
+        # `.all()` reaproveita o prefetch_related feito em
+        # NBBPMViewSet.get_queryset (baixas__unidade_administrativa_origem
+        # e baixas__itens__bem) — ordenar em Python evita uma query extra.
+        baixas = sorted(obj.baixas.all(), key=lambda baixa: baixa.id)
+        return NBBPMBaixaDetailSerializer(baixas, many=True, context=self.context).data
+
+
 class NBBPMGerarLoteSerializer(serializers.Serializer):
     """Valida e cria NBBPM consolidada a partir de Baixas ACEITA da mesma UO e mesmo processo (prefixo fixo 001)."""
 
