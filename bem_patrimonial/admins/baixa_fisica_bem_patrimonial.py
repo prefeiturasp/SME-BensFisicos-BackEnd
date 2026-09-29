@@ -35,9 +35,33 @@ from dados_comuns.escopo import (
 )
 from dados_comuns.models import UnidadeAdministrativa
 from django.core.validators import RegexValidator
+from django.utils.safestring import mark_safe
 
 
 NUMERO_PROCESSO_OBRIGATORIO = "Número do processo é obrigatório."
+
+
+def _texto_baixas_abertas_com_links(existentes):
+    links = []
+    for b in existentes:
+        try:
+            url = reverse(
+                "admin:bem_patrimonial_baixafisicabempatrimonial_change", args=[b.pk]
+            )
+        except Exception:
+            url = f"/admin/bem_patrimonial/baixafisicabempatrimonial/{b.pk}/change/"
+        links.append(f'<a href="{url}">Baixa #{b.pk}</a>')
+    if len(existentes) == 1:
+        return (
+            "Já existe uma baixa em aberto para esta unidade "
+            f"({links[0]}). Conclua ou recuse a baixa existente "
+            "antes de criar uma nova."
+        )
+    return (
+        f"Já existem {len(existentes)} baixas em aberto para esta unidade "
+        f"({', '.join(links)}). Conclua ou recuse as baixas existentes "
+        "antes de criar uma nova."
+    )
 
 
 class NBBPMGerarAdminForm(forms.Form):
@@ -141,6 +165,18 @@ class BaixaFisicaBemPatrimonialChangeForm(forms.ModelForm):
         if original is not None and valor != (original.numero_processo_baixa or ""):
             self._validar_correcao_processo(original, valor)
         return valor
+
+    def clean(self):
+        cleaned = super().clean()
+        instance = getattr(self, "instance", None)
+        # Trava só na inclusão: uma UA com baixa em aberto não pode abrir outra.
+        if instance is not None and not getattr(instance, "pk", None):
+            ua = cleaned.get("unidade_administrativa_origem")
+            if ua is not None:
+                existentes = BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(ua.pk)
+                if existentes:
+                    raise ValidationError(mark_safe(_texto_baixas_abertas_com_links(existentes)))
+        return cleaned
 
     def _baixa_original_para_correcao(self):
         instance = getattr(self, "instance", None)
@@ -825,12 +861,36 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
 
         solicitadas = 0
         for baixa in baixas_permitidas:
-            baixa.enviar_solicitacao()
+            solicitante_anterior_id = baixa.criado_por_id
+            solicitante_anterior_nome = str(baixa.criado_por) if baixa.criado_por_id else ""
+            baixa.enviar_solicitacao(solicitante=request.user)
             self.log_change(
                 request,
                 baixa,
                 "Baixa Física solicitada para aprovação.",
             )
+            if solicitante_anterior_id and solicitante_anterior_id != baixa.criado_por_id:
+                self.log_change(
+                    request,
+                    baixa,
+                    f"Solicitante atualizado de {solicitante_anterior_nome} para {baixa.criado_por}.",
+                )
+                try:
+                    from dados_comuns.models import HistoricoGeral
+                    from django.contrib.contenttypes.models import ContentType
+
+                    ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+                    HistoricoGeral.objects.create(
+                        content_type=ct,
+                        object_id=str(baixa.pk),
+                        campo="criado_por",
+                        valor_antigo=solicitante_anterior_nome,
+                        valor_novo=str(baixa.criado_por),
+                        alterado_por=request.user,
+                        justificativa="Solicitante atualizado ao enviar solicitação",
+                    )
+                except Exception:
+                    pass
             envia_email_baixa_fisica_solicitada(baixa)
             solicitadas += 1
 
