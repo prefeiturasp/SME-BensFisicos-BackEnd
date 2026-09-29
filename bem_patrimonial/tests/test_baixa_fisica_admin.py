@@ -978,3 +978,88 @@ class TestCorrigirProcessoAdmin(TestCase):
         self.assertEqual(historicos[0].campo, "numero_processo_baixa")
         self.assertEqual(historicos[0].valor_antigo, "6016.2025/0117371-7")
         self.assertEqual(historicos[0].valor_novo, "6016.2025/0222222-2")
+
+
+class TestBaixaFisicaUnicidadeSolicitanteAdmin(TestCase):
+    def setUp(self):
+        self.uo = _criar_uo_cov(codigo=codigo_uo(1, 16, 70))
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(1, 16, 70, 70), sigla="UA70", nome="UA70")
+        self.gestor = _criar_usuario_cov("gest_uni70", self.uo, self.ua, [GRUPO_GESTOR_PATRIMONIO])
+        self.operador = _criar_usuario_cov("oper_uni70", self.uo, self.ua, [GRUPO_OPERADOR_INVENTARIO])
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, AdminSite())
+        self.factory = RequestFactory()
+
+    def _req_messages(self, req):
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.contrib.sessions.backends.db import SessionStore
+
+        req.session = SessionStore()
+        req.session.create()
+        req._messages = FallbackStorage(req)
+        return req
+
+    def _historicos(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).order_by("id")
+
+    def test_form_bloqueia_segunda_baixa_aberta(self):
+        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
+            BaixaFisicaBemPatrimonialChangeForm,
+        )
+
+        aberta = _criar_baixa_cov(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        form = BaixaFisicaBemPatrimonialChangeForm(
+            data={
+                "unidade_administrativa_origem": self.ua.pk,
+                "data_baixa": str(timezone.localdate()),
+                "status": constants.AGUARDANDO_ENVIO,
+                "criado_por": self.operador.pk,
+            },
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn(str(aberta.pk), str(form.errors))
+
+    def test_form_exibe_links_para_todas_abertas(self):
+        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
+            BaixaFisicaBemPatrimonialChangeForm,
+        )
+
+        b1 = _criar_baixa_cov(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        b2 = _criar_baixa_cov(self.ua, self.operador, status=constants.SOLICITADA)
+        form = BaixaFisicaBemPatrimonialChangeForm(
+            data={
+                "unidade_administrativa_origem": self.ua.pk,
+                "data_baixa": str(timezone.localdate()),
+                "status": constants.AGUARDANDO_ENVIO,
+                "criado_por": self.operador.pk,
+            },
+        )
+        self.assertFalse(form.is_valid())
+        erros = str(form.errors)
+        self.assertIn(str(b1.pk), erros)
+        self.assertIn(str(b2.pk), erros)
+        self.assertIn("href", erros)
+        self.assertIn(f"/admin/bem_patrimonial/baixafisicabempatrimonial/{b1.pk}/change/", erros)
+        self.assertIn(f"/admin/bem_patrimonial/baixafisicabempatrimonial/{b2.pk}/change/", erros)
+
+    def test_acao_enviar_atualiza_solicitante_e_preserva_historico(self):
+        baixa = _criar_baixa_cov(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(
+            baixa=baixa,
+            bem=_criar_bem_cov(self.ua, self.operador, status=constants.APROVADO),
+        )
+        hist_antes = list(self._historicos(baixa))
+        req = self._req_messages(self.factory.post("/"))
+        req.user = self.gestor
+        self.admin.acao_enviar_baixa(req, BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk))
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.status, constants.SOLICITADA)
+        self.assertEqual(baixa.criado_por_id, self.gestor.pk)
+        hist_depois = list(self._historicos(baixa))
+        self.assertGreater(len(hist_depois), len(hist_antes))
+        for h in hist_antes:
+            self.assertIn(h.id, [x.id for x in hist_depois])
+        self.assertTrue([h for h in hist_depois if h.campo == "criado_por"])

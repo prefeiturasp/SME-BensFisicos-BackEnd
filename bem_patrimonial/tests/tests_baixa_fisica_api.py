@@ -2193,3 +2193,186 @@ class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
         baixa1.refresh_from_db()
         self.assertFalse(baixa1.nbbpms_lote.exists())
         self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
+
+
+class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
+    """Uma UA só pode ter uma baixa em aberto; solicitar atualiza o solicitante."""
+
+    def _payload(self, bem, ua=None):
+        return {
+            "unidade_administrativa_origem": (ua or self.ua).id,
+            "data_baixa": str(timezone.localdate()),
+            "itens": [{"bem": bem.id}],
+        }
+
+    def _bem_novo(self, npat):
+        return criar_bem(self.ua, self.operador, numero_patrimonial=npat)
+
+    def _extrair_ids_existentes(self, resp):
+        data = resp.data
+        val = data.get("baixas_existentes", [])
+        items = val if isinstance(val, list) else [val]
+        return sorted(int(str(x)) for x in items)
+
+    def _extrair_id_existente(self, resp):
+        ids = self._extrair_ids_existentes(resp)
+        return ids[0] if ids else None
+
+    def _historicos(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).order_by("id")
+
+    def test_criacao_valida_sem_pendencia(self):
+        self._auth(self.operador)
+        bem = self._bem_novo("000.000000101-0")
+        resp = self.client.post(self.list_url, self._payload(bem), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        baixa = BaixaFisicaBemPatrimonial.objects.get(pk=resp.data["id"])
+        self.assertEqual(baixa.unidade_administrativa_origem_id, self.ua.id)
+        self.assertEqual(baixa.itens.count(), 1)
+        self.assertEqual(baixa.criado_por_id, self.operador.id)
+
+    def test_bloqueio_quando_existe_em_elaboracao(self):
+        aberta = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=aberta, bem=self.bem)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(self.bem2), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._extrair_ids_existentes(resp), [aberta.id])
+        self.assertNotIn("baixa_existente", resp.data)
+        self.assertNotIn(str(aberta.id), str(resp.data["unidade_administrativa_origem"]))
+
+    def test_bloqueio_quando_existe_solicitada(self):
+        aberta = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=aberta, bem=self.bem)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(self.bem2), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._extrair_ids_existentes(resp), [aberta.id])
+
+    def test_liberada_apos_aceita_e_recusada(self):
+        for st in (constants.ACEITA, constants.RECUSADA):
+            BaixaFisicaBemPatrimonial.objects.filter(unidade_administrativa_origem=self.ua).delete()
+            BemPatrimonial.objects.filter(unidade_administrativa=self.ua).update(status=constants.APROVADO)
+            self.bem.refresh_from_db()
+            self.bem2.refresh_from_db()
+            final = criar_baixa(self.ua, self.operador, status=st)
+            BaixaFisicaBensItem.objects.create(baixa=final, bem=self.bem)
+            self._auth(self.operador)
+            resp = self.client.post(self.list_url, self._payload(self.bem2), format="json")
+            self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_duplicadas_existentes_concluem_e_bloqueiam_nova(self):
+        bem3 = self._bem_novo("000.000000103-0")
+        b1 = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=b1, bem=self.bem)
+        b2 = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=b2, bem=self.bem2)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(self._extrair_id_existente(resp), (b1.id, b2.id))
+        self._auth(self.gestor)
+        rec = self.client.post(self.action_url(b1.id, "recusar"), {"motivo": "x"}, format="json")
+        self.assertEqual(rec.status_code, status.HTTP_200_OK)
+        self._auth(self.operador)
+        resp2 = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._extrair_id_existente(resp2), b2.id)
+        self._auth(self.gestor)
+        self.client.post(self.action_url(b2.id, "recusar"), {"motivo": "y"}, format="json")
+        self._auth(self.operador)
+        resp3 = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp3.status_code, status.HTTP_201_CREATED, resp3.data)
+
+    def test_criacao_simultanea_segunda_bloqueada_sem_duplicar(self):
+        from unittest.mock import MagicMock
+
+        self._auth(self.operador)
+        bem = self._bem_novo("000.000000104-0")
+        resp1 = self.client.post(self.list_url, self._payload(bem), format="json")
+        self.assertEqual(resp1.status_code, status.HTTP_201_CREATED)
+        req = MagicMock()
+        req.user = self.operador
+        req.data = {}
+        s = BaixaFisicaBemPatrimonialCreateSerializer(
+            data=self._payload(self.bem2), context={"request": req}
+        )
+        self.assertFalse(s.is_valid())
+        abertas = BaixaFisicaBemPatrimonial.objects.filter(
+            unidade_administrativa_origem=self.ua,
+            status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA],
+        ).count()
+        self.assertEqual(abertas, 1)
+
+    def test_bloqueio_retorna_todas_existentes_quando_multiplas(self):
+        bem3 = self._bem_novo("000.000000105-0")
+        bem4 = self._bem_novo("000.000000106-0")
+        b1 = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=b1, bem=self.bem)
+        b2 = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=b2, bem=self.bem2)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        data = resp.data
+        self.assertIn("baixas_existentes", data)
+        self.assertNotIn("baixa_existente", data)
+        self.assertEqual(self._extrair_ids_existentes(resp), sorted([b1.id, b2.id]))
+        texto = str(data["unidade_administrativa_origem"])
+        self.assertNotIn(str(b1.id), texto)
+        self.assertNotIn(str(b2.id), texto)
+        # garante que bem4 continua livre e nenhuma baixa nova foi criada
+        self.assertTrue(BemPatrimonial.objects.filter(pk=bem4.pk).exists())
+        self.assertEqual(
+            BaixaFisicaBemPatrimonial.objects.filter(
+                unidade_administrativa_origem=self.ua,
+                status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA],
+            ).count(),
+            2,
+        )
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_correcao_solicitada")
+    def test_solicitar_troca_solicitante_preserva_historico(self, mock_corr, mock_sol):
+        from usuario.models import Usuario
+        from django.contrib.auth.models import Group
+        from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+
+        operador_b = Usuario.objects.create_user(
+            username="operador_b_troca",
+            email="operador_b_troca@test.com",
+            **auth_kwargs("senha123"),
+            unidade_administrativa=self.ua,
+            unidade_orcamentaria=self.uo,
+        )
+        grp, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
+        operador_b.groups.add(grp)
+        baixa = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        self._auth(self.operador)
+        r1 = self.client.post(self.action_url(baixa.id, "enviar-solicitacao"))
+        self.assertEqual(r1.status_code, status.HTTP_200_OK)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.criado_por_id, self.operador.id)
+        hist_antes = list(self._historicos(baixa))
+        self.assertTrue(hist_antes)
+        self._auth(self.operador)
+        rc = self.client.post(
+            self.action_url(baixa.id, "solicitar-correcao"), {"motivo": "ajuste"}, format="json"
+        )
+        self.assertEqual(rc.status_code, status.HTTP_200_OK)
+        self._auth(operador_b)
+        r2 = self.client.post(self.action_url(baixa.id, "enviar-solicitacao"))
+        self.assertEqual(r2.status_code, status.HTTP_200_OK)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.criado_por_id, operador_b.id)
+        hist_depois = list(self._historicos(baixa))
+        self.assertGreater(len(hist_depois), len(hist_antes))
+        for h in hist_antes:
+            self.assertIn(h.id, [x.id for x in hist_depois])
+        troca = [h for h in hist_depois if h.campo == "criado_por"]
+        self.assertTrue(troca)
