@@ -117,22 +117,25 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("itens_lote", form.errors)
 
-    def test_widget_lote_exibe_nome_do_bem_acao_e_mascara(self):
+    def test_widget_lote_exibe_modos_tabela_unica_e_mascara(self):
         widget = MovimentacaoLoteWidget(
             attrs={
                 "data-resolver-url": "/resolver-itens-lote/",
-                "data-buscar-url": "/buscar-bens-lote/",
+                "data-pesquisar-url": "/pesquisar-bens/",
             }
         )
         html = widget.render("itens_lote", "", {"id": "id_itens_lote"})
 
-        self.assertIn("Nome do Bem", html)
-        self.assertIn("Ação", html)
-        self.assertNotIn("Apagar", html)
+        self.assertEqual(html.count("<table"), 1)
+        self.assertIn("<th>Nome</th>", html)
+        self.assertIn("<th>Selecionar</th>", html)
+        self.assertIn('value="geral"', html)
+        self.assertIn('value="faixa"', html)
+        self.assertIn('value="todos"', html)
         self.assertEqual(html.count('placeholder="000.000000000-0"'), 2)
         self.assertEqual(html.count('maxlength="15"'), 2)
         self.assertIn('data-resolver-url="/resolver-itens-lote/"', html)
-        self.assertIn('data-buscar-url="/buscar-bens-lote/"', html)
+        self.assertIn('data-pesquisar-url="/pesquisar-bens/"', html)
 
     def test_submit_admin_exibe_mensagem_de_faixa_tratada(self):
         mensagem = (

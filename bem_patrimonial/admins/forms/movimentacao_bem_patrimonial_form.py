@@ -21,6 +21,7 @@ from dados_comuns.escopo import (
 
 
 CODIGO_UA_PONTO_CENTRAL = "001"
+MENSAGEM_ITENS_LOTE_INVALIDOS = "Itens de movimentação inválidos."
 MENSAGEM_SEM_PONTO_CENTRAL = (
     "Não há ponto central cadastrado na Unidade Orçamentária de destino. "
     "Por favor, entrar em contato com o gestor"
@@ -476,16 +477,16 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         try:
             dados = json.loads(valor)
         except (TypeError, json.JSONDecodeError) as error:
-            raise ValidationError({"itens_lote": "Itens de movimentação inválidos."}) from error
+            raise ValidationError({"itens_lote": MENSAGEM_ITENS_LOTE_INVALIDOS}) from error
 
         if not isinstance(dados, dict):
-            raise ValidationError({"itens_lote": "Itens de movimentação inválidos."})
+            raise ValidationError({"itens_lote": MENSAGEM_ITENS_LOTE_INVALIDOS})
 
         faixas = dados.get("faixas", [])
         selecionar_todos = dados.get("selecionar_todos", False)
         ids = dados.get("itens", [])
         if not isinstance(ids, list) or any(type(item) is not int for item in ids):
-            raise ValidationError({"itens_lote": "Itens de movimentação inválidos."})
+            raise ValidationError({"itens_lote": MENSAGEM_ITENS_LOTE_INVALIDOS})
         modos = sum((bool(faixas), bool(selecionar_todos), bool(ids)))
         if modos == 0:
             raise ValidationError(

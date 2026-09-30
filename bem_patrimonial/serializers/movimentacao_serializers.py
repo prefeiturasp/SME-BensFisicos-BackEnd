@@ -256,13 +256,14 @@ class BuscaBensMovimentacaoSerializer(serializers.Serializer):
     numero_patrimonial_de = serializers.CharField(required=False)
     numero_patrimonial_ate = serializers.CharField(required=False)
     descricao = serializers.CharField(required=False)
+    q = serializers.CharField(required=False)
     pagina = serializers.IntegerField(required=False, min_value=1, default=1)
 
     def validate(self, attrs):
         validar_ua_origem_movimentacao(
             self.context["request"].user, attrs["unidade_administrativa_origem"]
         )
-        modos = ("id", "numero_patrimonial", "numero_patrimonial_de", "descricao")
+        modos = ("id", "numero_patrimonial", "numero_patrimonial_de", "descricao", "q")
         if sum(bool(attrs.get(modo)) for modo in modos) != 1:
             raise serializers.ValidationError("Informe apenas um critério de busca.")
         if attrs.get("numero_patrimonial_ate") and not attrs.get("numero_patrimonial_de"):
@@ -290,6 +291,16 @@ def buscar_bens_para_movimentacao(criterios):
     bens = BemPatrimonial.objects.filter(unidade_administrativa=ua)
     if "id" in criterios:
         bens = bens.filter(pk=criterios["id"])
+    elif "q" in criterios:
+        termo = criterios["q"]
+        filtro = (
+            Q(nome__icontains=termo)
+            | Q(descricao__icontains=termo)
+            | Q(sem_numeracao=False, numero_patrimonial__icontains=termo)
+        )
+        if termo.isdecimal() and len(termo) <= 18:
+            filtro |= Q(pk=int(termo))
+        bens = bens.filter(filtro)
     elif "numero_patrimonial" in criterios:
         bens = bens.filter(
             sem_numeracao=False,
@@ -408,8 +419,22 @@ class BemPatrimonialSimpleSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class MovimentacaoBensLoteItemSerializer(serializers.ModelSerializer):
+    numero_patrimonial = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BemPatrimonial
+        fields = [
+            "id", "numero_patrimonial", "nome", "descricao", "localizacao", "status"
+        ]
+        read_only_fields = fields
+
+    def get_numero_patrimonial(self, obj):
+        return None if obj.sem_numeracao else obj.numero_patrimonial
+
+
 class MovimentacaoBensLotePreviewResponseSerializer(serializers.Serializer):
-    itens = BemPatrimonialSimpleSerializer(many=True)
+    itens = MovimentacaoBensLoteItemSerializer(many=True)
 
 
 class MovimentacaoBensItemSimpleSerializer(serializers.ModelSerializer):

@@ -34,6 +34,7 @@ from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
     BuscaBensMovimentacaoSerializer,
+    MovimentacaoBensLoteItemSerializer,
     MovimentacaoBensLotePreviewSerializer,
     buscar_bens_para_movimentacao,
     obter_mensagem_erro_validacao,
@@ -558,7 +559,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 status=400,
             )
 
-        itens = BemPatrimonialSimpleSerializer(
+        itens = MovimentacaoBensLoteItemSerializer(
             serializer.validated_data["bens"],
             many=True,
         ).data

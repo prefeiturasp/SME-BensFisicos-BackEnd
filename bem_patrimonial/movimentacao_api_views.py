@@ -342,6 +342,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             OpenApiParameter("numero_patrimonial_de", OpenApiTypes.STR),
             OpenApiParameter("numero_patrimonial_ate", OpenApiTypes.STR),
             OpenApiParameter("descricao", OpenApiTypes.STR),
+            OpenApiParameter("q", OpenApiTypes.STR, description="Busca geral por nome, descrição, ID ou número patrimonial."),
             OpenApiParameter("pagina", OpenApiTypes.INT),
         ],
     )

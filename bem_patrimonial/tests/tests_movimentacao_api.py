@@ -689,6 +689,9 @@ class MovimentacaoApiTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {item["id"] for item in response.data["itens"]}
         self.assertIn(self.bem_api.id, ids)
+        item = next(item for item in response.data["itens"] if item["id"] == self.bem_api.id)
+        self.assertEqual(item["descricao"], self.bem_api.descricao)
+        self.assertEqual(item["localizacao"], self.bem_api.localizacao)
         self.assertNotIn(bem_reprovado.id, ids)
         self.assertNotIn(bem_bloqueado.id, ids)
         self.assertNotIn(self.bem_oculto.id, ids)
@@ -888,6 +891,28 @@ class MovimentacaoApiTestCase(TestCase):
         self.assertFalse(encontrados[bloqueado.id]["apto"])
         self.assertIn("inventário", encontrados[bloqueado.id]["motivo"])
         self.assertNotIn(self.bem_oculto.id, encontrados)
+
+    def test_busca_geral_localiza_nome_descricao_id_e_numero_somente_na_ua(self):
+        bem = self._criar_bem(
+            "001.000000094-0", self.ua_origem, criado_por=self.operador_origem
+        )
+        bem.nome = "Cadeira especial"
+        bem.descricao = "Estofado verde"
+        bem.save(update_fields=["nome", "descricao"])
+        self._autenticar(self.operador_origem)
+        url = reverse("movimentacoes-buscar-bens")
+
+        for termo in ("cadeira", "estofado", str(bem.id), "000000094"):
+            with self.subTest(termo=termo):
+                response = self.client.get(url, {
+                    "unidade_administrativa_origem": self.ua_origem.id,
+                    "q": termo,
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(bem.id, [item["id"] for item in response.data["itens"]])
+                self.assertNotIn(
+                    self.bem_oculto.id, [item["id"] for item in response.data["itens"]]
+                )
 
     def test_busca_intervalo_exibe_somente_existentes_e_rejeita_inversao(self):
         primeiro = self._criar_bem(
