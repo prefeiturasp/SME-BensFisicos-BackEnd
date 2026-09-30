@@ -738,8 +738,14 @@ class BaixaFisicaUnicidadeSolicitanteModelTestCase(TestCase):
         self.assertNotIn(str(aberta.pk), msg)
 
     def test_enviar_atualiza_solicitante(self):
+        from datetime import timedelta
+
         baixa = self._baixa(status=AGUARDANDO_ENVIO)
+        antiga = timezone.now() - timedelta(days=5)
+        BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk).update(data_criacao=antiga)
+        baixa.refresh_from_db()
         baixa.enviar_solicitacao(solicitante=self.gestor)
         baixa.refresh_from_db()
         self.assertEqual(baixa.status, SOLICITADA)
         self.assertEqual(baixa.criado_por_id, self.gestor.pk)
+        self.assertGreater(baixa.data_criacao, antiga)

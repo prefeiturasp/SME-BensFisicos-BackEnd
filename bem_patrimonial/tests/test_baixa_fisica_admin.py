@@ -1046,11 +1046,15 @@ class TestBaixaFisicaUnicidadeSolicitanteAdmin(TestCase):
         self.assertIn(f"/admin/bem_patrimonial/baixafisicabempatrimonial/{b2.pk}/change/", erros)
 
     def test_acao_enviar_atualiza_solicitante_e_preserva_historico(self):
+        from datetime import timedelta
+
         baixa = _criar_baixa_cov(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
         BaixaFisicaBensItem.objects.create(
             baixa=baixa,
             bem=_criar_bem_cov(self.ua, self.operador, status=constants.APROVADO),
         )
+        antiga = timezone.now() - timedelta(days=5)
+        BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk).update(data_criacao=antiga)
         hist_antes = list(self._historicos(baixa))
         req = self._req_messages(self.factory.post("/"))
         req.user = self.gestor
@@ -1058,6 +1062,7 @@ class TestBaixaFisicaUnicidadeSolicitanteAdmin(TestCase):
         baixa.refresh_from_db()
         self.assertEqual(baixa.status, constants.SOLICITADA)
         self.assertEqual(baixa.criado_por_id, self.gestor.pk)
+        self.assertGreater(baixa.data_criacao, antiga)
         hist_depois = list(self._historicos(baixa))
         self.assertGreater(len(hist_depois), len(hist_antes))
         for h in hist_antes:

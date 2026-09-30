@@ -2365,11 +2365,17 @@ class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
             self.action_url(baixa.id, "solicitar-correcao"), {"motivo": "ajuste"}, format="json"
         )
         self.assertEqual(rc.status_code, status.HTTP_200_OK)
+        from datetime import timedelta
+
+        antiga = timezone.now() - timedelta(days=5)
+        BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk).update(data_criacao=antiga)
         self._auth(operador_b)
         r2 = self.client.post(self.action_url(baixa.id, "enviar-solicitacao"))
         self.assertEqual(r2.status_code, status.HTTP_200_OK)
         baixa.refresh_from_db()
         self.assertEqual(baixa.criado_por_id, operador_b.id)
+        self.assertGreater(baixa.data_criacao, antiga)
+        self.assertEqual(r2.data["criado_por"]["id"], operador_b.id)
         hist_depois = list(self._historicos(baixa))
         self.assertGreater(len(hist_depois), len(hist_antes))
         for h in hist_antes:
