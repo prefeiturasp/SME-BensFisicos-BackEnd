@@ -1025,17 +1025,50 @@ class BaixaFisicaBemPatrimonial(models.Model):
             raise ValidationError("Não é possível manter uma Baixa Física sem itens.")
         self._clean_valida_itens_baixa(itens)
 
+    @classmethod
+    def buscar_abertas_por_unidade(cls, unidade_id, ignorar_pk=None):
+        """Baixas em aberto (Em elaboração ou Solicitada) da UA."""
+        if not unidade_id:
+            return []
+        qs = cls.objects.filter(
+            unidade_administrativa_origem_id=unidade_id,
+            status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA],
+        )
+        if ignorar_pk:
+            qs = qs.exclude(pk=ignorar_pk)
+        return list(qs.order_by("id"))
+
+    @classmethod
+    def mensagem_baixas_abertas(cls, existentes):
+        if len(existentes) == 1:
+            return (
+                "Já existe baixa em aberto para esta unidade. "
+                "Conclua ou recuse a baixa existente antes de criar uma nova."
+            )
+        return (
+            f"Já existem {len(existentes)} baixas em aberto para esta unidade. "
+            "Conclua ou recuse as baixas existentes antes de criar uma nova."
+        )
+
     @transaction.atomic
-    def enviar_solicitacao(self):
+    def enviar_solicitacao(self, solicitante=None):
         """
-        Confirma a baixa (coloca como SOLICITADA) e
+        Confirma a baixa (coloca como SOLICITADA),
+        atualiza o solicitante para o usuário logado quando informado,
+        carimba a data da solicitação com o momento do envio e
         marca os bens como 'Baixa Física - Aguardando aprovação'.
         """
         if not self.itens.exists():
             raise ValidationError("Não é possível enviar Baixa Física sem itens.")
 
+        update_fields = ["status", "data_criacao"]
+        if solicitante is not None and getattr(solicitante, "pk", None):
+            if self.criado_por_id != solicitante.pk:
+                self.criado_por = solicitante
+                update_fields.append("criado_por")
         self.status = constants.SOLICITADA
-        self.save(update_fields=["status"])
+        self.data_criacao = timezone.now()
+        self.save(update_fields=update_fields)
 
         for item in self.itens.select_related("bem"):
             bem = item.bem
