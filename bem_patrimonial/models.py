@@ -1054,18 +1054,20 @@ class BaixaFisicaBemPatrimonial(models.Model):
     def enviar_solicitacao(self, solicitante=None):
         """
         Confirma a baixa (coloca como SOLICITADA),
-        atualiza o solicitante para o usuário logado quando informado e
+        atualiza o solicitante para o usuário logado quando informado,
+        carimba a data da solicitação com o momento do envio e
         marca os bens como 'Baixa Física - Aguardando aprovação'.
         """
         if not self.itens.exists():
             raise ValidationError("Não é possível enviar Baixa Física sem itens.")
 
-        update_fields = ["status"]
+        update_fields = ["status", "data_criacao"]
         if solicitante is not None and getattr(solicitante, "pk", None):
             if self.criado_por_id != solicitante.pk:
                 self.criado_por = solicitante
                 update_fields.append("criado_por")
         self.status = constants.SOLICITADA
+        self.data_criacao = timezone.now()
         self.save(update_fields=update_fields)
 
         for item in self.itens.select_related("bem"):
