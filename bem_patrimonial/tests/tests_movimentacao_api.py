@@ -906,7 +906,7 @@ class MovimentacaoApiTestCase(TestCase):
             with self.subTest(termo=termo):
                 response = self.client.get(url, {
                     "unidade_administrativa_origem": self.ua_origem.id,
-                    "q": termo,
+                    "termo_busca": termo,
                 })
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(bem.id, [item["id"] for item in response.data["itens"]])

@@ -256,14 +256,20 @@ class BuscaBensMovimentacaoSerializer(serializers.Serializer):
     numero_patrimonial_de = serializers.CharField(required=False)
     numero_patrimonial_ate = serializers.CharField(required=False)
     descricao = serializers.CharField(required=False)
-    q = serializers.CharField(required=False)
+    termo_busca = serializers.CharField(required=False)
     pagina = serializers.IntegerField(required=False, min_value=1, default=1)
 
     def validate(self, attrs):
         validar_ua_origem_movimentacao(
             self.context["request"].user, attrs["unidade_administrativa_origem"]
         )
-        modos = ("id", "numero_patrimonial", "numero_patrimonial_de", "descricao", "q")
+        modos = (
+            "id",
+            "numero_patrimonial",
+            "numero_patrimonial_de",
+            "descricao",
+            "termo_busca",
+        )
         if sum(bool(attrs.get(modo)) for modo in modos) != 1:
             raise serializers.ValidationError("Informe apenas um critério de busca.")
         if attrs.get("numero_patrimonial_ate") and not attrs.get("numero_patrimonial_de"):
@@ -291,8 +297,8 @@ def buscar_bens_para_movimentacao(criterios):
     bens = BemPatrimonial.objects.filter(unidade_administrativa=ua)
     if "id" in criterios:
         bens = bens.filter(pk=criterios["id"])
-    elif "q" in criterios:
-        termo = criterios["q"]
+    elif "termo_busca" in criterios:
+        termo = criterios["termo_busca"]
         filtro = (
             Q(nome__icontains=termo)
             | Q(descricao__icontains=termo)

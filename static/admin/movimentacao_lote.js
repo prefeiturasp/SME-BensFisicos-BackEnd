@@ -156,7 +156,7 @@
     if (mode === 'geral') {
       const term = controls.termo.value.trim()
       if (!term) throw new Error('Informe um critério de busca.')
-      params.set('q', term)
+      params.set('termo_busca', term)
       return params
     }
     const start = controls.de.value.trim()
