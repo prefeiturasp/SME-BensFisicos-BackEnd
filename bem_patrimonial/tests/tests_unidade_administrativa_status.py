@@ -257,6 +257,38 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(str(self.bem.pk), response.content.decode())
 
+    def test_admin_pesquisa_por_id_bem_sem_numero(self):
+        admin_instance = MovimentacaoBemPatrimonialAdmin(
+            MovimentacaoBemPatrimonial, AdminSite()
+        )
+        request = self.factory.get(
+            "/admin/bem_patrimonial/movimentacaobempatrimonial/pesquisar-bens/",
+            {"unidade_administrativa_origem": self.ua_ativa_1.pk, "id": self.bem.pk},
+        )
+        request.user = self.gestor
+
+        response = admin_instance.pesquisar_bens(request)
+        item = json.loads(response.content)["itens"][0]
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(item["id"], self.bem.pk)
+        self.assertIsNone(item["numero_patrimonial"])
+
+    def test_admin_salva_ids_selecionados_e_revalida_eligibilidade(self):
+        dados = {
+            "unidade_administrativa_origem": self.ua_ativa_1.pk,
+            "unidade_administrativa_destino": self.ua_ativa_2.pk,
+            "itens_lote": json.dumps({"itens": [self.bem.pk]}),
+        }
+        form = self._create_form_with_request(self.operador_1, dados)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["bens_lote_resolvidos"], [self.bem])
+
+        self.bem.bloqueado_conciliacao = True
+        self.bem.save(update_fields=["bloqueado_conciliacao"])
+        form = self._create_form_with_request(self.operador_1, dados)
+        self.assertFalse(form.is_valid())
+        self.assertIn("inventário", form.errors["itens_lote"][0])
+
 
 class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
 

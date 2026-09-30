@@ -24,6 +24,8 @@
         ...(numero_patrimonial_ate ? { numero_patrimonial_ate } : {}),
       })),
       selecionar_todos: state.selecionar_todos,
+      itens: state.itens.map((item) => item.id),
+      resumo: state.itens,
     })
   }
 
@@ -36,9 +38,17 @@
           : [],
         selecionar_todos: value.selecionar_todos === true,
         todos: [],
+        itens: Array.isArray(value.itens)
+          ? value.itens.map((id) =>
+            (value.resumo || []).find((item) => item.id === id) ||
+            { id, numero_patrimonial: null, descricao: '', localizacao: '' },
+          )
+          : [],
+        resultados: [],
+        proximaPagina: null,
       }
     } catch {
-      return { faixas: [], selecionar_todos: false, todos: [] }
+      return { faixas: [], selecionar_todos: false, todos: [], itens: [], resultados: [], proximaPagina: null }
     }
   }
 
@@ -142,6 +152,7 @@
           hideOptions(controls.opcoes)
         },
       )
+      option.addEventListener('mousedown', (event) => event.preventDefault())
       itemLista.appendChild(option)
       controls.opcoes.appendChild(itemLista)
     })
@@ -157,6 +168,10 @@
   }
 
   async function adicionarFaixa(state, controls) {
+    if (state.itens.length) {
+      setError(controls.erro, 'Retire os bens selecionados na busca antes de adicionar uma faixa inteira.')
+      return
+    }
     if (!controls.origem.value || !controls.de.value.trim()) {
       setError(controls.erro, 'Informe a Unidade Administrativa de origem e o Número Patrimonial - De.')
       return
@@ -204,6 +219,11 @@
       setError(controls.erro, 'Informe a Unidade Administrativa de origem.')
       return
     }
+    if (state.itens.length) {
+      controls.selecionarTodos.checked = false
+      setError(controls.erro, 'Retire os bens selecionados na busca antes de selecionar todos.')
+      return
+    }
     setError(controls.erro, '')
     try {
       state.todos = await resolver(controls.url, controls.origem, { selecionar_todos: true })
@@ -234,9 +254,106 @@
     state.faixas = []
     state.todos = []
     state.selecionar_todos = false
+    state.itens = []
+    state.resultados = []
     controls.selecionarTodos.checked = false
     persist(controls.hidden, state)
     renderSummary(state, controls)
+    renderSearch(state, controls)
+  }
+
+  function renderSearch(state, controls) {
+    controls.resultados.replaceChildren()
+    controls.resultados.closest('table').hidden = state.resultados.length === 0
+    state.resultados.forEach((bem) => {
+      const row = document.createElement('tr')
+      const cell = document.createElement('td')
+      const checkbox = document.createElement('input')
+      checkbox.type = 'checkbox'
+      checkbox.checked = state.itens.some((item) => item.id === bem.id)
+      checkbox.disabled = !bem.apto
+      checkbox.setAttribute('aria-label', `Selecionar bem ID ${bem.id}`)
+      checkbox.addEventListener('change', () => {
+        state.itens = checkbox.checked
+          ? [...state.itens, bem]
+          : state.itens.filter((item) => item.id !== bem.id)
+        persist(controls.hidden, state)
+        renderSearch(state, controls)
+      })
+      cell.appendChild(checkbox)
+      row.appendChild(cell)
+      ;[bem.id, bem.numero_patrimonial || 'Sem número patrimonial', bem.descricao, bem.localizacao || '-', bem.motivo || 'Apto para movimentação'].forEach((value) => {
+        const td = document.createElement('td')
+        td.textContent = value
+        row.appendChild(td)
+      })
+      controls.resultados.appendChild(row)
+    })
+    controls.selecionados.replaceChildren()
+    controls.selecionados.closest('table').hidden = state.itens.length === 0
+    controls.selecionadosTitulo.hidden = state.itens.length === 0
+    state.itens.forEach((bem) => {
+      const row = document.createElement('tr')
+      ;[bem.id, bem.numero_patrimonial || 'Sem número patrimonial', bem.descricao, bem.localizacao || '-'].forEach((value) => {
+        const td = document.createElement('td')
+        td.textContent = value
+        row.appendChild(td)
+      })
+      const action = document.createElement('td')
+      action.appendChild(createButton('Retirar', `Retirar bem ID ${bem.id}`, () => {
+        state.itens = state.itens.filter((item) => item.id !== bem.id)
+        persist(controls.hidden, state)
+        renderSearch(state, controls)
+      }))
+      row.appendChild(action)
+      controls.selecionados.appendChild(row)
+    })
+    controls.mais.hidden = !state.proximaPagina
+  }
+
+  async function pesquisarBens(state, controls, pagina = 1) {
+    if (!controls.origem.value) {
+      setError(controls.erro, 'Informe a Unidade Administrativa de origem.')
+      return
+    }
+    if (state.faixas.length || state.selecionar_todos) {
+      setError(controls.erro, 'Remova as faixas ou a seleção de todos antes de selecionar bens da busca.')
+      return
+    }
+    const params = new URLSearchParams({ unidade_administrativa_origem: controls.origem.value, pagina })
+    const tipo = controls.tipo.value
+    if (tipo === 'intervalo') {
+      const inicio = controls.buscaDe.value.trim()
+      const fim = controls.buscaAte.value.trim()
+      if (!inicio || (fim && inicio > fim)) {
+        setError(controls.erro, 'Informe um intervalo válido: o Número Patrimonial Até deve ser maior ou igual ao De.')
+        return
+      }
+      params.set('numero_patrimonial_de', inicio)
+      if (fim) params.set('numero_patrimonial_ate', fim)
+    } else {
+      const termo = controls.termo.value.trim()
+      if (!termo || (tipo === 'id' && !/^\d+$/.test(termo))) {
+        setError(controls.erro, 'Informe um critério de busca válido.')
+        return
+      }
+      params.set(tipo, termo)
+    }
+    controls.pesquisar.disabled = true
+    setError(controls.erro, '')
+    try {
+      const response = await fetch(`${controls.pesquisarUrl}?${params}`)
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.detail || 'Não foi possível buscar bens.')
+      state.resultados = pagina === 1 ? body.itens : [...state.resultados, ...body.itens]
+      state.proximaPagina = body.proxima_pagina
+      controls.vazio.textContent = body.count ? `${body.count} bem(ns) encontrado(s).` : 'A busca não retornou resultados.'
+      renderSearch(state, controls)
+    } catch (error) {
+      setError(controls.erro, error instanceof Error ? error.message : 'Não foi possível buscar bens.')
+    } finally {
+      controls.pesquisar.disabled = false
+    }
   }
 
   async function restoreState(state, controls) {
@@ -263,8 +380,8 @@
       root,
       hidden: root.querySelector('input[type="hidden"]'),
       origem: document.getElementById('id_unidade_administrativa_origem'),
-      de: root.querySelector('[id$="-de"]'),
-      ate: root.querySelector('[id$="-ate"]'),
+      de: root.querySelector('.movimentacao-lote__inputs [id$="-de"]'),
+      ate: root.querySelector('.movimentacao-lote__inputs [id$="-ate"]'),
       adicionar: root.querySelector('.movimentacao-lote__adicionar'),
       selecionarTodos: root.querySelector('.movimentacao-lote__selecionar-todos'),
       resumo: root.querySelector('.movimentacao-lote__resumo tbody'),
@@ -272,10 +389,46 @@
       opcoes: root.querySelector('.movimentacao-lote__opcoes'),
       url: root.dataset.resolverUrl,
       buscarUrl: root.dataset.buscarUrl,
+      pesquisarUrl: root.dataset.pesquisarUrl,
+      tipo: root.querySelector('.movimentacao-lote__tipo'),
+      termo: root.querySelector('.movimentacao-lote__termo'),
+      termoLabel: root.querySelector('.movimentacao-lote__termo-label'),
+      buscaDe: root.querySelector('[id$="-busca-de"]'),
+      buscaAte: root.querySelector('[id$="-busca-ate"]'),
+      intervalo: root.querySelector('.movimentacao-lote__intervalo'),
+      faixaTitulo: root.querySelector('.movimentacao-lote__faixa-titulo'),
+      faixaInputs: root.querySelector('.movimentacao-lote__inputs'),
+      pesquisar: root.querySelector('.movimentacao-lote__pesquisar'),
+      resultados: root.querySelector('.movimentacao-lote__resultados tbody'),
+      selecionados: root.querySelector('.movimentacao-lote__selecionados tbody'),
+      selecionadosTitulo: root.querySelector('.movimentacao-lote__selecionados-titulo'),
+      vazio: root.querySelector('.movimentacao-lote__vazio'),
+      mais: root.querySelector('.movimentacao-lote__mais'),
     }
     if (Object.values(controls).some((control) => !control)) return
 
     const state = readState(controls.hidden)
+    controls.tipo.addEventListener('change', () => {
+      controls.intervalo.hidden = controls.tipo.value !== 'intervalo'
+      controls.termo.hidden = controls.tipo.value === 'intervalo'
+      controls.termoLabel.hidden = controls.tipo.value === 'intervalo'
+      controls.faixaTitulo.hidden = controls.tipo.value === 'intervalo'
+      controls.faixaInputs.hidden = controls.tipo.value === 'intervalo'
+      state.resultados = []
+      state.proximaPagina = null
+      controls.vazio.textContent = ''
+      renderSearch(state, controls)
+    })
+    ;[controls.termo, controls.buscaDe, controls.buscaAte].forEach((input) => {
+      input.addEventListener('input', () => {
+        state.resultados = []
+        state.proximaPagina = null
+        controls.vazio.textContent = ''
+        renderSearch(state, controls)
+      })
+    })
+    controls.pesquisar.addEventListener('click', () => void pesquisarBens(state, controls))
+    controls.mais.addEventListener('click', () => void pesquisarBens(state, controls, state.proximaPagina))
     controls.adicionar.addEventListener('click', () => void adicionarFaixa(state, controls))
     controls.selecionarTodos.addEventListener('change', () =>
       void atualizarSelecionarTodos(state, controls),
@@ -283,6 +436,7 @@
     controls.origem.addEventListener('change', () => resetOnOrigemChange(state, controls))
     connectNumberFields(controls)
     renderSummary(state, controls)
+    renderSearch(state, controls)
     void restoreState(state, controls)
   }
 

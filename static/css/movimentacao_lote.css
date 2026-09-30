@@ -5,6 +5,10 @@
   gap: 12px;
 }
 
+.movimentacao-lote__inputs[hidden] {
+  display: none;
+}
+
 .movimentacao-lote__inputs label,
 .movimentacao-lote__todos {
   display: block;
@@ -34,6 +38,7 @@
   border: 0;
   border-bottom: 1px solid #eee;
   background: #fff;
+  color: #1f2937;
   text-align: left;
   cursor: pointer;
 }
@@ -41,6 +46,49 @@
 .movimentacao-lote__opcoes button:hover,
 .movimentacao-lote__opcoes button:focus {
   background: #f0f7f3;
+  color: #1f2937;
+}
+
+.movimentacao-lote__busca {
+  margin-bottom: 20px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #bbb);
+}
+
+.movimentacao-lote__busca label {
+  display: block;
+  margin-top: 8px;
+}
+
+.movimentacao-lote__busca input,
+.movimentacao-lote__busca select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 500px;
+}
+
+.movimentacao-lote__busca button {
+  margin-top: 8px;
+}
+
+.movimentacao-lote__tabelas {
+  overflow-x: auto;
+}
+
+.movimentacao-lote__tabelas table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.movimentacao-lote__tabelas th,
+.movimentacao-lote__tabelas td {
+  padding: 8px;
+  border: 1px solid var(--border-color, #ddd);
+  text-align: left;
+}
+
+.movimentacao-lote__tabelas input[type='checkbox'] {
+  width: auto;
 }
 
 .movimentacao-lote__todos {

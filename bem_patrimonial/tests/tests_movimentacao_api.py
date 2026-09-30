@@ -850,6 +850,135 @@ class MovimentacaoApiTestCase(TestCase):
             quantidade_inicial,
         )
 
+    def test_busca_por_id_encontra_bem_sem_numero_e_respeita_ua(self):
+        bem = self._criar_bem(
+            "", self.ua_origem, criado_por=self.operador_origem, sem_numeracao=True
+        )
+        self._autenticar(self.operador_origem)
+        url = reverse("movimentacoes-buscar-bens")
+
+        response = self.client.get(url, {
+            "unidade_administrativa_origem": self.ua_origem.id, "id": bem.id
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertIsNone(response.data["itens"][0]["numero_patrimonial"])
+        self.assertEqual(response.data["itens"][0]["localizacao"], "Sala 1")
+
+        outra_ua = self.client.get(url, {
+            "unidade_administrativa_origem": self.ua_outra_origem.id, "id": bem.id
+        })
+        self.assertEqual(outra_ua.status_code, 400)
+
+    def test_busca_por_descricao_mostra_aptos_e_impedidos_com_motivo(self):
+        bloqueado = self._criar_bem(
+            "001.000000090-0", self.ua_origem, criado_por=self.operador_origem,
+            bloqueado_conciliacao=True,
+        )
+        apto = self._criar_bem(
+            "001.000000091-0", self.ua_origem, criado_por=self.operador_origem
+        )
+        self._autenticar(self.operador_origem)
+        response = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "descricao": "Bem para teste de API",
+        })
+        encontrados = {item["id"]: item for item in response.data["itens"]}
+        self.assertTrue(encontrados[apto.id]["apto"])
+        self.assertFalse(encontrados[bloqueado.id]["apto"])
+        self.assertIn("inventário", encontrados[bloqueado.id]["motivo"])
+        self.assertNotIn(self.bem_oculto.id, encontrados)
+
+    def test_busca_intervalo_exibe_somente_existentes_e_rejeita_inversao(self):
+        primeiro = self._criar_bem(
+            "001.000000010-0", self.ua_origem, criado_por=self.operador_origem
+        )
+        ultimo = self._criar_bem(
+            "001.000000012-0", self.ua_origem, criado_por=self.operador_origem
+        )
+        self._autenticar(self.operador_origem)
+        url = reverse("movimentacoes-buscar-bens")
+        params = {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "numero_patrimonial_de": primeiro.numero_patrimonial,
+            "numero_patrimonial_ate": ultimo.numero_patrimonial,
+        }
+        response = self.client.get(url, params)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.data["itens"]], [primeiro.id, ultimo.id])
+        self.assertEqual(response.data["count"], 2)
+
+        params["numero_patrimonial_de"], params["numero_patrimonial_ate"] = (
+            params["numero_patrimonial_ate"], params["numero_patrimonial_de"]
+        )
+        self.assertEqual(self.client.get(url, params).status_code, 400)
+
+    def test_busca_paginada_por_descricao_nao_omite_correspondentes(self):
+        BemPatrimonial.objects.bulk_create([
+            BemPatrimonial(
+                numero_patrimonial=f"001.000001{numero:03d}-0",
+                nome=f"Cadeira {numero}", descricao="Cadeira paginada",
+                valor_unitario=100, marca="Teste", modelo="Teste",
+                unidade_administrativa=self.ua_origem, status=constants.APROVADO,
+            )
+            for numero in range(101)
+        ])
+        self._autenticar(self.operador_origem)
+        url = reverse("movimentacoes-buscar-bens")
+        params = {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "descricao": "Cadeira paginada",
+        }
+        primeira = self.client.get(url, params)
+        self.assertEqual(primeira.data["count"], 101)
+        self.assertEqual(len(primeira.data["itens"]), 100)
+        self.assertEqual(primeira.data["proxima_pagina"], 2)
+        segunda = self.client.get(url, {**params, "pagina": 2})
+        self.assertEqual(len(segunda.data["itens"]), 1)
+        self.assertIsNone(segunda.data["proxima_pagina"])
+
+    def test_busca_sem_resultados_retorna_lista_vazia(self):
+        self._autenticar(self.operador_origem)
+        response = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "descricao": "Descrição inexistente nesta UA",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["itens"], [])
+
+    def test_busca_mostra_movimentacao_pendente_como_motivo(self):
+        self._autenticar(self.operador_origem)
+        response = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "id": self.bem_visivel.id,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["itens"][0]["apto"])
+        self.assertIn("movimentação pendente", response.data["itens"][0]["motivo"])
+
+    def test_criacao_por_itens_salva_somente_o_bem_confirmado(self):
+        bem = self._criar_bem(
+            "001.000000095-0", self.ua_origem, criado_por=self.operador_origem
+        )
+        outro = self._criar_bem(
+            "001.000000096-0", self.ua_origem, criado_por=self.operador_origem
+        )
+        self._autenticar(self.operador_origem)
+        with patch("bem_patrimonial.models.envia_email_nova_solicitacao_movimentacao"):
+            response = self.client.post(reverse("movimentacoes-list"), {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "unidade_administrativa_destino": self.ua_destino.id,
+                "itens": [{"bem": bem.id}],
+            }, format="json")
+        self.assertEqual(response.status_code, 201)
+        ids = set(MovimentacaoBensItem.objects.filter(
+            movimentacao_id=response.data["id"]
+        ).values_list("bem_id", flat=True))
+        self.assertEqual(ids, {bem.id})
+        outro.refresh_from_db()
+        self.assertEqual(outro.status, constants.APROVADO)
+
     def test_criacao_aprovacao_historico_e_documento_cimbpm(self):
         self._autenticar(self.operador_origem)
         payload = {
