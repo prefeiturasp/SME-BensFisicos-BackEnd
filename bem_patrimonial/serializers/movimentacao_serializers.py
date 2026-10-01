@@ -123,6 +123,35 @@ def _formatar_numero_patrimonial(indice, largura, digito, formato_atual):
     return numero
 
 
+def _numeros_patrimoniais_da_faixa(dados_de, dados_ate):
+    indice_de, largura, digito_de, formato_atual = dados_de
+    indice_ate, _, digito_ate, _ = dados_ate
+
+    if formato_atual and indice_de == indice_ate:
+        inicio_digito = int(digito_de)
+        fim_digito = int(digito_ate)
+        if fim_digito < inicio_digito:
+            return None
+        quantidade = fim_digito - inicio_digito + 1
+        numeros = [
+            _formatar_numero_patrimonial(
+                indice_de, largura, str(digito), formato_atual
+            )
+            for digito in range(inicio_digito, fim_digito + 1)
+        ]
+        return quantidade, numeros
+
+    if formato_atual and digito_de != digito_ate:
+        return None
+
+    quantidade = indice_ate - indice_de + 1
+    numeros = [
+        _formatar_numero_patrimonial(indice, largura, digito_de, formato_atual)
+        for indice in range(indice_de, indice_ate + 1)
+    ]
+    return quantidade, numeros
+
+
 def _mensagem_bens_nao_movimentaveis(numeros_patrimoniais):
     numeros = ", ".join(numeros_patrimoniais)
     return (
@@ -150,7 +179,7 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
             {"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])}
         )
 
-    indice_de, largura, digito, formato_atual = dados_de
+    indice_de = dados_de[0]
     indice_ate = dados_ate[0]
     if indice_ate < indice_de:
         raise serializers.ValidationError(
@@ -161,39 +190,40 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
                 )
             }
         )
-    if indice_ate - indice_de + 1 > LIMITE_BENS_POR_FAIXA:
+    dados_faixa = _numeros_patrimoniais_da_faixa(dados_de, dados_ate)
+    if not dados_faixa:
+        raise serializers.ValidationError(
+            {"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])}
+        )
+
+    quantidade, numeros_esperados = dados_faixa
+    if quantidade > LIMITE_BENS_POR_FAIXA:
         raise serializers.ValidationError(
             {"faixas": "Cada faixa pode conter no máximo 500 bens."}
         )
 
     bens_da_ua = BemPatrimonial.objects.filter(
         unidade_administrativa=unidade_administrativa,
-        numero_patrimonial__gte=numero_de,
-        numero_patrimonial__lte=numero_ate,
+        numero_patrimonial__in=numeros_esperados,
     )
-    bens_por_indice = {
-        dados[0]: bem
+    bens_por_numero = {
+        bem.numero_patrimonial: bem
         for bem in bens_da_ua.order_by("numero_patrimonial", "id")
-        if (dados := _dados_numero_patrimonial(bem.numero_patrimonial))
     }
     ids_movimentaveis = set(
         queryset_bens_movimentaveis(unidade_administrativa)
-        .filter(id__in=[bem.id for bem in bens_por_indice.values()])
+        .filter(id__in=[bem.id for bem in bens_por_numero.values()])
         .values_list("id", flat=True)
     )
 
     numeros_invalidos = []
     bens = []
-    for indice in range(indice_de, indice_ate + 1):
-        bem = bens_por_indice.get(indice)
+    for numero_esperado in numeros_esperados:
+        bem = bens_por_numero.get(numero_esperado)
         if bem and bem.id in ids_movimentaveis:
             bens.append(bem)
             continue
-        numeros_invalidos.append(
-            bem.numero_patrimonial
-            if bem
-            else _formatar_numero_patrimonial(indice, largura, digito, formato_atual)
-        )
+        numeros_invalidos.append(bem.numero_patrimonial if bem else numero_esperado)
 
     if numeros_invalidos:
         raise serializers.ValidationError(

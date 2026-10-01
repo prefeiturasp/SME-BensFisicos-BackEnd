@@ -28,7 +28,7 @@ class MovimentacaoLoteWidget(Widget):
             '<label><input type="radio" name="{id}-modo" value="todos"> Todos os bens da UA</label></div>'
             '<div class="movimentacao-lote__criterio movimentacao-lote__criterio--geral">'
             '<label for="{id}-termo">Buscar por nome, descrição, ID ou número patrimonial</label>'
-            '<input id="{id}-termo" class="movimentacao-lote__termo" type="search"></div>'
+            '<input id="{id}-termo" class="movimentacao-lote__termo" type="text"></div>'
             '<div class="movimentacao-lote__criterio movimentacao-lote__criterio--faixa" hidden>'
             '<div><label for="{id}-busca-de">Número Patrimonial - De</label>'
             '<input id="{id}-busca-de" type="text" inputmode="numeric" maxlength="15" placeholder="000.000000000-0"></div>'

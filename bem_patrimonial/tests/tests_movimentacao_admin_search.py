@@ -31,6 +31,7 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.assertIn('value="faixa"', html)
         self.assertIn('value="todos"', html)
         self.assertIn('data-pesquisar-url="/pesquisar/"', html)
+        self.assertIn('class="movimentacao-lote__termo" type="text"', html)
         self.assertNotIn('Buscar e selecionar bens', html)
         self.assertNotIn('<fieldset', html)
 

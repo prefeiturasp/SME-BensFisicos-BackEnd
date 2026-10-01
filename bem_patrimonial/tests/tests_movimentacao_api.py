@@ -555,6 +555,37 @@ class MovimentacaoApiTestCase(TestCase):
             [bem.id for bem in bens],
         )
 
+    def test_resolver_itens_lote_preserva_bens_com_digitos_finais_sequenciais(self):
+        bens = [
+            self._criar_bem(
+                f"123.342323423-{digito}",
+                self.ua_origem,
+                criado_por=self.operador_origem,
+            )
+            for digito in (2, 3)
+        ]
+        self._autenticar(self.operador_origem)
+
+        response = self.client.post(
+            reverse("movimentacoes-resolver-itens-lote"),
+            {
+                "unidade_administrativa_origem": self.ua_origem.id,
+                "faixas": [
+                    {
+                        "numero_patrimonial_de": bens[0].numero_patrimonial,
+                        "numero_patrimonial_ate": bens[1].numero_patrimonial,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in response.data["itens"]],
+            [bem.id for bem in bens],
+        )
+
     def test_resolver_itens_lote_aceita_bem_de_formato_antigo_sem_limite_final(self):
         bem = self._criar_bem(
             "01030001",

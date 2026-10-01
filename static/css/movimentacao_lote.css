@@ -36,6 +36,15 @@
   gap: 12px;
 }
 
+.movimentacao-lote__criterio--geral {
+  width: 100%;
+}
+
+.movimentacao-lote__criterio--geral .movimentacao-lote__termo {
+  width: 420px !important;
+  max-width: 100%;
+}
+
 .movimentacao-lote__criterio[hidden],
 .movimentacao-lote__pesquisar[hidden],
 .movimentacao-lote__importar[hidden] {

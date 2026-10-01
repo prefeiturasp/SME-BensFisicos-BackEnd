@@ -23,27 +23,43 @@
     controls.erro.textContent = message || ''
   }
 
+  function getSavedSummary(saved, mode) {
+    if (Array.isArray(saved.resumo)) return saved.resumo
+    return saved.resumos_por_modo?.[mode] || []
+  }
+
+  function getSavedItemIds(saved, summary) {
+    if (Array.isArray(saved.itens)) return new Set(saved.itens)
+    return new Set(summary.map((bem) => bem.id))
+  }
+
+  function restoreSavedState(state, saved) {
+    state.faixasAntigas = Array.isArray(saved.faixas) ? saved.faixas : []
+    if (['geral', 'faixa', 'todos'].includes(saved.modo)) state.modo = saved.modo
+    if (Array.isArray(saved.selecoes)) {
+      state.selecoes = saved.selecoes
+      return
+    }
+
+    const summary = getSavedSummary(saved, state.modo)
+    if (saved.selecionar_todos && summary.length) {
+      state.selecoes = [{ id: 'todos', tipo: 'todos', bens: summary }]
+      return
+    }
+
+    const ids = getSavedItemIds(saved, summary)
+    state.selecoes = summary.filter((bem) => ids.has(bem.id))
+      .map((bem) => ({ id: `bem-${bem.id}`, tipo: 'individual', bens: [bem] }))
+  }
+
   function createInitialState(hidden) {
     const state = {
       modo: 'geral', selecoes: [], resultados: [], proximaPagina: null,
-      total: 0, faixasAntigas: [], versao: 0, busy: false,
+      total: 0, faixasAntigas: [], versao: 0, busy: false, buscaTimer: null,
     }
     try {
       const saved = JSON.parse(hidden.value || '{}')
-      state.faixasAntigas = Array.isArray(saved.faixas) ? saved.faixas : []
-      state.modo = ['geral', 'faixa', 'todos'].includes(saved.modo) ? saved.modo : 'geral'
-      if (Array.isArray(saved.selecoes)) {
-        state.selecoes = saved.selecoes
-        return state
-      }
-      const resumo = Array.isArray(saved.resumo) ? saved.resumo : (saved.resumos_por_modo?.[state.modo] || [])
-      if (saved.selecionar_todos && resumo.length) {
-        state.selecoes = [{ id: 'todos', tipo: 'todos', bens: resumo }]
-      } else {
-        const ids = new Set(Array.isArray(saved.itens) ? saved.itens : resumo.map((bem) => bem.id))
-        state.selecoes = resumo.filter((bem) => ids.has(bem.id))
-          .map((bem) => ({ id: `bem-${bem.id}`, tipo: 'individual', bens: [bem] }))
-      }
+      restoreSavedState(state, saved)
     } catch {
       return state
     }
@@ -123,6 +139,7 @@
     remove.type = 'button'
     remove.className = 'button movimentacao-lote__remover'
     remove.textContent = 'Remover'
+    remove.disabled = selection.tipo === 'todos'
     remove.setAttribute('aria-label', `Remover seleção ${selectionLabel(selection)}`)
     remove.addEventListener('click', () => {
       state.selecoes = state.selecoes.filter((item) => item.id !== selection.id)
@@ -172,6 +189,22 @@
     state.total = 0
     controls.vazio.textContent = ''
     render(state, controls)
+  }
+
+  function cancelScheduledSearch(state) {
+    if (!state.buscaTimer) return
+    globalThis.clearTimeout(state.buscaTimer)
+    state.buscaTimer = null
+  }
+
+  function scheduleGeneralSearch(state, controls) {
+    cancelScheduledSearch(state)
+    resetResults(state, controls)
+    if (!controls.termo.value.trim()) return
+    state.buscaTimer = globalThis.setTimeout(() => {
+      state.buscaTimer = null
+      void pesquisarBens(state, controls)
+    }, 400)
   }
 
   function setModeLayout(state, controls) {
@@ -328,6 +361,7 @@
   }
 
   function changeMode(state, controls, newMode) {
+    cancelScheduledSearch(state)
     const previousMode = state.modo
     const sairDaSelecaoDeTodos = previousMode === 'todos' && newMode !== 'todos'
     state.modo = newMode
@@ -422,18 +456,22 @@
     controls.root.querySelectorAll('input[name$="-modo"]').forEach((radio) => {
       radio.addEventListener('change', () => changeMode(state, controls, radio.value))
     })
-    controls.termo.addEventListener('input', () => resetResults(state, controls))
+    controls.termo.addEventListener('input', () => scheduleGeneralSearch(state, controls))
     ;[controls.de, controls.ate].forEach((input) => {
       input.addEventListener('input', () => {
         input.value = formatarNumeroPatrimonial(input.value)
         resetResults(state, controls)
       })
     })
-    controls.pesquisar.addEventListener('click', () => void pesquisarBens(state, controls))
+    controls.pesquisar.addEventListener('click', () => {
+      cancelScheduledSearch(state)
+      void pesquisarBens(state, controls)
+    })
     controls.importar.addEventListener('click', () => void importarFaixa(state, controls))
     controls.mais.addEventListener('click', () => void pesquisarBens(state, controls, state.proximaPagina))
     controls.selecionarResultados.addEventListener('change', () => toggleVisibleResults(state, controls))
     controls.origem.addEventListener('change', () => {
+      cancelScheduledSearch(state)
       state.versao += 1
       state.selecoes = []
       state.modo = 'geral'
