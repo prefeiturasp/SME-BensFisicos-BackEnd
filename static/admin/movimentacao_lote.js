@@ -492,22 +492,27 @@
     }
   }
 
+  function bindModeRadio(state, controls, radio) {
+    radio.addEventListener('change', () => changeMode(state, controls, radio.value))
+  }
+
+  function bindRangeInput(state, controls, input) {
+    input.addEventListener('focus', () => void loadAutocompleteOptions(state, controls, input))
+    input.addEventListener('input', () => {
+      input.value = formatarNumeroPatrimonial(input.value)
+      resetResults(state, controls)
+      scheduleAutocomplete(state, controls, input)
+    })
+    input.addEventListener('blur', () => {
+      globalThis.setTimeout(hideAutocomplete, 150, controls)
+    })
+  }
+
   function bindEvents(state, controls) {
-    controls.root.querySelectorAll('input[name$="-modo"]').forEach((radio) => {
-      radio.addEventListener('change', () => changeMode(state, controls, radio.value))
-    })
+    controls.root.querySelectorAll('input[name$="-modo"]')
+      .forEach((radio) => bindModeRadio(state, controls, radio))
     controls.termo.addEventListener('input', () => resetResults(state, controls))
-    ;[controls.de, controls.ate].forEach((input) => {
-      input.addEventListener('focus', () => void loadAutocompleteOptions(state, controls, input))
-      input.addEventListener('input', () => {
-        input.value = formatarNumeroPatrimonial(input.value)
-        resetResults(state, controls)
-        scheduleAutocomplete(state, controls, input)
-      })
-      input.addEventListener('blur', () => {
-        globalThis.setTimeout(() => hideAutocomplete(controls), 150)
-      })
-    })
+    ;[controls.de, controls.ate].forEach((input) => bindRangeInput(state, controls, input))
     controls.pesquisar.addEventListener('click', () => void pesquisarBens(state, controls))
     controls.importar.addEventListener('click', () => void importarFaixa(state, controls))
     controls.mais.addEventListener('click', () => void pesquisarBens(state, controls, state.proximaPagina))
