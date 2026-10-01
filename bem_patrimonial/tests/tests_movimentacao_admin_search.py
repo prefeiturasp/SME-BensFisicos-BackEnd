@@ -22,7 +22,14 @@ class MovimentacaoAdminSearchTestCase(TestCase):
 
     def test_widget_de_selecao_exibe_modos_resultados_e_selecionados(self):
         html = MovimentacaoLoteWidget().render(
-            "itens_lote", "", {"id": "id_itens_lote", "data-resolver-url": "/resolver/", "data-pesquisar-url": "/pesquisar/"}
+            "itens_lote",
+            "",
+            {
+                "id": "id_itens_lote",
+                "data-resolver-url": "/resolver/",
+                "data-buscar-url": "/autocomplete/",
+                "data-pesquisar-url": "/pesquisar/",
+            },
         )
         self.assertEqual(html.count("<table"), 2)
         self.assertIn('aria-label="Selecionar todos os resultados"', html)
@@ -31,7 +38,10 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.assertIn('value="faixa"', html)
         self.assertIn('value="todos"', html)
         self.assertIn('data-pesquisar-url="/pesquisar/"', html)
+        self.assertIn('data-buscar-url="/autocomplete/"', html)
         self.assertIn('class="movimentacao-lote__termo" type="text"', html)
+        self.assertIn('class="movimentacao-lote__opcoes" hidden', html)
+        self.assertIn('class="movimentacao-lote__acoes"', html)
         self.assertNotIn('Buscar e selecionar bens', html)
         self.assertNotIn('<fieldset', html)
 

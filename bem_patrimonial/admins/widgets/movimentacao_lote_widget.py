@@ -11,7 +11,7 @@ class MovimentacaoLoteWidget(Widget):
         attrs = self.build_attrs(self.attrs, attrs)
         field_id = attrs.get("id", f"id_{name}")
         resolver_url = attrs.pop("data-resolver-url", "")
-        attrs.pop("data-buscar-url", None)
+        buscar_url = attrs.pop("data-buscar-url", "")
         pesquisar_url = attrs.pop("data-pesquisar-url", "")
         value = value or ""
         hidden_input = format_html(
@@ -21,7 +21,7 @@ class MovimentacaoLoteWidget(Widget):
             value,
         )
         return format_html(
-            '<div class="movimentacao-lote" data-resolver-url="{resolver}" data-pesquisar-url="{pesquisar}">'
+            '<div class="movimentacao-lote" data-resolver-url="{resolver}" data-buscar-url="{buscar}" data-pesquisar-url="{pesquisar}">'
             '<div class="movimentacao-lote__modos" role="radiogroup" aria-label="Modo de seleção de bens">'
             '<label><input type="radio" name="{id}-modo" value="geral" checked> Buscar Geral</label>'
             '<label><input type="radio" name="{id}-modo" value="faixa"> Buscar Faixa</label>'
@@ -34,8 +34,10 @@ class MovimentacaoLoteWidget(Widget):
             '<input id="{id}-busca-de" type="text" inputmode="numeric" maxlength="15" placeholder="000.000000000-0"></div>'
             '<div><label for="{id}-busca-ate">Número Patrimonial - Até</label>'
             '<input id="{id}-busca-ate" type="text" inputmode="numeric" maxlength="15" placeholder="000.000000000-0"></div></div>'
+            '<ul class="movimentacao-lote__opcoes" hidden></ul>'
+            '<div class="movimentacao-lote__acoes">'
             '<button type="button" class="button movimentacao-lote__pesquisar">Buscar</button>'
-            '<button type="button" class="button movimentacao-lote__importar" hidden>Importar Faixa</button>'
+            '<button type="button" class="button movimentacao-lote__importar" hidden>Importar Faixa</button></div>'
             '<p class="movimentacao-lote__vazio" aria-live="polite"></p>'
             '<div class="movimentacao-lote__tabelas"><table class="movimentacao-lote__resultados">'
             '<thead><tr><th><input type="checkbox" class="movimentacao-lote__selecionar-resultados" aria-label="Selecionar todos os resultados"></th>'
@@ -47,6 +49,7 @@ class MovimentacaoLoteWidget(Widget):
             '<tbody><tr class="movimentacao-lote__sem-selecao"><td colspan="4">Nenhum bem selecionado.</td></tr></tbody></table></div>'
             '<p class="movimentacao-lote__erro" role="alert"></p>{hidden}</div>',
             resolver=resolver_url,
+            buscar=buscar_url,
             pesquisar=pesquisar_url,
             id=field_id,
             hidden=mark_safe(hidden_input),

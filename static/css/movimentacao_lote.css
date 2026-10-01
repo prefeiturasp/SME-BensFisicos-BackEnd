@@ -47,7 +47,8 @@
 
 .movimentacao-lote__criterio[hidden],
 .movimentacao-lote__pesquisar[hidden],
-.movimentacao-lote__importar[hidden] {
+.movimentacao-lote__importar[hidden],
+.movimentacao-lote__opcoes[hidden] {
   display: none;
 }
 
@@ -63,13 +64,45 @@
   max-width: 500px;
 }
 
-.movimentacao-lote__pesquisar,
-.movimentacao-lote__importar {
+.movimentacao-lote__acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-top: 12px;
 }
 
-.movimentacao-lote__importar {
-  margin-left: 8px;
+.movimentacao-lote__acoes .button {
+  min-height: 34px;
+  padding: 7px 14px;
+  line-height: 1.25;
+}
+
+.movimentacao-lote__opcoes {
+  max-width: 640px;
+  max-height: 240px;
+  margin: 4px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border-color, #bbb);
+  background: var(--body-bg, #fff);
+}
+
+.movimentacao-lote__opcoes button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color, #eee);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.movimentacao-lote__opcoes button:hover,
+.movimentacao-lote__opcoes button:focus {
+  background: var(--selected-bg, #e4f2ea);
 }
 
 .movimentacao-lote__tabelas {

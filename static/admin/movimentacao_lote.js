@@ -55,7 +55,8 @@
   function createInitialState(hidden) {
     const state = {
       modo: 'geral', selecoes: [], resultados: [], proximaPagina: null,
-      total: 0, faixasAntigas: [], versao: 0, busy: false, buscaTimer: null,
+      total: 0, faixasAntigas: [], versao: 0, busy: false,
+      autocompleteTimer: null, autocompleteVersion: 0,
     }
     try {
       const saved = JSON.parse(hidden.value || '{}')
@@ -191,20 +192,57 @@
     render(state, controls)
   }
 
-  function cancelScheduledSearch(state) {
-    if (!state.buscaTimer) return
-    globalThis.clearTimeout(state.buscaTimer)
-    state.buscaTimer = null
+  function hideAutocomplete(controls) {
+    controls.opcoes.hidden = true
   }
 
-  function scheduleGeneralSearch(state, controls) {
-    cancelScheduledSearch(state)
-    resetResults(state, controls)
-    if (!controls.termo.value.trim()) return
-    state.buscaTimer = globalThis.setTimeout(() => {
-      state.buscaTimer = null
-      void pesquisarBens(state, controls)
-    }, 400)
+  function cancelAutocomplete(state, controls) {
+    if (state.autocompleteTimer) globalThis.clearTimeout(state.autocompleteTimer)
+    state.autocompleteTimer = null
+    state.autocompleteVersion += 1
+    if (controls) hideAutocomplete(controls)
+  }
+
+  function createAutocompleteOption(item, input, controls) {
+    const listItem = document.createElement('li')
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = `${item.numero_patrimonial} - ${item.nome}`
+    button.setAttribute('aria-label', `Selecionar ${item.numero_patrimonial}`)
+    button.addEventListener('click', () => {
+      input.value = item.numero_patrimonial
+      hideAutocomplete(controls)
+    })
+    listItem.appendChild(button)
+    return listItem
+  }
+
+  async function loadAutocompleteOptions(state, controls, input) {
+    if (!controls.origem.value || state.modo !== 'faixa') return
+    const version = ++state.autocompleteVersion
+    const params = new URLSearchParams({
+      unidade_administrativa_origem: controls.origem.value,
+      q: input.value.trim(),
+    })
+    try {
+      const response = await fetch(`${controls.buscarUrl}?${params}`)
+      if (!response.ok || version !== state.autocompleteVersion) return
+      const body = await response.json()
+      controls.opcoes.replaceChildren(
+        ...body.itens.map((item) => createAutocompleteOption(item, input, controls)),
+      )
+      controls.opcoes.hidden = body.itens.length === 0
+    } catch {
+      hideAutocomplete(controls)
+    }
+  }
+
+  function scheduleAutocomplete(state, controls, input) {
+    cancelAutocomplete(state)
+    state.autocompleteTimer = globalThis.setTimeout(() => {
+      state.autocompleteTimer = null
+      void loadAutocompleteOptions(state, controls, input)
+    }, 300)
   }
 
   function setModeLayout(state, controls) {
@@ -361,7 +399,7 @@
   }
 
   function changeMode(state, controls, newMode) {
-    cancelScheduledSearch(state)
+    cancelAutocomplete(state, controls)
     const previousMode = state.modo
     const sairDaSelecaoDeTodos = previousMode === 'todos' && newMode !== 'todos'
     state.modo = newMode
@@ -373,7 +411,7 @@
       setModeLayout(state, controls)
       return
     }
-    const confirmed = !state.selecoes.length || window.confirm(
+    const confirmed = !state.selecoes.length || globalThis.confirm(
       'A lista de bens selecionados será substituída por todos os bens aptos da Unidade Administrativa de origem. Deseja continuar?',
     )
     if (!confirmed) {
@@ -438,6 +476,7 @@
       termo: root.querySelector('.movimentacao-lote__termo'),
       de: root.querySelector('[id$="-busca-de"]'),
       ate: root.querySelector('[id$="-busca-ate"]'),
+      opcoes: root.querySelector('.movimentacao-lote__opcoes'),
       pesquisar: root.querySelector('.movimentacao-lote__pesquisar'),
       importar: root.querySelector('.movimentacao-lote__importar'),
       resultados: root.querySelector('.movimentacao-lote__resultados tbody'),
@@ -448,6 +487,7 @@
       erro: root.querySelector('.movimentacao-lote__erro'),
       mais: root.querySelector('.movimentacao-lote__mais'),
       resolverUrl: root.dataset.resolverUrl,
+      buscarUrl: root.dataset.buscarUrl,
       pesquisarUrl: root.dataset.pesquisarUrl,
     }
   }
@@ -456,22 +496,24 @@
     controls.root.querySelectorAll('input[name$="-modo"]').forEach((radio) => {
       radio.addEventListener('change', () => changeMode(state, controls, radio.value))
     })
-    controls.termo.addEventListener('input', () => scheduleGeneralSearch(state, controls))
+    controls.termo.addEventListener('input', () => resetResults(state, controls))
     ;[controls.de, controls.ate].forEach((input) => {
+      input.addEventListener('focus', () => void loadAutocompleteOptions(state, controls, input))
       input.addEventListener('input', () => {
         input.value = formatarNumeroPatrimonial(input.value)
         resetResults(state, controls)
+        scheduleAutocomplete(state, controls, input)
+      })
+      input.addEventListener('blur', () => {
+        globalThis.setTimeout(() => hideAutocomplete(controls), 150)
       })
     })
-    controls.pesquisar.addEventListener('click', () => {
-      cancelScheduledSearch(state)
-      void pesquisarBens(state, controls)
-    })
+    controls.pesquisar.addEventListener('click', () => void pesquisarBens(state, controls))
     controls.importar.addEventListener('click', () => void importarFaixa(state, controls))
     controls.mais.addEventListener('click', () => void pesquisarBens(state, controls, state.proximaPagina))
     controls.selecionarResultados.addEventListener('change', () => toggleVisibleResults(state, controls))
     controls.origem.addEventListener('change', () => {
-      cancelScheduledSearch(state)
+      cancelAutocomplete(state, controls)
       state.versao += 1
       state.selecoes = []
       state.modo = 'geral'
