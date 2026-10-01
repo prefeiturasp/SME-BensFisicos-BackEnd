@@ -27,6 +27,7 @@ from bem_patrimonial.pdf_utils import (
     formatar_data,
 )
 from bem_patrimonial.documentos_pdf_utils import (
+    agrupar_bens_documento,
     criar_cabecalho_registro_documento,
     criar_tabela_rodape_responsaveis,
     desenhar_rodape_padrao,
@@ -275,20 +276,26 @@ def _criar_tabela_bens(nbbpm):
 
     valor_total_geral = Decimal("0.00")
 
-    for bem in bens:
-        numero_pat = str(getattr(bem, "numero_patrimonial", None) or "-")
-        descricao = str(getattr(bem, "nome", None) or getattr(bem, "descricao", None) or "-").upper()
-        valor_unitario = getattr(bem, "valor_unitario", None) or Decimal("0.00")
-        valor_total_geral += valor_unitario
+    for grupo in agrupar_bens_documento(bens):
+        bem = grupo[0]
+        numero_de = str(bem.numero_patrimonial or "-")
+        numero_ate = str(grupo[-1].numero_patrimonial) if len(grupo) > 1 else ""
+        descricao = str(bem.nome or bem.descricao or "-").upper()
+        valor_unitario = bem.valor_unitario or Decimal("0.00")
+        valor_total_grupo = sum(
+            (item.valor_unitario or Decimal("0.00") for item in grupo),
+            Decimal("0.00"),
+        )
+        valor_total_geral += valor_total_grupo
 
         data.append(
             [
-                Paragraph(numero_pat, cell_center),
-                Paragraph(numero_pat, cell_center),
+                Paragraph(numero_de, cell_center),
+                Paragraph(numero_ate, cell_center),
                 Paragraph(descricao, cell_left),
-                Paragraph("1", cell_center),
+                Paragraph(str(len(grupo)), cell_center),
                 Paragraph(formatar_moeda_brasileira(valor_unitario), cell_center),
-                Paragraph(formatar_moeda_brasileira(valor_unitario), cell_center),
+                Paragraph(formatar_moeda_brasileira(valor_total_grupo), cell_center),
             ]
         )
 

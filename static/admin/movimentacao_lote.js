@@ -1,13 +1,6 @@
 (function () {
   function getCsrfToken() {
-    return document.cookie
-      .split('; ')
-      .find((cookie) => cookie.startsWith('csrftoken='))
-      ?.split('=')[1]
-  }
-
-  function setError(erro, message) {
-    erro.textContent = message || ''
+    return document.cookie.split('; ').find((cookie) => cookie.startsWith('csrftoken='))?.split('=')[1]
   }
 
   function formatarNumeroPatrimonial(value) {
@@ -17,278 +10,546 @@
     return `${digits.slice(0, 3)}.${digits.slice(3, 12)}-${digits.slice(12)}`
   }
 
-  function persist(hidden, state) {
-    hidden.value = JSON.stringify({
-      faixas: state.faixas.map(({ numero_patrimonial_de, numero_patrimonial_ate }) => ({
-        numero_patrimonial_de,
-        ...(numero_patrimonial_ate ? { numero_patrimonial_ate } : {}),
-      })),
-      selecionar_todos: state.selecionar_todos,
-    })
+  function selectionIds(selections) {
+    return new Set(selections.flatMap((selection) => selection.bens.map((bem) => bem.id)))
   }
 
-  function readState(hidden) {
-    try {
-      const value = JSON.parse(hidden.value || '{}')
-      return {
-        faixas: Array.isArray(value.faixas)
-          ? value.faixas.map((faixa) => ({ ...faixa, itens: [] }))
-          : [],
-        selecionar_todos: value.selecionar_todos === true,
-        todos: [],
-      }
-    } catch {
-      return { faixas: [], selecionar_todos: false, todos: [] }
-    }
+  function blockedIds(selections) {
+    return new Set(selections.filter((selection) => selection.tipo !== 'individual')
+      .flatMap((selection) => selection.bens.map((bem) => bem.id)))
   }
 
-  function getRows(state) {
-    if (state.selecionar_todos) {
-      return [{ titulo: 'Todos os Bens aprovados da UA de origem', itens: state.todos, all: true }]
-    }
-    return state.faixas.map((faixa) => ({
-      titulo: faixa.numero_patrimonial_ate
-        ? `${faixa.numero_patrimonial_de} até ${faixa.numero_patrimonial_ate}`
-        : faixa.numero_patrimonial_de,
-      itens: faixa.itens,
-      faixa,
-    }))
+  function setError(controls, message) {
+    controls.erro.textContent = message || ''
   }
 
-  function createButton(text, label, onClick) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'button'
-    button.textContent = text
-    button.setAttribute('aria-label', label)
-    button.addEventListener('click', onClick)
-    return button
+  function getSavedSummary(saved, mode) {
+    if (Array.isArray(saved.resumo)) return saved.resumo
+    return saved.resumos_por_modo?.[mode] || []
   }
 
-  function removeRow(state, row, selecionarTodos) {
-    if (row.all) {
-      state.selecionar_todos = false
-      state.todos = []
-      selecionarTodos.checked = false
+  function getSavedItemIds(saved, summary) {
+    if (Array.isArray(saved.itens)) return new Set(saved.itens)
+    return new Set(summary.map((bem) => bem.id))
+  }
+
+  function restoreSavedState(state, saved) {
+    state.faixasAntigas = Array.isArray(saved.faixas) ? saved.faixas : []
+    if (['geral', 'faixa', 'todos'].includes(saved.modo)) state.modo = saved.modo
+    if (Array.isArray(saved.selecoes)) {
+      state.selecoes = saved.selecoes
       return
     }
-    state.faixas = state.faixas.filter((faixa) => faixa !== row.faixa)
+
+    const summary = getSavedSummary(saved, state.modo)
+    if (saved.selecionar_todos && summary.length) {
+      state.selecoes = [{ id: 'todos', tipo: 'todos', bens: summary }]
+      return
+    }
+
+    const ids = getSavedItemIds(saved, summary)
+    state.selecoes = summary.filter((bem) => ids.has(bem.id))
+      .map((bem) => ({ id: `bem-${bem.id}`, tipo: 'individual', bens: [bem] }))
   }
 
-  function createSummaryRow(row, state, controls) {
-    const tr = document.createElement('tr')
-    const remover = createButton('Excluir', `Excluir faixa ${row.titulo}`, () => {
-      removeRow(state, row, controls.selecionarTodos)
-      persist(controls.hidden, state)
-      renderSummary(state, controls)
-    })
-    const nomes = row.itens.map((item) => item.nome).join(', ')
+  function createInitialState(hidden) {
+    const state = {
+      modo: 'geral', selecoes: [], resultados: [], proximaPagina: null,
+      total: 0, faixasAntigas: [], versao: 0, busy: false,
+      autocompleteTimer: null, autocompleteVersion: 0,
+    }
+    try {
+      const saved = JSON.parse(hidden.value || '{}')
+      restoreSavedState(state, saved)
+    } catch {
+      return state
+    }
+    return state
+  }
 
-    ;[row.titulo, nomes].forEach((text) => {
-      const td = document.createElement('td')
-      td.textContent = text
-      tr.appendChild(td)
+  function persist(state, controls) {
+    const allGoods = state.selecoes.flatMap((selection) => selection.bens)
+    const bens = [...selectionIds(state.selecoes)].map((id) => allGoods.find((bem) => bem.id === id))
+    const selecionarTodos = state.selecoes.length === 1 && state.selecoes[0].tipo === 'todos'
+    controls.hidden.value = JSON.stringify({
+      modo: state.modo,
+      selecionar_todos: selecionarTodos,
+      itens: selecionarTodos ? [] : bens.map((bem) => bem.id),
+      resumo: bens,
+      selecoes: state.selecoes,
     })
+  }
+
+  function appendCells(row, values) {
+    values.forEach((value) => {
+      const cell = document.createElement('td')
+      cell.textContent = value
+      row.appendChild(cell)
+    })
+  }
+
+  function toggleIndividual(state, controls, bem, checked) {
+    if (checked) {
+      state.selecoes.push({ id: `bem-${bem.id}`, tipo: 'individual', bens: [bem] })
+    } else {
+      state.selecoes = state.selecoes.filter(
+        (selection) => selection.tipo !== 'individual' || selection.bens[0].id !== bem.id,
+      )
+    }
+    setError(controls, '')
+    persist(state, controls)
+    render(state, controls)
+  }
+
+  function createResultRow(bem, state, controls) {
+    const selected = selectionIds(state.selecoes)
+    const blocked = blockedIds(state.selecoes)
+    const row = document.createElement('tr')
+    const cell = document.createElement('td')
+    const checkbox = document.createElement('input')
+    checkbox.type = 'checkbox'
+    checkbox.checked = selected.has(bem.id)
+    checkbox.disabled = state.modo !== 'geral' || bem.apto === false || blocked.has(bem.id)
+    checkbox.setAttribute('aria-label', `Selecionar bem ID ${bem.id}`)
+    checkbox.addEventListener('change', () => toggleIndividual(state, controls, bem, checkbox.checked))
+    cell.appendChild(checkbox)
+    row.appendChild(cell)
+    appendCells(row, [bem.id, bem.numero_patrimonial || 'Sem número patrimonial', bem.nome || '-',
+      bem.descricao || '-', bem.localizacao || '-', bem.motivo || 'Apto para movimentação'])
+    return row
+  }
+
+  function selectionLabel(selection) {
+    if (selection.tipo === 'todos') return 'Todos os bens aptos da UA de origem'
+    if (selection.tipo === 'faixa') {
+      return selection.numeroAte && selection.numeroAte !== selection.numeroDe
+        ? `${selection.numeroDe} até ${selection.numeroAte}` : selection.numeroDe
+    }
+    const bem = selection.bens[0]
+    return bem.numero_patrimonial || `ID ${bem.id}`
+  }
+
+  function createSelectionRow(selection, state, controls) {
+    const row = document.createElement('tr')
+    const names = selection.tipo === 'todos'
+      ? `${selection.bens.length} bem(ns) selecionado(s)`
+      : selection.bens.map((bem) => bem.nome || '-').join(', ')
+    appendCells(row, [selectionLabel(selection), selection.bens.length, names])
     const action = document.createElement('td')
-    action.appendChild(remover)
-    tr.appendChild(action)
-    return tr
-  }
-
-  function renderSummary(state, controls) {
-    controls.resumo.replaceChildren()
-    getRows(state).forEach((row) => {
-      controls.resumo.appendChild(createSummaryRow(row, state, controls))
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.className = 'button movimentacao-lote__remover'
+    remove.textContent = 'Remover'
+    remove.disabled = selection.tipo === 'todos'
+    remove.setAttribute('aria-label', `Remover seleção ${selectionLabel(selection)}`)
+    remove.addEventListener('click', () => {
+      state.selecoes = state.selecoes.filter((item) => item.id !== selection.id)
+      persist(state, controls)
+      render(state, controls)
     })
-    controls.de.disabled = state.selecionar_todos
-    controls.ate.disabled = state.selecionar_todos
-    controls.adicionar.disabled = state.selecionar_todos
-    controls.selecionarTodos.checked = state.selecionar_todos
-    controls.root.classList.toggle('movimentacao-lote--todos', state.selecionar_todos)
+    action.appendChild(remove)
+    row.appendChild(action)
+    return row
   }
 
-  async function resolver(url, origem, payload) {
-    const response = await fetch(url, {
+  function updateHeaderCheckbox(state, controls) {
+    const selected = selectionIds(state.selecoes)
+    const blocked = blockedIds(state.selecoes)
+    const selectable = state.modo === 'geral'
+      ? state.resultados.filter((bem) => bem.apto !== false && !blocked.has(bem.id)) : []
+    const selectedCount = selectable.filter((bem) => selected.has(bem.id)).length
+    controls.selecionarResultados.disabled = !selectable.length
+    controls.selecionarResultados.checked = selectable.length > 0 && selectedCount === selectable.length
+    controls.selecionarResultados.indeterminate = selectedCount > 0 && selectedCount < selectable.length
+  }
+
+  function render(state, controls) {
+    controls.resultados.replaceChildren(...state.resultados.map((bem) => createResultRow(bem, state, controls)))
+    controls.tituloSelecionados.textContent = `Selecionados (${selectionIds(state.selecoes).size})`
+    if (state.selecoes.length) {
+      controls.selecionados.replaceChildren(
+        ...state.selecoes.map((selection) => createSelectionRow(selection, state, controls)),
+      )
+    } else {
+      const row = document.createElement('tr')
+      const cell = document.createElement('td')
+      cell.colSpan = 4
+      cell.textContent = 'Nenhum bem selecionado.'
+      row.appendChild(cell)
+      controls.selecionados.replaceChildren(row)
+    }
+    controls.mais.hidden = !state.proximaPagina
+    controls.importar.hidden = state.modo !== 'faixa' || state.total === 0
+    updateHeaderCheckbox(state, controls)
+  }
+
+  function resetResults(state, controls) {
+    state.versao += 1
+    state.resultados = []
+    state.proximaPagina = null
+    state.total = 0
+    controls.vazio.textContent = ''
+    render(state, controls)
+  }
+
+  function hideAutocomplete(controls) {
+    controls.opcoes.hidden = true
+  }
+
+  function cancelAutocomplete(state, controls) {
+    if (state.autocompleteTimer) globalThis.clearTimeout(state.autocompleteTimer)
+    state.autocompleteTimer = null
+    state.autocompleteVersion += 1
+    if (controls) hideAutocomplete(controls)
+  }
+
+  function createAutocompleteOption(item, input, controls) {
+    const listItem = document.createElement('li')
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = `${item.numero_patrimonial} - ${item.nome}`
+    button.setAttribute('aria-label', `Selecionar ${item.numero_patrimonial}`)
+    button.addEventListener('click', () => {
+      input.value = item.numero_patrimonial
+      hideAutocomplete(controls)
+    })
+    listItem.appendChild(button)
+    return listItem
+  }
+
+  async function loadAutocompleteOptions(state, controls, input) {
+    if (!controls.origem.value || state.modo !== 'faixa') return
+    const version = ++state.autocompleteVersion
+    const params = new URLSearchParams({
+      unidade_administrativa_origem: controls.origem.value,
+      q: input.value.trim(),
+    })
+    try {
+      const response = await fetch(`${controls.buscarUrl}?${params}`)
+      if (!response.ok || version !== state.autocompleteVersion) return
+      const body = await response.json()
+      controls.opcoes.replaceChildren(
+        ...body.itens.map((item) => createAutocompleteOption(item, input, controls)),
+      )
+      controls.opcoes.hidden = body.itens.length === 0
+    } catch {
+      hideAutocomplete(controls)
+    }
+  }
+
+  function scheduleAutocomplete(state, controls, input) {
+    cancelAutocomplete(state)
+    state.autocompleteTimer = globalThis.setTimeout(() => {
+      state.autocompleteTimer = null
+      void loadAutocompleteOptions(state, controls, input)
+    }, 300)
+  }
+
+  function setModeLayout(state, controls) {
+    controls.geral.hidden = state.modo !== 'geral'
+    controls.faixa.hidden = state.modo !== 'faixa'
+    controls.pesquisar.hidden = state.modo === 'todos'
+    controls.importar.hidden = state.modo !== 'faixa' || state.total === 0
+    controls.vazio.textContent = ''
+    setError(controls, '')
+    persist(state, controls)
+    render(state, controls)
+  }
+
+  function searchParams(state, controls, page) {
+    const params = new URLSearchParams({ unidade_administrativa_origem: controls.origem.value, pagina: page })
+    if (state.modo === 'geral') {
+      const term = controls.termo.value.trim()
+      if (!term) throw new Error('Informe um critério de busca.')
+      params.set('termo_busca', term)
+      return params
+    }
+    const start = controls.de.value.trim()
+    const end = controls.ate.value.trim()
+    if (!start || (end && start > end)) {
+      throw new Error('Informe um intervalo válido: o Número Patrimonial Até deve ser maior ou igual ao De.')
+    }
+    params.set('numero_patrimonial_de', start)
+    if (end) params.set('numero_patrimonial_ate', end)
+    return params
+  }
+
+  function setBusy(state, controls, busy) {
+    state.busy = busy
+    controls.pesquisar.disabled = busy
+    controls.importar.disabled = busy
+    controls.mais.disabled = busy
+    controls.selecionarResultados.disabled = busy
+    controls.root.querySelectorAll('input[name$="-modo"]').forEach((radio) => { radio.disabled = busy })
+  }
+
+  async function pesquisarBens(state, controls, page = 1) {
+    if (!controls.origem.value) {
+      setError(controls, 'Informe a Unidade Administrativa de origem.')
+      return
+    }
+    let params
+    try {
+      params = searchParams(state, controls, page)
+    } catch (error) {
+      setError(controls, error.message)
+      return
+    }
+    const versao = ++state.versao
+    setBusy(state, controls, true)
+    setError(controls, '')
+    try {
+      const response = await fetch(`${controls.pesquisarUrl}?${params}`)
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.detail || 'Não foi possível buscar bens.')
+      if (versao !== state.versao) return
+      state.resultados = page === 1 ? body.itens : [...state.resultados, ...body.itens]
+      state.proximaPagina = body.proxima_pagina
+      state.total = body.count
+      controls.vazio.textContent = body.count ? `${body.count} bem(ns) encontrado(s).` : 'A busca não retornou resultados.'
+      render(state, controls)
+    } catch (error) {
+      if (versao === state.versao) {
+        setError(controls, error instanceof Error ? error.message : 'Não foi possível buscar bens.')
+      }
+    } finally {
+      setBusy(state, controls, false)
+    }
+  }
+
+  async function resolver(controls, payload) {
+    const response = await fetch(controls.resolverUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() || '' },
-      body: JSON.stringify({ unidade_administrativa_origem: origem.value, ...payload }),
+      body: JSON.stringify({ unidade_administrativa_origem: controls.origem.value, ...payload }),
     })
     const body = await response.json()
     if (!response.ok) throw new Error(body.detail || 'Não foi possível incluir os bens.')
     return body.itens
   }
 
-  function hideOptions(opcoes) {
-    opcoes.hidden = true
-  }
-
-  async function carregarOpcoes(controls, input) {
-    if (!controls.origem.value) return
-    const params = new URLSearchParams({
-      unidade_administrativa_origem: controls.origem.value,
-      q: input.value.trim(),
-    })
-    const response = await fetch(`${controls.buscarUrl}?${params.toString()}`)
-    if (!response.ok) return
-    const body = await response.json()
-    controls.opcoes.replaceChildren()
-    body.itens.forEach((item) => {
-      const itemLista = document.createElement('li')
-      const option = createButton(
-        `${item.numero_patrimonial} - ${item.nome}`,
-        `Selecionar ${item.numero_patrimonial}`,
-        () => {
-          input.value = item.numero_patrimonial
-          hideOptions(controls.opcoes)
-        },
-      )
-      itemLista.appendChild(option)
-      controls.opcoes.appendChild(itemLista)
-    })
-    controls.opcoes.hidden = body.itens.length === 0
-  }
-
-  function faixaDuplicada(state, faixa) {
-    return state.faixas.some(
-      (item) =>
-        item.numero_patrimonial_de === faixa.numero_patrimonial_de &&
-        item.numero_patrimonial_ate === faixa.numero_patrimonial_ate,
-    )
-  }
-
-  async function adicionarFaixa(state, controls) {
-    if (!controls.origem.value || !controls.de.value.trim()) {
-      setError(controls.erro, 'Informe a Unidade Administrativa de origem e o Número Patrimonial - De.')
-      return
-    }
-    const faixa = {
-      numero_patrimonial_de: controls.de.value.trim(),
-      numero_patrimonial_ate: controls.ate.value.trim(),
-    }
-    if (faixa.numero_patrimonial_ate && faixa.numero_patrimonial_ate < faixa.numero_patrimonial_de) {
-      setError(controls.erro, 'O Número Patrimonial Até deve ser maior ou igual ao Número Patrimonial De.')
-      return
-    }
-    if (faixaDuplicada(state, faixa)) {
-      setError(controls.erro, 'A faixa informada já foi adicionada à movimentação.')
-      return
-    }
-
-    setError(controls.erro, '')
+  async function importarFaixa(state, controls) {
+    let params
     try {
-      const itens = await resolver(controls.url, controls.origem, { faixas: [faixa] })
-      const ids = new Set(state.faixas.flatMap((item) => item.itens.map((bem) => bem.id)))
-      if (itens.some((item) => ids.has(item.id))) {
-        throw new Error('Os bens informados já foram adicionados à movimentação.')
+      params = searchParams(state, controls, 1)
+    } catch (error) {
+      setError(controls, error.message)
+      return
+    }
+    const numeroDe = params.get('numero_patrimonial_de')
+    const numeroAteInformado = params.get('numero_patrimonial_ate')
+    const numeroAte = numeroAteInformado || numeroDe
+    const faixaRepetida = state.selecoes.some((selection) => selection.tipo === 'faixa'
+      && selection.numeroDe === numeroDe && selection.numeroAte === numeroAte)
+    if (faixaRepetida) {
+      setError(controls, 'A faixa informada já foi adicionada à movimentação.')
+      return
+    }
+    setBusy(state, controls, true)
+    setError(controls, '')
+    try {
+      const itens = await resolver(controls, {
+        faixas: [{
+          numero_patrimonial_de: numeroDe,
+          ...(numeroAteInformado ? { numero_patrimonial_ate: numeroAteInformado } : {}),
+        }],
+      })
+      if (!itens.length) throw new Error('Nenhum bem apto foi encontrado na faixa informada.')
+      const selected = selectionIds(state.selecoes)
+      if (itens.some((bem) => selected.has(bem.id))) {
+        throw new Error('Um ou mais bens da faixa já foram adicionados à movimentação.')
       }
-      state.faixas.push({ ...faixa, itens })
+      state.selecoes.push({ id: `faixa-${numeroDe}-${numeroAte}`, tipo: 'faixa', numeroDe, numeroAte, bens: itens })
       controls.de.value = ''
       controls.ate.value = ''
-      persist(controls.hidden, state)
-      renderSummary(state, controls)
+      resetResults(state, controls)
+      persist(state, controls)
     } catch (error) {
-      setError(controls.erro, error instanceof Error ? error.message : 'Não foi possível incluir os bens.')
+      setError(controls, error instanceof Error ? error.message : 'Não foi possível importar a faixa.')
+    } finally {
+      setBusy(state, controls, false)
     }
   }
 
-  async function atualizarSelecionarTodos(state, controls) {
-    if (!controls.selecionarTodos.checked) {
-      state.selecionar_todos = false
-      state.todos = []
-      persist(controls.hidden, state)
-      renderSummary(state, controls)
-      return
-    }
+  async function selecionarTodos(state, controls) {
     if (!controls.origem.value) {
-      controls.selecionarTodos.checked = false
-      setError(controls.erro, 'Informe a Unidade Administrativa de origem.')
+      setError(controls, 'Informe a Unidade Administrativa de origem.')
       return
     }
-    setError(controls.erro, '')
+    const versao = ++state.versao
+    setBusy(state, controls, true)
+    setError(controls, '')
     try {
-      state.todos = await resolver(controls.url, controls.origem, { selecionar_todos: true })
-      state.faixas = []
-      state.selecionar_todos = true
-      persist(controls.hidden, state)
-      renderSummary(state, controls)
+      const itens = await resolver(controls, { selecionar_todos: true })
+      if (versao !== state.versao) return
+      if (!itens.length) throw new Error('Nenhum bem aprovado foi encontrado na unidade administrativa de origem.')
+      state.selecoes = [{ id: 'todos', tipo: 'todos', bens: itens }]
+      state.resultados = itens
+      state.total = itens.length
+      state.proximaPagina = null
+      persist(state, controls)
+      render(state, controls)
     } catch (error) {
-      controls.selecionarTodos.checked = false
-      setError(controls.erro, error instanceof Error ? error.message : 'Não foi possível incluir os bens.')
+      if (versao === state.versao) {
+        setError(controls, error instanceof Error ? error.message : 'Não foi possível incluir os bens.')
+      }
+    } finally {
+      setBusy(state, controls, false)
     }
   }
 
-  function connectNumberFields(controls) {
-    ;[controls.de, controls.ate].forEach((input) => {
-      input.addEventListener('focus', () => void carregarOpcoes(controls, input))
-      input.addEventListener('input', () => {
-        input.value = formatarNumeroPatrimonial(input.value)
-        void carregarOpcoes(controls, input)
-      })
-      input.addEventListener('blur', () => {
-        globalThis.setTimeout(hideOptions, 150, controls.opcoes)
-      })
-    })
+  function changeMode(state, controls, newMode) {
+    cancelAutocomplete(state, controls)
+    const previousMode = state.modo
+    const sairDaSelecaoDeTodos = previousMode === 'todos' && newMode !== 'todos'
+    state.modo = newMode
+    if (sairDaSelecaoDeTodos) {
+      state.selecoes = []
+    }
+    resetResults(state, controls)
+    if (newMode !== 'todos') {
+      setModeLayout(state, controls)
+      return
+    }
+    const confirmed = !state.selecoes.length || globalThis.confirm(
+      'A lista de bens selecionados será substituída por todos os bens aptos da Unidade Administrativa de origem. Deseja continuar?',
+    )
+    if (!confirmed) {
+      state.modo = previousMode
+      controls.root.querySelector(`input[value="${previousMode}"]`).checked = true
+      setModeLayout(state, controls)
+      return
+    }
+    setModeLayout(state, controls)
+    void selecionarTodos(state, controls)
   }
 
-  function resetOnOrigemChange(state, controls) {
-    state.faixas = []
-    state.todos = []
-    state.selecionar_todos = false
-    controls.selecionarTodos.checked = false
-    persist(controls.hidden, state)
-    renderSummary(state, controls)
+  function toggleVisibleResults(state, controls) {
+    if (state.modo !== 'geral') return
+    const blocked = blockedIds(state.selecoes)
+    const selectable = state.resultados.filter((bem) => bem.apto !== false && !blocked.has(bem.id))
+    const selected = selectionIds(state.selecoes)
+    const remove = selectable.length > 0 && selectable.every((bem) => selected.has(bem.id))
+    const visibleIds = new Set(selectable.map((bem) => bem.id))
+    if (remove) {
+      state.selecoes = state.selecoes.filter(
+        (selection) => selection.tipo !== 'individual' || !visibleIds.has(selection.bens[0].id),
+      )
+    } else {
+      selectable.filter((bem) => !selected.has(bem.id))
+        .forEach((bem) => state.selecoes.push({ id: `bem-${bem.id}`, tipo: 'individual', bens: [bem] }))
+    }
+    persist(state, controls)
+    render(state, controls)
   }
 
-  async function restoreState(state, controls) {
-    if (!controls.origem.value) return
+  async function restoreLegacyRanges(state, controls) {
+    if (!controls.origem.value || !state.faixasAntigas.length) return
+    setBusy(state, controls, true)
     try {
-      if (state.selecionar_todos) {
-        state.todos = await resolver(controls.url, controls.origem, { selecionar_todos: true })
-      } else {
-        const itensPorFaixa = await Promise.all(
-          state.faixas.map((faixa) => resolver(controls.url, controls.origem, { faixas: [faixa] })),
-        )
-        state.faixas.forEach((faixa, index) => {
-          faixa.itens = itensPorFaixa[index]
+      for (const [index, faixa] of state.faixasAntigas.entries()) {
+        const itens = await resolver(controls, { faixas: [faixa] })
+        state.selecoes.push({
+          id: `faixa-restaurada-${index}`, tipo: 'faixa',
+          numeroDe: faixa.numero_patrimonial_de,
+          numeroAte: faixa.numero_patrimonial_ate || faixa.numero_patrimonial_de,
+          bens: itens,
         })
       }
-      renderSummary(state, controls)
+      state.faixasAntigas = []
+      persist(state, controls)
+      render(state, controls)
     } catch (error) {
-      setError(controls.erro, error instanceof Error ? error.message : 'Não foi possível restaurar os bens.')
+      setError(controls, error instanceof Error ? error.message : 'Não foi possível restaurar os bens.')
+    } finally {
+      setBusy(state, controls, false)
     }
   }
 
-  function initialize(root) {
-    const controls = {
+  function getControls(root) {
+    return {
       root,
       hidden: root.querySelector('input[type="hidden"]'),
       origem: document.getElementById('id_unidade_administrativa_origem'),
-      de: root.querySelector('[id$="-de"]'),
-      ate: root.querySelector('[id$="-ate"]'),
-      adicionar: root.querySelector('.movimentacao-lote__adicionar'),
-      selecionarTodos: root.querySelector('.movimentacao-lote__selecionar-todos'),
-      resumo: root.querySelector('.movimentacao-lote__resumo tbody'),
-      erro: root.querySelector('.movimentacao-lote__erro'),
+      geral: root.querySelector('.movimentacao-lote__criterio--geral'),
+      faixa: root.querySelector('.movimentacao-lote__criterio--faixa'),
+      termo: root.querySelector('.movimentacao-lote__termo'),
+      de: root.querySelector('[id$="-busca-de"]'),
+      ate: root.querySelector('[id$="-busca-ate"]'),
       opcoes: root.querySelector('.movimentacao-lote__opcoes'),
-      url: root.dataset.resolverUrl,
+      pesquisar: root.querySelector('.movimentacao-lote__pesquisar'),
+      importar: root.querySelector('.movimentacao-lote__importar'),
+      resultados: root.querySelector('.movimentacao-lote__resultados tbody'),
+      selecionarResultados: root.querySelector('.movimentacao-lote__selecionar-resultados'),
+      selecionados: root.querySelector('.movimentacao-lote__selecionados tbody'),
+      tituloSelecionados: root.querySelector('.movimentacao-lote__selecionados-titulo'),
+      vazio: root.querySelector('.movimentacao-lote__vazio'),
+      erro: root.querySelector('.movimentacao-lote__erro'),
+      mais: root.querySelector('.movimentacao-lote__mais'),
+      resolverUrl: root.dataset.resolverUrl,
       buscarUrl: root.dataset.buscarUrl,
+      pesquisarUrl: root.dataset.pesquisarUrl,
     }
-    if (Object.values(controls).some((control) => !control)) return
-
-    const state = readState(controls.hidden)
-    controls.adicionar.addEventListener('click', () => void adicionarFaixa(state, controls))
-    controls.selecionarTodos.addEventListener('change', () =>
-      void atualizarSelecionarTodos(state, controls),
-    )
-    controls.origem.addEventListener('change', () => resetOnOrigemChange(state, controls))
-    connectNumberFields(controls)
-    renderSummary(state, controls)
-    void restoreState(state, controls)
   }
 
-  function initializeAll() {
+  function bindModeRadio(state, controls, radio) {
+    radio.addEventListener('change', () => changeMode(state, controls, radio.value))
+  }
+
+  function bindRangeInput(state, controls, input) {
+    input.addEventListener('focus', () => void loadAutocompleteOptions(state, controls, input))
+    input.addEventListener('input', () => {
+      input.value = formatarNumeroPatrimonial(input.value)
+      resetResults(state, controls)
+      scheduleAutocomplete(state, controls, input)
+    })
+    input.addEventListener('blur', () => {
+      globalThis.setTimeout(hideAutocomplete, 150, controls)
+    })
+  }
+
+  function bindEvents(state, controls) {
+    controls.root.querySelectorAll('input[name$="-modo"]')
+      .forEach((radio) => bindModeRadio(state, controls, radio))
+    controls.termo.addEventListener('input', () => resetResults(state, controls))
+    ;[controls.de, controls.ate].forEach((input) => bindRangeInput(state, controls, input))
+    controls.pesquisar.addEventListener('click', () => void pesquisarBens(state, controls))
+    controls.importar.addEventListener('click', () => void importarFaixa(state, controls))
+    controls.mais.addEventListener('click', () => void pesquisarBens(state, controls, state.proximaPagina))
+    controls.selecionarResultados.addEventListener('change', () => toggleVisibleResults(state, controls))
+    controls.origem.addEventListener('change', () => {
+      cancelAutocomplete(state, controls)
+      state.versao += 1
+      state.selecoes = []
+      state.modo = 'geral'
+      controls.root.querySelector('input[value="geral"]').checked = true
+      resetResults(state, controls)
+      setModeLayout(state, controls)
+    })
+    controls.root.closest('form')?.addEventListener('submit', (event) => {
+      if (!state.busy) return
+      event.preventDefault()
+      setError(controls, 'Aguarde a busca de bens terminar antes de salvar.')
+    })
+  }
+
+  function initialize(root) {
+    const controls = getControls(root)
+    if (Object.values(controls).some((control) => !control)) return
+    const state = createInitialState(controls.hidden)
+    bindEvents(state, controls)
+    controls.root.querySelector(`input[value="${state.modo}"]`).checked = true
+    setModeLayout(state, controls)
+    if (state.faixasAntigas.length) void restoreLegacyRanges(state, controls)
+  }
+
+  function initializeWidgets() {
     document.querySelectorAll('.movimentacao-lote').forEach(initialize)
   }
 
-  document.addEventListener('DOMContentLoaded', initializeAll)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeWidgets)
+  } else {
+    initializeWidgets()
+  }
 })()

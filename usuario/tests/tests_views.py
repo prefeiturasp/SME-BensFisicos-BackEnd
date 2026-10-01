@@ -15,6 +15,8 @@ from rest_framework.test import APIClient, APITestCase
 from openpyxl import load_workbook
 
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from dados_comuns.models import HistoricoGeral
+from django.contrib.contenttypes.models import ContentType
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 User = get_user_model()
@@ -363,6 +365,41 @@ class UsuarioViewSetTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
         self.assertEqual(resp.data["username"], "user1")
+
+    def test_historico_exibe_autor_comprovado_e_preserva_ausencia(self):
+        self.admin.nome = "Pessoa Administradora"
+        self.admin.rf = "F123456"
+        self.admin.save(update_fields=["nome", "rf"])
+        content_type = ContentType.objects.get_for_model(User)
+        criacao_registrada = HistoricoGeral.objects.create(
+            content_type=content_type,
+            object_id=str(self.user.pk),
+            campo="",
+            justificativa="Usuário criado",
+            alterado_por=self.admin,
+        )
+        HistoricoGeral.objects.create(
+            content_type=content_type,
+            object_id=str(self.user.pk),
+            campo="email",
+            valor_antigo="antigo@test.com",
+            valor_novo=self.user.email,
+        )
+
+        resp = self.client.get(reverse("usuario-historico", args=[self.user.pk]))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data), 2)
+        criacao = next(grupo for grupo in resp.data if grupo["alterado_por"] == self.admin.pk)
+        sem_autor = next(grupo for grupo in resp.data if grupo["alterado_por"] is None)
+        self.assertEqual(criacao["alterado_por_nome"], "Pessoa Administradora")
+        self.assertEqual(criacao["alterado_por_rf"], "F123456")
+        self.assertEqual(criacao["acoes"][0]["valor_novo"], "criado")
+        self.assertIsNotNone(criacao["alterado_em"])
+        self.assertIsNone(sem_autor["alterado_por_nome"])
+        self.assertIsNone(sem_autor["alterado_por_rf"])
+        criacao_registrada.refresh_from_db()
+        self.assertEqual(criacao_registrada.campo, "")
 
     def test_create_user(self):
 

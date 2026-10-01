@@ -3,9 +3,12 @@ from django.urls import reverse
 
 from bem_patrimonial import constants
 from bem_patrimonial.ntbpm import (
+    _criar_tabela_bens,
+    _criar_total_bens,
     _criar_informacoes_complementares,
     _criar_informacoes_gerais,
     _criar_rodape_ntbpm,
+    gerar_pdf_ntbpm,
 )
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -154,6 +157,31 @@ class NTBPMTestCase(TestCase):
         self.assertEqual(partes[0], "001")
         self.assertEqual(len(partes[1]), 7)
         self.assertEqual(len(partes[2]), 4)
+
+    def test_tabela_ntbpm_agrupa_bens_e_mantem_total(self):
+        self.bem.refresh_from_db()
+        segundo = BemPatrimonial.objects.create(
+            numero_patrimonial="001.000000051-1",
+            nome=self.bem.nome,
+            descricao=self.bem.descricao,
+            valor_unitario=self.bem.valor_unitario,
+            marca=self.bem.marca,
+            modelo=self.bem.modelo,
+            numero_processo=self.bem.numero_processo,
+            status=constants.APROVADO,
+            unidade_administrativa=self.bem.unidade_administrativa,
+            criado_por=self.gestor,
+        )
+        TransferenciaBensItem.objects.create(transferencia=self.transferencia, bem=segundo)
+
+        [tabela] = _criar_tabela_bens(self.transferencia)
+        [total] = _criar_total_bens(self.transferencia)
+
+        self.assertEqual(tabela._cellvalues[2][0].text, "001.000000050-0")
+        self.assertEqual(tabela._cellvalues[2][1].text, "001.000000051-1")
+        self.assertEqual(tabela._cellvalues[2][3].text, "2")
+        self.assertEqual(total._cellvalues[0][3].text, "<b>2</b>")
+        self.assertTrue(gerar_pdf_ntbpm(self.transferencia).getvalue().startswith(b"%PDF"))
 
     def test_gestor_pode_baixar_documento_ntbpm(self):
         self.client.login(username="gestor_ntbpm", **auth_kwargs("senha123"))

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import datetime
 
 from django.contrib.auth import get_user_model
@@ -37,6 +36,7 @@ from dados_comuns.api_serializers import (
     UnidadeOrcamentariaListSerializer,
 )
 from dados_comuns.context import audit_as
+from dados_comuns.historico_consulta import consultar_historico
 from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
 from dados_comuns.formats import (
     UnidadeAdministrativaPDFFormat,
@@ -143,48 +143,8 @@ class AuditHistoryExportMixin:
             )
 
     def _build_historico_response(self, instance):
-        historicos = (
-            HistoricoGeral.objects.filter(
-                content_type=self._get_audit_content_type(),
-                object_id=str(instance.pk),
-            )
-            .select_related("alterado_por")
-            .order_by("-alterado_em")
-        )
-
-        agrupado = defaultdict(list)
-        for item in historicos:
-            chave = (item.alterado_em.replace(microsecond=0), item.alterado_por_id)
-            agrupado[chave].append(item)
-
-        resposta = []
-        for (alterado_em, alterado_por_id), itens in agrupado.items():
-            resposta.append(
-                {
-                    "alterado_em": alterado_em,
-                    "alterado_por": alterado_por_id,
-                    "alterado_por_nome": (
-                        itens[0].alterado_por.nome if itens[0].alterado_por else None
-                    ),
-                    "acoes": [
-                        {
-                            "campo": i.campo,
-                            "valor_antigo": i.valor_antigo,
-                            "valor_novo": i.valor_novo,
-                        }
-                        for i in itens
-                    ],
-                }
-            )
-
-        resposta_ordenada = sorted(
-            resposta,
-            key=lambda row: row["alterado_em"],
-            reverse=True,
-        )
-
         serializer = self.historico_grupo_serializer_class(
-            resposta_ordenada,
+            consultar_historico(self.audit_model, instance.pk),
             many=True,
         )
         return Response(serializer.data)

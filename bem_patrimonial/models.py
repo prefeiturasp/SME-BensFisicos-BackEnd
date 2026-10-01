@@ -95,7 +95,7 @@ class BemPatrimonial(BaseModel):
     descricao = models.TextField("Descrição", null=False, blank=False)
     observacao = models.TextField("Observação", null=True, blank=True)  # NOSONAR
     numero_processo = models.CharField(
-        "Número do processo de incorporação",
+        "Número do processo",
         max_length=64,
         null=True,  # NOSONAR
         blank=True,
@@ -1017,22 +1017,58 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
         if not self.pk:
             return
+        if self.status in (constants.ACEITA, constants.RECUSADA):
+            # Itens congelados após a decisão; bens já estão BAIXA_FISICA por desenho.
+            return
         itens = list(self.itens.select_related("bem", "bem__unidade_administrativa"))
         if not itens:
             raise ValidationError("Não é possível manter uma Baixa Física sem itens.")
         self._clean_valida_itens_baixa(itens)
 
+    @classmethod
+    def buscar_abertas_por_unidade(cls, unidade_id, ignorar_pk=None):
+        """Baixas em aberto (Em elaboração ou Solicitada) da UA."""
+        if not unidade_id:
+            return []
+        qs = cls.objects.filter(
+            unidade_administrativa_origem_id=unidade_id,
+            status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA],
+        )
+        if ignorar_pk:
+            qs = qs.exclude(pk=ignorar_pk)
+        return list(qs.order_by("id"))
+
+    @classmethod
+    def mensagem_baixas_abertas(cls, existentes):
+        if len(existentes) == 1:
+            return (
+                "Já existe baixa em aberto para esta unidade. "
+                "Conclua ou recuse a baixa existente antes de criar uma nova."
+            )
+        return (
+            f"Já existem {len(existentes)} baixas em aberto para esta unidade. "
+            "Conclua ou recuse as baixas existentes antes de criar uma nova."
+        )
+
     @transaction.atomic
-    def enviar_solicitacao(self):
+    def enviar_solicitacao(self, solicitante=None):
         """
-        Confirma a baixa (coloca como SOLICITADA) e
+        Confirma a baixa (coloca como SOLICITADA),
+        atualiza o solicitante para o usuário logado quando informado,
+        carimba a data da solicitação com o momento do envio e
         marca os bens como 'Baixa Física - Aguardando aprovação'.
         """
         if not self.itens.exists():
             raise ValidationError("Não é possível enviar Baixa Física sem itens.")
 
+        update_fields = ["status", "data_criacao"]
+        if solicitante is not None and getattr(solicitante, "pk", None):
+            if self.criado_por_id != solicitante.pk:
+                self.criado_por = solicitante
+                update_fields.append("criado_por")
         self.status = constants.SOLICITADA
-        self.save(update_fields=["status"])
+        self.data_criacao = timezone.now()
+        self.save(update_fields=update_fields)
 
         for item in self.itens.select_related("bem"):
             bem = item.bem
@@ -1089,6 +1125,75 @@ class BaixaFisicaBemPatrimonial(models.Model):
             bem.localizacao = texto_localizacao
             bem.numero_processo = processo
             bem.save(update_fields=["status", "numero_processo", "localizacao"])
+
+    @property
+    def possui_nota_gerada(self):
+        """True quando já existe Nota (NBBPM consolidada via M2M ou número legado)."""
+        try:
+            if self.nbbpms_lote.exists():
+                return True
+        except Exception:
+            pass
+        return bool((self.numero_nbbpm or "").strip())
+
+    @property
+    def pode_corrigir_processo(self):
+        """Permite correção pontual só quando Aceita e sem Nota gerada."""
+        return self.status == constants.ACEITA and not self.possui_nota_gerada
+
+    @transaction.atomic
+    def corrigir_numero_processo(self, novo_numero, usuario=None):
+        """
+        Corrige o número do processo da Baixa Física aprovada, sem gerar
+        nova solicitação, propagando para todos os bens vinculados.
+
+        Só permite quando status for Aceita e sem NBBPM vinculada
+        (consolidada ou legado), com mesma regra de formato do aceite.
+        Em transação única atualiza a baixa e todos os itens vinculados
+        (numero_processo e localizacao do bem), sem alterar vínculo ou status.
+        Cada edição válida gera um registro novo e imutável em HistoricoGeral
+        com número anterior, número novo, responsável e data/hora automática.
+        """
+        if self.status != constants.ACEITA:
+            raise ValidationError(
+                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+            )
+        if self.possui_nota_gerada:
+            raise ValidationError(
+                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+            )
+        processo = (novo_numero or "").strip()
+        if not processo:
+            raise ValidationError(
+                {"numero_processo_baixa": "Número do processo é obrigatório."}
+            )
+        if not re.fullmatch(constants.PROCESSO_BAIXA_REGEX, processo):
+            raise ValidationError(
+                {"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE}
+            )
+        numero_antigo = self.numero_processo_baixa or ""
+        if processo == (numero_antigo or "").strip():
+            return
+        self.numero_processo_baixa = processo
+        self.save(update_fields=["numero_processo_baixa"])
+        texto_localizacao = f"Baixa Física - {processo}"
+        for item in self.itens.select_related("bem"):
+            bem = item.bem
+            bem.numero_processo = processo
+            bem.localizacao = texto_localizacao
+            bem.save(update_fields=["numero_processo", "localizacao"])
+        alterado_por = usuario if usuario is not None else get_user()
+        if alterado_por is not None and getattr(alterado_por, "is_anonymous", False):
+            alterado_por = None
+        HistoricoGeral.objects.create(
+            content_type=ContentType.objects.get_for_model(type(self)),
+            object_id=str(self.pk),
+            campo="numero_processo_baixa",
+            valor_antigo=numero_antigo,
+            valor_novo=processo,
+            alterado_por=alterado_por,
+            justificativa=f"Número do processo corrigido de {numero_antigo} para {processo}.",
+        )
 
 
 class BaixaFisicaBensItem(models.Model):

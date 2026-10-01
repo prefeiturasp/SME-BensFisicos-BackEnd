@@ -11,6 +11,7 @@ from bem_patrimonial.models import (
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
 )
+from bem_patrimonial.admins.widgets.movimentacao_lote_widget import MovimentacaoLoteWidget
 from bem_patrimonial.constants import APROVADO
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
@@ -18,6 +19,31 @@ from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
 class MovimentacaoAdminSearchTestCase(TestCase):
+
+    def test_widget_de_selecao_exibe_modos_resultados_e_selecionados(self):
+        html = MovimentacaoLoteWidget().render(
+            "itens_lote",
+            "",
+            {
+                "id": "id_itens_lote",
+                "data-resolver-url": "/resolver/",
+                "data-buscar-url": "/autocomplete/",
+                "data-pesquisar-url": "/pesquisar/",
+            },
+        )
+        self.assertEqual(html.count("<table"), 2)
+        self.assertIn('aria-label="Selecionar todos os resultados"', html)
+        self.assertIn("Selecionados (0)", html)
+        self.assertIn('value="geral"', html)
+        self.assertIn('value="faixa"', html)
+        self.assertIn('value="todos"', html)
+        self.assertIn('data-pesquisar-url="/pesquisar/"', html)
+        self.assertIn('data-buscar-url="/autocomplete/"', html)
+        self.assertIn('class="movimentacao-lote__termo" type="text"', html)
+        self.assertIn('class="movimentacao-lote__opcoes" hidden', html)
+        self.assertIn('class="movimentacao-lote__acoes"', html)
+        self.assertNotIn('Buscar e selecionar bens', html)
+        self.assertNotIn('<fieldset', html)
 
     def setUp(self):
         self.uo_a = criar_uo(codigo="UO-100", nome="UO Alfa", sigla="UOA")

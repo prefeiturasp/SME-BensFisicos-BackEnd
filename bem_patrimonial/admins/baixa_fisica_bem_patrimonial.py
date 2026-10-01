@@ -35,6 +35,33 @@ from dados_comuns.escopo import (
 )
 from dados_comuns.models import UnidadeAdministrativa
 from django.core.validators import RegexValidator
+from django.utils.safestring import mark_safe
+
+
+NUMERO_PROCESSO_OBRIGATORIO = "Número do processo é obrigatório."
+
+
+def _texto_baixas_abertas_com_links(existentes):
+    links = []
+    for b in existentes:
+        try:
+            url = reverse(
+                "admin:bem_patrimonial_baixafisicabempatrimonial_change", args=[b.pk]
+            )
+        except Exception:
+            url = f"/admin/bem_patrimonial/baixafisicabempatrimonial/{b.pk}/change/"
+        links.append(f'<a href="{url}">Baixa #{b.pk}</a>')
+    if len(existentes) == 1:
+        return (
+            "Já existe uma baixa em aberto para esta unidade "
+            f"({links[0]}). Conclua ou recuse a baixa existente "
+            "antes de criar uma nova."
+        )
+    return (
+        f"Já existem {len(existentes)} baixas em aberto para esta unidade "
+        f"({', '.join(links)}). Conclua ou recuse as baixas existentes "
+        "antes de criar uma nova."
+    )
 
 
 class NBBPMGerarAdminForm(forms.Form):
@@ -96,8 +123,88 @@ class AprovarBaixaAdminForm(forms.Form):
     def clean_numero_processo_baixa(self):
         valor = (self.cleaned_data.get("numero_processo_baixa") or "").strip()
         if not valor:
-            raise ValidationError("Número do processo é obrigatório.")
+            raise ValidationError(NUMERO_PROCESSO_OBRIGATORIO)
         return valor
+
+
+class BaixaFisicaBemPatrimonialChangeForm(forms.ModelForm):
+    numero_processo_baixa = forms.CharField(
+        label="Número do processo de Baixa Física",
+        max_length=64,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "vTextField",
+                "placeholder": constants.PROCESSO_BAIXA_EXEMPLO,
+            }
+        ),
+        help_text=f"Editável só quando Aceita e sem Nota gerada. Formato: XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})",
+        validators=[
+            RegexValidator(
+                regex=constants.PROCESSO_BAIXA_REGEX,
+                message=constants.PROCESSO_BAIXA_MESSAGE,
+            )
+        ],
+    )
+
+    class Meta:
+        model = BaixaFisicaBemPatrimonial
+        fields = (
+            "unidade_administrativa_origem",
+            "numero_processo_baixa",
+            "status",
+            "criado_por",
+            "data_baixa",
+            "aprovado_por",
+            "data_aprovacao",
+        )
+
+    def clean_numero_processo_baixa(self):
+        valor = (self.cleaned_data.get("numero_processo_baixa") or "").strip()
+        original = self._baixa_original_para_correcao()
+        if original is not None and valor != (original.numero_processo_baixa or ""):
+            self._validar_correcao_processo(original, valor)
+        return valor
+
+    def clean(self):
+        cleaned = super().clean()
+        instance = getattr(self, "instance", None)
+        # Trava só na inclusão: uma UA com baixa em aberto não pode abrir outra.
+        if instance is not None and not getattr(instance, "pk", None):
+            ua = cleaned.get("unidade_administrativa_origem")
+            if ua is not None:
+                existentes = BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(ua.pk)
+                if existentes:
+                    raise ValidationError(mark_safe(_texto_baixas_abertas_com_links(existentes)))
+        return cleaned
+
+    def _baixa_original_para_correcao(self):
+        instance = getattr(self, "instance", None)
+        if not instance or not instance.pk:
+            return None
+        try:
+            return BaixaFisicaBemPatrimonial.objects.get(pk=instance.pk)
+        except BaixaFisicaBemPatrimonial.DoesNotExist:
+            return None
+
+    def _validar_correcao_processo(self, original, valor):
+        if original.status != constants.ACEITA:
+            raise ValidationError(
+                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+            )
+        if self._tem_nota_vinculada(original):
+            raise ValidationError(
+                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+            )
+        if not valor:
+            raise ValidationError(NUMERO_PROCESSO_OBRIGATORIO)
+
+    @staticmethod
+    def _tem_nota_vinculada(original):
+        try:
+            return original.nbbpms_lote.exists() or bool((original.numero_nbbpm or "").strip())
+        except Exception:
+            return bool((original.numero_nbbpm or "").strip())
 
 
 class BaixaFisicaBensItemInlineForm(forms.ModelForm):
@@ -430,6 +537,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
     inlines = [BaixaFisicaBensItemInline]
     autocomplete_fields = ("unidade_administrativa_origem",)
     change_form_template = "admin/bem_patrimonial/baixa_fisica/change_form.html"
+    form = BaixaFisicaBemPatrimonialChangeForm
 
     class Media:
         js = ("admin/baixa_fisica_autocomplete.js",)
@@ -441,13 +549,40 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             )
         }
 
+    def _baixa_possui_nota(self, obj):
+        try:
+            if obj.nbbpms_lote.exists():
+                return True
+        except Exception:
+            pass
+        return bool((getattr(obj, "numero_nbbpm", "") or "").strip())
+
+    def _pode_editar_processo(self, request, obj):
+        if obj is None:
+            return False
+        user = request.user
+        is_gestor = bool(
+            getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)
+        )
+        if not is_gestor:
+            return False
+        if obj.status != constants.ACEITA:
+            return False
+        if self._baixa_possui_nota(obj):
+            return False
+        return True
+
     def get_readonly_fields(self, request, obj=None):
         # Criação: UA e data_baixa editáveis; processo só no aceite (não no formulário de criação)
-        # Após criação, processo/data/UA ficam readonly
+        # Após criação, processo/data/UA ficam readonly, exceto correção pontual:
+        # numero_processo_baixa editável quando Aceita, sem Nota e usuário gestor.
+        # numero_nbbpm_display espelha a listagem no detalhe (com link para a NBBPM).
         base_audit = ("status", "criado_por", "data_criacao", "aprovado_por", "data_aprovacao")
         if obj is None:
             return base_audit
-        return base_audit + ("unidade_administrativa_origem", "numero_processo_baixa", "data_baixa")
+        if self._pode_editar_processo(request, obj):
+            return base_audit + ("unidade_administrativa_origem", "data_baixa", "numero_nbbpm_display")
+        return base_audit + ("unidade_administrativa_origem", "numero_processo_baixa", "data_baixa", "numero_nbbpm_display")
 
     def get_fieldsets(self, request, obj=None):
         if obj is None:
@@ -469,6 +604,7 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 "aprovado_por",
                 "data_aprovacao",
                 "status",
+                "numero_nbbpm_display",
             )
         else:
             campos = campos_basicos
@@ -480,10 +616,79 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
             ),
         )
 
+    def _motivo_bloqueio_correcao(self, request, original, novo):
+        user = request.user
+        is_gestor = bool(
+            getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)
+        )
+        if not is_gestor:
+            return "Apenas Gestor de Patrimônio pode corrigir o número do processo."
+        if original.status != constants.ACEITA:
+            return "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
+        if self._baixa_possui_nota(original):
+            return "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
+        if not novo:
+            return NUMERO_PROCESSO_OBRIGATORIO
+        import re as _re
+
+        if not _re.fullmatch(constants.PROCESSO_BAIXA_REGEX, novo):
+            return constants.PROCESSO_BAIXA_MESSAGE
+        return None
+
+    def _registrar_e_propagar_correcao(self, request, obj, antigo, novo):
+        self.log_change(
+            request, obj, f"Número do processo corrigido de {antigo} para {novo}."
+        )
+        texto_localizacao = f"Baixa Física - {novo}"
+        for item in obj.itens.select_related("bem"):
+            bem = item.bem
+            bem.numero_processo = novo
+            bem.localizacao = texto_localizacao
+            bem.save(update_fields=["numero_processo", "localizacao"])
+        try:
+            from dados_comuns.models import HistoricoGeral
+            from django.contrib.contenttypes.models import ContentType
+
+            ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+            HistoricoGeral.objects.create(
+                content_type=ct,
+                object_id=str(obj.pk),
+                campo="numero_processo_baixa",
+                valor_antigo=antigo or "",
+                valor_novo=novo or "",
+                alterado_por=request.user,
+                justificativa=f"Número do processo corrigido de {antigo} para {novo}.",
+            )
+        except Exception:
+            pass
+
     def save_model(self, request, obj, form, change):
         if not change or not obj.criado_por_id:
             obj.criado_por = request.user
-        super().save_model(request, obj, form, change)
+            super().save_model(request, obj, form, change)
+            return
+        from django.db import transaction as _transaction
+
+        with _transaction.atomic():
+            try:
+                original = BaixaFisicaBemPatrimonial.objects.get(pk=obj.pk)
+            except BaixaFisicaBemPatrimonial.DoesNotExist:
+                super().save_model(request, obj, form, change)
+                return
+            novo = (obj.numero_processo_baixa or "").strip()
+            antigo = (original.numero_processo_baixa or "")
+            correcao_permitida = False
+            if novo != antigo:
+                motivo = self._motivo_bloqueio_correcao(request, original, novo)
+                if motivo:
+                    self.message_user(request, motivo, level=messages.ERROR)
+                    obj.numero_processo_baixa = antigo
+                else:
+                    obj.numero_processo_baixa = novo
+                    correcao_permitida = True
+            super().save_model(request, obj, form, change)
+            if correcao_permitida:
+                self._registrar_e_propagar_correcao(request, obj, antigo, novo)
 
     def save_related(self, request, form, formsets, change):
         """
@@ -656,12 +861,36 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
 
         solicitadas = 0
         for baixa in baixas_permitidas:
-            baixa.enviar_solicitacao()
+            solicitante_anterior_id = baixa.criado_por_id
+            solicitante_anterior_nome = str(baixa.criado_por) if baixa.criado_por_id else ""
+            baixa.enviar_solicitacao(solicitante=request.user)
             self.log_change(
                 request,
                 baixa,
                 "Baixa Física solicitada para aprovação.",
             )
+            if solicitante_anterior_id and solicitante_anterior_id != baixa.criado_por_id:
+                self.log_change(
+                    request,
+                    baixa,
+                    f"Solicitante atualizado de {solicitante_anterior_nome} para {baixa.criado_por}.",
+                )
+                try:
+                    from dados_comuns.models import HistoricoGeral
+                    from django.contrib.contenttypes.models import ContentType
+
+                    ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+                    HistoricoGeral.objects.create(
+                        content_type=ct,
+                        object_id=str(baixa.pk),
+                        campo="criado_por",
+                        valor_antigo=solicitante_anterior_nome,
+                        valor_novo=str(baixa.criado_por),
+                        alterado_por=request.user,
+                        justificativa="Solicitante atualizado ao enviar solicitação",
+                    )
+                except Exception:
+                    pass
             envia_email_baixa_fisica_solicitada(baixa)
             solicitadas += 1
 
@@ -1080,6 +1309,8 @@ class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
                 responsavel=form.cleaned_data["responsavel"],
                 numero_processo_destinacao_final=form.cleaned_data.get("numero_processo_destinacao_final") or "",
             )
+            for baixa in baixas:
+                self.log_change(request, baixa, f"NBBPM {nbbpm.numero} gerada e vinculada à baixa.")
             self.message_user(request, f"NBBPM {nbbpm.numero} gerada com sucesso com {len(baixas)} baixa(s).", level=messages.SUCCESS)
             return HttpResponseRedirect(reverse("admin:bem_patrimonial_nbbpm_change", args=[nbbpm.pk]))
         except ValidationError as exc:

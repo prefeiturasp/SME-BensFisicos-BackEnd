@@ -1610,3 +1610,775 @@ class NBBPMSerializerTestCase(BaseSetup):
         )
         data = NBBPMSerializer(nbbpm_sem_baixas).data
         self.assertIsNone(data["unidade_administrativa_origem"])
+
+
+# ============================================================================
+# TESTES — CORRIGIR NÚMERO DO PROCESSO (Baixa Aceita, sem Nota)
+# ============================================================================
+
+class BaixaFisicaCorrigirProcessoSerializerTestCase(BaseSetup):
+    def setUp(self):
+        super().setUp()
+        from bem_patrimonial.api_serializers import BaixaFisicaCorrigirProcessoSerializer
+
+        self.Serializer = BaixaFisicaCorrigirProcessoSerializer
+        self.baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+
+    def _req(self, user):
+        req = MagicMock()
+        req.user = user
+        return req
+
+    def test_valido_gestor_aceita_sem_nota(self):
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_formato_invalido(self):
+        s = self.Serializer(
+            data={"numero_processo_baixa": "FORMATO-RUIM"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("numero_processo_baixa", s.errors)
+
+    def test_operador_sem_permissao(self):
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.operador)},
+        )
+        with self.assertRaises(PermissionDenied):
+            s.is_valid(raise_exception=True)
+
+    def test_status_nao_aceita_invalido(self):
+        self.baixa.status = constants.SOLICITADA
+        self.baixa.save()
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertFalse(s.is_valid())
+
+    def test_com_nbbpm_vinculada_invalido(self):
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000001/2026",
+            numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([self.baixa])
+        s = self.Serializer(
+            data={"numero_processo_baixa": "6016.2025/0222222-2"},
+            context={"baixa": self.baixa, "request": self._req(self.gestor)},
+        )
+        self.assertFalse(s.is_valid())
+
+
+class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
+    PROCESSO_ANTIGO = "6016.2025/0117371-7"
+    PROCESSO_NOVO = "6016.2025/0222222-2"
+
+    def _nova_baixa_aceita(self, processo=None):
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=processo or self.PROCESSO_ANTIGO,
+        )
+        baixa.aprovado_por = self.gestor
+        baixa.data_aprovacao = timezone.now()
+        baixa.save(update_fields=["aprovado_por", "data_aprovacao"])
+        return baixa
+
+    def _vincular_bem_baixado(self, baixa, bem):
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        bem.status = constants.BAIXA_FISICA
+        bem.numero_processo = baixa.numero_processo_baixa
+        bem.localizacao = f"Baixa Física - {baixa.numero_processo_baixa}"
+        bem.save(update_fields=["status", "numero_processo", "localizacao"])
+
+    def _criar_baixa_aceita_com_bem(self, processo=None):
+        baixa = self._nova_baixa_aceita(processo)
+        self._vincular_bem_baixado(baixa, self.bem)
+        return baixa
+
+    def _contar_historico(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).count()
+
+    def _criar_baixa_aceita_com_dois_bens(self, processo=None):
+        baixa = self._nova_baixa_aceita(processo)
+        for bem in (self.bem, self.bem2):
+            self._vincular_bem_baixado(baixa, bem)
+        return baixa
+
+    def _post_corrigir(self, baixa, numero=None):
+        return self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": numero or self.PROCESSO_NOVO},
+            format="json",
+        )
+
+    def _obter_historicos(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return list(
+            HistoricoGeral.objects.filter(
+                content_type=ct, object_id=str(baixa.pk)
+            ).order_by("id")
+        )
+
+    def test_corrige_valido_propaga_para_bens(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        nome_antes = self.bem.nome
+        status_bem_antes = self.bem.status
+        total_antes = BaixaFisicaBemPatrimonial.objects.count()
+        historico_antes = self._contar_historico(baixa)
+
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["numero_processo_baixa"], self.PROCESSO_NOVO)
+
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_NOVO)
+        self.assertEqual(baixa.status, constants.ACEITA)
+        self.assertEqual(BaixaFisicaBemPatrimonial.objects.count(), total_antes)
+
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_NOVO)
+        self.assertEqual(self.bem.localizacao, f"Baixa Física - {self.PROCESSO_NOVO}")
+        self.assertEqual(self.bem.status, status_bem_antes)
+        self.assertEqual(self.bem.nome, nome_antes)
+        self.assertTrue(
+            BaixaFisicaBensItem.objects.filter(baixa=baixa, bem=self.bem).exists()
+        )
+        self.assertEqual(self._contar_historico(baixa), historico_antes + 1)
+        historicos = self._obter_historicos(baixa)
+        registro = historicos[-1]
+        self.assertEqual(registro.campo, "numero_processo_baixa")
+        self.assertEqual(registro.valor_antigo, self.PROCESSO_ANTIGO)
+        self.assertEqual(registro.valor_novo, self.PROCESSO_NOVO)
+        self.assertEqual(registro.alterado_por, self.gestor)
+        self.assertIsNotNone(registro.alterado_em)
+
+    def test_segunda_correcao_cria_segundo_registro_sem_alterar_primeiro(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp1 = self._post_corrigir(baixa)
+        self.assertEqual(resp1.status_code, status.HTTP_200_OK)
+        primeiro = self._obter_historicos(baixa)[-1]
+        primeiro_id = primeiro.id
+        valor_primeiro_novo = primeiro.valor_novo
+
+        segundo_numero = "6016.2025/0333333-3"
+        resp2 = self._post_corrigir(baixa, numero=segundo_numero)
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, segundo_numero)
+
+        historicos = self._obter_historicos(baixa)
+        self.assertEqual(len(historicos), 2)
+        primeiro_db = [h for h in historicos if h.id == primeiro_id][0]
+        self.assertEqual(primeiro_db.valor_antigo, self.PROCESSO_ANTIGO)
+        self.assertEqual(primeiro_db.valor_novo, valor_primeiro_novo)
+        segundo = historicos[-1]
+        self.assertEqual(segundo.campo, "numero_processo_baixa")
+        self.assertEqual(segundo.valor_antigo, self.PROCESSO_NOVO)
+        self.assertEqual(segundo.valor_novo, segundo_numero)
+        self.assertEqual(segundo.alterado_por, self.gestor)
+        self.assertIsNotNone(segundo.alterado_em)
+
+    def test_historico_endpoint_exibe_correcao_com_usuario_e_data(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        hist = self.client.get(self.action_url(baixa.id, "historico"))
+        self.assertEqual(hist.status_code, status.HTTP_200_OK)
+        self.assertTrue(hist.data)
+        correcao = [r for r in hist.data if r["campo"] == "numero_processo_baixa"]
+        self.assertTrue(correcao)
+        registro = correcao[0]
+        self.assertEqual(registro["valor_antigo"], self.PROCESSO_ANTIGO)
+        self.assertEqual(registro["valor_novo"], self.PROCESSO_NOVO)
+        self.assertEqual(registro["alterado_por"], self.gestor.username)
+        self.assertIsNotNone(registro["data_alteracao"])
+
+    def test_corrige_valido_com_dois_bens_e_preserva_outra_baixa(self):
+        baixa = self._criar_baixa_aceita_com_dois_bens()
+        outra = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0999999-9",
+        )
+        bem_outra = criar_bem(
+            self.ua, self.operador, numero_patrimonial="000.000000009-0",
+            status=constants.BAIXA_FISICA, numero_processo="6016.2025/0999999-9",
+            localizacao="Baixa Física - 6016.2025/0999999-9",
+        )
+        BaixaFisicaBensItem.objects.create(baixa=outra, bem=bem_outra)
+        nome1, nome2 = self.bem.nome, self.bem2.nome
+
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
+        bem_outra.refresh_from_db()
+        outra.refresh_from_db()
+        for bem in (self.bem, self.bem2):
+            self.assertEqual(bem.numero_processo, self.PROCESSO_NOVO)
+            self.assertEqual(bem.localizacao, f"Baixa Física - {self.PROCESSO_NOVO}")
+            self.assertEqual(bem.status, constants.BAIXA_FISICA)
+        self.assertEqual(self.bem.nome, nome1)
+        self.assertEqual(self.bem2.nome, nome2)
+        self.assertEqual(baixa.itens.count(), 2)
+        self.assertEqual(bem_outra.numero_processo, "6016.2025/0999999-9")
+        self.assertEqual(outra.numero_processo_baixa, "6016.2025/0999999-9")
+
+    def test_detalhe_e_lista_exibem_numero_atualizado(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        detalhe = self.client.get(self.detail_url(baixa.id))
+        self.assertEqual(detalhe.status_code, status.HTTP_200_OK)
+        self.assertEqual(detalhe.data["numero_processo_baixa"], self.PROCESSO_NOVO)
+        lista = self.client.get(self.list_url)
+        self.assertEqual(lista.status_code, status.HTTP_200_OK)
+        resultados = lista.data.get("results", lista.data)
+        item = next(b for b in resultados if b["id"] == baixa.id)
+        self.assertEqual(item["numero_processo_baixa"], self.PROCESSO_NOVO)
+
+    def test_falha_em_um_bem_reverte_tudo(self):
+        baixa = self._criar_baixa_aceita_com_dois_bens()
+        self._auth(self.gestor)
+        original_save = BemPatrimonial.save
+
+        def _side(inst_self, *args, **kwargs):
+            if inst_self.pk == self.bem2.pk:
+                raise RuntimeError("falha simulada no bem")
+            return original_save(inst_self, *args, **kwargs)
+
+        with patch.object(BemPatrimonial, "save", autospec=True) as mock_save:
+            mock_save.side_effect = _side
+            with self.assertRaises(RuntimeError):
+                self._post_corrigir(baixa)
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem2.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.localizacao, f"Baixa Física - {self.PROCESSO_ANTIGO}")
+
+    def test_formato_invalido_retorna_400_sem_alterar(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.gestor)
+        resp = self.client.post(
+            self.action_url(baixa.id, "corrigir-processo"),
+            {"numero_processo_baixa": "NUMERO-RUIM"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
+
+    def test_apos_nbbpm_vinculada_retorna_400(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000002/2026",
+            numero_processo_baixa=self.PROCESSO_ANTIGO,
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
+        nbbpm.baixas.set([baixa])
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
+
+    def test_apos_numero_legado_retorna_400(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        baixa.numero_nbbpm = "001.0000003/2026"
+        baixa.save(update_fields=["numero_nbbpm"])
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
+
+    def test_status_nao_aceita_retorna_400(self):
+        baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        processo_antes = self.bem.numero_processo
+        self._auth(self.gestor)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.numero_processo, processo_antes)
+        self.assertEqual(self._contar_historico(baixa), 0)
+
+    def test_operador_nao_pode_corrigir_403(self):
+        baixa = self._criar_baixa_aceita_com_bem()
+        self._auth(self.operador)
+        resp = self._post_corrigir(baixa)
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, self.PROCESSO_ANTIGO)
+        self.assertEqual(self.bem.numero_processo, self.PROCESSO_ANTIGO)
+        self.assertEqual(self._contar_historico(baixa), 0)
+
+    def test_falha_em_um_bem_reverte_tudo_sem_historico(self):
+        baixa = self._criar_baixa_aceita_com_dois_bens()
+        historico_antes = self._contar_historico(baixa)
+        self._auth(self.gestor)
+        original_save = BemPatrimonial.save
+
+        def _side(inst_self, *args, **kwargs):
+            if inst_self.pk == self.bem2.pk:
+                raise RuntimeError("falha simulada no bem")
+            return original_save(inst_self, *args, **kwargs)
+
+        with patch.object(BemPatrimonial, "save", autospec=True) as mock_save:
+            mock_save.side_effect = _side
+            with self.assertRaises(RuntimeError):
+                self._post_corrigir(baixa)
+        self.assertEqual(self._contar_historico(baixa), historico_antes)
+
+
+class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
+    def _baixa_aceita_com_bens_baixados(self):
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        for bem in (self.bem, self.bem2):
+            BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+            bem.numero_processo = "6016.2025/0117371-7"
+            bem.localizacao = "Baixa Física - 6016.2025/0117371-7"
+            bem.status = constants.BAIXA_FISICA
+            bem.save(update_fields=["numero_processo", "localizacao", "status"])
+        return baixa
+
+    def _contar_historico(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk))
+
+    def test_corrigir_valido_propaga_para_bens(self):
+        from django.core.exceptions import ValidationError
+
+        baixa = self._baixa_aceita_com_bens_baixados()
+        nome_antes = self.bem.nome
+
+        baixa.corrigir_numero_processo("6016.2025/0333333-3", usuario=self.gestor)
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0333333-3")
+        self.assertEqual(baixa.status, constants.ACEITA)
+        for bem in (self.bem, self.bem2):
+            self.assertEqual(bem.numero_processo, "6016.2025/0333333-3")
+            self.assertEqual(bem.localizacao, "Baixa Física - 6016.2025/0333333-3")
+            self.assertEqual(bem.status, constants.BAIXA_FISICA)
+        self.assertEqual(self.bem.nome, nome_antes)
+        self.assertEqual(baixa.itens.count(), 2)
+        historicos = list(self._contar_historico(baixa).order_by("id"))
+        self.assertEqual(len(historicos), 1)
+        registro = historicos[0]
+        self.assertEqual(registro.campo, "numero_processo_baixa")
+        self.assertEqual(registro.valor_antigo, "6016.2025/0117371-7")
+        self.assertEqual(registro.valor_novo, "6016.2025/0333333-3")
+        self.assertEqual(registro.alterado_por, self.gestor)
+        self.assertIsNotNone(registro.alterado_em)
+
+    def test_segunda_correcao_gera_novo_registro_imutavel(self):
+        baixa = self._baixa_aceita_com_bens_baixados()
+        baixa.corrigir_numero_processo("6016.2025/0333333-3", usuario=self.gestor)
+        primeiro = list(self._contar_historico(baixa).order_by("id"))[0]
+        baixa.corrigir_numero_processo("6016.2025/0444444-4", usuario=self.gestor)
+        historicos = list(self._contar_historico(baixa).order_by("id"))
+        self.assertEqual(len(historicos), 2)
+        primeiro.refresh_from_db()
+        self.assertEqual(primeiro.valor_antigo, "6016.2025/0117371-7")
+        self.assertEqual(primeiro.valor_novo, "6016.2025/0333333-3")
+        segundo = historicos[1]
+        self.assertEqual(segundo.valor_antigo, "6016.2025/0333333-3")
+        self.assertEqual(segundo.valor_novo, "6016.2025/0444444-4")
+        self.assertEqual(segundo.alterado_por, self.gestor)
+
+    def test_corrigir_falha_em_bem_reverte_tudo(self):
+        baixa = self._baixa_aceita_com_bens_baixados()
+
+        original_save = BemPatrimonial.save
+
+        def _falha(inst_self, *args, **kwargs):
+            if inst_self.pk == self.bem2.pk:
+                raise RuntimeError("falha simulada")
+            return original_save(inst_self, *args, **kwargs)
+
+        with patch.object(BemPatrimonial, "save", autospec=True) as mock_save:
+            mock_save.side_effect = lambda inst_self, *a, **k: _falha(inst_self, *a, **k)
+            with self.assertRaises(RuntimeError):
+                baixa.corrigir_numero_processo("6016.2025/0333333-3")
+        baixa.refresh_from_db()
+        self.bem.refresh_from_db()
+        self.bem2.refresh_from_db()
+        self.assertEqual(baixa.numero_processo_baixa, "6016.2025/0117371-7")
+        self.assertEqual(self.bem.numero_processo, "6016.2025/0117371-7")
+        self.assertEqual(self.bem2.numero_processo, "6016.2025/0117371-7")
+
+    def test_corrigir_status_invalido_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+
+        baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        with self.assertRaises(ValidationError):
+            baixa.corrigir_numero_processo("6016.2025/0333333-3")
+
+    def test_corrigir_formato_invalido_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+        )
+        with self.assertRaises(ValidationError):
+            baixa.corrigir_numero_processo("RUIM")
+
+
+class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
+    """Cobre: identificador na baixa e evento por baixa."""
+
+    PROCESSO = "6016.2025/0117371-7"
+
+    def _nova_baixa_aceita_com_bem(self, processo=None, npat="000.000000001-0"):
+        bem = criar_bem(self.ua, self.operador, numero_patrimonial=npat)
+        baixa = criar_baixa(
+            self.ua, self.operador, status=constants.ACEITA,
+            numero_processo_baixa=processo or self.PROCESSO,
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
+        return baixa, bem
+
+    def _payload(self, baixas):
+        return {
+            "baixas": [b.id for b in baixas],
+            "numero_processo_baixa": self.PROCESSO,
+            "data_autorizacao": str(timezone.localdate()),
+            "responsavel": "Gestor Teste",
+        }
+
+    def _historicos_baixa(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).order_by("id")
+
+    def test_geracao_cria_vinculo_historico_identificador_e_reemissao(self):
+        baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000021-0")
+        baixa2, _ = self._nova_baixa_aceita_com_bem(npat="000.000000022-0")
+        baixa_sem_nota = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
+        self._auth(self.gestor)
+
+        resp = self.client.post("/api/nbbpm/", self._payload([baixa1, baixa2]), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        numero = resp.data["numero"]
+        nbbpm_id = resp.data["id"]
+
+        for baixa in (baixa1, baixa2):
+            baixa.refresh_from_db()
+            self.assertTrue(baixa.nbbpms_lote.filter(pk=nbbpm_id).exists())
+
+        data_br = timezone.localdate().strftime("%d/%m/%Y")
+        rotulo_uo = f"{self.uo.codigo} - {self.uo.nome}"
+        for baixa in (baixa1, baixa2):
+            eventos = [h for h in self._historicos_baixa(baixa) if h.campo == "nbbpm"]
+            self.assertEqual(len(eventos), 1)
+            ev = eventos[0]
+            self.assertEqual(ev.valor_novo, numero)
+            self.assertEqual(ev.alterado_por, self.gestor)
+            self.assertIsNotNone(ev.alterado_em)
+            self.assertIn(numero, ev.justificativa)
+            self.assertIn(self.PROCESSO, ev.justificativa)
+            self.assertIn(data_br, ev.justificativa)
+            self.assertIn(rotulo_uo, ev.justificativa)
+
+        lista = self.client.get(self.list_url)
+        item = next(b for b in lista.data.get("results", lista.data) if b["id"] == baixa1.id)
+        self.assertEqual(item["numero_nbbpm"], numero)
+        self.assertEqual(item["nbbpm_id"], nbbpm_id)
+
+        detalhe = self.client.get(self.detail_url(baixa1.id))
+        self.assertEqual(detalhe.data["numero_nbbpm"], numero)
+        self.assertEqual(detalhe.data["nbbpm_id"], nbbpm_id)
+        self.assertTrue(detalhe.data["itens"])
+        self.assertIsNotNone(detalhe.data["url_gerar_nbbpm"])
+
+        hist = self.client.get(self.action_url(baixa1.id, "historico"))
+        evento_api = next(r for r in hist.data if r["campo"] == "nbbpm")
+        self.assertEqual(evento_api["valor_novo"], numero)
+        self.assertEqual(evento_api["alterado_por"], self.gestor.username)
+
+        hist_antes = self._historicos_baixa(baixa1).count()
+        pdf = self.client.get(f"/api/nbbpm/{nbbpm_id}/pdf/")
+        self.assertEqual(pdf.status_code, status.HTTP_200_OK)
+        self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
+
+        detalhe_sem_nota = self.client.get(self.detail_url(baixa_sem_nota.id))
+        self.assertIsNone(detalhe_sem_nota.data["nbbpm_id"])
+        self.assertEqual(detalhe_sem_nota.data["numero_nbbpm"], "")
+
+    def test_segunda_geracao_400_mantem_vinculo_e_historico(self):
+        baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000031-0")
+        baixa2, _ = self._nova_baixa_aceita_com_bem(npat="000.000000032-0")
+        self._auth(self.gestor)
+
+        resp1 = self.client.post("/api/nbbpm/", self._payload([baixa1, baixa2]), format="json")
+        self.assertEqual(resp1.status_code, status.HTTP_201_CREATED)
+        nbbpm_id1 = resp1.data["id"]
+        hist_antes = self._historicos_baixa(baixa1).count()
+        total_antes = NBBPM.objects.count()
+
+        resp2 = self.client.post("/api/nbbpm/", self._payload([baixa1]), format="json")
+        self.assertEqual(resp2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(NBBPM.objects.count(), total_antes)
+        baixa1.refresh_from_db()
+        self.assertEqual(list(baixa1.nbbpms_lote.values_list("id", flat=True)), [nbbpm_id1])
+        self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
+
+    def test_falha_no_historico_desfaz_nbbpm_e_vinculo(self):
+        from dados_comuns.models import HistoricoGeral
+        from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+
+        baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000033-0")
+        total_antes = NBBPM.objects.count()
+        hist_antes = self._historicos_baixa(baixa1).count()
+
+        with patch.object(HistoricoGeral.objects, "bulk_create", side_effect=RuntimeError("falha historico")):
+            with self.assertRaises(RuntimeError):
+                criar_nbbpm_com_retry(
+                    baixas=[baixa1],
+                    numero_processo_baixa=self.PROCESSO,
+                    data_autorizacao=timezone.localdate(),
+                    responsavel="Gestor Teste",
+                    criado_por=self.gestor,
+                )
+        self.assertEqual(NBBPM.objects.count(), total_antes)
+        baixa1.refresh_from_db()
+        self.assertFalse(baixa1.nbbpms_lote.exists())
+        self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
+
+
+class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
+    """Uma UA só pode ter uma baixa em aberto; solicitar atualiza o solicitante."""
+
+    def _payload(self, bem, ua=None):
+        return {
+            "unidade_administrativa_origem": (ua or self.ua).id,
+            "data_baixa": str(timezone.localdate()),
+            "itens": [{"bem": bem.id}],
+        }
+
+    def _bem_novo(self, npat):
+        return criar_bem(self.ua, self.operador, numero_patrimonial=npat)
+
+    def _extrair_ids_existentes(self, resp):
+        data = resp.data
+        val = data.get("baixas_existentes", [])
+        items = val if isinstance(val, list) else [val]
+        return sorted(int(str(x)) for x in items)
+
+    def _extrair_id_existente(self, resp):
+        ids = self._extrair_ids_existentes(resp)
+        return ids[0] if ids else None
+
+    def _historicos(self, baixa):
+        from django.contrib.contenttypes.models import ContentType
+        from dados_comuns.models import HistoricoGeral
+
+        ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
+        return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).order_by("id")
+
+    def test_criacao_valida_sem_pendencia(self):
+        self._auth(self.operador)
+        bem = self._bem_novo("000.000000101-0")
+        resp = self.client.post(self.list_url, self._payload(bem), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        baixa = BaixaFisicaBemPatrimonial.objects.get(pk=resp.data["id"])
+        self.assertEqual(baixa.unidade_administrativa_origem_id, self.ua.id)
+        self.assertEqual(baixa.itens.count(), 1)
+        self.assertEqual(baixa.criado_por_id, self.operador.id)
+
+    def test_bloqueio_quando_existe_em_elaboracao(self):
+        aberta = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=aberta, bem=self.bem)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(self.bem2), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._extrair_ids_existentes(resp), [aberta.id])
+        self.assertNotIn("baixa_existente", resp.data)
+        self.assertNotIn(str(aberta.id), str(resp.data["unidade_administrativa_origem"]))
+
+    def test_bloqueio_quando_existe_solicitada(self):
+        aberta = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=aberta, bem=self.bem)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(self.bem2), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._extrair_ids_existentes(resp), [aberta.id])
+
+    def test_liberada_apos_aceita_e_recusada(self):
+        for st in (constants.ACEITA, constants.RECUSADA):
+            BaixaFisicaBemPatrimonial.objects.filter(unidade_administrativa_origem=self.ua).delete()
+            BemPatrimonial.objects.filter(unidade_administrativa=self.ua).update(status=constants.APROVADO)
+            self.bem.refresh_from_db()
+            self.bem2.refresh_from_db()
+            final = criar_baixa(self.ua, self.operador, status=st)
+            BaixaFisicaBensItem.objects.create(baixa=final, bem=self.bem)
+            self._auth(self.operador)
+            resp = self.client.post(self.list_url, self._payload(self.bem2), format="json")
+            self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_duplicadas_existentes_concluem_e_bloqueiam_nova(self):
+        bem3 = self._bem_novo("000.000000103-0")
+        b1 = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=b1, bem=self.bem)
+        b2 = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=b2, bem=self.bem2)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(self._extrair_id_existente(resp), (b1.id, b2.id))
+        self._auth(self.gestor)
+        rec = self.client.post(self.action_url(b1.id, "recusar"), {"motivo": "x"}, format="json")
+        self.assertEqual(rec.status_code, status.HTTP_200_OK)
+        self._auth(self.operador)
+        resp2 = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self._extrair_id_existente(resp2), b2.id)
+        self._auth(self.gestor)
+        self.client.post(self.action_url(b2.id, "recusar"), {"motivo": "y"}, format="json")
+        self._auth(self.operador)
+        resp3 = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp3.status_code, status.HTTP_201_CREATED, resp3.data)
+
+    def test_criacao_simultanea_segunda_bloqueada_sem_duplicar(self):
+        from unittest.mock import MagicMock
+
+        self._auth(self.operador)
+        bem = self._bem_novo("000.000000104-0")
+        resp1 = self.client.post(self.list_url, self._payload(bem), format="json")
+        self.assertEqual(resp1.status_code, status.HTTP_201_CREATED)
+        req = MagicMock()
+        req.user = self.operador
+        req.data = {}
+        s = BaixaFisicaBemPatrimonialCreateSerializer(
+            data=self._payload(self.bem2), context={"request": req}
+        )
+        self.assertFalse(s.is_valid())
+        abertas = BaixaFisicaBemPatrimonial.objects.filter(
+            unidade_administrativa_origem=self.ua,
+            status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA],
+        ).count()
+        self.assertEqual(abertas, 1)
+
+    def test_bloqueio_retorna_todas_existentes_quando_multiplas(self):
+        bem3 = self._bem_novo("000.000000105-0")
+        bem4 = self._bem_novo("000.000000106-0")
+        b1 = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=b1, bem=self.bem)
+        b2 = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
+        BaixaFisicaBensItem.objects.create(baixa=b2, bem=self.bem2)
+        self._auth(self.operador)
+        resp = self.client.post(self.list_url, self._payload(bem3), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        data = resp.data
+        self.assertIn("baixas_existentes", data)
+        self.assertNotIn("baixa_existente", data)
+        self.assertEqual(self._extrair_ids_existentes(resp), sorted([b1.id, b2.id]))
+        texto = str(data["unidade_administrativa_origem"])
+        self.assertNotIn(str(b1.id), texto)
+        self.assertNotIn(str(b2.id), texto)
+        # garante que bem4 continua livre e nenhuma baixa nova foi criada
+        self.assertTrue(BemPatrimonial.objects.filter(pk=bem4.pk).exists())
+        self.assertEqual(
+            BaixaFisicaBemPatrimonial.objects.filter(
+                unidade_administrativa_origem=self.ua,
+                status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA],
+            ).count(),
+            2,
+        )
+
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_correcao_solicitada")
+    def test_solicitar_troca_solicitante_preserva_historico(self, mock_corr, mock_sol):
+        from usuario.models import Usuario
+        from django.contrib.auth.models import Group
+        from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+
+        operador_b = Usuario.objects.create_user(
+            username="operador_b_troca",
+            email="operador_b_troca@test.com",
+            **auth_kwargs("senha123"),
+            unidade_administrativa=self.ua,
+            unidade_orcamentaria=self.uo,
+        )
+        grp, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
+        operador_b.groups.add(grp)
+        baixa = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        self._auth(self.operador)
+        r1 = self.client.post(self.action_url(baixa.id, "enviar-solicitacao"))
+        self.assertEqual(r1.status_code, status.HTTP_200_OK)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.criado_por_id, self.operador.id)
+        hist_antes = list(self._historicos(baixa))
+        self.assertTrue(hist_antes)
+        self._auth(self.operador)
+        rc = self.client.post(
+            self.action_url(baixa.id, "solicitar-correcao"), {"motivo": "ajuste"}, format="json"
+        )
+        self.assertEqual(rc.status_code, status.HTTP_200_OK)
+        from datetime import timedelta
+
+        antiga = timezone.now() - timedelta(days=5)
+        BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk).update(data_criacao=antiga)
+        self._auth(operador_b)
+        r2 = self.client.post(self.action_url(baixa.id, "enviar-solicitacao"))
+        self.assertEqual(r2.status_code, status.HTTP_200_OK)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.criado_por_id, operador_b.id)
+        self.assertGreater(baixa.data_criacao, antiga)
+        self.assertEqual(r2.data["criado_por"]["id"], operador_b.id)
+        hist_depois = list(self._historicos(baixa))
+        self.assertGreater(len(hist_depois), len(hist_antes))
+        for h in hist_antes:
+            self.assertIn(h.id, [x.id for x in hist_depois])
+        troca = [h for h in hist_depois if h.campo == "criado_por"]
+        self.assertTrue(troca)
