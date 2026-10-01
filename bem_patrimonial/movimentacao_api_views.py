@@ -34,6 +34,7 @@ from bem_patrimonial.models import MovimentacaoBemPatrimonial
 from bem_patrimonial.models import MovimentacaoBensItem
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
+    BuscaBensMovimentacaoSerializer,
     MovimentacaoBensLotePreviewResponseSerializer,
     MovimentacaoBensLotePreviewSerializer,
     MovimentacaoBemPatrimonialCreateSerializer,
@@ -42,6 +43,7 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     MovimentacaoBemPatrimonialUpdateSerializer,
     MovimentacaoHistoricoGrupoSerializer,
     MovimentacaoUoCadastroOptionSerializer,
+    buscar_bens_para_movimentacao,
     obter_ua_ponto_central,
     queryset_bens_movimentaveis,
     validar_ua_origem_movimentacao,
@@ -329,6 +331,32 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             many=True,
         )
         return Response(serializer.data)
+
+    @extend_schema(
+        tags=["Movimentações"],
+        summary="Buscar bens para selecionar na movimentação",
+        parameters=[
+            OpenApiParameter("unidade_administrativa_origem", OpenApiTypes.INT, required=True),
+            OpenApiParameter("id", OpenApiTypes.INT),
+            OpenApiParameter("numero_patrimonial", OpenApiTypes.STR),
+            OpenApiParameter("numero_patrimonial_de", OpenApiTypes.STR),
+            OpenApiParameter("numero_patrimonial_ate", OpenApiTypes.STR),
+            OpenApiParameter("descricao", OpenApiTypes.STR),
+            OpenApiParameter(
+                "termo_busca",
+                OpenApiTypes.STR,
+                description="Busca geral por nome, descrição, ID ou número patrimonial.",
+            ),
+            OpenApiParameter("pagina", OpenApiTypes.INT),
+        ],
+    )
+    @action(detail=False, methods=["get"], url_path="buscar-bens")
+    def buscar_bens(self, request):
+        serializer = BuscaBensMovimentacaoSerializer(
+            data=request.query_params, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        return Response(buscar_bens_para_movimentacao(serializer.validated_data))
 
     @action(detail=False, methods=["get"], url_path="opcoes-cadastro")
     def opcoes_cadastro(self, request):

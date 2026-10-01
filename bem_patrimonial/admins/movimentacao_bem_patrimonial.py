@@ -33,7 +33,10 @@ from bem_patrimonial import constants
 from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
+    BuscaBensMovimentacaoSerializer,
+    MovimentacaoBensLoteItemSerializer,
     MovimentacaoBensLotePreviewSerializer,
+    buscar_bens_para_movimentacao,
     obter_mensagem_erro_validacao,
     queryset_bens_movimentaveis,
     validar_ua_origem_movimentacao,
@@ -527,6 +530,11 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.buscar_bens_lote),
                 name="bem_patrimonial_movimentacaobempatrimonial_buscar_bens_lote",
             ),
+            path(
+                "pesquisar-bens/",
+                self.admin_site.admin_view(self.pesquisar_bens),
+                name="bem_patrimonial_movimentacaobempatrimonial_pesquisar_bens",
+            ),
         ]
         return custom_urls + urls
 
@@ -551,7 +559,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 status=400,
             )
 
-        itens = BemPatrimonialSimpleSerializer(
+        itens = MovimentacaoBensLoteItemSerializer(
             serializer.validated_data["bens"],
             many=True,
         ).data
@@ -579,6 +587,20 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
         ).order_by("numero_patrimonial")[:50]
         itens = BemPatrimonialSimpleSerializer(bens, many=True).data
         return JsonResponse({"itens": itens})
+
+    def pesquisar_bens(self, request):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        if request.method != "GET":
+            return HttpResponseNotAllowed(["GET"])
+        serializer = BuscaBensMovimentacaoSerializer(
+            data=request.GET, context={"request": request}
+        )
+        if not serializer.is_valid():
+            return JsonResponse(
+                {"detail": obter_mensagem_erro_validacao(serializer.errors)}, status=400
+            )
+        return JsonResponse(buscar_bens_para_movimentacao(serializer.validated_data))
 
     def get_queryset(self, request):
         qs = (

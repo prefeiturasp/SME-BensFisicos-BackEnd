@@ -7,7 +7,7 @@ from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
 from bem_patrimonial.admins.widgets.movimentacao_lote_widget import MovimentacaoLoteWidget
-from bem_patrimonial.models import MovimentacaoBemPatrimonial
+from bem_patrimonial.models import BemPatrimonial, MovimentacaoBemPatrimonial
 from bem_patrimonial.serializers.movimentacao_serializers import (
     obter_mensagem_erro_validacao,
     resolver_bens_movimentacao_lote,
@@ -21,6 +21,7 @@ from dados_comuns.escopo import (
 
 
 CODIGO_UA_PONTO_CENTRAL = "001"
+MENSAGEM_ITENS_LOTE_INVALIDOS = "Itens de movimentação inválidos."
 MENSAGEM_SEM_PONTO_CENTRAL = (
     "Não há ponto central cadastrado na Unidade Orçamentária de destino. "
     "Por favor, entrar em contato com o gestor"
@@ -139,6 +140,9 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             )
             self.fields["itens_lote"].widget.attrs["data-buscar-url"] = reverse(
                 "admin:bem_patrimonial_movimentacaobempatrimonial_buscar_bens_lote"
+            )
+            self.fields["itens_lote"].widget.attrs["data-pesquisar-url"] = reverse(
+                "admin:bem_patrimonial_movimentacaobempatrimonial_pesquisar_bens"
             )
         self._configure_dynamic_fields()
 
@@ -473,21 +477,38 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         try:
             dados = json.loads(valor)
         except (TypeError, json.JSONDecodeError) as error:
-            raise ValidationError({"itens_lote": "Itens de movimentação inválidos."}) from error
+            raise ValidationError({"itens_lote": MENSAGEM_ITENS_LOTE_INVALIDOS}) from error
+
+        if not isinstance(dados, dict):
+            raise ValidationError({"itens_lote": MENSAGEM_ITENS_LOTE_INVALIDOS})
 
         faixas = dados.get("faixas", [])
         selecionar_todos = dados.get("selecionar_todos", False)
-        if selecionar_todos == bool(faixas):
+        ids = dados.get("itens", [])
+        if not isinstance(ids, list) or any(type(item) is not int for item in ids):
+            raise ValidationError({"itens_lote": MENSAGEM_ITENS_LOTE_INVALIDOS})
+        modos = sum((bool(faixas), bool(selecionar_todos), bool(ids)))
+        if modos == 0:
             raise ValidationError(
                 {"itens_lote": "Informe uma ou mais faixas ou selecione todos os bens da UA."}
             )
+        if modos != 1:
+            raise ValidationError(
+                {"itens_lote": "Informe uma ou mais faixas, selecione bens ou todos os bens da UA."}
+            )
 
         try:
-            bens = resolver_bens_movimentacao_lote(
-                cleaned_data["unidade_administrativa_origem"],
-                faixas,
-                selecionar_todos,
-            )
+            if ids:
+                if len(set(ids)) != len(ids):
+                    raise ValidationError({"itens_lote": "Não é permitido repetir o mesmo bem."})
+                encontrados = BemPatrimonial.objects.in_bulk(ids)
+                if len(encontrados) != len(ids):
+                    raise ValidationError({"itens_lote": "Um ou mais bens selecionados não foram encontrados."})
+                bens = [encontrados[item] for item in ids]
+            else:
+                bens = resolver_bens_movimentacao_lote(
+                    cleaned_data["unidade_administrativa_origem"], faixas, selecionar_todos
+                )
             if not bens:
                 raise ValidationError(
                     {"itens_lote": "Nenhum bem aprovado foi encontrado na unidade administrativa de origem."}
