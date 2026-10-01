@@ -35,10 +35,16 @@ class MovimentacaoLoteWidget(Widget):
             '<div><label for="{id}-busca-ate">Número Patrimonial - Até</label>'
             '<input id="{id}-busca-ate" type="text" inputmode="numeric" maxlength="15" placeholder="000.000000000-0"></div></div>'
             '<button type="button" class="button movimentacao-lote__pesquisar">Buscar</button>'
+            '<button type="button" class="button movimentacao-lote__importar" hidden>Importar Faixa</button>'
             '<p class="movimentacao-lote__vazio" aria-live="polite"></p>'
             '<div class="movimentacao-lote__tabelas"><table class="movimentacao-lote__resultados">'
-            '<thead><tr><th>Selecionar</th><th>ID</th><th>Número Patrimonial</th><th>Nome</th><th>Descrição</th><th>Localização</th><th>Situação</th></tr></thead><tbody></tbody></table></div>'
+            '<thead><tr><th><input type="checkbox" class="movimentacao-lote__selecionar-resultados" aria-label="Selecionar todos os resultados"></th>'
+            '<th>ID</th><th>Número Patrimonial</th><th>Nome</th><th>Descrição</th><th>Localização</th><th>Situação</th></tr></thead><tbody></tbody></table></div>'
             '<button type="button" class="button movimentacao-lote__mais" hidden>Carregar mais</button>'
+            '<h3 class="movimentacao-lote__selecionados-titulo">Selecionados (0)</h3>'
+            '<div class="movimentacao-lote__tabelas"><table class="movimentacao-lote__selecionados">'
+            '<thead><tr><th>Número Patrimonial / Critério</th><th>Quantidade</th><th>Nome do Bem</th><th>Ação</th></tr></thead>'
+            '<tbody><tr class="movimentacao-lote__sem-selecao"><td colspan="4">Nenhum bem selecionado.</td></tr></tbody></table></div>'
             '<p class="movimentacao-lote__erro" role="alert"></p>{hidden}</div>',
             resolver=resolver_url,
             pesquisar=pesquisar_url,

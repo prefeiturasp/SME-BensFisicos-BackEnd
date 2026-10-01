@@ -117,7 +117,7 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("itens_lote", form.errors)
 
-    def test_widget_lote_exibe_modos_tabela_unica_e_mascara(self):
+    def test_widget_lote_exibe_modos_tabelas_e_mascara(self):
         widget = MovimentacaoLoteWidget(
             attrs={
                 "data-resolver-url": "/resolver-itens-lote/",
@@ -126,9 +126,10 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         )
         html = widget.render("itens_lote", "", {"id": "id_itens_lote"})
 
-        self.assertEqual(html.count("<table"), 1)
+        self.assertEqual(html.count("<table"), 2)
         self.assertIn("<th>Nome</th>", html)
-        self.assertIn("<th>Selecionar</th>", html)
+        self.assertIn('aria-label="Selecionar todos os resultados"', html)
+        self.assertIn("<th>Quantidade</th>", html)
         self.assertIn('value="geral"', html)
         self.assertIn('value="faixa"', html)
         self.assertIn('value="todos"', html)
