@@ -11,6 +11,8 @@ from bem_patrimonial.models import (
     MovimentacaoBensItem,
 )
 from bem_patrimonial.cimbpm import (
+    _criar_tabela_bens,
+    _criar_total_bens,
     extrair_codigo_ua,
     formatar_moeda_brasileira,
     obter_bens_movimentacao,
@@ -18,6 +20,7 @@ from bem_patrimonial.cimbpm import (
     _criar_rodape_cimbpm,
     gerar_pdf_cimbpm,
 )
+from bem_patrimonial.documentos_pdf_utils import agrupar_bens_documento
 from bem_patrimonial.pdf_utils import criar_info_geracao_paragraph
 from bem_patrimonial import constants
 from dados_comuns.models import UnidadeAdministrativa
@@ -214,6 +217,86 @@ class TestObterBensMovimentacao(CIMBPMTestBase):
         bens = obter_bens_movimentacao(mov)
         self.assertEqual(bens[0], bem_a)
         self.assertEqual(bens[1], bem_z)
+
+
+class TestAgrupamentoBensDocumento(CIMBPMTestBase):
+    def test_agrupa_sequencia_mesmo_com_digito_final_diferente_e_ids_nao_consecutivos(self):
+        primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
+        self.criar_bem(numero_patrimonial="001.000000099-9")
+        segundo = self.criar_bem(numero_patrimonial="001.000000011-2")
+        isolado = self.criar_bem(numero_patrimonial="001.000000013-3")
+
+        grupos = agrupar_bens_documento([isolado, segundo, primeiro])
+
+        self.assertEqual(grupos, [[primeiro, segundo], [isolado]])
+        self.assertEqual(sum(len(grupo) for grupo in grupos), 3)
+
+    def test_numero_antigo_ou_sem_formato_confiavel_permanece_individual(self):
+        antigos = [
+            self.criar_bem(numero_patrimonial="01020001", numero_formato_antigo=True),
+            self.criar_bem(numero_patrimonial="01020002", numero_formato_antigo=True),
+            self.criar_bem(numero_patrimonial="900.000.001-1"),
+            self.criar_bem(numero_patrimonial="900.000.002-2"),
+            self.criar_bem(numero_patrimonial="001.000000001-1", numero_formato_antigo=True),
+            self.criar_bem(numero_patrimonial="001.000000002-2"),
+        ]
+
+        grupos = agrupar_bens_documento(antigos)
+
+        self.assertEqual([len(grupo) for grupo in grupos], [1] * len(antigos))
+
+    def test_caracteristicas_e_prefixos_diferentes_nao_formam_intervalo(self):
+        primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
+        outro_valor = self.criar_bem(
+            numero_patrimonial="001.000000011-2", valor_unitario=Decimal("100.00")
+        )
+        outro_prefixo = self.criar_bem(
+            numero_patrimonial="002.000000012-3", valor_unitario=Decimal("100.00")
+        )
+
+        grupos = agrupar_bens_documento([primeiro, outro_valor, outro_prefixo])
+
+        self.assertEqual(grupos, [[primeiro], [outro_valor], [outro_prefixo]])
+
+    def test_corpo_numerico_duplicado_nao_e_agrupado(self):
+        primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
+        outro_digito = self.criar_bem(numero_patrimonial="001.000000010-2")
+        proximo = self.criar_bem(numero_patrimonial="001.000000011-3")
+
+        grupos = agrupar_bens_documento([primeiro, outro_digito, proximo])
+
+        self.assertEqual(grupos, [[primeiro], [outro_digito], [proximo]])
+
+    def test_descricao_diferente_nao_e_agrupada(self):
+        primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
+        outro_bem = self.criar_bem(
+            numero_patrimonial="001.000000011-2", descricao="Outro tipo de armário"
+        )
+
+        self.assertEqual(agrupar_bens_documento([primeiro, outro_bem]), [[primeiro], [outro_bem]])
+
+    def test_tabela_cimbpm_mostra_de_ate_e_total_original(self):
+        primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
+        segundo = self.criar_bem(numero_patrimonial="001.000000011-2")
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=primeiro,
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador,
+            status=constants.ENVIADA,
+        )
+        MovimentacaoBensItem.objects.create(movimentacao=mov, bem=primeiro)
+        MovimentacaoBensItem.objects.create(movimentacao=mov, bem=segundo)
+
+        [tabela] = _criar_tabela_bens(mov)
+        [total] = _criar_total_bens(mov)
+
+        self.assertEqual(tabela._cellvalues[2][0].text, "001.000000010-1")
+        self.assertEqual(tabela._cellvalues[2][1].text, "001.000000011-2")
+        self.assertEqual(tabela._cellvalues[2][3].text, "2")
+        self.assertEqual(total._cellvalues[0][3].text, "<b>2</b>")
+        self.assertEqual(sum(tabela._colWidths), sum(total._colWidths))
+        self.assertTrue(gerar_pdf_cimbpm(mov).getvalue().startswith(b"%PDF"))
 
 
 class TestGeracaoNumeroCIMBPM(CIMBPMTestBase):

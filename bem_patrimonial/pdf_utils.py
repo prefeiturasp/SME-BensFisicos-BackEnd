@@ -21,8 +21,9 @@ class PDFConfigBase:
     MARGEM_SUPERIOR = 3.0 * cm
     MARGEM_INFERIOR = 4.5 * cm
 
-    COL_NUMERO_CHAPA = 3.5 * cm
-    COL_DISCRIMINACAO = 9.5 * cm
+    COL_NUMERO_DE = 2.5 * cm
+    COL_NUMERO_ATE = 2.5 * cm
+    COL_DISCRIMINACAO = 8 * cm
     COL_QUANTIDADE = 2 * cm
     COL_VALOR = 3 * cm
 

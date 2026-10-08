@@ -177,6 +177,11 @@ class BemPatrimonialTestCase(TestCase):
         self.assertIsNotNone(obj.numero_patrimonial)
         self.assertRegex(obj.numero_patrimonial, NPAT_AUTO_REGEX)
 
+    def test_numero_processo_usa_label_generico(self):
+        campo = self.entity._meta.get_field("numero_processo")
+        self.assertEqual(campo.verbose_name, "Número do processo")
+        self.assertNotIn("incorporação", campo.verbose_name)
+
     def test_unicidade_numero_patrimonial(self):
         a = self.entity.objects.create(
             nome="Item1",

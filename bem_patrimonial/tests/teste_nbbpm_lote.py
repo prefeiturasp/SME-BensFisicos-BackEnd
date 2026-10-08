@@ -312,7 +312,7 @@ class CriarTabelaBensTestCase(BaseSetup):
             textos.append(linha_textos)
         return textos
 
-    def test_uma_linha_por_bem_com_numero_repetido_em_de_ate(self):
+    def test_bem_isolado_nao_preenche_ate(self):
         nbbpm = criar_nbbpm([self.baixa], self.usuario)
 
         [tabela] = _criar_tabela_bens(nbbpm)
@@ -320,7 +320,56 @@ class CriarTabelaBensTestCase(BaseSetup):
 
         linha_bem = textos[2]
         self.assertEqual(linha_bem[0], "000.000000001-0")
-        self.assertEqual(linha_bem[1], "000.000000001-0")
+        self.assertEqual(linha_bem[1], "")
+
+    def test_sequencia_agrupada_preserva_quantidade_e_valor_total(self):
+        criar_item(self.bem2, self.baixa)
+        bem3 = criar_bem(self.ua, self.usuario, numero_patrimonial="000.000000003-7")
+        criar_item(bem3, self.baixa)
+        nbbpm = criar_nbbpm([self.baixa], self.usuario)
+
+        [tabela] = _criar_tabela_bens(nbbpm)
+        textos = self._textos_da_tabela(tabela)
+
+        self.assertEqual(len(textos), 4)
+        self.assertEqual(textos[2][0:4], ["000.000000001-0", "000.000000003-7", "NOTEBOOK DELL", "3"])
+        self.assertIn("1.000,00", textos[2][4])
+        self.assertIn("3.000,00", textos[2][5])
+        self.assertIn("3", textos[-1][3])
+        self.assertIn("3.000,00", textos[-1][5])
+        nbbpm.numero = gerar_numero_nbbpm_lote(nbbpm)
+        nbbpm.save(update_fields=["numero"])
+        self.assertTrue(gerar_pdf_nbbpm_lote(nbbpm).getvalue().startswith(b"%PDF"))
+
+    def test_lacuna_separa_intervalos_e_bem_isolado(self):
+        criar_item(self.bem2, self.baixa)
+        for numero in ("000.000000004-4", "000.000000005-5", "000.000000008-8"):
+            criar_item(criar_bem(self.ua, self.usuario, numero_patrimonial=numero), self.baixa)
+        nbbpm = criar_nbbpm([self.baixa], self.usuario)
+
+        [tabela] = _criar_tabela_bens(nbbpm)
+        textos = self._textos_da_tabela(tabela)
+
+        self.assertEqual([(linha[0], linha[1], linha[3]) for linha in textos[2:-1]], [
+            ("000.000000001-0", "000.000000002-0", "2"),
+            ("000.000000004-4", "000.000000005-5", "2"),
+            ("000.000000008-8", "", "1"),
+        ])
+        self.assertIn("5", textos[-1][3])
+        self.assertIn("5.000,00", textos[-1][5])
+
+    def test_valor_diferente_nao_agrupa_bens_consecutivos(self):
+        self.bem2.valor_unitario = Decimal("500.00")
+        self.bem2.save(update_fields=["valor_unitario"])
+        criar_item(self.bem2, self.baixa)
+        nbbpm = criar_nbbpm([self.baixa], self.usuario)
+
+        [tabela] = _criar_tabela_bens(nbbpm)
+        textos = self._textos_da_tabela(tabela)
+
+        self.assertEqual(len(textos[2:-1]), 2)
+        self.assertEqual([linha[1] for linha in textos[2:-1]], ["", ""])
+        self.assertIn("1.500,00", textos[-1][5])
 
     def test_discriminacao_usa_nome_do_bem_em_maiusculo(self):
         nbbpm = criar_nbbpm([self.baixa], self.usuario)

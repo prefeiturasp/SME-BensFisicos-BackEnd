@@ -6,7 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 import django_filters
 
 from bem_patrimonial.models import NBBPM
-from bem_patrimonial.api_serializers import NBBPMSerializer, NBBPMGerarLoteSerializer
+from bem_patrimonial.api_serializers import NBBPMSerializer, NBBPMDetailSerializer, NBBPMGerarLoteSerializer
 from bem_patrimonial.nbbpm_lote import http_response_nbbpm_lote
 from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
 from dados_comuns.escopo import resolver_ids_escopo
@@ -78,6 +78,8 @@ class NBBPMViewSet(
     def get_serializer_class(self):
         if self.action == "create":
             return NBBPMGerarLoteSerializer
+        if self.action == "retrieve":
+            return NBBPMDetailSerializer
         return NBBPMSerializer
 
     @extend_schema(
@@ -121,7 +123,12 @@ class NBBPMViewSet(
     @extend_schema(
         tags=["NBBPM"],
         summary="Detalhar NBBPM",
-        responses={200: NBBPMSerializer},
+        description=(
+            "Identificação da NBBPM e as Baixas Físicas vinculadas, cada uma com "
+            "sua Unidade Administrativa e os bens que a compunham (uma mesma "
+            "NBBPM pode reunir Baixas de UAs diferentes)."
+        ),
+        responses={200: NBBPMDetailSerializer},
     )
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)

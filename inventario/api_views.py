@@ -26,8 +26,11 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
 from dados_comuns.context import audit_as
+from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
 from dados_comuns.escopo import filtrar_queryset_por_escopo
+from dados_comuns.historico_consulta import consultar_historico
 from dados_comuns.models import HistoricoGeral
+from dados_comuns.utils import dict_changes
 
 from inventario.api_serializers import (
     ConciliacaoExportQuerySerializer,
@@ -79,7 +82,7 @@ class ParametroConciliacaoAnualPermission(BasePermission):
             return False
 
         action = getattr(view, "action", None)
-        if action in ("list", "retrieve"):
+        if action in ("list", "retrieve", "historico"):
             return True
 
         if action in ("create", "update", "partial_update", "destroy"):
@@ -89,7 +92,7 @@ class ParametroConciliacaoAnualPermission(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         action = getattr(view, "action", None)
-        if action == "retrieve":
+        if action in ("retrieve", "historico"):
             return True
 
         if action in ("update", "partial_update", "destroy"):
@@ -148,6 +151,13 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
         "unidade_orcamentaria__codigo",
     ]
     ordering = ["-ano_referencia", "-periodo_inicial", "unidade_orcamentaria__codigo"]
+    AUDIT_TRACK_FIELDS = (
+        "unidade_orcamentaria",
+        "ano_referencia",
+        "periodo_inicial",
+        "periodo_final",
+        "ativo",
+    )
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -225,7 +235,15 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         self._validate_uo_scope(serializer.validated_data)
         try:
-            serializer.save()
+            with transaction.atomic():
+                instance = serializer.save()
+                HistoricoGeral.objects.create(
+                    content_type=ContentType.objects.get_for_model(ParametroConciliacaoAnual),
+                    object_id=str(instance.pk),
+                    campo="acao",
+                    valor_novo="criado",
+                    alterado_por=self.request.user,
+                )
         except DjangoValidationError as exc:
             self._raise_drf_validation_error(exc)
 
@@ -234,10 +252,38 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
             serializer.validated_data,
             instance=serializer.instance,
         )
+        original = ParametroConciliacaoAnual.objects.get(pk=serializer.instance.pk)
         try:
-            serializer.save()
+            with transaction.atomic():
+                instance = serializer.save()
+                changes = dict_changes(original, instance, fields=self.AUDIT_TRACK_FIELDS)
+                content_type = ContentType.objects.get_for_model(ParametroConciliacaoAnual)
+                HistoricoGeral.objects.bulk_create(
+                    [
+                        HistoricoGeral(
+                            content_type=content_type,
+                            object_id=str(instance.pk),
+                            campo=campo,
+                            valor_antigo=antigo,
+                            valor_novo=novo,
+                            alterado_por=self.request.user,
+                        )
+                        for campo, (antigo, novo) in changes.items()
+                    ]
+                )
         except DjangoValidationError as exc:
             self._raise_drf_validation_error(exc)
+
+    @extend_schema(
+        tags=["Inventário"],
+        summary="Histórico do parâmetro de conciliação anual",
+        responses={200: HistoricoConsultaGrupoSerializer(many=True)},
+    )
+    @action(detail=True, methods=["get"], url_path="historico", filter_backends=[], pagination_class=None)
+    def historico(self, request, pk=None):
+        instance = self.get_object()
+        registros = consultar_historico(ParametroConciliacaoAnual, instance.pk)
+        return Response(HistoricoConsultaGrupoSerializer(registros, many=True).data)
 
     def perform_destroy(self, instance):
         try:

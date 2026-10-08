@@ -153,6 +153,14 @@ class BaixaFisicaModelCleanTestCase(TestCase):
             baixa.clean()
         self.assertIn("já foi baixado", str(ctx.exception))
 
+    def test_clean_nao_revalida_itens_em_baixa_aceita(self):
+        # Baixa Aceita com bens BAIXA_FISICA não pode falhar com "já foi baixado".
+        self.bem.status = BAIXA_FISICA
+        self.bem.save()
+
+        baixa = self._cria_baixa_com_item(status=ACEITA)
+        baixa.clean()
+
     def test_clean_impede_bem_em_outra_baixa_em_andamento(self):
         # primeira baixa enviada
         baixa1 = self._cria_baixa_com_item(status=SOLICITADA)
@@ -682,3 +690,62 @@ class BaixaFisicaAdminExportTestCase(TestCase):
         qs = list(self.admin.get_export_queryset(request))
 
         self.assertGreaterEqual(qs[0].id, qs[-1].id)
+
+
+class BaixaFisicaUnicidadeSolicitanteModelTestCase(TestCase):
+    def setUp(self):
+        setup = SetupMovimentacaoData()
+        self.ua_origem, _ = setup.create_unidades_administrativas()
+        (self.operador_origem, _, self.gestor) = setup.create_usuarios(
+            self.ua_origem, self.ua_origem
+        )
+        self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
+        self.bem.status = APROVADO
+        self.bem.save()
+
+    def _baixa(self, status=AGUARDANDO_ENVIO):
+        baixa = BaixaFisicaBemPatrimonial.objects.create(
+            unidade_administrativa_origem=self.ua_origem,
+            numero_processo_baixa="PROC-123",
+            status=status,
+            criado_por=self.operador_origem,
+            data_baixa=timezone.localdate(),
+        )
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
+        return baixa
+
+    def test_buscar_abertas_e_mensagem_sem_ids(self):
+        self.assertEqual(BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(self.ua_origem.id), [])
+        aberta = self._baixa(status=AGUARDANDO_ENVIO)
+        self.assertEqual(
+            [b.pk for b in BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(self.ua_origem.id)],
+            [aberta.pk],
+        )
+        aberta.status = SOLICITADA
+        aberta.save(update_fields=["status"])
+        self.assertEqual(
+            [b.pk for b in BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(self.ua_origem.id)],
+            [aberta.pk],
+        )
+        self.assertEqual(
+            BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(self.ua_origem.id, ignorar_pk=aberta.pk),
+            [],
+        )
+        aberta.status = ACEITA
+        aberta.save(update_fields=["status"])
+        self.assertEqual(BaixaFisicaBemPatrimonial.buscar_abertas_por_unidade(self.ua_origem.id), [])
+        msg = BaixaFisicaBemPatrimonial.mensagem_baixas_abertas([aberta])
+        self.assertNotIn(str(aberta.pk), msg)
+
+    def test_enviar_atualiza_solicitante(self):
+        from datetime import timedelta
+
+        baixa = self._baixa(status=AGUARDANDO_ENVIO)
+        antiga = timezone.now() - timedelta(days=5)
+        BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk).update(data_criacao=antiga)
+        baixa.refresh_from_db()
+        baixa.enviar_solicitacao(solicitante=self.gestor)
+        baixa.refresh_from_db()
+        self.assertEqual(baixa.status, SOLICITADA)
+        self.assertEqual(baixa.criado_por_id, self.gestor.pk)
+        self.assertGreater(baixa.data_criacao, antiga)

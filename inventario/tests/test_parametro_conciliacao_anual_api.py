@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 
 from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_uo
+from dados_comuns.models import HistoricoGeral
 from inventario.models import ParametroConciliacaoAnual
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -337,3 +338,41 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("detail", response.data)
+
+    def test_historico_vazio_e_criacao_e_alteracao_auditadas(self):
+        self._auth(self.gestor)
+        historico_url = reverse(
+            "parametros-conciliacao-anual-historico", args=[self.parametro1.id]
+        )
+        self.assertEqual(self.client.get(historico_url).data, [])
+
+        response = self.client.post(
+            self.list_url,
+            self._payload_parametro(
+                unidade_orcamentaria=self.uo1.id,
+                ano_referencia=2027,
+                periodo_inicial="2027-01-01",
+                periodo_final="2027-03-31",
+                ativo=True,
+            ),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        parametro_id = response.data["id"]
+        url = reverse("parametros-conciliacao-anual-historico", args=[parametro_id])
+        criado = self.client.get(url)
+        self.assertEqual(criado.data[0]["acoes"][0]["valor_novo"], "criado")
+        self.assertEqual(criado.data[0]["alterado_por_nome"], self.gestor.nome)
+
+        alterado = self.client.patch(
+            self._detail_url(parametro_id), {"periodo_final": "2027-04-30"}, format="json"
+        )
+        self.assertEqual(alterado.status_code, status.HTTP_200_OK)
+        historico = self.client.get(url).data
+        self.assertEqual(historico[0]["acoes"][0]["campo"], "periodo_final")
+        self.assertEqual(historico[0]["acoes"][0]["valor_antigo"], "2027-03-31")
+        self.assertEqual(historico[0]["acoes"][0]["valor_novo"], "2027-04-30")
+        self.assertEqual(HistoricoGeral.objects.filter(object_id=str(parametro_id), campo="periodo_final").count(), 1)
+
+        self._auth(self.operador)
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
