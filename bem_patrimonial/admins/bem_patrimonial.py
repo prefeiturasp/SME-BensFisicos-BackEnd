@@ -34,6 +34,7 @@ from django.contrib.contenttypes.admin import GenericTabularInline
 from django.db.models.functions import Cast, Concat
 from bem_patrimonial import constants
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     BaixadosMaisDeUmPeriodoFilter,
     BuscaGeralTodasUOsFilter,
@@ -548,7 +549,7 @@ class BemPatrimonialResource(resources.ModelResource):
         super().after_import(dataset, result, *args, **kwargs)
 
 
-class BemPatrimonialAdmin(ImportExportModelAdmin):
+class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
     model = BemPatrimonial
     form = BemPatrimonialAdminForm
 
