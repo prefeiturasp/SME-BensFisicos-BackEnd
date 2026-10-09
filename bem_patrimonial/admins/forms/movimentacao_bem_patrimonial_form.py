@@ -1,7 +1,7 @@
 import json
 
 from django import forms
-from django.core.exceptions import ValidationError
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.db.models import Q
 from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -464,8 +464,13 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                 try:
                     validator()
                 except ValidationError as error:
-                    for field, errors in error.error_dict.items():
-                        validation_errors.setdefault(field, []).extend(errors)
+                    if hasattr(error, "error_dict"):
+                        for field, errors in error.error_dict.items():
+                            validation_errors.setdefault(field, []).extend(errors)
+                    else:
+                        validation_errors.setdefault(NON_FIELD_ERRORS, []).extend(
+                            error.error_list
+                        )
             if validation_errors:
                 raise ValidationError(validation_errors)
         elif self.instance.unidade_administrativa_destino_id:

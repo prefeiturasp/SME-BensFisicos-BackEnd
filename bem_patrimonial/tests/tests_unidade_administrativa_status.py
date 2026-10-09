@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.exceptions import NON_FIELD_ERRORS
 from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -133,6 +134,22 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("unidade_administrativa_destino", form.errors)
+        self.assertIn("itens_lote", form.errors)
+
+    def test_exibe_erro_geral_e_de_itens_lote_simultaneamente(self):
+        form = self._create_form_with_request(
+            self.operador_1,
+            {
+                "unidade_administrativa_origem": self.ua_ativa_1.pk,
+                "unidade_administrativa_destino": self.ua_ativa_1.pk,
+                "itens_lote": json.dumps(
+                    {"modo": "geral", "selecionar_todos": False, "itens": []}
+                ),
+            },
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(NON_FIELD_ERRORS, form.errors)
         self.assertIn("itens_lote", form.errors)
 
     def test_widget_lote_exibe_modos_tabelas_e_mascara(self):
