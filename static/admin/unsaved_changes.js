@@ -188,7 +188,6 @@
     globalThis.addEventListener('beforeunload', function (event) {
       if (state.allowExit || !hasUnsavedChanges(form)) return
       event.preventDefault()
-      event.returnValue = ''
     })
   }
 
