@@ -323,7 +323,21 @@
     if (!box) return;
     box.classList.remove('hide');
     box.innerHTML = msgs.map(function(m){ return '<div>'+m+'</div>'; }).join('');
-    box.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  function focusFirstValidationError(form){
+    const field = qs(
+      '.form-row.error input, .form-row.error select, .form-row.error textarea, #multi-container input.error, #multi-container select.error, #multi-container textarea.error',
+      form
+    );
+    if (field){
+      field.focus();
+      field.scrollIntoView({behavior:'smooth', block:'center'});
+      return;
+    }
+
+    const errorBox = qs('#base-required-errors:not(.hide), #multi-errors:not(.hide)', form);
+    errorBox?.scrollIntoView({behavior:'smooth', block:'center'});
   }
 
   function validateMultiRows(){
@@ -521,14 +535,16 @@
     function guardSubmit(ev){
         toPayload();
         const okBase = validateBaseRequired(form);
-        if (!okBase){ ev.preventDefault(); ev.stopPropagation(); return; }
 
         const isMulti = !multi.classList.contains('hide');
         const hasRows = qsa('#multi-rows .multi-row').length > 0;
         const radioMultiChecked = !!qs('input[name="cadastro_modo"][value="multi"]:checked');
-        if (isMulti){
-        const okMulti = validateMultiRows();
-        if (!okMulti){ ev.preventDefault(); ev.stopPropagation(); return; }
+        const okMulti = !isMulti || validateMultiRows();
+        if (!okBase || !okMulti){
+        ev.preventDefault();
+        ev.stopPropagation();
+        focusFirstValidationError(form);
+        return;
         }
         if (hasRows || radioMultiChecked){
         hiddenModo.value = 'multi';
