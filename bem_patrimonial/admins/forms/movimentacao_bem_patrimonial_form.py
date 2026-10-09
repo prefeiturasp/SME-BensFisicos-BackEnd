@@ -451,28 +451,37 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             destino_mesma_uo,
         )
 
+    @staticmethod
+    def _acumular_erros_validacao(validation_errors, error):
+        if hasattr(error, "error_dict"):
+            for field, errors in error.error_dict.items():
+                validation_errors.setdefault(field, []).extend(errors)
+            return
+
+        validation_errors.setdefault(NON_FIELD_ERRORS, []).extend(error.error_list)
+
+    def _validar_criacao(self, cleaned_data, user):
+        validation_errors = {}
+        validators = (
+            lambda: self._validate_ua_origem_destino_new(cleaned_data, user),
+            lambda: self._validar_itens_lote(cleaned_data),
+        )
+
+        for validator in validators:
+            try:
+                validator()
+            except ValidationError as error:
+                self._acumular_erros_validacao(validation_errors, error)
+
+        if validation_errors:
+            raise ValidationError(validation_errors)
+
     def clean(self):
         cleaned_data = super().clean()
         user = self._get_user()
         is_editing = self.instance.pk is not None
         if not is_editing:
-            validation_errors = {}
-            for validator in (
-                lambda: self._validate_ua_origem_destino_new(cleaned_data, user),
-                lambda: self._validar_itens_lote(cleaned_data),
-            ):
-                try:
-                    validator()
-                except ValidationError as error:
-                    if hasattr(error, "error_dict"):
-                        for field, errors in error.error_dict.items():
-                            validation_errors.setdefault(field, []).extend(errors)
-                    else:
-                        validation_errors.setdefault(NON_FIELD_ERRORS, []).extend(
-                            error.error_list
-                        )
-            if validation_errors:
-                raise ValidationError(validation_errors)
+            self._validar_criacao(cleaned_data, user)
         elif self.instance.unidade_administrativa_destino_id:
             cleaned_data["unidade_orcamentaria_destino"] = (
                 self.instance.unidade_administrativa_destino.unidade_orcamentaria
