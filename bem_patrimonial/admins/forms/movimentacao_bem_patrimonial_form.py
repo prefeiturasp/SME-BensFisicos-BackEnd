@@ -456,8 +456,18 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         user = self._get_user()
         is_editing = self.instance.pk is not None
         if not is_editing:
-            self._validate_ua_origem_destino_new(cleaned_data, user)
-            self._validar_itens_lote(cleaned_data)
+            validation_errors = {}
+            for validator in (
+                lambda: self._validate_ua_origem_destino_new(cleaned_data, user),
+                lambda: self._validar_itens_lote(cleaned_data),
+            ):
+                try:
+                    validator()
+                except ValidationError as error:
+                    for field, errors in error.error_dict.items():
+                        validation_errors.setdefault(field, []).extend(errors)
+            if validation_errors:
+                raise ValidationError(validation_errors)
         elif self.instance.unidade_administrativa_destino_id:
             cleaned_data["unidade_orcamentaria_destino"] = (
                 self.instance.unidade_administrativa_destino.unidade_orcamentaria

@@ -117,6 +117,24 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("itens_lote", form.errors)
 
+    def test_exibe_erros_de_destino_e_itens_lote_simultaneamente(self):
+        form = self._create_form_with_request(
+            self.operador_1,
+            {
+                "unidade_administrativa_origem": self.ua_ativa_1.pk,
+                "unidade_orcamentaria_destino": (
+                    self.ua_ativa_1.unidade_orcamentaria_id
+                ),
+                "itens_lote": json.dumps(
+                    {"modo": "geral", "selecionar_todos": False, "itens": []}
+                ),
+            },
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("unidade_administrativa_destino", form.errors)
+        self.assertIn("itens_lote", form.errors)
+
     def test_widget_lote_exibe_modos_tabelas_e_mascara(self):
         widget = MovimentacaoLoteWidget(
             attrs={
