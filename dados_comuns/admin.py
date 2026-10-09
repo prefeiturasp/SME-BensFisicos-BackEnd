@@ -17,6 +17,7 @@ from dados_comuns.formats import (
     UnidadeOrcamentariaPDFFormat,
 )
 from dados_comuns.utils import garantir_ua_ponto_central_externa
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
@@ -55,7 +56,7 @@ class AtivaFilter(admin.SimpleListFilter):
 
 
 @admin.register(UnidadeOrcamentaria)
-class UnidadeOrcamentariaAdmin(ImportExportModelAdmin):
+class UnidadeOrcamentariaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
     """
     Cadastro de Unidades Orçamentárias (UO).
 
@@ -178,7 +179,7 @@ class UnidadeOrcamentariaAdmin(ImportExportModelAdmin):
 
 
 @admin.register(UnidadeAdministrativa)
-class UnidadeAdministrativaAdmin(ImportExportModelAdmin):
+class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
     resource_class = UnidadeAdministrativaResource
     form = UnidadeAdministrativaAdminForm
 

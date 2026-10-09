@@ -252,6 +252,7 @@
 
     ant.addEventListener('change', refresh);
     sem.addEventListener('change', refresh);
+    qs('.fld-loc', row)?.addEventListener('input', toPayload);
     input.addEventListener('input', function(){
       if (!ant?.checked && !sem?.checked){
         input.value = fmt(onlyDigits(input.value));
