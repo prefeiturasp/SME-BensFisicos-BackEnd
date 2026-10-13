@@ -55,8 +55,10 @@ class UnsavedChangesAdminMixinTest(SimpleTestCase):
             Path(settings.BASE_DIR) / "static" / "admin" / "bem_patrimonial.js"
         ).read_text(encoding="utf-8")
 
+        self.assertIn("function updateRowValidation()", script)
+        self.assertIn("toPayload();", script)
         self.assertIn(
-            "qs('.fld-loc', row)?.addEventListener('input', toPayload)",
+            "loc.addEventListener('input', updateRowValidation)",
             script,
         )
 

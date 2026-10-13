@@ -2,7 +2,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import TestCase, RequestFactory
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib import messages
@@ -115,6 +116,40 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         )
 
         self.assertFalse(form.is_valid())
+        self.assertIn("itens_lote", form.errors)
+
+    def test_exibe_erros_de_destino_e_itens_lote_simultaneamente(self):
+        form = self._create_form_with_request(
+            self.operador_1,
+            {
+                "unidade_administrativa_origem": self.ua_ativa_1.pk,
+                "unidade_orcamentaria_destino": (
+                    self.ua_ativa_1.unidade_orcamentaria_id
+                ),
+                "itens_lote": json.dumps(
+                    {"modo": "geral", "selecionar_todos": False, "itens": []}
+                ),
+            },
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("unidade_administrativa_destino", form.errors)
+        self.assertIn("itens_lote", form.errors)
+
+    def test_exibe_erro_geral_e_de_itens_lote_simultaneamente(self):
+        form = self._create_form_with_request(
+            self.operador_1,
+            {
+                "unidade_administrativa_origem": self.ua_ativa_1.pk,
+                "unidade_administrativa_destino": self.ua_ativa_1.pk,
+                "itens_lote": json.dumps(
+                    {"modo": "geral", "selecionar_todos": False, "itens": []}
+                ),
+            },
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(NON_FIELD_ERRORS, form.errors)
         self.assertIn("itens_lote", form.errors)
 
     def test_widget_lote_exibe_modos_tabelas_e_mascara(self):
@@ -292,6 +327,59 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         form = self._create_form_with_request(self.operador_1, dados)
         self.assertFalse(form.is_valid())
         self.assertIn("inventário", form.errors["itens_lote"][0])
+
+
+class ValidacaoCriacaoMovimentacaoUnitTest(SimpleTestCase):
+    def test_nao_valida_bens_quando_origem_e_invalida(self):
+        form = MovimentacaoBemPatrimonialForm.__new__(MovimentacaoBemPatrimonialForm)
+        erro_origem = ValidationError(
+            {
+                "unidade_administrativa_origem": (
+                    "Unidade administrativa de origem é obrigatória."
+                )
+            }
+        )
+
+        with (
+            patch.object(
+                form,
+                "_validate_ua_origem_destino_new",
+                side_effect=erro_origem,
+            ),
+            patch.object(form, "_validar_itens_lote") as validar_itens_mock,
+            self.assertRaises(ValidationError) as contexto,
+        ):
+            form._validar_criacao({}, None)
+
+        validar_itens_mock.assert_not_called()
+        self.assertIn("unidade_administrativa_origem", contexto.exception.error_dict)
+
+    def test_acumula_erros_de_destino_e_itens(self):
+        form = MovimentacaoBemPatrimonialForm.__new__(MovimentacaoBemPatrimonialForm)
+        erro_destino = ValidationError(
+            {
+                "unidade_administrativa_destino": (
+                    "Unidade administrativa de destino é obrigatória."
+                )
+            }
+        )
+        erro_itens = ValidationError(
+            {"itens_lote": "Informe uma ou mais faixas ou selecione bens."}
+        )
+
+        with (
+            patch.object(
+                form,
+                "_validate_ua_origem_destino_new",
+                side_effect=erro_destino,
+            ),
+            patch.object(form, "_validar_itens_lote", side_effect=erro_itens),
+            self.assertRaises(ValidationError) as contexto,
+        ):
+            form._validar_criacao({}, None)
+
+        self.assertIn("unidade_administrativa_destino", contexto.exception.error_dict)
+        self.assertIn("itens_lote", contexto.exception.error_dict)
 
 
 class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
