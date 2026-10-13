@@ -29,6 +29,7 @@ from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_cancelada,
 )
 from bem_patrimonial import constants
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 
 from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 from bem_patrimonial.serializers.movimentacao_serializers import (
@@ -380,7 +381,7 @@ def cancelar_solicitacao(modeladmin, request, queryset):
 cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"
 
 
-class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
+class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
     model = MovimentacaoBemPatrimonial
     create_fields = (
         "unidade_administrativa_origem",

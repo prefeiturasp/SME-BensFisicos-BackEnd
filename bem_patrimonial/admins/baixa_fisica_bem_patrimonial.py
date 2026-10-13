@@ -33,6 +33,7 @@ from dados_comuns.escopo import (
     filtrar_ua_origem_por_escopo,
     usuario_e_super_admin,
 )
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.models import UnidadeAdministrativa
 from django.core.validators import RegexValidator
 from django.utils.safestring import mark_safe
@@ -439,7 +440,7 @@ class BaixaFisicaResource(resources.ModelResource):
         return obj.numero_nbbpm or "-"
 
 
-class BaixaFisicaBemPatrimonialAdmin(ExportMixin, admin.ModelAdmin):
+class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admin.ModelAdmin):
     resource_class = BaixaFisicaResource
 
     def numero_nbbpm_display(self, obj):
