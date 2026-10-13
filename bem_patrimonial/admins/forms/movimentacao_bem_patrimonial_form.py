@@ -462,14 +462,19 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
 
     def _validar_criacao(self, cleaned_data, user):
         validation_errors = {}
-        validators = (
-            lambda: self._validate_ua_origem_destino_new(cleaned_data, user),
-            lambda: self._validar_itens_lote(cleaned_data),
-        )
+        origem_invalida = False
 
-        for validator in validators:
+        try:
+            self._validate_ua_origem_destino_new(cleaned_data, user)
+        except ValidationError as error:
+            self._acumular_erros_validacao(validation_errors, error)
+            origem_invalida = (
+                "unidade_administrativa_origem" in getattr(error, "error_dict", {})
+            )
+
+        if not origem_invalida:
             try:
-                validator()
+                self._validar_itens_lote(cleaned_data)
             except ValidationError as error:
                 self._acumular_erros_validacao(validation_errors, error)
 

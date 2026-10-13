@@ -226,6 +226,7 @@
     const input = qs('.fld-npat', row);
     const ant = qs('.fld-ant', row);
     const sem = qs('.fld-sem', row);
+    const loc = qs('.fld-loc', row);
 
     function refresh(){
       if (sem.checked){
@@ -252,12 +253,16 @@
 
     ant.addEventListener('change', refresh);
     sem.addEventListener('change', refresh);
-    input.addEventListener('input', function(){
+    function updateRowValidation(){
       if (!ant?.checked && !sem?.checked){
         input.value = fmt(onlyDigits(input.value));
       }
       toPayload();
-    });
+      if (!id('multi-errors')?.classList.contains('hide')) validateMultiRows();
+    }
+
+    input.addEventListener('input', updateRowValidation);
+    loc.addEventListener('input', updateRowValidation);
     refresh();
   }
 
@@ -565,9 +570,13 @@
         }
     });
 
-    document.addEventListener('input', function(){
-        showError('base-required-errors', []);
-        showError('multi-errors', []);
+    document.addEventListener('input', function(event){
+        const target = event.target;
+        if (target?.closest('#multi-container')){
+        if (!id('multi-errors')?.classList.contains('hide')) validateMultiRows();
+        return;
+        }
+        if (!id('base-required-errors')?.classList.contains('hide')) validateBaseRequired(form);
     });
    }
 
