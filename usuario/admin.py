@@ -10,6 +10,7 @@ from usuario.models import Usuario
 from usuario.resources import UsuarioResource
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from django.core.exceptions import ValidationError
 
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
@@ -135,7 +136,7 @@ class GroupSingleSelectWidget(forms.Select):
         return groups
 
 
-class CustomUserModelAdmin(ImportExportModelAdmin, UserAdmin):
+class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, UserAdmin):
     model = Usuario
     resource_class = UsuarioResource
     list_display = (

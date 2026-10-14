@@ -1,0 +1,70 @@
+.unsaved-changes-dialog {
+  width: min(32rem, calc(100vw - 2rem));
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--body-bg);
+  color: var(--body-fg);
+  box-shadow: 0 20px 45px rgb(0 0 0 / 30%);
+}
+
+.unsaved-changes-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.unsaved-changes-dialog__content {
+  padding: 24px;
+}
+
+.unsaved-changes-dialog__title {
+  margin: 0 0 12px;
+  color: var(--body-fg);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.unsaved-changes-dialog__message {
+  margin: 0;
+  color: var(--body-quiet-color);
+  font-size: 0.875rem;
+}
+
+.unsaved-changes-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.unsaved-changes-dialog__actions .button {
+  min-height: 40px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.unsaved-changes-dialog__continue {
+  background: var(--close-button-bg);
+  color: var(--button-fg);
+}
+
+.unsaved-changes-dialog__continue:hover,
+.unsaved-changes-dialog__continue:focus {
+  background: var(--close-button-hover-bg);
+}
+
+.unsaved-changes-dialog__discard {
+  background: var(--delete-button-bg);
+  color: var(--button-fg);
+}
+
+.unsaved-changes-dialog__discard:hover,
+.unsaved-changes-dialog__discard:focus {
+  background: var(--delete-button-hover-bg);
+}
+
+.unsaved-changes-cancel {
+  margin-inline-start: 8px;
+}

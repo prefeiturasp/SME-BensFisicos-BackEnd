@@ -272,8 +272,14 @@ def motivo_impedimento_movimentacao(unidade_administrativa, bem, bens_pendentes)
         return f"O bem '{identificador}' está bloqueado por inventário e não pode ser movimentado."
     if bem.id in bens_pendentes:
         return f"O bem '{identificador}' já possui uma movimentação pendente."
+    if bem.status == constants.BAIXA_FISICA:
+        return f"O bem '{identificador}' possui Baixa Física e não pode ser movimentado."
     if bem.status != constants.APROVADO:
-        return f"O bem '{identificador}' precisa estar com status 'Aprovado' para ser movimentado."
+        return (
+            f"O bem '{identificador}' está com status '{bem.get_status_display()}' "
+            "e não pode ser adicionado à movimentação. "
+            "Somente bens com status 'Aprovado' podem ser incluídos."
+        )
     return None
 
 
