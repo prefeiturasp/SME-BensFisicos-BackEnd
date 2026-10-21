@@ -35,7 +35,7 @@
 
   function restoreSavedState(state, saved) {
     state.faixasAntigas = Array.isArray(saved.faixas) ? saved.faixas : []
-    if (['geral', 'faixa', 'todos'].includes(saved.modo)) state.modo = saved.modo
+    if (['geral', 'faixa', 'visualizar', 'todos'].includes(saved.modo)) state.modo = saved.modo
     if (Array.isArray(saved.selecoes)) {
       state.selecoes = saved.selecoes
       return
@@ -55,7 +55,7 @@
   function createInitialState(hidden) {
     const state = {
       modo: 'geral', selecoes: [], resultados: [], proximaPagina: null,
-      total: 0, faixasAntigas: [], versao: 0, busy: false,
+      total: 0, faixasAntigas: [], versao: 0, busy: false, busyVersion: 0,
       autocompleteTimer: null, autocompleteVersion: 0,
     }
     try {
@@ -81,11 +81,97 @@
   }
 
   function appendCells(row, values) {
-    values.forEach((value) => {
+    return values.map((value) => {
       const cell = document.createElement('td')
       cell.textContent = value
       row.appendChild(cell)
+      return cell
     })
+  }
+
+  function createHelp(message) {
+    const help = document.createElement('span')
+    help.className = 'movimentacao-lote__ajuda'
+    help.tabIndex = 0
+    help.textContent = '?'
+    help.setAttribute('role', 'img')
+    help.setAttribute('aria-label', message)
+    return help
+  }
+
+  function manualMode(state) {
+    return state.modo === 'geral' || state.modo === 'visualizar'
+  }
+
+  function goodsTable(bens) {
+    const table = document.createElement('table')
+    const header = table.createTHead().insertRow()
+    for (const title of ['Número Patrimonial', 'Nome do Bem']) {
+      const cell = document.createElement('th')
+      cell.textContent = title
+      header.appendChild(cell)
+    }
+    const body = table.createTBody()
+    for (const bem of bens) appendCells(body.insertRow(), [bem.numero_patrimonial || 'Sem número patrimonial', bem.nome || '-'])
+    return table
+  }
+
+  function openDialog(controls, title, content, confirmLabel, onConfirm, cancelLabel = 'Cancelar', variant = 'primary') {
+    const dialog = document.createElement('dialog')
+    dialog.className = 'admin-confirm-dialog movimentacao-lote__dialog'
+    dialog.setAttribute('aria-label', title)
+    const container = document.createElement('div')
+    container.className = 'admin-confirm-dialog__content'
+    const heading = document.createElement('h2')
+    heading.className = 'admin-confirm-dialog__title'
+    heading.textContent = title
+    heading.tabIndex = -1
+    heading.setAttribute('autofocus', '')
+    content.classList.add('admin-confirm-dialog__message')
+    const body = document.createElement('div')
+    body.className = 'admin-confirm-dialog__body'
+    body.appendChild(content)
+    const footer = document.createElement('div')
+    footer.className = 'admin-confirm-dialog__footer'
+    const error = document.createElement('p')
+    error.className = 'movimentacao-lote__erro'
+    error.setAttribute('role', 'alert')
+    const actions = document.createElement('div')
+    actions.className = 'admin-confirm-dialog__actions'
+    const cancel = document.createElement('button')
+    cancel.type = 'button'
+    cancel.className = 'button admin-confirm-dialog__cancel'
+    cancel.textContent = cancelLabel
+    const confirm = document.createElement('button')
+    confirm.type = 'button'
+    confirm.className = variant === 'destructive' ? 'button admin-confirm-dialog__discard' : 'button default'
+    confirm.textContent = confirmLabel
+    let pending = false
+    cancel.addEventListener('click', () => dialog.close())
+    dialog.addEventListener('cancel', (event) => { if (pending) event.preventDefault() })
+    dialog.addEventListener('close', () => dialog.remove())
+    confirm.addEventListener('click', async () => {
+      if (pending) return
+      pending = true
+      error.textContent = ''
+      dialog.querySelectorAll('button, input').forEach((input) => { input.disabled = true })
+      try {
+        await onConfirm()
+        dialog.close()
+      } catch (requestError) {
+        error.textContent = requestError instanceof Error ? requestError.message : 'Não foi possível concluir. Tente novamente.'
+      } finally {
+        pending = false
+        dialog.querySelectorAll('button, input').forEach((input) => { input.disabled = false })
+      }
+    })
+    actions.append(cancel, confirm)
+    footer.append(error, actions)
+    container.append(heading, body, footer)
+    dialog.appendChild(container)
+    controls.root.appendChild(dialog)
+    dialog.showModal()
+    return dialog
   }
 
   function bindHelpTooltips(controls) {
@@ -108,6 +194,7 @@
       if (!help || help === activeHelp) return
       hideHelp()
       activeHelp = help
+      ;(help.closest('dialog') || document.body).appendChild(tooltip)
       tooltip.textContent = help.getAttribute('aria-label')
       tooltip.hidden = false
       help.setAttribute('aria-describedby', tooltip.id)
@@ -151,25 +238,36 @@
     const selected = selectionIds(state.selecoes)
     const blocked = blockedIds(state.selecoes)
     const row = document.createElement('tr')
-    if (state.modo !== 'todos') {
+    const disabled = bem.apto === false || blocked.has(bem.id)
+    if (disabled) {
+      row.className = 'movimentacao-lote__bloqueado'
+      row.setAttribute('aria-disabled', 'true')
+    }
+    if (manualMode(state)) {
       const cell = document.createElement('td')
       const checkbox = document.createElement('input')
       checkbox.type = 'checkbox'
       checkbox.checked = selected.has(bem.id)
-      checkbox.disabled = state.modo !== 'geral' || bem.apto === false || blocked.has(bem.id)
+      checkbox.disabled = state.busy || disabled
       checkbox.setAttribute('aria-label', `Selecionar bem ID ${bem.id}`)
       checkbox.addEventListener('change', () => toggleIndividual(state, controls, bem, checkbox.checked))
       cell.appendChild(checkbox)
       row.appendChild(cell)
     }
-    const situation = state.modo === 'geral' && bem.apto !== false && blocked.has(bem.id)
+    const situation = bem.apto !== false && blocked.has(bem.id)
       ? 'Já incluído em uma faixa selecionada'
       : bem.motivo || 'Apto para movimentação'
-    appendCells(row, [bem.id, bem.numero_patrimonial || 'Sem número patrimonial', bem.nome || '-',
-      bem.descricao || '-', bem.localizacao || '-', situation])
-    if (state.modo === 'geral' && (bem.apto === false || blocked.has(bem.id))) {
+    const cells = appendCells(row, [bem.id, bem.numero_patrimonial || 'Sem número patrimonial', bem.nome || '-',
+      bem.descricao || '-', bem.localizacao || '-'])
+    if (!bem.numero_patrimonial?.trim()) {
+      cells[1].append(' ', createHelp('Este bem está cadastrado sem número patrimonial. Sua seleção segue as mesmas regras de movimentação dos demais bens; a ausência do número, por si só, não impede a movimentação.'))
+    }
+    const situationCell = document.createElement('td')
+    situationCell.textContent = situation
+    row.appendChild(situationCell)
+    if (disabled) {
       const message = bem.apto !== false && blocked.has(bem.id)
-        ? 'Este bem já está incluído em uma faixa selecionada. Não é necessário selecioná-lo novamente.'
+        ? 'Este bem pertence a uma faixa selecionada e não pode ser desmarcado individualmente. Para retirá-lo, remova ou edite a faixa da lista de selecionados.'
         : bem.motivo || 'Este bem não está apto para movimentação.'
       const help = document.createElement('span')
       help.className = 'movimentacao-lote__ajuda'
@@ -177,7 +275,14 @@
       help.textContent = '!'
       help.setAttribute('role', 'img')
       help.setAttribute('aria-label', message)
-      row.lastElementChild.append(' ', help)
+      const text = document.createElement('span')
+      text.className = 'movimentacao-lote__situacao-texto'
+      text.textContent = situation
+      const summary = document.createElement('span')
+      summary.className = 'movimentacao-lote__situacao'
+      summary.title = message
+      summary.append(text, help)
+      situationCell.replaceChildren(summary)
     }
     return row
   }
@@ -189,48 +294,114 @@
         ? `${selection.numeroDe} até ${selection.numeroAte}` : selection.numeroDe
     }
     const bem = selection.bens[0]
-    return bem.numero_patrimonial || `ID ${bem.id}`
+    return bem.numero_patrimonial || 'Sem número patrimonial'
   }
 
-  function createSelectionRow(selection, state, controls) {
+  function createSelectionRow(selection, state, controls, readOnly = false) {
     const row = document.createElement('tr')
-    const names = selection.tipo === 'todos'
-      ? `${selection.bens.length} bem(ns) selecionado(s)`
-      : selection.bens.map((bem) => bem.nome || '-').join(', ')
-    appendCells(row, [selectionLabel(selection), selection.bens.length, names])
+    const names = selection.bens.slice(0, 2).map((bem) => bem.nome || '-').join(', ')
+    const suffix = selection.bens.length > 2 ? ` e mais ${selection.bens.length - 2}` : ''
+    const displayNames = readOnly ? selection.bens.map((bem) => bem.nome || '-').join(', ') : names + suffix
+    const cells = appendCells(row, [selectionLabel(selection), selection.bens.length, displayNames])
+    if (selection.tipo === 'faixa') {
+      const hint = document.createElement('small')
+      hint.className = 'movimentacao-lote__faixa-resumo'
+      hint.textContent = 'Faixa completa · seleção em conjunto'
+      cells[0].appendChild(hint)
+    }
+    if (readOnly) return row
     const action = document.createElement('td')
+    if (selection.tipo === 'faixa') {
+      const edit = document.createElement('button')
+      edit.type = 'button'
+      edit.disabled = state.busy
+      edit.title = 'Ver/editar faixa'
+      edit.className = 'button movimentacao-lote__editar'
+      edit.appendChild(actionIcon(controls.root.dataset.editIcon))
+      edit.setAttribute('aria-label', `Ver/editar faixa ${selectionLabel(selection)}`)
+      edit.addEventListener('click', () => editRange(state, controls, selection))
+      action.appendChild(edit)
+    }
     const remove = document.createElement('button')
     remove.type = 'button'
     remove.className = 'button movimentacao-lote__remover'
-    remove.textContent = 'Remover'
-    remove.disabled = selection.tipo === 'todos'
+    remove.title = 'Remover seleção'
+    remove.appendChild(actionIcon(controls.root.dataset.removeIcon))
+    remove.disabled = state.busy
     remove.setAttribute('aria-label', `Remover seleção ${selectionLabel(selection)}`)
-    remove.addEventListener('click', () => {
-      state.selecoes = state.selecoes.filter((item) => item.id !== selection.id)
-      persist(state, controls)
-      render(state, controls)
-    })
+    remove.addEventListener('click', () => confirmRemoval(selection, state, controls))
     action.appendChild(remove)
     row.appendChild(action)
     return row
   }
 
+  function selectionTable(selections) {
+    if (selections.length === 1 && selections[0].tipo === 'todos') {
+      const table = goodsTable(selections[0].bens)
+      const caption = table.createCaption()
+      caption.append('Todos os bens aptos da UA de origem ', createHelp('Todos os bens aptos da UA de origem serão incluídos na movimentação. Para marcar ou desmarcar bens específicos, volte para Seleção manual.'))
+      return table
+    }
+    const table = document.createElement('table')
+    const header = table.createTHead().insertRow()
+    for (const title of ['Número Patrimonial', 'Quantidade', 'Nome do Bem']) {
+      const cell = document.createElement('th')
+      cell.textContent = title
+      header.appendChild(cell)
+    }
+    const body = table.createTBody()
+    for (const selection of selections) body.appendChild(createSelectionRow(selection, null, null, true))
+    return table
+  }
+
+  function actionIcon(url) {
+    const icon = document.createElement('img')
+    icon.src = url
+    icon.alt = ''
+    icon.width = 16
+    icon.height = 16
+    return icon
+  }
+
+  function confirmRemoval(selection, state, controls) {
+    const content = document.createElement('p')
+    content.textContent = `Deseja remover ${selectionLabel(selection)} da movimentação? Os cadastros dos bens não serão apagados.`
+    const version = state.versao
+    openDialog(controls, 'Remover seleção?', content, 'Remover da seleção', () => {
+      if (version !== state.versao) throw new Error('A seleção foi alterada. Tente novamente.')
+      state.selecoes = state.selecoes.filter((item) => item.id !== selection.id)
+      persist(state, controls)
+      render(state, controls)
+    }, 'Voltar', 'destructive')
+  }
+
   function updateHeaderCheckbox(state, controls) {
     const selected = selectionIds(state.selecoes)
     const blocked = blockedIds(state.selecoes)
-    const selectable = state.modo === 'geral'
+    const selectable = manualMode(state)
       ? state.resultados.filter((bem) => bem.apto !== false && !blocked.has(bem.id)) : []
     const selectedCount = selectable.filter((bem) => selected.has(bem.id)).length
-    controls.selecionarResultados.disabled = !selectable.length
+    controls.selecionarResultados.disabled = state.busy || !selectable.length
     controls.selecionarResultados.checked = selectable.length > 0 && selectedCount === selectable.length
     controls.selecionarResultados.indeterminate = selectedCount > 0 && selectedCount < selectable.length
   }
 
   function render(state, controls) {
-    controls.colunaSelecao.hidden = state.modo === 'todos'
+    controls.colunaSelecao.hidden = !manualMode(state)
+    controls.resultados.closest('.movimentacao-lote__tabelas').hidden = state.modo === 'todos' || !state.resultados.length
+    controls.tituloResultados.hidden = state.modo === 'todos' || !state.resultados.length
+    controls.tituloResultados.textContent = `Resultados da Busca (${state.total})`
     controls.resultados.replaceChildren(...state.resultados.map((bem) => createResultRow(bem, state, controls)))
     controls.tituloSelecionados.textContent = `Selecionados (${selectionIds(state.selecoes).size})`
-    if (state.selecoes.length) {
+    controls.tituloSelecionados.hidden = !state.selecoes.length
+    controls.selecionados.closest('.movimentacao-lote__tabelas').hidden = !state.selecoes.length
+    const automatic = state.modo === 'todos'
+    controls.selecionados.closest('table').hidden = automatic
+    controls.automaticos.hidden = !automatic || !state.selecoes.length
+    if (automatic) {
+      controls.automaticos.replaceChildren(selectionTable(state.selecoes))
+    }
+    if (state.selecoes.length && !automatic) {
       controls.selecionados.replaceChildren(
         ...state.selecoes.map((selection) => createSelectionRow(selection, state, controls)),
       )
@@ -242,7 +413,7 @@
       row.appendChild(cell)
       controls.selecionados.replaceChildren(row)
     }
-    controls.mais.hidden = !state.proximaPagina
+    controls.mais.hidden = state.modo === 'todos' || !state.proximaPagina
     controls.importar.hidden = state.modo !== 'faixa' || state.total === 0
     controls.ajudaImportar.hidden = controls.importar.hidden
     updateHeaderCheckbox(state, controls)
@@ -268,7 +439,7 @@
     if (controls) hideAutocomplete(controls)
   }
 
-  function createAutocompleteOption(item, input, controls) {
+  function createAutocompleteOption(item, input, state, controls) {
     const listItem = document.createElement('li')
     const button = document.createElement('button')
     button.type = 'button'
@@ -276,7 +447,8 @@
     button.setAttribute('aria-label', `Selecionar ${item.numero_patrimonial}`)
     button.addEventListener('click', () => {
       input.value = item.numero_patrimonial
-      hideAutocomplete(controls)
+      cancelAutocomplete(state, controls)
+      resetResults(state, controls)
     })
     listItem.appendChild(button)
     return listItem
@@ -293,12 +465,13 @@
       const response = await fetch(`${controls.buscarUrl}?${params}`)
       if (!response.ok || version !== state.autocompleteVersion) return
       const body = await response.json()
+      if (version !== state.autocompleteVersion) return
       controls.opcoes.replaceChildren(
-        ...body.itens.map((item) => createAutocompleteOption(item, input, controls)),
+        ...body.itens.map((item) => createAutocompleteOption(item, input, state, controls)),
       )
       controls.opcoes.hidden = body.itens.length === 0
     } catch {
-      hideAutocomplete(controls)
+      if (version === state.autocompleteVersion) hideAutocomplete(controls)
     }
   }
 
@@ -319,6 +492,7 @@
     controls.root.querySelector('input[value="todos"]').checked = state.modo === 'todos'
     controls.geral.hidden = state.modo !== 'geral'
     controls.faixa.hidden = state.modo !== 'faixa'
+    controls.visualizar.hidden = state.modo !== 'visualizar'
     controls.pesquisar.hidden = state.modo === 'todos'
     controls.importar.hidden = state.modo !== 'faixa' || state.total === 0
     controls.ajudaImportar.hidden = state.modo !== 'faixa' || state.total === 0
@@ -330,15 +504,14 @@
 
   function searchParams(state, controls, page) {
     const params = new URLSearchParams({ unidade_administrativa_origem: controls.origem.value, pagina: page })
-    if (state.modo === 'geral') {
+    if (manualMode(state)) {
       const term = controls.termo.value.trim()
-      if (!term) throw new Error('Informe um critério de busca.')
-      params.set('termo_busca', term)
+      if (state.modo === 'geral' && term) params.set('termo_busca', term)
       return params
     }
     const start = controls.de.value.trim()
     const end = controls.ate.value.trim()
-    if (!start || (end && start > end)) {
+    if (!start || (end && start.split('-')[0] > end.split('-')[0])) {
       throw new Error('Informe um intervalo válido: o Número Patrimonial Até deve ser maior ou igual ao De.')
     }
     params.set('numero_patrimonial_de', start)
@@ -347,6 +520,7 @@
   }
 
   function setBusy(state, controls, busy) {
+    state.busyVersion += 1
     state.busy = busy
     controls.pesquisar.disabled = busy
     controls.importar.disabled = busy
@@ -354,9 +528,18 @@
     controls.selecionarResultados.disabled = busy
     controls.root.querySelectorAll('input[name$="-modo"]').forEach((radio) => { radio.disabled = busy })
     controls.abas.querySelectorAll('[role="tab"]').forEach((tab) => { tab.disabled = busy })
+    render(state, controls)
+    return state.busyVersion
+  }
+
+  function finishRequest(state, controls, request) {
+    // Only the request owning the busy state can release the controls.
+    if (request === state.busyVersion) setBusy(state, controls, false)
   }
 
   async function pesquisarBens(state, controls, page = 1) {
+    if (state.busy) return
+    cancelAutocomplete(state, controls)
     if (!controls.origem.value) {
       setError(controls, 'Informe a Unidade Administrativa de origem.')
       return
@@ -369,24 +552,27 @@
       return
     }
     const versao = ++state.versao
-    setBusy(state, controls, true)
+    if (state.modo === 'faixa') {
+      state.resultados = []
+      state.total = 0
+      render(state, controls)
+    }
+    const request = setBusy(state, controls, true)
     setError(controls, '')
     try {
-      const response = await fetch(`${controls.pesquisarUrl}?${params}`)
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.detail || 'Não foi possível buscar bens.')
+      const body = await searchResults(state, controls, params)
       if (versao !== state.versao) return
       state.resultados = page === 1 ? body.itens : [...state.resultados, ...body.itens]
       state.proximaPagina = body.proxima_pagina
       state.total = body.count
-      controls.vazio.textContent = body.count ? `${body.count} bem(ns) encontrado(s).` : 'A busca não retornou resultados.'
+      controls.vazio.textContent = body.count ? '' : 'A busca não retornou resultados.'
       render(state, controls)
     } catch (error) {
       if (versao === state.versao) {
         setError(controls, error instanceof Error ? error.message : 'Não foi possível buscar bens.')
       }
     } finally {
-      setBusy(state, controls, false)
+      finishRequest(state, controls, request)
     }
   }
 
@@ -401,7 +587,196 @@
     return body.itens
   }
 
+  function rangePayload(de, ate) {
+    const start = de.trim()
+    const end = ate.trim()
+    if (!start) throw new Error('Informe o Número Patrimonial - De.')
+    if (end && start.split('-')[0] > end.split('-')[0]) {
+      throw new Error('O Número Patrimonial Até deve ser maior ou igual ao Número Patrimonial De.')
+    }
+    return { numero_patrimonial_de: start, ...(end ? { numero_patrimonial_ate: end } : {}) }
+  }
+
+  async function searchResults(state, controls, params) {
+    if (state.modo === 'faixa') {
+      const faixa = rangePayload(controls.de.value, controls.ate.value)
+      const itens = await resolver(controls, { faixas: [faixa] })
+      if (!itens.length) throw new Error('Nenhum bem apto foi encontrado na faixa informada.')
+      return { itens, count: itens.length, proxima_pagina: null }
+    }
+    const response = await fetch(`${controls.pesquisarUrl}?${params}`)
+    const body = await response.json()
+    if (!response.ok) throw new Error(body.detail || 'Não foi possível buscar bens.')
+    return body
+  }
+
+  function rangeInput(id, label, value, help) {
+    const container = document.createElement('div')
+    container.className = 'movimentacao-lote__criterio'
+    const title = document.createElement('label')
+    title.htmlFor = id
+    title.textContent = label
+    const labelRow = document.createElement('div')
+    labelRow.className = 'movimentacao-lote__rotulo'
+    labelRow.appendChild(title)
+    labelRow.append(' ', createHelp(help))
+    const input = document.createElement('input')
+    input.type = 'text'
+    input.id = id
+    input.value = value
+    input.inputMode = 'numeric'
+    input.maxLength = 15
+    input.placeholder = '000.000000000-0'
+    input.addEventListener('input', () => { input.value = formatarNumeroPatrimonial(input.value) })
+    container.append(labelRow, input)
+    return { container, input }
+  }
+
+  function editRange(state, controls, selection) {
+    const content = document.createElement('div')
+    const description = document.createElement('p')
+    description.textContent = 'Altere De/Até para substituir a faixa. A sequência e a disponibilidade dos bens serão validadas ao aplicar. Os bens não podem ser removidos individualmente.'
+    const ajudaDe = controls.de.previousElementSibling.querySelector('[aria-label]').getAttribute('aria-label')
+    const ajudaAte = controls.ate.previousElementSibling.querySelector('[aria-label]').getAttribute('aria-label')
+    const de = rangeInput(`${controls.hidden.id}-editar-de`, 'Número Patrimonial - De', selection.numeroDe, ajudaDe)
+    const ate = rangeInput(`${controls.hidden.id}-editar-ate`, 'Número Patrimonial - Até', selection.numeroAte, ajudaAte)
+    const fields = document.createElement('div')
+    fields.className = 'movimentacao-lote__criterio--faixa'
+    fields.append(de.container, ate.container)
+    const count = document.createElement('p')
+    count.textContent = `Bens da faixa após aplicar (${selection.bens.length})`
+    count.setAttribute('role', 'status')
+    const help = document.createElement('p')
+    help.append('Como buscar por faixa ', createHelp(controls.ajudaFaixa.getAttribute('aria-label')))
+    const preview = document.createElement('div')
+    preview.appendChild(rangePreviewTable(selection.bens, selection.bens))
+    const notice = document.createElement('p')
+    notice.setAttribute('role', 'status')
+    content.append(description, fields, help, count, notice, preview)
+    const version = state.versao
+    async function validate() {
+      const faixa = rangePayload(de.input.value, ate.input.value)
+      const itens = await resolver(controls, { faixas: [faixa] })
+      if (version !== state.versao) throw new Error('A seleção foi alterada. Abra a faixa novamente.')
+      if (!itens.length) throw new Error('Nenhum bem apto foi encontrado na faixa informada.')
+      const others = selectionIds(state.selecoes.filter((item) => item.id !== selection.id))
+      if (itens.some((bem) => others.has(bem.id))) throw new Error('Um ou mais bens da faixa já foram adicionados à movimentação.')
+      return { faixa, itens }
+    }
+    const dialog = openDialog(controls, 'Ver/editar faixa', content, 'Aplicar faixa', async () => {
+      const { faixa, itens } = await validate()
+      const numeroDe = faixa.numero_patrimonial_de
+      const numeroAte = faixa.numero_patrimonial_ate || numeroDe
+      const updated = { id: `faixa-${numeroDe}-${numeroAte}`, tipo: 'faixa', numeroDe, numeroAte, bens: itens }
+      state.selecoes = state.selecoes.map((item) => item.id === selection.id ? updated : item)
+      persist(state, controls)
+      render(state, controls)
+    })
+    bindRangePreview(dialog, [de.input, ate.input], selection, validate, preview, count, notice)
+    bindEditAutocomplete(dialog, de, controls)
+    bindEditAutocomplete(dialog, ate, controls)
+  }
+
+  function rangePreviewTable(original, target) {
+    const previous = new Set(original.map((bem) => bem.id))
+    const next = new Set(target?.map((bem) => bem.id))
+    const rows = target === null ? original : [...target, ...original.filter((bem) => !next.has(bem.id))]
+    const table = goodsTable(rows)
+    const header = document.createElement('th')
+    header.append('Situação ', createHelp('Esta lista é uma prévia das alterações na faixa. Os bens novos serão incluídos, os mantidos continuarão na faixa e os indicados para remoção sairão dela. A seleção só será alterada ao clicar em "Aplicar faixa".'))
+    table.tHead.rows[0].appendChild(header)
+    rows.forEach((bem, index) => {
+      let status = 'mantido'
+      let label = 'Mantido'
+      if (target === null) { label = 'Seleção atual' }
+      else if (!next.has(bem.id)) { status = 'removido'; label = 'Será removido' }
+      else if (!previous.has(bem.id)) { status = 'novo'; label = 'Novo' }
+      const row = table.tBodies[0].rows[index]
+      row.className = `movimentacao-lote__previa--${status}`
+      appendCells(row, [label])
+    })
+    return table
+  }
+
+  function bindRangePreview(dialog, inputs, selection, validate, preview, count, notice) {
+    let timer
+    let version = 0
+    async function update(request) {
+      try {
+        const { itens } = await validate()
+        if (request !== version || !dialog.open) return
+        preview.replaceChildren(rangePreviewTable(selection.bens, itens))
+        count.textContent = `Bens da faixa após aplicar (${itens.length})`
+        notice.textContent = ''
+        notice.setAttribute('role', 'status')
+      } catch (error) {
+        if (request !== version || !dialog.open) return
+        notice.textContent = `${error.message} A seleção atual permanece inalterada.`
+        notice.setAttribute('role', 'alert')
+      }
+    }
+    function schedule() {
+      const request = ++version
+      globalThis.clearTimeout(timer)
+      notice.setAttribute('role', 'status')
+      preview.replaceChildren(rangePreviewTable(selection.bens, null))
+      count.textContent = `Bens da faixa atual (${selection.bens.length})`
+      notice.textContent = 'Atualizando prévia...'
+      if (inputs[0].value === selection.numeroDe && inputs[1].value === selection.numeroAte) {
+        preview.replaceChildren(rangePreviewTable(selection.bens, selection.bens))
+        count.textContent = `Bens da faixa após aplicar (${selection.bens.length})`
+        notice.textContent = ''
+        return
+      }
+      timer = globalThis.setTimeout(() => void update(request), 350)
+    }
+    for (const input of inputs) input.addEventListener('input', schedule)
+    dialog.addEventListener('close', () => { version += 1; globalThis.clearTimeout(timer) })
+  }
+
+  function bindEditAutocomplete(dialog, field, controls) {
+    const options = document.createElement('datalist')
+    options.id = `${field.input.id}-opcoes`
+    field.input.setAttribute('list', options.id)
+    field.input.setAttribute('autocomplete', 'off')
+    field.container.appendChild(options)
+    let timer
+    let version = 0
+    async function load(request) {
+      const params = new URLSearchParams({
+        unidade_administrativa_origem: controls.origem.value, q: field.input.value.trim(),
+      })
+      try {
+        const response = await fetch(`${controls.buscarUrl}?${params}`)
+        if (!response.ok) return
+        const body = await response.json()
+        if (request !== version || !dialog.open) return
+        options.replaceChildren(...body.itens.filter((bem) => bem.numero_patrimonial).map(rangeOption))
+      } catch {
+        if (request === version) options.replaceChildren()
+      }
+    }
+    function schedule() {
+      const request = ++version
+      options.replaceChildren()
+      globalThis.clearTimeout(timer)
+      timer = globalThis.setTimeout(() => void load(request), 300)
+    }
+    field.input.addEventListener('input', schedule)
+    field.input.addEventListener('focus', schedule)
+    dialog.addEventListener('close', () => { version += 1; globalThis.clearTimeout(timer) })
+  }
+
+  function rangeOption(bem) {
+    const option = document.createElement('option')
+    option.value = bem.numero_patrimonial
+    option.label = bem.nome
+    return option
+  }
+
   async function importarFaixa(state, controls) {
+    if (state.busy) return
+    cancelAutocomplete(state, controls)
     let params
     try {
       params = searchParams(state, controls, 1)
@@ -418,8 +793,9 @@
       setError(controls, 'A faixa informada já foi adicionada à movimentação.')
       return
     }
-    setBusy(state, controls, true)
+    const request = setBusy(state, controls, true)
     setError(controls, '')
+    const version = state.versao
     try {
       const itens = await resolver(controls, {
         faixas: [{
@@ -427,6 +803,7 @@
           ...(numeroAteInformado ? { numero_patrimonial_ate: numeroAteInformado } : {}),
         }],
       })
+      if (version !== state.versao) return
       if (!itens.length) throw new Error('Nenhum bem apto foi encontrado na faixa informada.')
       const selected = selectionIds(state.selecoes)
       if (itens.some((bem) => selected.has(bem.id))) {
@@ -438,49 +815,52 @@
       resetResults(state, controls)
       persist(state, controls)
     } catch (error) {
-      setError(controls, error instanceof Error ? error.message : 'Não foi possível importar a faixa.')
+      if (version === state.versao) {
+        setError(controls, error instanceof Error ? error.message : 'Não foi possível importar a faixa.')
+      }
     } finally {
-      setBusy(state, controls, false)
+      finishRequest(state, controls, request)
     }
   }
 
   async function selecionarTodos(state, controls) {
     if (!controls.origem.value) {
-      setError(controls, 'Informe a Unidade Administrativa de origem.')
-      return
+      throw new Error('Informe a Unidade Administrativa de origem.')
     }
     const versao = ++state.versao
-    setBusy(state, controls, true)
+    const request = setBusy(state, controls, true)
     setError(controls, '')
     try {
       const itens = await resolver(controls, { selecionar_todos: true })
       if (versao !== state.versao) return
       if (!itens.length) throw new Error('Nenhum bem aprovado foi encontrado na unidade administrativa de origem.')
       state.selecoes = [{ id: 'todos', tipo: 'todos', bens: itens }]
-      state.resultados = itens
-      state.total = itens.length
-      state.proximaPagina = null
-      persist(state, controls)
-      render(state, controls)
+      state.modo = 'todos'
+      resetResults(state, controls)
+      setModeLayout(state, controls)
     } catch (error) {
-      if (versao === state.versao) {
-        setError(controls, error instanceof Error ? error.message : 'Não foi possível incluir os bens.')
-      }
+      if (versao === state.versao) throw error
     } finally {
-      setBusy(state, controls, false)
+      finishRequest(state, controls, request)
     }
   }
 
   function changeMode(state, controls, newMode) {
+    if (state.busy) return
     if (newMode === 'todos') {
-      const message = state.selecoes.length
-        ? 'A lista de bens selecionados será substituída por todos os bens aptos da Unidade Administrativa de origem. Deseja continuar?'
-        : 'Serão selecionados todos os bens aptos da Unidade Administrativa de origem. Deseja continuar?'
-      if (!globalThis.confirm(message)) {
-        controls.root.querySelector('input[value="manual"]').checked = state.modo !== 'todos'
-        controls.root.querySelector('input[value="todos"]').checked = state.modo === 'todos'
-        return
+      setModeLayout(state, controls)
+      cancelAutocomplete(state, controls)
+      if (state.selecoes.length) {
+        const content = document.createElement('div')
+        const message = document.createElement('p')
+        message.textContent = 'A seleção abaixo será descartada e substituída por todos os bens aptos da UA de origem.'
+        content.append(message, selectionTable(state.selecoes))
+        openDialog(controls, 'Descartar seleção?', content, 'Descartar selecionados',
+          () => selecionarTodos(state, controls), 'Voltar', 'destructive')
+      } else {
+        void selecionarTodos(state, controls).catch((error) => setError(controls, error.message))
       }
+      return
     }
     cancelAutocomplete(state, controls)
     const previousMode = state.modo
@@ -490,16 +870,12 @@
       state.selecoes = []
     }
     resetResults(state, controls)
-    if (newMode !== 'todos') {
-      setModeLayout(state, controls)
-      return
-    }
     setModeLayout(state, controls)
-    void selecionarTodos(state, controls)
+    if (newMode === 'visualizar') void pesquisarBens(state, controls)
   }
 
   function toggleVisibleResults(state, controls) {
-    if (state.modo !== 'geral') return
+    if (!manualMode(state) || state.busy) return
     const blocked = blockedIds(state.selecoes)
     const selectable = state.resultados.filter((bem) => bem.apto !== false && !blocked.has(bem.id))
     const selected = selectionIds(state.selecoes)
@@ -519,10 +895,12 @@
 
   async function restoreLegacyRanges(state, controls) {
     if (!controls.origem.value || !state.faixasAntigas.length) return
-    setBusy(state, controls, true)
+    const version = state.versao
+    const request = setBusy(state, controls, true)
     try {
       for (const [index, faixa] of state.faixasAntigas.entries()) {
         const itens = await resolver(controls, { faixas: [faixa] })
+        if (version !== state.versao) return
         state.selecoes.push({
           id: `faixa-restaurada-${index}`, tipo: 'faixa',
           numeroDe: faixa.numero_patrimonial_de,
@@ -534,19 +912,28 @@
       persist(state, controls)
       render(state, controls)
     } catch (error) {
-      setError(controls, error instanceof Error ? error.message : 'Não foi possível restaurar os bens.')
+      if (version === state.versao) {
+        setError(controls, error instanceof Error ? error.message : 'Não foi possível restaurar os bens.')
+      }
     } finally {
-      setBusy(state, controls, false)
+      finishRequest(state, controls, request)
     }
   }
 
   function getControls(root) {
+    const automaticos = document.createElement('div')
+    automaticos.className = 'movimentacao-lote__automaticos'
+    automaticos.hidden = true
+    root.querySelector('.movimentacao-lote__selecionados').after(automaticos)
     return {
       root,
+      automaticos,
       hidden: root.querySelector('input[type="hidden"]'),
       origem: document.getElementById('id_unidade_administrativa_origem'),
       geral: root.querySelector('.movimentacao-lote__criterio--geral'),
       faixa: root.querySelector('.movimentacao-lote__criterio--faixa'),
+      visualizar: root.querySelector('.movimentacao-lote__visualizar'),
+      ajudaFaixa: root.querySelector('.movimentacao-lote__ajuda-faixa .movimentacao-lote__ajuda'),
       abas: root.querySelector('.movimentacao-lote__abas'),
       ajudaImportar: root.querySelector('.movimentacao-lote__ajuda-importar'),
       colunaSelecao: root.querySelector('.movimentacao-lote__coluna-selecao'),
@@ -557,6 +944,7 @@
       pesquisar: root.querySelector('.movimentacao-lote__pesquisar'),
       importar: root.querySelector('.movimentacao-lote__importar'),
       resultados: root.querySelector('.movimentacao-lote__resultados tbody'),
+      tituloResultados: root.querySelector('.movimentacao-lote__resultados-titulo'),
       selecionarResultados: root.querySelector('.movimentacao-lote__selecionar-resultados'),
       selecionados: root.querySelector('.movimentacao-lote__selecionados tbody'),
       tituloSelecionados: root.querySelector('.movimentacao-lote__selecionados-titulo'),
@@ -601,15 +989,93 @@
       cancelAutocomplete(state, controls)
       state.versao += 1
       state.selecoes = []
+      state.busy = false
       state.modo = 'geral'
+      controls.root.querySelector('dialog')?.close()
       resetResults(state, controls)
       setModeLayout(state, controls)
+      setBusy(state, controls, false)
     })
-    controls.root.closest('form')?.addEventListener('submit', (event) => {
-      if (!state.busy) return
-      event.preventDefault()
+    controls.root.closest('form')?.addEventListener('submit', (event) => reviewSubmit(event, state, controls), true)
+  }
+
+  function selectedLabel(id) {
+    const field = document.getElementById(id)
+    return field?.selectedOptions?.[0]?.textContent || field?.value || 'Não informado'
+  }
+
+  function validateReviewDestination() {
+    const destination = document.getElementById('id_unidade_administrativa_destino')
+    document.getElementById('movimentacao-checkout-destino-error')?.remove()
+    if (destination?.value) return true
+
+    const field = destination?.disabled
+      ? document.getElementById('id_unidade_orcamentaria_destino')
+      : destination
+    const error = document.createElement('ul')
+    error.id = 'movimentacao-checkout-destino-error'
+    error.className = 'errorlist'
+    error.setAttribute('role', 'alert')
+    const message = document.createElement('li')
+    message.textContent = 'Selecione a unidade administrativa de destino antes de revisar a movimentação.'
+    error.appendChild(message)
+    field?.closest('.form-row')?.appendChild(error)
+    field?.scrollIntoView({ block: 'center' })
+    field?.focus()
+    return false
+  }
+
+  function reviewSubmit(event, state, controls) {
+    if (state.confirmedSubmit) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    if (state.busy) {
       setError(controls, 'Aguarde a busca de bens terminar antes de salvar.')
-    })
+      return
+    }
+    if (controls.root.querySelector('dialog[open]')) return
+    if (!validateReviewDestination()) return
+    if (!state.selecoes.length) {
+      setError(controls, 'Adicione ao menos um item de movimentação.')
+      controls.root.scrollIntoView({ block: 'center' })
+      return
+    }
+    const content = document.createElement('div')
+    for (const [label, id] of [
+      ['Origem', 'id_unidade_administrativa_origem'],
+      ['UO de destino', 'id_unidade_orcamentaria_destino'],
+      ['UA de destino', 'id_unidade_administrativa_destino'],
+    ]) {
+      const line = document.createElement('p')
+      line.textContent = `${label}: ${selectedLabel(id)}`
+      content.appendChild(line)
+    }
+    const observation = document.createElement('p')
+    observation.textContent = `Observação: ${document.getElementById('id_observacao')?.value || 'Não informada'}`
+    const count = document.createElement('p')
+    count.textContent = `Selecionados (${selectionIds(state.selecoes).size})`
+    content.append(observation, count, selectionTable(state.selecoes))
+    const form = event.target
+    const submitter = event.submitter
+    openDialog(controls, 'Revisar e salvar movimentação', content, 'Salvar movimentação', () => {
+      persist(state, controls)
+      form.querySelector('[data-movimentacao-submit]')?.remove()
+      if (submitter?.name) {
+        const action = document.createElement('input')
+        action.type = 'hidden'
+        action.name = submitter.name
+        action.value = submitter.value
+        action.dataset.movimentacaoSubmit = 'true'
+        form.appendChild(action)
+      }
+      state.confirmedSubmit = true
+      try {
+        if (submitter) form.requestSubmit(submitter)
+        else form.requestSubmit()
+      } finally {
+        state.confirmedSubmit = false
+      }
+    }, 'Voltar para editar')
   }
 
   function initialize(root) {

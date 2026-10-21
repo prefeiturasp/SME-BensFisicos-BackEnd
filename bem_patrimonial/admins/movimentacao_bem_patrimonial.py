@@ -486,7 +486,7 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
             "js/bem_patrimonial/prevenir_duplo_submit.js",
             "admin/movimentacao_filtra_bens_por_ua.js",
             "admin/movimentacao_uo_destino.js",
-            f"{static('admin/movimentacao_lote.js')}?v=5",
+            f"{static('admin/movimentacao_lote.js')}?v=15",
         )
         css = {
             "all": (
@@ -494,7 +494,8 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
                 "css/custom_inline.css",
                 "css/hide_crud_icons.css",
                 "css/admin_filtros.css",
-                f"{static('css/movimentacao_lote.css')}?v=5",
+                f"{static('admin/unsaved_changes.css')}?v=2",
+                f"{static('css/movimentacao_lote.css')}?v=11",
             )
         }
 
