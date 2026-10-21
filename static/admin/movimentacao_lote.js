@@ -432,6 +432,19 @@
     controls.opcoes.hidden = true
   }
 
+  function showAutocomplete(options, input) {
+    const rect = input.getBoundingClientRect()
+    const below = globalThis.innerHeight - rect.bottom - 12
+    const above = rect.top - 12
+    const openBelow = below >= 160 || below >= above
+    options.style.left = `${Math.max(8, rect.left)}px`
+    options.style.width = `${Math.min(rect.width, globalThis.innerWidth - Math.max(8, rect.left) - 8)}px`
+    options.style.top = openBelow ? `${rect.bottom + 4}px` : 'auto'
+    options.style.bottom = openBelow ? 'auto' : `${globalThis.innerHeight - rect.top + 4}px`
+    options.style.maxHeight = `${Math.max(0, Math.min(240, openBelow ? below : above))}px`
+    options.hidden = options.childElementCount === 0
+  }
+
   function cancelAutocomplete(state, controls) {
     if (state.autocompleteTimer) globalThis.clearTimeout(state.autocompleteTimer)
     state.autocompleteTimer = null
@@ -439,16 +452,16 @@
     if (controls) hideAutocomplete(controls)
   }
 
-  function createAutocompleteOption(item, input, state, controls) {
+  function createAutocompleteOption(item, input, onSelect) {
     const listItem = document.createElement('li')
     const button = document.createElement('button')
     button.type = 'button'
     button.textContent = `${item.numero_patrimonial} - ${item.nome}`
     button.setAttribute('aria-label', `Selecionar ${item.numero_patrimonial}`)
+    button.addEventListener('mousedown', (event) => event.preventDefault())
     button.addEventListener('click', () => {
       input.value = item.numero_patrimonial
-      cancelAutocomplete(state, controls)
-      resetResults(state, controls)
+      onSelect()
     })
     listItem.appendChild(button)
     return listItem
@@ -467,9 +480,12 @@
       const body = await response.json()
       if (version !== state.autocompleteVersion) return
       controls.opcoes.replaceChildren(
-        ...body.itens.map((item) => createAutocompleteOption(item, input, state, controls)),
+        ...body.itens.map((item) => createAutocompleteOption(item, input, () => {
+          cancelAutocomplete(state, controls)
+          resetResults(state, controls)
+        })),
       )
-      controls.opcoes.hidden = body.itens.length === 0
+      showAutocomplete(controls.opcoes, input)
     } catch {
       if (version === state.autocompleteVersion) hideAutocomplete(controls)
     }
@@ -493,7 +509,7 @@
     controls.geral.hidden = state.modo !== 'geral'
     controls.faixa.hidden = state.modo !== 'faixa'
     controls.visualizar.hidden = state.modo !== 'visualizar'
-    controls.pesquisar.hidden = state.modo === 'todos'
+    controls.pesquisar.hidden = ['todos', 'visualizar'].includes(state.modo)
     controls.importar.hidden = state.modo !== 'faixa' || state.total === 0
     controls.ajudaImportar.hidden = state.modo !== 'faixa' || state.total === 0
     controls.vazio.textContent = ''
@@ -680,7 +696,8 @@
   function rangePreviewTable(original, target) {
     const previous = new Set(original.map((bem) => bem.id))
     const next = new Set(target?.map((bem) => bem.id))
-    const rows = target === null ? original : [...target, ...original.filter((bem) => !next.has(bem.id))]
+    const rows = (target === null ? [...original] : [...target, ...original.filter((bem) => !next.has(bem.id))])
+      .sort((a, b) => (a.numero_patrimonial || '').localeCompare(b.numero_patrimonial || '', 'pt-BR', { numeric: true }))
     const table = goodsTable(rows)
     const header = document.createElement('th')
     header.append('Situação ', createHelp('Esta lista é uma prévia das alterações na faixa. Os bens novos serão incluídos, os mantidos continuarão na faixa e os indicados para remoção sairão dela. A seleção só será alterada ao clicar em "Aplicar faixa".'))
@@ -735,9 +752,10 @@
   }
 
   function bindEditAutocomplete(dialog, field, controls) {
-    const options = document.createElement('datalist')
+    const options = document.createElement('ul')
     options.id = `${field.input.id}-opcoes`
-    field.input.setAttribute('list', options.id)
+    options.className = 'movimentacao-lote__opcoes'
+    options.hidden = true
     field.input.setAttribute('autocomplete', 'off')
     field.container.appendChild(options)
     let timer
@@ -751,27 +769,45 @@
         if (!response.ok) return
         const body = await response.json()
         if (request !== version || !dialog.open) return
-        options.replaceChildren(...body.itens.filter((bem) => bem.numero_patrimonial).map(rangeOption))
+        const items = body.itens.filter((bem) => bem.numero_patrimonial)
+        options.replaceChildren(...items.map((bem) => createAutocompleteOption(bem, field.input, () => {
+          field.input.dispatchEvent(new Event('input', { bubbles: true }))
+          dismiss()
+        })))
+        showAutocomplete(options, field.input)
       } catch {
-        if (request === version) options.replaceChildren()
+        if (request === version) dismiss()
       }
     }
     function schedule() {
-      const request = ++version
+      dismiss()
+      const request = version
       options.replaceChildren()
-      globalThis.clearTimeout(timer)
       timer = globalThis.setTimeout(() => void load(request), 300)
+    }
+    function dismiss() {
+      version += 1
+      globalThis.clearTimeout(timer)
+      options.hidden = true
     }
     field.input.addEventListener('input', schedule)
     field.input.addEventListener('focus', schedule)
-    dialog.addEventListener('close', () => { version += 1; globalThis.clearTimeout(timer) })
-  }
-
-  function rangeOption(bem) {
-    const option = document.createElement('option')
-    option.value = bem.numero_patrimonial
-    option.label = bem.nome
-    return option
+    field.input.addEventListener('blur', (event) => {
+      if (!options.contains(event.relatedTarget)) dismiss()
+    })
+    options.addEventListener('focusout', (event) => {
+      if (!options.contains(event.relatedTarget)) dismiss()
+    })
+    function hideOnScroll(event) {
+      if (!options.hidden && !options.contains(event.target)) dismiss()
+    }
+    globalThis.addEventListener('scroll', hideOnScroll, true)
+    globalThis.addEventListener('resize', dismiss)
+    dialog.addEventListener('close', () => {
+      dismiss()
+      globalThis.removeEventListener('scroll', hideOnScroll, true)
+      globalThis.removeEventListener('resize', dismiss)
+    })
   }
 
   async function importarFaixa(state, controls) {
@@ -968,12 +1004,19 @@
       resetResults(state, controls)
       scheduleAutocomplete(state, controls, input)
     })
-    input.addEventListener('blur', () => {
-      globalThis.setTimeout(hideAutocomplete, 150, controls)
+    input.addEventListener('blur', (event) => {
+      if (!controls.opcoes.contains(event.relatedTarget)) hideAutocomplete(controls)
     })
   }
 
   function bindEvents(state, controls) {
+    globalThis.addEventListener('scroll', (event) => {
+      if (!controls.opcoes.hidden && !controls.opcoes.contains(event.target)) cancelAutocomplete(state, controls)
+    }, true)
+    globalThis.addEventListener('resize', () => cancelAutocomplete(state, controls))
+    controls.opcoes.addEventListener('focusout', (event) => {
+      if (!controls.opcoes.contains(event.relatedTarget)) hideAutocomplete(controls)
+    })
     controls.root.querySelectorAll('input[name$="-modo"]')
       .forEach((radio) => bindModeRadio(state, controls, radio))
     controls.abas.querySelectorAll('[role="tab"]').forEach((tab) => {

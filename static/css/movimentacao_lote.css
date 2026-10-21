@@ -251,15 +251,18 @@
   line-height: 1.25;
 }
 
-.movimentacao-lote__opcoes {
-  max-width: 640px;
+.movimentacao-lote .movimentacao-lote__opcoes {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
   max-height: 240px;
-  margin: 4px 0 0;
+  margin: 0;
   padding: 0;
   overflow-y: auto;
   list-style: none;
   border: 1px solid var(--border-color, #bbb);
   background: var(--body-bg, #fff);
+  box-shadow: 0 4px 12px #0003;
 }
 
 .movimentacao-lote__opcoes button {
@@ -325,13 +328,21 @@
 }
 
 .movimentacao-lote__previa--novo td {
-  background: #edf9f0;
-  color: #14532d;
+  background: color-mix(in srgb, #16a34a 12%, var(--body-bg, white));
+  color: var(--body-fg, #333);
 }
 
 .movimentacao-lote__previa--removido td {
-  background: #fff1f2;
-  color: #991b1b;
+  background: color-mix(in srgb, #dc2626 12%, var(--body-bg, white));
+  color: var(--body-fg, #333);
+}
+
+.movimentacao-lote__previa--novo td:last-child {
+  color: color-mix(in srgb, #16a34a 70%, var(--body-fg, #333));
+}
+
+.movimentacao-lote__previa--removido td:last-child {
+  color: color-mix(in srgb, #dc2626 70%, var(--body-fg, #333));
 }
 
 .movimentacao-lote__previa--mantido td {
