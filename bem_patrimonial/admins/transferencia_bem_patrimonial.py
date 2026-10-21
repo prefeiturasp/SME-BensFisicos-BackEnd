@@ -10,9 +10,10 @@ from bem_patrimonial.admins.forms.transferencia_bem_patrimonial_form import (
 )
 from bem_patrimonial.admins.inlines.inlines import TransferenciaBensItemInline
 from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 
 
-class TransferenciaBemPatrimonialAdmin(admin.ModelAdmin):
+class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
     model = TransferenciaBemPatrimonial
     form = TransferenciaBemPatrimonialForm
     inlines = [TransferenciaBensItemInline]

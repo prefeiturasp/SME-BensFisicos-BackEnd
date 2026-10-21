@@ -226,6 +226,7 @@
     const input = qs('.fld-npat', row);
     const ant = qs('.fld-ant', row);
     const sem = qs('.fld-sem', row);
+    const loc = qs('.fld-loc', row);
 
     function refresh(){
       if (sem.checked){
@@ -252,12 +253,16 @@
 
     ant.addEventListener('change', refresh);
     sem.addEventListener('change', refresh);
-    input.addEventListener('input', function(){
+    function updateRowValidation(){
       if (!ant?.checked && !sem?.checked){
         input.value = fmt(onlyDigits(input.value));
       }
       toPayload();
-    });
+      if (!id('multi-errors')?.classList.contains('hide')) validateMultiRows();
+    }
+
+    input.addEventListener('input', updateRowValidation);
+    loc.addEventListener('input', updateRowValidation);
     refresh();
   }
 
@@ -323,7 +328,21 @@
     if (!box) return;
     box.classList.remove('hide');
     box.innerHTML = msgs.map(function(m){ return '<div>'+m+'</div>'; }).join('');
-    box.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  function focusFirstValidationError(form){
+    const field = qs(
+      '.form-row.error input, .form-row.error select, .form-row.error textarea, #multi-container input.error, #multi-container select.error, #multi-container textarea.error',
+      form
+    );
+    if (field){
+      field.focus();
+      field.scrollIntoView({behavior:'smooth', block:'center'});
+      return;
+    }
+
+    const errorBox = qs('#base-required-errors:not(.hide), #multi-errors:not(.hide)', form);
+    errorBox?.scrollIntoView({behavior:'smooth', block:'center'});
   }
 
   function validateMultiRows(){
@@ -521,14 +540,16 @@
     function guardSubmit(ev){
         toPayload();
         const okBase = validateBaseRequired(form);
-        if (!okBase){ ev.preventDefault(); ev.stopPropagation(); return; }
 
         const isMulti = !multi.classList.contains('hide');
         const hasRows = qsa('#multi-rows .multi-row').length > 0;
         const radioMultiChecked = !!qs('input[name="cadastro_modo"][value="multi"]:checked');
-        if (isMulti){
-        const okMulti = validateMultiRows();
-        if (!okMulti){ ev.preventDefault(); ev.stopPropagation(); return; }
+        const okMulti = !isMulti || validateMultiRows();
+        if (!okBase || !okMulti){
+        ev.preventDefault();
+        ev.stopPropagation();
+        focusFirstValidationError(form);
+        return;
         }
         if (hasRows || radioMultiChecked){
         hiddenModo.value = 'multi';
@@ -549,9 +570,13 @@
         }
     });
 
-    document.addEventListener('input', function(){
-        showError('base-required-errors', []);
-        showError('multi-errors', []);
+    document.addEventListener('input', function(event){
+        const target = event.target;
+        if (target?.closest('#multi-container')){
+        if (!id('multi-errors')?.classList.contains('hide')) validateMultiRows();
+        return;
+        }
+        if (!id('base-required-errors')?.classList.contains('hide')) validateBaseRequired(form);
     });
    }
 

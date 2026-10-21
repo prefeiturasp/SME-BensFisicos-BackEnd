@@ -88,6 +88,52 @@
     })
   }
 
+  function bindHelpTooltips(controls) {
+    const tooltip = document.createElement('div')
+    tooltip.id = `${controls.hidden.id}-ajuda-tooltip`
+    tooltip.className = 'movimentacao-lote__tooltip'
+    tooltip.setAttribute('role', 'tooltip')
+    tooltip.hidden = true
+    document.body.appendChild(tooltip)
+    let activeHelp = null
+
+    function hideHelp() {
+      activeHelp?.removeAttribute('aria-describedby')
+      activeHelp = null
+      tooltip.hidden = true
+    }
+
+    function showHelp(event) {
+      const help = event.target.closest('.movimentacao-lote__ajuda')
+      if (!help || help === activeHelp) return
+      hideHelp()
+      activeHelp = help
+      tooltip.textContent = help.getAttribute('aria-label')
+      tooltip.hidden = false
+      help.setAttribute('aria-describedby', tooltip.id)
+      const anchor = help.getBoundingClientRect()
+      const bounds = tooltip.getBoundingClientRect()
+      const left = Math.max(8, Math.min(anchor.left, globalThis.innerWidth - bounds.width - 8))
+      const top = anchor.top >= bounds.height + 8
+        ? anchor.top - bounds.height - 8 : anchor.bottom + 8
+      tooltip.style.left = `${left}px`
+      tooltip.style.top = `${top}px`
+    }
+
+    function dismissHelp(event) {
+      if (!activeHelp?.contains(event.relatedTarget)) hideHelp()
+    }
+
+    controls.root.addEventListener('mouseover', showHelp)
+    controls.root.addEventListener('focusin', showHelp)
+    controls.root.addEventListener('mouseout', dismissHelp)
+    controls.root.addEventListener('focusout', dismissHelp)
+    controls.root.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') hideHelp()
+    })
+    globalThis.addEventListener('scroll', hideHelp, true)
+  }
+
   function toggleIndividual(state, controls, bem, checked) {
     if (checked) {
       state.selecoes.push({ id: `bem-${bem.id}`, tipo: 'individual', bens: [bem] })
@@ -105,17 +151,34 @@
     const selected = selectionIds(state.selecoes)
     const blocked = blockedIds(state.selecoes)
     const row = document.createElement('tr')
-    const cell = document.createElement('td')
-    const checkbox = document.createElement('input')
-    checkbox.type = 'checkbox'
-    checkbox.checked = selected.has(bem.id)
-    checkbox.disabled = state.modo !== 'geral' || bem.apto === false || blocked.has(bem.id)
-    checkbox.setAttribute('aria-label', `Selecionar bem ID ${bem.id}`)
-    checkbox.addEventListener('change', () => toggleIndividual(state, controls, bem, checkbox.checked))
-    cell.appendChild(checkbox)
-    row.appendChild(cell)
+    if (state.modo !== 'todos') {
+      const cell = document.createElement('td')
+      const checkbox = document.createElement('input')
+      checkbox.type = 'checkbox'
+      checkbox.checked = selected.has(bem.id)
+      checkbox.disabled = state.modo !== 'geral' || bem.apto === false || blocked.has(bem.id)
+      checkbox.setAttribute('aria-label', `Selecionar bem ID ${bem.id}`)
+      checkbox.addEventListener('change', () => toggleIndividual(state, controls, bem, checkbox.checked))
+      cell.appendChild(checkbox)
+      row.appendChild(cell)
+    }
+    const situation = state.modo === 'geral' && bem.apto !== false && blocked.has(bem.id)
+      ? 'Já incluído em uma faixa selecionada'
+      : bem.motivo || 'Apto para movimentação'
     appendCells(row, [bem.id, bem.numero_patrimonial || 'Sem número patrimonial', bem.nome || '-',
-      bem.descricao || '-', bem.localizacao || '-', bem.motivo || 'Apto para movimentação'])
+      bem.descricao || '-', bem.localizacao || '-', situation])
+    if (state.modo === 'geral' && (bem.apto === false || blocked.has(bem.id))) {
+      const message = bem.apto !== false && blocked.has(bem.id)
+        ? 'Este bem já está incluído em uma faixa selecionada. Não é necessário selecioná-lo novamente.'
+        : bem.motivo || 'Este bem não está apto para movimentação.'
+      const help = document.createElement('span')
+      help.className = 'movimentacao-lote__ajuda'
+      help.tabIndex = 0
+      help.textContent = '!'
+      help.setAttribute('role', 'img')
+      help.setAttribute('aria-label', message)
+      row.lastElementChild.append(' ', help)
+    }
     return row
   }
 
@@ -164,6 +227,7 @@
   }
 
   function render(state, controls) {
+    controls.colunaSelecao.hidden = state.modo === 'todos'
     controls.resultados.replaceChildren(...state.resultados.map((bem) => createResultRow(bem, state, controls)))
     controls.tituloSelecionados.textContent = `Selecionados (${selectionIds(state.selecoes).size})`
     if (state.selecoes.length) {
@@ -180,6 +244,7 @@
     }
     controls.mais.hidden = !state.proximaPagina
     controls.importar.hidden = state.modo !== 'faixa' || state.total === 0
+    controls.ajudaImportar.hidden = controls.importar.hidden
     updateHeaderCheckbox(state, controls)
   }
 
@@ -246,10 +311,17 @@
   }
 
   function setModeLayout(state, controls) {
+    controls.abas.hidden = state.modo === 'todos'
+    controls.abas.querySelectorAll('[role="tab"]').forEach((tab) => {
+      tab.setAttribute('aria-selected', String(tab.dataset.modo === state.modo))
+    })
+    controls.root.querySelector('input[value="manual"]').checked = state.modo !== 'todos'
+    controls.root.querySelector('input[value="todos"]').checked = state.modo === 'todos'
     controls.geral.hidden = state.modo !== 'geral'
     controls.faixa.hidden = state.modo !== 'faixa'
     controls.pesquisar.hidden = state.modo === 'todos'
     controls.importar.hidden = state.modo !== 'faixa' || state.total === 0
+    controls.ajudaImportar.hidden = state.modo !== 'faixa' || state.total === 0
     controls.vazio.textContent = ''
     setError(controls, '')
     persist(state, controls)
@@ -281,6 +353,7 @@
     controls.mais.disabled = busy
     controls.selecionarResultados.disabled = busy
     controls.root.querySelectorAll('input[name$="-modo"]').forEach((radio) => { radio.disabled = busy })
+    controls.abas.querySelectorAll('[role="tab"]').forEach((tab) => { tab.disabled = busy })
   }
 
   async function pesquisarBens(state, controls, page = 1) {
@@ -399,6 +472,16 @@
   }
 
   function changeMode(state, controls, newMode) {
+    if (newMode === 'todos') {
+      const message = state.selecoes.length
+        ? 'A lista de bens selecionados será substituída por todos os bens aptos da Unidade Administrativa de origem. Deseja continuar?'
+        : 'Serão selecionados todos os bens aptos da Unidade Administrativa de origem. Deseja continuar?'
+      if (!globalThis.confirm(message)) {
+        controls.root.querySelector('input[value="manual"]').checked = state.modo !== 'todos'
+        controls.root.querySelector('input[value="todos"]').checked = state.modo === 'todos'
+        return
+      }
+    }
     cancelAutocomplete(state, controls)
     const previousMode = state.modo
     const sairDaSelecaoDeTodos = previousMode === 'todos' && newMode !== 'todos'
@@ -408,15 +491,6 @@
     }
     resetResults(state, controls)
     if (newMode !== 'todos') {
-      setModeLayout(state, controls)
-      return
-    }
-    const confirmed = !state.selecoes.length || globalThis.confirm(
-      'A lista de bens selecionados será substituída por todos os bens aptos da Unidade Administrativa de origem. Deseja continuar?',
-    )
-    if (!confirmed) {
-      state.modo = previousMode
-      controls.root.querySelector(`input[value="${previousMode}"]`).checked = true
       setModeLayout(state, controls)
       return
     }
@@ -473,6 +547,9 @@
       origem: document.getElementById('id_unidade_administrativa_origem'),
       geral: root.querySelector('.movimentacao-lote__criterio--geral'),
       faixa: root.querySelector('.movimentacao-lote__criterio--faixa'),
+      abas: root.querySelector('.movimentacao-lote__abas'),
+      ajudaImportar: root.querySelector('.movimentacao-lote__ajuda-importar'),
+      colunaSelecao: root.querySelector('.movimentacao-lote__coluna-selecao'),
       termo: root.querySelector('.movimentacao-lote__termo'),
       de: root.querySelector('[id$="-busca-de"]'),
       ate: root.querySelector('[id$="-busca-ate"]'),
@@ -493,7 +570,7 @@
   }
 
   function bindModeRadio(state, controls, radio) {
-    radio.addEventListener('change', () => changeMode(state, controls, radio.value))
+    radio.addEventListener('change', () => changeMode(state, controls, radio.value === 'manual' ? 'geral' : 'todos'))
   }
 
   function bindRangeInput(state, controls, input) {
@@ -511,6 +588,9 @@
   function bindEvents(state, controls) {
     controls.root.querySelectorAll('input[name$="-modo"]')
       .forEach((radio) => bindModeRadio(state, controls, radio))
+    controls.abas.querySelectorAll('[role="tab"]').forEach((tab) => {
+      tab.addEventListener('click', () => changeMode(state, controls, tab.dataset.modo))
+    })
     controls.termo.addEventListener('input', () => resetResults(state, controls))
     ;[controls.de, controls.ate].forEach((input) => bindRangeInput(state, controls, input))
     controls.pesquisar.addEventListener('click', () => void pesquisarBens(state, controls))
@@ -522,7 +602,6 @@
       state.versao += 1
       state.selecoes = []
       state.modo = 'geral'
-      controls.root.querySelector('input[value="geral"]').checked = true
       resetResults(state, controls)
       setModeLayout(state, controls)
     })
@@ -537,8 +616,8 @@
     const controls = getControls(root)
     if (Object.values(controls).some((control) => !control)) return
     const state = createInitialState(controls.hidden)
+    bindHelpTooltips(controls)
     bindEvents(state, controls)
-    controls.root.querySelector(`input[value="${state.modo}"]`).checked = true
     setModeLayout(state, controls)
     if (state.faixasAntigas.length) void restoreLegacyRanges(state, controls)
   }

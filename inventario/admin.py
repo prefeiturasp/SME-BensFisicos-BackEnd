@@ -15,6 +15,7 @@ from dados_comuns.escopo import (
     resolver_ids_escopo,
     usuario_e_super_admin,
 )
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from inventario.utils_conciliacao.conciliacao_utils import (
     criar_itens_conciliacao,
     finalizar_conciliacao,
@@ -128,7 +129,7 @@ class ParametroConciliacaoAnualAdminForm(forms.ModelForm):
 
 
 @admin.register(ParametroConciliacaoAnual)
-class ParametroConciliacaoAnualAdmin(admin.ModelAdmin):
+class ParametroConciliacaoAnualAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
     form = ParametroConciliacaoAnualAdminForm
 
     list_display = (
