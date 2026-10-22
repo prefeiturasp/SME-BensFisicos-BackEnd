@@ -760,6 +760,10 @@
     field.container.appendChild(options)
     let timer
     let version = 0
+    function selectOption() {
+      field.input.dispatchEvent(new Event('input', { bubbles: true }))
+      dismiss()
+    }
     async function load(request) {
       const params = new URLSearchParams({
         unidade_administrativa_origem: controls.origem.value, q: field.input.value.trim(),
@@ -770,10 +774,7 @@
         const body = await response.json()
         if (request !== version || !dialog.open) return
         const items = body.itens.filter((bem) => bem.numero_patrimonial)
-        options.replaceChildren(...items.map((bem) => createAutocompleteOption(bem, field.input, () => {
-          field.input.dispatchEvent(new Event('input', { bubbles: true }))
-          dismiss()
-        })))
+        options.replaceChildren(...items.map((bem) => createAutocompleteOption(bem, field.input, selectOption)))
         showAutocomplete(options, field.input)
       } catch {
         if (request === version) dismiss()
