@@ -257,12 +257,18 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
         self.assertIn("itens", s.errors)
 
     def test_data_baixa_futura_invalida(self):
-        from datetime import timedelta
+        from datetime import datetime, timedelta, timezone as datetime_timezone
 
-        futura = str((timezone.localdate() + timedelta(days=1)))
-        s = self._serializer(self._data(data_baixa=futura))
-        self.assertFalse(s.is_valid())
-        self.assertIn("data_baixa", s.errors)
+        for hora in (0, 2, 3, 12, 23):
+            with self.subTest(hora_utc=hora):
+                agora = datetime(2026, 10, 22, hora, tzinfo=datetime_timezone.utc)
+                with patch("bem_patrimonial.api_serializers.timezone.now", return_value=agora):
+                    # A validacao atual considera a data UTC, nao a data local.
+                    futura = str(agora.date() + timedelta(days=1))
+                    s = self._serializer(self._data(data_baixa=futura))
+                    self.assertFalse(s.is_valid())
+                    self.assertIn("data_baixa", s.errors)
+                    self.assertIn("A data de baixa não pode ser futura.", s.errors["data_baixa"])
 
     def test_numero_processo_bloqueado_na_criacao(self):
         s = self._serializer({**self._data(), "numero_processo_baixa": "6016.2025/0117371-7"})
