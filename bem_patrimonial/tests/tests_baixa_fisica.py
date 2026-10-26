@@ -16,6 +16,7 @@ from bem_patrimonial.constants import (
     APROVADO,
     BAIXA_FISICA,
     BAIXA_FISICA_AGUARDANDO_APROVACAO,
+    LAUDADO_PARA_BAIXA,
     AGUARDANDO_ENVIO,
     ENVIADA,
     ACEITA,
@@ -256,7 +257,7 @@ class BaixaFisicaFluxoEnvioAprovacaoTestCase(TestCase):
         self.assertEqual(self.baixa.aprovado_por, self.gestor)
         self.assertIsNotNone(self.baixa.data_aprovacao)
         self.assertEqual(self.baixa.numero_processo_baixa, "6016.2025/0117371-7")
-        self.assertEqual(self.bem.status, BAIXA_FISICA)
+        self.assertEqual(self.bem.status, LAUDADO_PARA_BAIXA)
         self.assertEqual(self.bem.numero_processo, "6016.2025/0117371-7")
 
 
@@ -471,7 +472,7 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
         self.assertEqual(self.baixa.status, ACEITA)
         self.assertEqual(self.baixa.numero_processo_baixa, "6016.2025/0117371-7")
         self.assertEqual(self.bem.numero_processo, "6016.2025/0117371-7")
-        self.assertEqual(self.bem.status, BAIXA_FISICA)
+        self.assertEqual(self.bem.status, LAUDADO_PARA_BAIXA)
         self.assertTrue(self._logentry_qs().exists())
 
     def test_acao_cancelar_baixa_reseta_status_bem(self):
