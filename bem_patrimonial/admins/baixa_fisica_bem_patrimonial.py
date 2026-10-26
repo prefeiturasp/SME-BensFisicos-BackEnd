@@ -783,15 +783,21 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             if status_origem is None:
                 if bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
                     bem.status = constants.APROVADO
-                    bem.save(update_fields=["status"])
+                    bem.numero_processo = ""
+                    bem.localizacao = ""
+                    bem.save(update_fields=["status", "numero_processo", "localizacao"])
                 continue
             if bem.status == status_origem:
                 bem.status = constants.APROVADO
-                bem.save(update_fields=["status"])
+                bem.numero_processo = ""
+                bem.localizacao = ""
+                bem.save(update_fields=["status", "numero_processo", "localizacao"])
             elif status_origem == constants.LAUDADO_PARA_BAIXA and bem.status == constants.BAIXA_FISICA:
                 # Aceita legada com Baixa Física também restaura para Aprovado.
                 bem.status = constants.APROVADO
-                bem.save(update_fields=["status"])
+                bem.numero_processo = ""
+                bem.localizacao = ""
+                bem.save(update_fields=["status", "numero_processo", "localizacao"])
 
     def _ativar_bens_novos(self, formset, status_alvo=None, baixa=None):
         for item in getattr(formset, "new_objects", []):
@@ -844,7 +850,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             if ainda_vinculado:
                 return
             old_bem.status = constants.APROVADO
-            old_bem.save(update_fields=["status"])
+            old_bem.numero_processo = ""
+            old_bem.localizacao = ""
+            old_bem.save(update_fields=["status", "numero_processo", "localizacao"])
         except Exception:
             pass
 

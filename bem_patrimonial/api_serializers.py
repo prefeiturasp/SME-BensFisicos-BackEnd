@@ -539,7 +539,9 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
             if ainda_vinculado:
                 return
             bem.status = constants.APROVADO
-            bem.save(update_fields=['status'])
+            bem.numero_processo = ""
+            bem.localizacao = ""
+            bem.save(update_fields=['status', 'numero_processo', 'localizacao'])
 
     def _marcar_bem_em_baixa(self, bem: BemPatrimonial) -> None:
         if self.instance and self.instance.status == constants.ACEITA:
