@@ -227,29 +227,45 @@ class BaixaFisicaBensItemInlineForm(forms.ModelForm):
 
         bloqueados = {
             bem_constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
+            bem_constants.LAUDADO_PARA_BAIXA,
             bem_constants.BLOQUEADO,
             bem_constants.BAIXA_FISICA,
             bem_constants.TRANSFERIDO,
         }
         if bem.status not in bloqueados:
             return
-        if bem.status != bem_constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-            raise ValidationError(
-                f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
-            )
-        baixa_atual = self._obter_baixa_atual_id()
-        existe_outra = ItemModel.objects.filter(
-            bem=bem,
-            baixa__status__in=[
-                bem_constants.AGUARDANDO_ENVIO,
-                bem_constants.SOLICITADA,
-                bem_constants.ACEITA,
-            ],
-        ).exclude(baixa_id=baixa_atual).exists()
-        if existe_outra:
-            raise ValidationError(
-                f"Bem {bem.numero_patrimonial or bem.nome} já está em outra Baixa Física pendente/aprovada."
-            )
+        if bem.status in (
+            bem_constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
+            bem_constants.LAUDADO_PARA_BAIXA,
+            bem_constants.BAIXA_FISICA,
+        ):
+            baixa_atual = self._obter_baixa_atual_id()
+            existe_outra = ItemModel.objects.filter(
+                bem=bem,
+                baixa__status__in=[
+                    bem_constants.AGUARDANDO_ENVIO,
+                    bem_constants.SOLICITADA,
+                    bem_constants.ACEITA,
+                ],
+            ).exclude(baixa_id=baixa_atual).exists()
+            if existe_outra:
+                raise ValidationError(
+                    f"Bem {bem.numero_patrimonial or bem.nome} já está em outra Baixa Física pendente/aprovada."
+                )
+            # Permite manter vínculo (edição Em elaboração ou Aceita).
+            mesma_baixa = ItemModel.objects.filter(
+                bem=bem, baixa_id=baixa_atual
+            ).exists() if baixa_atual else False
+            if mesma_baixa:
+                return
+            if bem.status in (bem_constants.LAUDADO_PARA_BAIXA, bem_constants.BAIXA_FISICA):
+                raise ValidationError(
+                    f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
+                )
+            return
+        raise ValidationError(
+            f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
+        )
 
     def _obter_baixa_atual_id(self):
         baixa_atual = getattr(self.instance, "baixa_id", None) or getattr(getattr(self, "_baixa_fk", None), "pk", None)
@@ -304,6 +320,39 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
     autocomplete_fields = ("bem",)
     formset = BaixaFisicaBensItemInlineFormSet
 
+    def _baixa_permite_edicao_itens(self, request, obj) -> bool:
+        if obj is None:
+            return True
+        if obj.status == constants.AGUARDANDO_ENVIO:
+            return True
+        if obj.status != constants.ACEITA:
+            return False
+        user = getattr(request, 'user', None)
+        is_gestor = bool(
+            getattr(user, 'is_gestor_patrimonio', False) or getattr(user, 'is_superuser', False)
+        )
+        if not is_gestor:
+            return False
+        try:
+            if obj.nbbpms_lote.exists():
+                return False
+        except Exception:
+            pass
+        if (getattr(obj, 'numero_nbbpm', '') or '').strip():
+            return False
+        # Escopo: mesma regra da API. Superuser libera, demais precisam estar no escopo da UA.
+        try:
+            if getattr(user, 'is_superuser', False):
+                return True
+            from dados_comuns.escopo import validar_objeto_no_escopo
+            if not validar_objeto_no_escopo(
+                user, obj, campo_ua='unidade_administrativa_origem'
+            ):
+                return False
+        except Exception:
+            return False
+        return True
+
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
 
@@ -314,18 +363,21 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
             widget.can_change_related = False
             widget.can_view_related = False
             widget.can_delete_related = False
-            # Filtra bens disponíveis: só APROVADO (e os já nesta baixa quando em elaboração)
+            # Filtra bens disponíveis: só APROVADO (e os já nesta baixa quando em elaboração ou Aceita sem NBBPM)
             try:
                 from bem_patrimonial.models import BemPatrimonial
 
-                if obj and obj.status == constants.AGUARDANDO_ENVIO and obj.pk:
-                    ids_atuais = list(obj.itens.values_list("bem_id", flat=True))
-                    qs = BemPatrimonial.objects.filter(
-                        models.Q(status=constants.APROVADO) | models.Q(pk__in=ids_atuais)
-                    )
-                    if obj.unidade_administrativa_origem_id:
-                        qs = qs.filter(unidade_administrativa_id=obj.unidade_administrativa_origem_id)
-                    bem_field.queryset = qs
+                if obj and obj.pk and obj.status in (constants.AGUARDANDO_ENVIO, constants.ACEITA):
+                    if obj.status == constants.ACEITA and not self._baixa_permite_edicao_itens(request, obj):
+                        pass
+                    else:
+                        ids_atuais = list(obj.itens.values_list("bem_id", flat=True))
+                        qs = BemPatrimonial.objects.filter(
+                            models.Q(status=constants.APROVADO) | models.Q(pk__in=ids_atuais)
+                        )
+                        if obj.unidade_administrativa_origem_id:
+                            qs = qs.filter(unidade_administrativa_id=obj.unidade_administrativa_origem_id)
+                        bem_field.queryset = qs
                 elif obj is None:
                     base_qs = BemPatrimonial.objects.filter(status=constants.APROVADO)
                     ua_user = getattr(request.user, "unidade_administrativa", None)
@@ -338,25 +390,27 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
 
         return formset
 
-    def has_add_permission(self, request, obj):
+    def has_add_permission(self, request, obj=None):
 
         if obj is None:
             return True
 
-        return obj.status == constants.AGUARDANDO_ENVIO
+        return self._baixa_permite_edicao_itens(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        return self.has_add_permission(request, obj)
+        if obj is None:
+            return True
+        return self._baixa_permite_edicao_itens(request, obj)
 
     def get_max_num(self, request, obj=None):
 
-        if obj is not None and obj.status != constants.AGUARDANDO_ENVIO:
+        if obj is not None and not self._baixa_permite_edicao_itens(request, obj):
             return 0
         return super().get_max_num(request, obj)
 
     def get_readonly_fields(self, request, obj=None):
 
-        if obj and obj.status != constants.AGUARDANDO_ENVIO:
+        if obj and not self._baixa_permite_edicao_itens(request, obj):
             return ("bem",)
         return super().get_readonly_fields(request, obj)
 
@@ -694,45 +748,79 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
     def save_related(self, request, form, formsets, change):
         """
         Depois de salvar os inlines, ajusta o status dos bens
-        conforme inclusão/remoção/alteração de itens, mas APENAS quando
-        a baixa está em status 'aguardando envio' (Em elaboração).
+        conforme inclusão/remoção/alteração de itens.
+        - Em elaboração: Aguardando aprovação <-> Aprovado.
+        - Aceita sem NBBPM (gestor): Laudado para Baixa <-> Aprovado.
         Igual API: PATCH /baixa-fisica/{id}/ só permite `itens`.
         """
         super().save_related(request, form, formsets, change)
         baixa = form.instance
-        if baixa.status != constants.AGUARDANDO_ENVIO:
+        if baixa.status == constants.AGUARDANDO_ENVIO:
+            status_alvo = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+        elif baixa.status == constants.ACEITA:
+            if not self._baixa_permite_edicao_via_save_related(request, baixa):
+                return
+            status_alvo = constants.LAUDADO_PARA_BAIXA
+        else:
             return
         for formset in formsets:
             if getattr(formset, "model", None) is not BaixaFisicaBensItem:
                 continue
-            self._reverter_bens_removidos(formset)
-            self._ativar_bens_novos(formset)
-            self._atualizar_bens_trocados(formset, baixa)
+            self._reverter_bens_removidos(formset, status_alvo)
+            self._ativar_bens_novos(formset, status_alvo, baixa)
+            self._atualizar_bens_trocados(formset, baixa, status_alvo)
 
-    def _reverter_bens_removidos(self, formset):
+    def _baixa_permite_edicao_via_save_related(self, request, baixa) -> bool:
+        try:
+            inline = BaixaFisicaBensItemInline(BaixaFisicaBemPatrimonial, self.admin_site)
+            return inline._baixa_permite_edicao_itens(request, baixa)
+        except Exception:
+            return False
+
+    def _reverter_bens_removidos(self, formset, status_origem=None):
         for item in formset.deleted_objects:
             bem = item.bem
-            if bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+            if status_origem is None:
+                if bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
+                    bem.status = constants.APROVADO
+                    bem.save(update_fields=["status"])
+                continue
+            if bem.status == status_origem:
+                bem.status = constants.APROVADO
+                bem.save(update_fields=["status"])
+            elif status_origem == constants.LAUDADO_PARA_BAIXA and bem.status == constants.BAIXA_FISICA:
+                # Aceita legada com Baixa Física também restaura para Aprovado.
                 bem.status = constants.APROVADO
                 bem.save(update_fields=["status"])
 
-    def _ativar_bens_novos(self, formset):
+    def _ativar_bens_novos(self, formset, status_alvo=None, baixa=None):
         for item in getattr(formset, "new_objects", []):
             bem = item.bem
-            if bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
-                bem.save(update_fields=["status"])
+            alvo = status_alvo or constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+            if bem.status != alvo:
+                if alvo == constants.LAUDADO_PARA_BAIXA and baixa is not None:
+                    processo = (getattr(baixa, 'numero_processo_baixa', '') or '').strip()
+                    bem.status = alvo
+                    if processo:
+                        bem.numero_processo = processo
+                        bem.localizacao = f"Baixa Física - {processo}"
+                        bem.save(update_fields=["status", "numero_processo", "localizacao"])
+                    else:
+                        bem.save(update_fields=["status"])
+                else:
+                    bem.status = alvo
+                    bem.save(update_fields=["status"])
 
-    def _atualizar_bens_trocados(self, formset, baixa):
+    def _atualizar_bens_trocados(self, formset, baixa, status_alvo=None):
         for form in getattr(formset, "forms", []):
             if form in getattr(formset, "deleted_forms", []):
                 continue
             if "bem" not in getattr(form, "changed_data", []):
                 continue
-            self._restaurar_bem_antigo(form, baixa)
-            self._garantir_bem_novo_em_aguardando(form)
+            self._restaurar_bem_antigo(form, baixa, status_alvo)
+            self._garantir_bem_novo_em_aguardando(form, status_alvo, baixa)
 
-    def _restaurar_bem_antigo(self, form, baixa):
+    def _restaurar_bem_antigo(self, form, baixa, status_origem=None):
         old_bem_id = (form.initial or {}).get("bem")
         if not old_bem_id:
             return
@@ -740,8 +828,11 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             from bem_patrimonial.models import BemPatrimonial
 
             old_bem = BemPatrimonial.objects.get(pk=old_bem_id)
-            if old_bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                return
+            esperado = status_origem or constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+            if old_bem.status != esperado:
+                # Aceita legada com Baixa Física também restaura para Aprovado.
+                if not (esperado == constants.LAUDADO_PARA_BAIXA and old_bem.status == constants.BAIXA_FISICA):
+                    return
             ainda_vinculado = BaixaFisicaBensItem.objects.filter(
                 bem=old_bem,
                 baixa__status__in=[
@@ -757,12 +848,23 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         except Exception:
             pass
 
-    def _garantir_bem_novo_em_aguardando(self, form):
+    def _garantir_bem_novo_em_aguardando(self, form, status_alvo=None, baixa=None):
         try:
             new_bem = form.cleaned_data.get("bem")
-            if new_bem and new_bem.status != constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
-                new_bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
-                new_bem.save(update_fields=["status"])
+            alvo = status_alvo or constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
+            if new_bem and new_bem.status != alvo:
+                if alvo == constants.LAUDADO_PARA_BAIXA and baixa is not None:
+                    processo = (getattr(baixa, 'numero_processo_baixa', '') or '').strip()
+                    new_bem.status = alvo
+                    if processo:
+                        new_bem.numero_processo = processo
+                        new_bem.localizacao = f"Baixa Física - {processo}"
+                        new_bem.save(update_fields=["status", "numero_processo", "localizacao"])
+                    else:
+                        new_bem.save(update_fields=["status"])
+                else:
+                    new_bem.status = alvo
+                    new_bem.save(update_fields=["status"])
         except Exception:
             pass
 
