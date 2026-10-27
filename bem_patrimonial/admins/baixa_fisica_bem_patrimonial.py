@@ -358,37 +358,53 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
 
         bem_field = formset.form.base_fields.get("bem")
         if bem_field:
-            widget = bem_field.widget
-            widget.can_add_related = False
-            widget.can_change_related = False
-            widget.can_view_related = False
-            widget.can_delete_related = False
-            # Filtra bens disponíveis: só APROVADO (e os já nesta baixa quando em elaboração ou Aceita sem NBBPM)
-            try:
-                from bem_patrimonial.models import BemPatrimonial
-
-                if obj and obj.pk and obj.status in (constants.AGUARDANDO_ENVIO, constants.ACEITA):
-                    if obj.status == constants.ACEITA and not self._baixa_permite_edicao_itens(request, obj):
-                        pass
-                    else:
-                        ids_atuais = list(obj.itens.values_list("bem_id", flat=True))
-                        qs = BemPatrimonial.objects.filter(
-                            models.Q(status=constants.APROVADO) | models.Q(pk__in=ids_atuais)
-                        )
-                        if obj.unidade_administrativa_origem_id:
-                            qs = qs.filter(unidade_administrativa_id=obj.unidade_administrativa_origem_id)
-                        bem_field.queryset = qs
-                elif obj is None:
-                    base_qs = BemPatrimonial.objects.filter(status=constants.APROVADO)
-                    ua_user = getattr(request.user, "unidade_administrativa", None)
-                    if ua_user and not usuario_e_super_admin(request.user):
-                        bem_field.queryset = base_qs.filter(unidade_administrativa_id=ua_user.pk)
-                    else:
-                        bem_field.queryset = base_qs
-            except Exception:
-                pass
+            self._configurar_widget_bem(bem_field)
+            self._aplicar_queryset_bem(bem_field, request, obj)
 
         return formset
+
+    @staticmethod
+    def _configurar_widget_bem(bem_field):
+        widget = bem_field.widget
+        widget.can_add_related = False
+        widget.can_change_related = False
+        widget.can_view_related = False
+        widget.can_delete_related = False
+
+    def _aplicar_queryset_bem(self, bem_field, request, obj):
+        # Filtra bens disponíveis: só APROVADO (e os já nesta baixa quando em elaboração ou Aceita sem NBBPM)
+        try:
+            if obj is not None and obj.pk:
+                self._aplicar_queryset_bem_em_baixa(bem_field, request, obj)
+            elif obj is None:
+                self._aplicar_queryset_bem_criacao(bem_field, request)
+        except Exception:
+            pass
+
+    def _aplicar_queryset_bem_em_baixa(self, bem_field, request, obj):
+        from bem_patrimonial.models import BemPatrimonial
+
+        if obj.status not in (constants.AGUARDANDO_ENVIO, constants.ACEITA):
+            return
+        if obj.status == constants.ACEITA and not self._baixa_permite_edicao_itens(request, obj):
+            return
+        ids_atuais = list(obj.itens.values_list("bem_id", flat=True))
+        qs = BemPatrimonial.objects.filter(
+            models.Q(status=constants.APROVADO) | models.Q(pk__in=ids_atuais)
+        )
+        if obj.unidade_administrativa_origem_id:
+            qs = qs.filter(unidade_administrativa_id=obj.unidade_administrativa_origem_id)
+        bem_field.queryset = qs
+
+    def _aplicar_queryset_bem_criacao(self, bem_field, request):
+        from bem_patrimonial.models import BemPatrimonial
+
+        base_qs = BemPatrimonial.objects.filter(status=constants.APROVADO)
+        ua_user = getattr(request.user, "unidade_administrativa", None)
+        if ua_user and not usuario_e_super_admin(request.user):
+            bem_field.queryset = base_qs.filter(unidade_administrativa_id=ua_user.pk)
+        else:
+            bem_field.queryset = base_qs
 
     def has_add_permission(self, request, obj=None):
 
@@ -398,9 +414,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
         return self._baixa_permite_edicao_itens(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj is None:
-            return True
-        return self._baixa_permite_edicao_itens(request, obj)
+        return self.has_add_permission(request, obj)
 
     def get_max_num(self, request, obj=None):
 
@@ -787,12 +801,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
                     bem.localizacao = ""
                     bem.save(update_fields=["status", "numero_processo", "localizacao"])
                 continue
-            if bem.status == status_origem:
-                bem.status = constants.APROVADO
-                bem.numero_processo = ""
-                bem.localizacao = ""
-                bem.save(update_fields=["status", "numero_processo", "localizacao"])
-            elif status_origem == constants.LAUDADO_PARA_BAIXA and bem.status == constants.BAIXA_FISICA:
+            if bem.status == status_origem or (
+                status_origem == constants.LAUDADO_PARA_BAIXA and bem.status == constants.BAIXA_FISICA
+            ):
                 # Aceita legada com Baixa Física também restaura para Aprovado.
                 bem.status = constants.APROVADO
                 bem.numero_processo = ""

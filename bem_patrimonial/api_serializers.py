@@ -100,41 +100,42 @@ class BaixaFisicaBensItemCreateSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("Bem patrimonial é obrigatório.")
 
-        if value.status in _STATUS_BEM_INVALIDOS_PARA_BAIXA:
-            baixa_id = self.context.get('baixa_id')
+        if value.status not in _STATUS_BEM_INVALIDOS_PARA_BAIXA:
+            return value
 
-            if value.status in (
-                constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
-                constants.LAUDADO_PARA_BAIXA,
-                constants.BAIXA_FISICA,
-            ):
-                item_atual = BaixaFisicaBensItem.objects.filter(
-                    bem=value,
-                    baixa__status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA, constants.ACEITA]
-                ).exclude(baixa_id=baixa_id).first()
+        if value.status not in (
+            constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
+            constants.LAUDADO_PARA_BAIXA,
+            constants.BAIXA_FISICA,
+        ):
+            raise serializers.ValidationError(
+                f"O bem '{value.numero_patrimonial}' possui status "
+                f"'{value.get_status_display()}' e não pode ser incluído em uma baixa física."
+            )
+        return self._validar_bem_vinculavel(value, self.context.get('baixa_id'))
 
-                if item_atual:
-                    raise serializers.ValidationError(
-                        f"Este bem já está incluído em outra baixa física "
-                        f"(Baixa #{item_atual.baixa.id})."
-                    )
-                # Permite manter vínculo (edição de Em elaboração ou Aceita).
-                mesma_baixa = BaixaFisicaBensItem.objects.filter(
-                    bem=value, baixa_id=baixa_id
-                ).exists() if baixa_id else False
-                if mesma_baixa:
-                    return value
-                if value.status in (constants.LAUDADO_PARA_BAIXA, constants.BAIXA_FISICA):
-                    raise serializers.ValidationError(
-                        f"O bem '{value.numero_patrimonial}' possui status "
-                        f"'{value.get_status_display()}' e não pode ser incluído em uma baixa física."
-                    )
-            else:
-                raise serializers.ValidationError(
-                    f"O bem '{value.numero_patrimonial}' possui status "
-                    f"'{value.get_status_display()}' e não pode ser incluído em uma baixa física."
-                )
+    def _validar_bem_vinculavel(self, value: BemPatrimonial, baixa_id) -> BemPatrimonial:
+        item_atual = BaixaFisicaBensItem.objects.filter(
+            bem=value,
+            baixa__status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA, constants.ACEITA]
+        ).exclude(baixa_id=baixa_id).first()
 
+        if item_atual:
+            raise serializers.ValidationError(
+                f"Este bem já está incluído em outra baixa física "
+                f"(Baixa #{item_atual.baixa.id})."
+            )
+        # Permite manter vínculo (edição de Em elaboração ou Aceita).
+        mesma_baixa = BaixaFisicaBensItem.objects.filter(
+            bem=value, baixa_id=baixa_id
+        ).exists() if baixa_id else False
+        if mesma_baixa:
+            return value
+        if value.status in (constants.LAUDADO_PARA_BAIXA, constants.BAIXA_FISICA):
+            raise serializers.ValidationError(
+                f"O bem '{value.numero_patrimonial}' possui status "
+                f"'{value.get_status_display()}' e não pode ser incluído em uma baixa física."
+            )
         return value
 
 
@@ -468,23 +469,24 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
             )
         if instance.status == constants.AGUARDANDO_ENVIO:
             return attrs
-        if instance.status == constants.ACEITA:
-            if not self._usuario_pode_editar_aceita():
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied(
-                    "Apenas Gestor de Patrimônio pode editar baixa Aceita."
-                )
-            if self._baixa_possui_nota(instance):
-                raise serializers.ValidationError(
-                    "Esta baixa já possui NBBPM gerada e não pode ser editada."
-                )
-            self._validar_escopo_edicao(instance)
-            return attrs
-        raise serializers.ValidationError(
-            "Apenas baixas com status 'Em elaboração' podem ser editadas."
-            if instance.status != constants.ACEITA else
-            "Baixa Aceita não pode ser editada neste estado."
-        )
+        self._validar_edicao_fora_elaboracao(instance)
+        return attrs
+
+    def _validar_edicao_fora_elaboracao(self, instance) -> None:
+        if instance.status != constants.ACEITA:
+            raise serializers.ValidationError(
+                "Apenas baixas com status 'Em elaboração' podem ser editadas."
+            )
+        if not self._usuario_pode_editar_aceita():
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                "Apenas Gestor de Patrimônio pode editar baixa Aceita."
+            )
+        if self._baixa_possui_nota(instance):
+            raise serializers.ValidationError(
+                "Esta baixa já possui NBBPM gerada e não pode ser editada."
+            )
+        self._validar_escopo_edicao(instance)
 
     def validate_itens(self, value: list) -> list:
         if not value:
