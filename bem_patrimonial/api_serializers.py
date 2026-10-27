@@ -467,9 +467,8 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
                     for campo in sorted(campos_nao_permitidos)
                 }
             )
-        if instance.status == constants.AGUARDANDO_ENVIO:
-            return attrs
-        self._validar_edicao_fora_elaboracao(instance)
+        if instance.status != constants.AGUARDANDO_ENVIO:
+            self._validar_edicao_fora_elaboracao(instance)
         return attrs
 
     def _validar_edicao_fora_elaboracao(self, instance) -> None:
