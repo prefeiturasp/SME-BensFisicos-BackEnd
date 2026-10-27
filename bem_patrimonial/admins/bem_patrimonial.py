@@ -205,6 +205,9 @@ COLUNAS_MODELO = (
     "modelo",
 )
 
+TAMANHO_NUMERO_PATROMONIAL = 13
+_RE_NAO_DIGITO = re.compile(r"\D")
+
 
 class BemPatrimonialResource(resources.ModelResource):
     """
@@ -219,8 +222,6 @@ class BemPatrimonialResource(resources.ModelResource):
     - marca e modelo em branco são normalizados para "-".
     - Retorno de erros padronizado: {linha, numero_patrimonial, campo, mensagem}.
     """
-
-    NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
 
     # Campo com widget DecimalWidget explícito para aceitar vírgula como separador decimal.
     # A normalização vírgula→ponto é feita no before_import_row antes de chegar aqui.
@@ -252,6 +253,7 @@ class BemPatrimonialResource(resources.ModelResource):
         super().__init__(*args, **kwargs)
         self._erros_por_linha: list[dict] = []
         self._mensagens_exibidas = False
+        self._bloquear_linhas_por_erro = False
 
     # ------------------------------------------------------------------
     # Helpers internos
@@ -261,6 +263,48 @@ class BemPatrimonialResource(resources.ModelResource):
         if value is None:
             return ""
         return str(value).strip()
+
+    def _normalizar_numero_patrimonial(self, raw):
+        """
+        Normaliza o número patrimonial para o formato atual quando possível.
+
+        - Vazio (None, "", só espaços) -> (None, True, False): sem numeração.
+        - Contém letras, sem dígitos ou com mais de 13 dígitos ->
+          formato anterior, preserva valor stripped.
+        - Caso contrário completa com zeros à esquerda até 13 e aplica
+          máscara padrão NNN.NNNNNNNNN-D.
+        Retorna (numero_normalizado_ou_None, sem_numeracao, formato_antigo).
+        """
+        valor = self._numero_para_texto(raw)
+        if not valor:
+            resultado = (None, True, False)
+        elif self._eh_formato_anterior(valor):
+            resultado = (valor, False, True)
+        else:
+            digitos = _RE_NAO_DIGITO.sub("", valor).zfill(TAMANHO_NUMERO_PATROMONIAL)
+            resultado = (self._aplicar_mascara_padrao(digitos), False, False)
+        return resultado
+
+    def _numero_para_texto(self, raw) -> str:
+        """Converte int/float da planilha para texto sem perder dígitos."""
+        if isinstance(raw, bool):
+            return self._normalizar_valor(raw)
+        if isinstance(raw, float) and raw.is_integer():
+            return str(int(raw))
+        if isinstance(raw, int):
+            return str(raw)
+        return self._normalizar_valor(raw)
+
+    def _eh_formato_anterior(self, valor: str) -> bool:
+        """True quando o valor não pode ser padronizado para o formato atual."""
+        if any(ch.isalpha() for ch in valor):
+            return True
+        digitos = _RE_NAO_DIGITO.sub("", valor)
+        return not digitos or len(digitos) > TAMANHO_NUMERO_PATROMONIAL
+
+    def _aplicar_mascara_padrao(self, digitos_13: str) -> str:
+        """Aplica a máscara NNN.NNNNNNNNN-D em 13 dígitos."""
+        return f"{digitos_13[:3]}.{digitos_13[3:12]}-{digitos_13[12]}"
 
     def _linha_completamente_vazia(self, row) -> bool:
         """
@@ -375,16 +419,23 @@ class BemPatrimonialResource(resources.ModelResource):
                 self._registrar_erro(idx, numero_patrimonial, campo, msg)
 
     def _validar_numero_patrimonial(self, idx, numero_patrimonial, numeros_vistos):
-        """Valida duplicidade do número patrimonial no arquivo e no banco."""
-        if not numero_patrimonial:
+        """Valida duplicidade do número patrimonial no arquivo e no banco.
+
+        A comparação considera o valor já normalizado (máscara padrão),
+        de modo que "10538588879" e "001.053858887-9" são a mesma chave.
+        """
+        normalizado, sem_numeracao, _ = self._normalizar_numero_patrimonial(
+            numero_patrimonial
+        )
+        if sem_numeracao or not normalizado:
             return
 
-        numero_key = numero_patrimonial.lower()
+        numero_key = normalizado.lower()
         linha_anterior = numeros_vistos.get(numero_key)
 
         if linha_anterior:
             self._registrar_erro(
-                idx, numero_patrimonial, "numero_patrimonial",
+                idx, normalizado, "numero_patrimonial",
                 f"Número patrimonial duplicado no arquivo. "
                 f"Primeira ocorrência na linha {linha_anterior}."
             )
@@ -393,10 +444,10 @@ class BemPatrimonialResource(resources.ModelResource):
         numeros_vistos[numero_key] = idx
 
         if BemPatrimonial.objects.filter(
-            numero_patrimonial__iexact=numero_patrimonial
+            numero_patrimonial__iexact=normalizado
         ).exists():
             self._registrar_erro(
-                idx, numero_patrimonial, "numero_patrimonial",
+                idx, normalizado, "numero_patrimonial",
                 "Número patrimonial já cadastrado no sistema."
             )
 
@@ -410,13 +461,15 @@ class BemPatrimonialResource(resources.ModelResource):
 
         for idx, row in enumerate(dataset.dict, start=1):
             linha_original = self._numero_linha_original(idx)
-            numero_patrimonial = self._normalizar_valor(row.get("numero_patrimonial"))
+            raw_numero = row.get("numero_patrimonial")
+            normalizado = self._normalizar_numero_patrimonial(raw_numero)[0]
+            numero_para_erro = normalizado if normalizado is not None else ""
             valor_raw = self._normalizar_valor(row.get("valor_unitario"))
 
-            self._validar_campos_obrigatorios(linha_original, numero_patrimonial, row)
-            self._parse_valor_unitario(valor_raw, linha_original, numero_patrimonial)
+            self._validar_campos_obrigatorios(linha_original, numero_para_erro, row)
+            self._parse_valor_unitario(valor_raw, linha_original, numero_para_erro)
             self._validar_numero_patrimonial(
-                linha_original, numero_patrimonial, numeros_vistos
+                linha_original, raw_numero, numeros_vistos
             )
 
         return self._erros_por_linha
@@ -442,29 +495,51 @@ class BemPatrimonialResource(resources.ModelResource):
         """
         self._erros_por_linha = []
         self._mensagens_exibidas = False
+        self._bloquear_linhas_por_erro = False
 
         if not self.request:
             return
 
         ua_usuario = self._ua_para_importacao()
         if not ua_usuario:
+            self._bloquear_linhas_por_erro = True
             raise ValidationError(
                 "Não é possível importar bens: seu usuário não possui uma "
                 "Unidade Administrativa vinculada. "
                 "Entre em contato com o gestor de patrimônio."
             )
         if not ua_usuario.is_ativa:
+            self._bloquear_linhas_por_erro = True
             raise ValidationError(
                 f"Não é possível importar bens: sua Unidade Administrativa "
                 f"'{ua_usuario.nome}' está inativa. "
                 "Entre em contato com o gestor de patrimônio."
             )
 
+        from inventario import constants as inv_constants
+        from inventario.models import ConciliacaoUA
+
+        if ConciliacaoUA.objects.filter(
+            unidade_administrativa_id=ua_usuario.id,
+            status=inv_constants.CONCILIACAO_EM_ABERTO,
+        ).exists():
+            self._bloquear_linhas_por_erro = True
+            if self.request:
+                messages.error(
+                    self.request,
+                    "Importação não realizada: existe Conciliação em aberto.",
+                )
+            raise ValidationError(
+                "Importação não realizada: existe Conciliação em aberto."
+            )
+
         if len(dataset) == 0:
+            self._bloquear_linhas_por_erro = True
             raise ValidationError("A planilha está vazia ou não contém linhas de dados.")
 
         erro_cabecalho = self._validar_cabecalho(dataset)
         if erro_cabecalho:
+            self._bloquear_linhas_por_erro = True
             raise ValidationError(erro_cabecalho)
 
         # Descarta linhas 100% vazias antes de validar/importar: apenas as
@@ -476,10 +551,12 @@ class BemPatrimonialResource(resources.ModelResource):
         # Após remover as linhas vazias, a planilha pode ter ficado sem nenhuma
         # linha de dados — trata como planilha vazia.
         if len(dataset) == 0:
+            self._bloquear_linhas_por_erro = True
             raise ValidationError("A planilha está vazia ou não contém linhas de dados.")
 
         erros = self._validar_dataset_completo(dataset)
         if erros:
+            self._bloquear_linhas_por_erro = True
             if self.request:
                 qtd = len(erros)
                 messages.error(
@@ -504,10 +581,14 @@ class BemPatrimonialResource(resources.ModelResource):
 
     def before_import_row(self, row, row_number=None, **kwargs):
         """Força status, limpa ID, normaliza marca/modelo e valor_unitario."""
+        if getattr(self, "_bloquear_linhas_por_erro", False):
+            raise ValidationError(
+                "Importação rejeitada: corrija o arquivo e tente novamente."
+            )
         # Remove colunas que não fazem parte do modelo de importação para
         # evitar que o django-import-export tente mapeá-las (ex: id, status
         # presentes em planilhas exportadas pelo próprio sistema).
-        for header in row.keys():
+        for header in list(row.keys()):
             if header.lower() not in COLUNAS_MODELO:
                 del row[header]
 
@@ -527,6 +608,10 @@ class BemPatrimonialResource(resources.ModelResource):
         return None
 
     def before_save_instance(self, instance, *args, **kwargs):
+        dry_run = kwargs.get("dry_run")
+        if dry_run is None and len(args) >= 2:
+            dry_run = args[1]
+        instance._skip_conciliacao_sync = bool(dry_run)
         instance.pk = None
         instance.id = None
         if self.request:
@@ -534,16 +619,17 @@ class BemPatrimonialResource(resources.ModelResource):
                 instance.criado_por = self.request.user
             instance.unidade_administrativa = self._ua_para_importacao()
         instance.status = constants.AGUARDANDO_APROVACAO
-        numero_patrimonial = self._normalizar_valor(instance.numero_patrimonial)
-        if not numero_patrimonial:
+        normalizado, sem_numeracao, formato_antigo = self._normalizar_numero_patrimonial(
+            instance.numero_patrimonial
+        )
+        if sem_numeracao:
             instance.numero_patrimonial = None
             instance.sem_numeracao = True
             instance.numero_formato_antigo = False
             return
+        instance.numero_patrimonial = normalizado
         instance.sem_numeracao = False
-        instance.numero_formato_antigo = not bool(
-            re.fullmatch(self.NEW_FMT_RE, numero_patrimonial)
-        )
+        instance.numero_formato_antigo = formato_antigo
 
     def after_import(self, dataset, result, *args, **kwargs):
         super().after_import(dataset, result, *args, **kwargs)
