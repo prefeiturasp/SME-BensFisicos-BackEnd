@@ -500,22 +500,39 @@ class BemPatrimonialResource(resources.ModelResource):
         if not self.request:
             return
 
+        ua_usuario = self._ua_ou_erro_importacao()
+        self._bloquear_por_conciliacao(ua_usuario)
+        self._preparar_dataset(dataset)
+
+        erros = self._validar_dataset_completo(dataset)
+        if erros:
+            self._bloquear_linhas_por_erro = True
+            self._rejeitar_erros_dataset(erros)
+
+    def _falhar_importacao(self, mensagem: str):
+        """Marca as linhas como bloqueadas e rejeita a importação."""
+        self._bloquear_linhas_por_erro = True
+        raise ValidationError(mensagem)
+
+    def _ua_ou_erro_importacao(self):
+        """UA de destino ou ValidationError quando o usuário não pode importar."""
         ua_usuario = self._ua_para_importacao()
         if not ua_usuario:
-            self._bloquear_linhas_por_erro = True
-            raise ValidationError(
+            self._falhar_importacao(
                 "Não é possível importar bens: seu usuário não possui uma "
                 "Unidade Administrativa vinculada. "
                 "Entre em contato com o gestor de patrimônio."
             )
         if not ua_usuario.is_ativa:
-            self._bloquear_linhas_por_erro = True
-            raise ValidationError(
+            self._falhar_importacao(
                 f"Não é possível importar bens: sua Unidade Administrativa "
                 f"'{ua_usuario.nome}' está inativa. "
                 "Entre em contato com o gestor de patrimônio."
             )
+        return ua_usuario
 
+    def _bloquear_por_conciliacao(self, ua_usuario):
+        """Rejeita quando existe conciliação em aberto para a UA de destino."""
         from inventario import constants as inv_constants
         from inventario.models import ConciliacaoUA
 
@@ -523,24 +540,25 @@ class BemPatrimonialResource(resources.ModelResource):
             unidade_administrativa_id=ua_usuario.id,
             status=inv_constants.CONCILIACAO_EM_ABERTO,
         ).exists():
-            self._bloquear_linhas_por_erro = True
             if self.request:
                 messages.error(
                     self.request,
                     "Importação não realizada: existe Conciliação em aberto.",
                 )
-            raise ValidationError(
+            self._falhar_importacao(
                 "Importação não realizada: existe Conciliação em aberto."
             )
 
+    def _preparar_dataset(self, dataset):
+        """Checa cabeçalho e remove linhas vazias, ou rejeita planilha vazia."""
         if len(dataset) == 0:
-            self._bloquear_linhas_por_erro = True
-            raise ValidationError("A planilha está vazia ou não contém linhas de dados.")
+            self._falhar_importacao(
+                "A planilha está vazia ou não contém linhas de dados."
+            )
 
         erro_cabecalho = self._validar_cabecalho(dataset)
         if erro_cabecalho:
-            self._bloquear_linhas_por_erro = True
-            raise ValidationError(erro_cabecalho)
+            self._falhar_importacao(erro_cabecalho)
 
         # Descarta linhas 100% vazias antes de validar/importar: apenas as
         # linhas preenchidas seguem adiante. Linhas parcialmente preenchidas
@@ -551,33 +569,33 @@ class BemPatrimonialResource(resources.ModelResource):
         # Após remover as linhas vazias, a planilha pode ter ficado sem nenhuma
         # linha de dados — trata como planilha vazia.
         if len(dataset) == 0:
-            self._bloquear_linhas_por_erro = True
-            raise ValidationError("A planilha está vazia ou não contém linhas de dados.")
-
-        erros = self._validar_dataset_completo(dataset)
-        if erros:
-            self._bloquear_linhas_por_erro = True
-            if self.request:
-                qtd = len(erros)
-                messages.error(
-                    self.request,
-                    f"Importação rejeitada: {qtd} linha(s) com erro. Nenhum bem foi importado."
-                )
-                for erro in erros[:20]:
-                    messages.warning(
-                        self.request,
-                        f"Linha {erro['linha']} | {erro['numero_patrimonial']} | "
-                        f"{erro['campo']}: {erro['mensagem']}"
-                    )
-                if qtd > 20:
-                    messages.warning(
-                        self.request,
-                        f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima."
-                    )
-            raise ValidationError(
-                f"Importação rejeitada: {len(erros)} linha(s) com erro. "
-                "Corrija o arquivo e tente novamente."
+            self._falhar_importacao(
+                "A planilha está vazia ou não contém linhas de dados."
             )
+
+    def _rejeitar_erros_dataset(self, erros):
+        """Exibe os erros padronizados e rejeita a carga inteira."""
+        if self.request:
+            qtd = len(erros)
+            messages.error(
+                self.request,
+                f"Importação rejeitada: {qtd} linha(s) com erro. Nenhum bem foi importado."
+            )
+            for erro in erros[:20]:
+                messages.warning(
+                    self.request,
+                    f"Linha {erro['linha']} | {erro['numero_patrimonial']} | "
+                    f"{erro['campo']}: {erro['mensagem']}"
+                )
+            if qtd > 20:
+                messages.warning(
+                    self.request,
+                    f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima."
+                )
+        raise ValidationError(
+            f"Importação rejeitada: {len(erros)} linha(s) com erro. "
+            "Corrija o arquivo e tente novamente."
+        )
 
     def before_import_row(self, row, row_number=None, **kwargs):
         """Força status, limpa ID, normaliza marca/modelo e valor_unitario."""
@@ -588,9 +606,11 @@ class BemPatrimonialResource(resources.ModelResource):
         # Remove colunas que não fazem parte do modelo de importação para
         # evitar que o django-import-export tente mapeá-las (ex: id, status
         # presentes em planilhas exportadas pelo próprio sistema).
-        for header in list(row.keys()):
-            if header.lower() not in COLUNAS_MODELO:
-                del row[header]
+        colunas_extras = [
+            header for header in row.keys() if header.lower() not in COLUNAS_MODELO
+        ]
+        for header in colunas_extras:
+            del row[header]
 
         # Ponto 4: marca e modelo vazios → "-"
         for campo in ("marca", "modelo"):
