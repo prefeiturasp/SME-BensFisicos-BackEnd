@@ -923,6 +923,26 @@ class MovimentacaoApiTestCase(TestCase):
         self.assertIn("inventário", encontrados[bloqueado.id]["motivo"])
         self.assertNotIn(self.bem_oculto.id, encontrados)
 
+    def test_busca_geral_informa_baixa_fisica_como_motivo_do_bloqueio(self):
+        bem = self._criar_bem(
+            "001.000000092-0", self.ua_origem, criado_por=self.operador_origem
+        )
+        bem.status = constants.BAIXA_FISICA
+        bem.save(update_fields=["status"])
+        self._autenticar(self.operador_origem)
+
+        response = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "termo_busca": "001.000000092-0",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        encontrado = response.data["itens"][0]
+        self.assertEqual(encontrado["id"], bem.id)
+        self.assertFalse(encontrado["apto"])
+        self.assertIn("Baixa Física", encontrado["motivo"])
+
     def test_busca_geral_localiza_nome_descricao_id_e_numero_somente_na_ua(self):
         bem = self._criar_bem(
             "001.000000094-0", self.ua_origem, criado_por=self.operador_origem

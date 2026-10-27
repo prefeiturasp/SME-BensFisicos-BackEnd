@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponseNotAllowed, JsonResponse
+from django.templatetags.static import static
 from django.urls import path
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
@@ -29,6 +30,7 @@ from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_cancelada,
 )
 from bem_patrimonial import constants
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 
 from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 from bem_patrimonial.serializers.movimentacao_serializers import (
@@ -380,7 +382,7 @@ def cancelar_solicitacao(modeladmin, request, queryset):
 cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"
 
 
-class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
+class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
     model = MovimentacaoBemPatrimonial
     create_fields = (
         "unidade_administrativa_origem",
@@ -484,7 +486,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
             "js/bem_patrimonial/prevenir_duplo_submit.js",
             "admin/movimentacao_filtra_bens_por_ua.js",
             "admin/movimentacao_uo_destino.js",
-            "admin/movimentacao_lote.js",
+            f"{static('admin/movimentacao_lote.js')}?v=5",
         )
         css = {
             "all": (
@@ -492,7 +494,7 @@ class MovimentacaoBemPatrimonialAdmin(admin.ModelAdmin):
                 "css/custom_inline.css",
                 "css/hide_crud_icons.css",
                 "css/admin_filtros.css",
-                "css/movimentacao_lote.css",
+                f"{static('css/movimentacao_lote.css')}?v=5",
             )
         }
 
