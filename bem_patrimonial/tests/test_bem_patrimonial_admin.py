@@ -1,7 +1,7 @@
 from rest_framework.test import APIClient
 from unittest.mock import patch as mock_patch
 from io import BytesIO
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import tablib
 
@@ -22,7 +22,6 @@ from bem_patrimonial.admins.bem_patrimonial import (
 from bem_patrimonial.constants import (
     AGUARDANDO_APROVACAO,
     APROVADO,
-    BAIXA_FISICA,
 )
 from bem_patrimonial.models import BemPatrimonial, StatusBemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
@@ -1550,7 +1549,6 @@ class ImportacaoMarcaModeloIntegracaoTest(_Base):
 
 class AdminImportFormatsTest(_Base):
     def test_get_import_formats_retorna_apenas_3_formatos(self):
-        from import_export.formats.base_formats import CSV, XLS, XLSX
         formatos = self.admin.get_import_formats()
         self.assertEqual(len(formatos), 3)
         nomes = [f.__name__ if isinstance(f, type) else type(f).__name__ for f in formatos]
@@ -1981,10 +1979,6 @@ class ImportacaoDuplicadaComConciliacaoAbertaTest(_Base):
             unidade_administrativa=self.ua,
             criado_por=self.gestor,
             status=inv_constants.CONCILIACAO_EM_ABERTO,
-        )
-        ds = _dataset_importacao(
-            ("10538588879", "Note 1", "Desc 1", "10,00", "M", "X"),
-            ("001.053858887-9", "Note 2", "Desc 2", "10,00", "M", "Y"),
         )
         bens_antes = BemPatrimonial.objects.count()
         itens_antes = ItemConciliacao.objects.count()
