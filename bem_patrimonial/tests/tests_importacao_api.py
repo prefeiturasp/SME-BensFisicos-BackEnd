@@ -803,3 +803,134 @@ class ImportacaoNumeroLinhaOriginalTestCase(APITransactionTestCase):
         # A 3ª linha de dados mantém o número 3 (posição original), não 2.
         self.assertIn(3, linhas_erro)
         self.assertNotIn(2, linhas_erro)
+
+
+class ImportacaoNormalizacaoNumeroPatrimonialTestCase(APITransactionTestCase):
+    """
+    Padronização automática do número patrimonial na importação.
+
+    - Vazio -> sem numeração (sem_numeracao True, formato antigo False).
+    - 13 dígitos (com ou sem máscara) -> formato atual com máscara padrão.
+    - Mais curto -> zeros à esquerda até 13 dígitos + máscara padrão.
+    - Com letras -> formato anterior preservado.
+    - Duplicidade considera o valor já normalizado (tudo ou nada).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.uo = criar_uo(codigo=codigo_uo(90, 90, 90), nome="UO Norm", sigla="UON")
+        self.ua = criar_ua(
+            uo=self.uo, codigo=codigo_ua(90, 90, 90, 1), sigla="UAN", nome="UA Norm"
+        )
+        self.gestor = Usuario.objects.create_user(
+            username="gestor_norm",
+            email="gestor.norm@test.com",
+            **auth_kwargs("test123"),
+            nome="Gestor Norm",
+            is_staff=True,
+            unidade_administrativa=self.ua,
+            unidade_orcamentaria=self.uo,
+        )
+        self.gestor.groups.add(
+            Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.gestor)
+
+    def test_vazio_salva_como_sem_numero(self):
+        arquivo = _planilha_valida(
+            [["", "Cadeira", "Cadeira sem número", "300,00", "Marca X", "Modelo Y"]]
+        )
+        response = self.client.post(
+            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        bem = BemPatrimonial.objects.filter(
+            unidade_administrativa=self.ua, nome="Cadeira"
+        ).first()
+        self.assertIsNotNone(bem)
+        self.assertTrue(bem.sem_numeracao)
+        self.assertFalse(bem.numero_formato_antigo)
+
+    def test_treze_digitos_sem_mascara_aplica_mascara_padrao(self):
+        arquivo = _planilha_valida(
+            [["0010000009010", "Note", "Desc", "10,00", "M", "X"]]
+        )
+        response = self.client.post(
+            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000901-0")
+        self.assertFalse(bem.sem_numeracao)
+        self.assertFalse(bem.numero_formato_antigo)
+
+    def test_onze_digitos_completa_zeros_e_aplica_mascara(self):
+        arquivo = _planilha_valida(
+            [["10538588879", "Note", "Desc", "10,00", "M", "X"]]
+        )
+        response = self.client.post(
+            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.053858887-9")
+        self.assertFalse(bem.sem_numeracao)
+        self.assertFalse(bem.numero_formato_antigo)
+
+    def test_valor_com_letras_permanece_formato_anterior(self):
+        arquivo = _planilha_valida(
+            [["ANT-902-XYZ", "Note", "Desc", "10,00", "M", "X"]]
+        )
+        response = self.client.post(
+            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="ANT-902-XYZ")
+        self.assertFalse(bem.sem_numeracao)
+        self.assertTrue(bem.numero_formato_antigo)
+
+    def test_duplicidade_apos_normalizacao_retorna_422_e_nada_persiste(self):
+        arquivo = _planilha_valida(
+            [
+                ["10538588879", "Note 1", "Desc 1", "10,00", "M", "X"],
+                ["001.053858887-9", "Note 2", "Desc 2", "10,00", "M", "Y"],
+            ]
+        )
+        count_antes = BemPatrimonial.objects.count()
+        response = self.client.post(
+            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
+        )
+        self.assertEqual(
+            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
+        )
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+        self.assertFalse(
+            BemPatrimonial.objects.filter(
+                numero_patrimonial="001.053858887-9"
+            ).exists()
+        )
+
+    def test_duplicidade_com_banco_apos_normalizacao_retorna_422(self):
+        BemPatrimonial.objects.create(
+            nome="Existente",
+            descricao="Desc",
+            valor_unitario=10,
+            marca="M",
+            modelo="X",
+            numero_patrimonial="001.053858887-9",
+            numero_formato_antigo=False,
+            sem_numeracao=False,
+            unidade_administrativa=self.ua,
+            criado_por=self.gestor,
+            status=bem_constants.APROVADO,
+        )
+        count_antes = BemPatrimonial.objects.count()
+        arquivo = _planilha_valida(
+            [["10538588879", "Note", "Desc", "10,00", "M", "X"]]
+        )
+        response = self.client.post(
+            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
+        )
+        self.assertEqual(
+            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
+        )
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)

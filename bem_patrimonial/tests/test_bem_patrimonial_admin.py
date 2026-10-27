@@ -402,9 +402,25 @@ class BeforeSaveInstanceTest(_Base):
 
     def test_numero_formato_antigo_define_flag_true(self):
         resource = self._resource_com_request()
-        instance = BemPatrimonial(nome="X", numero_patrimonial="12345")
+        instance = BemPatrimonial(nome="X", numero_patrimonial="ANT-123")
         resource.before_save_instance(instance)
         self.assertTrue(instance.numero_formato_antigo)
+        self.assertFalse(instance.sem_numeracao)
+
+    def test_numero_curto_normaliza_com_zeros_e_mascara(self):
+        resource = self._resource_com_request()
+        instance = BemPatrimonial(nome="X", numero_patrimonial="10538588879")
+        resource.before_save_instance(instance)
+        self.assertEqual(instance.numero_patrimonial, "001.053858887-9")
+        self.assertFalse(instance.numero_formato_antigo)
+        self.assertFalse(instance.sem_numeracao)
+
+    def test_numero_sem_mascara_normaliza_para_formato_atual(self):
+        resource = self._resource_com_request()
+        instance = BemPatrimonial(nome="X", numero_patrimonial="0010000000010")
+        resource.before_save_instance(instance)
+        self.assertEqual(instance.numero_patrimonial, "001.000000001-0")
+        self.assertFalse(instance.numero_formato_antigo)
         self.assertFalse(instance.sem_numeracao)
 
     def test_criado_por_ja_preenchido_nao_sobrescreve(self):
@@ -1933,3 +1949,63 @@ class AdminUsaResourceDaAPITest(_Base):
 
         ua_resolvida = self.admin._extrair_ua_do_form(req, _FormFake())
         self.assertIsNone(ua_resolvida)
+
+
+# ===========================================================================
+# 40. Regressão Admin: duplicado normalizado com conciliação em aberto
+# ===========================================================================
+
+class ImportacaoDuplicadaComConciliacaoAbertaTest(_Base):
+    """Duplicado após normalização não pode estourar IntegrityError no Admin.
+
+    Cenário: conciliação em aberto + arquivo com "10538588879" e
+    "001.053858887-9" (mesma chave normalizada). O before_import rejeita
+    (tudo ou nada) e as linhas são bloqueadas em before_import_row, então
+    nenhum Bem é salvo e nenhum on_commit órfão tenta criar ItemConciliacao
+    para um Bem que foi revertido (FK bem_id).
+    """
+
+    def _resource(self):
+        req = _request_with_messages(self.factory, self.gestor)
+        return BemPatrimonialResource(request=req)
+
+    def test_duplicado_normalizado_nao_salva_nada_nem_estoura(self):
+        from datetime import date
+
+        from inventario import constants as inv_constants
+        from inventario.models import ConciliacaoUA, ItemConciliacao
+
+        ConciliacaoUA.objects.create(
+            tipo=inv_constants.CONCILIACAO_EVENTUAL,
+            periodo_final=date(2025, 12, 31),
+            unidade_administrativa=self.ua,
+            criado_por=self.gestor,
+            status=inv_constants.CONCILIACAO_EM_ABERTO,
+        )
+        ds = _dataset_importacao(
+            ("10538588879", "Note 1", "Desc 1", "10,00", "M", "X"),
+            ("001.053858887-9", "Note 2", "Desc 2", "10,00", "M", "Y"),
+        )
+        bens_antes = BemPatrimonial.objects.count()
+        itens_antes = ItemConciliacao.objects.count()
+
+        for dry_run in (True, False):
+            resource = self._resource()
+            result = resource.import_data(
+                _dataset_importacao(
+                    ("10538588879", "Note 1", "Desc 1", "10,00", "M", "X"),
+                    ("001.053858887-9", "Note 2", "Desc 2", "10,00", "M", "Y"),
+                ),
+                dry_run=dry_run,
+                raise_errors=False,
+                use_transactions=True,
+            )
+            self.assertTrue(result.has_errors())
+
+        self.assertEqual(BemPatrimonial.objects.count(), bens_antes)
+        self.assertEqual(ItemConciliacao.objects.count(), itens_antes)
+        self.assertFalse(
+            BemPatrimonial.objects.filter(
+                numero_patrimonial="001.053858887-9"
+            ).exists()
+        )
