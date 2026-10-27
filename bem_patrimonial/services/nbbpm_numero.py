@@ -228,9 +228,29 @@ def _criar_nbbpm_atomico(baixas, numero_processo_baixa, data_autorizacao, respon
         criado_por=criado_por,
     )
     nbbpm.baixas.set(locked)
+    _evoluir_bens_para_baixa_fisica(locked)
     logger.info("NBBPM gerada %s %s tentativa %s", PREFIXO_FIXO, numero, tentativa)
     _registrar_historico_nbbpm(nbbpm, criado_por, uo_ids, ano, locked)
     return nbbpm
+
+
+def _evoluir_bens_para_baixa_fisica(locked_baixas):
+    """Evolui bens Laudado para Baixa após NBBPM (idempotente p/ legado Baixa Física)."""
+    from bem_patrimonial import constants as bem_constants
+    from bem_patrimonial.models import BemPatrimonial
+
+    bem_ids = set()
+    for baixa in locked_baixas:
+        for item in baixa.itens.select_related("bem").all():
+            if item.bem_id:
+                bem_ids.add(item.bem_id)
+    if not bem_ids:
+        return
+    bens = BemPatrimonial.objects.filter(pk__in=bem_ids)
+    for bem in bens:
+        if bem.status == bem_constants.LAUDADO_PARA_BAIXA:
+            bem.status = bem_constants.BAIXA_FISICA
+            bem.save(update_fields=["status"])
 
 
 def _registrar_historico_nbbpm(nbbpm, criado_por, uo_ids, ano, locked):

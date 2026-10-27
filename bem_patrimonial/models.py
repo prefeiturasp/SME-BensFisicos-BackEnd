@@ -997,8 +997,11 @@ class BaixaFisicaBemPatrimonial(models.Model):
                 raise ValidationError(
                     f"O bem '{bem}' não pertence à Unidade Administrativa selecionada."
                 )
-            if bem.status == constants.BAIXA_FISICA:
-                raise ValidationError(f"O bem '{bem}' já foi baixado.")
+            if bem.status in (constants.BAIXA_FISICA, constants.LAUDADO_PARA_BAIXA):
+                # Laudado vinculado a outra Aceita cai no check abaixo
+                # com mensagem de "outro pedido". Aqui cobre Baixa Física definitiva.
+                if bem.status == constants.BAIXA_FISICA:
+                    raise ValidationError(f"O bem '{bem}' já foi baixado.")
             if BaixaFisicaBensItem.objects.filter(
                 bem=bem,
                 baixa__status__in=[
@@ -1010,6 +1013,11 @@ class BaixaFisicaBemPatrimonial(models.Model):
                 raise ValidationError(
                     f"O bem '{bem}' já está em processo de Baixa Física em outro pedido."
                 )
+            # Órfão Laudado (sem outra baixa): barra igual API para não entrar em Em elaboração/Solicitada.
+            if bem.status == constants.LAUDADO_PARA_BAIXA:
+                raise ValidationError(
+                    f"O bem '{bem}' possui status '{bem.get_status_display()}' e não pode ser incluído em uma baixa física."
+                )
 
     def clean(self):
         super().clean()
@@ -1018,7 +1026,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
         if not self.pk:
             return
         if self.status in (constants.ACEITA, constants.RECUSADA):
-            # Itens congelados após a decisão; bens já estão BAIXA_FISICA por desenho.
+            # Itens congelados após a decisão; bens já estão Laudado/Baixa Física por desenho.
+            # Edição de Aceita sem NBBPM é liberada via API/Admin com validações próprias.
             return
         itens = list(self.itens.select_related("bem", "bem__unidade_administrativa"))
         if not itens:
@@ -1081,7 +1090,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
         Aprova a Baixa Física:
         - exige numero_processo_baixa no formato XXXX.XXXX/XXXXXXX-X
         - status da baixa => ACEITA
-        - status do bem => BAIXA_FISICA
+        - status do bem => LAUDADO_PARA_BAIXA (evolui para BAIXA_FISICA após NBBPM)
         - propaga numero_processo_baixa para baixa e para todos os bens vinculados
         - localização usa numero_processo_baixa
         - validação cruzada central: barra reuso se já tem NBBPM (nova tabela ou legado)
@@ -1121,7 +1130,7 @@ class BaixaFisicaBemPatrimonial(models.Model):
 
         for item in self.itens.select_related("bem"):
             bem = item.bem
-            bem.status = constants.BAIXA_FISICA
+            bem.status = constants.LAUDADO_PARA_BAIXA
             bem.localizacao = texto_localizacao
             bem.numero_processo = processo
             bem.save(update_fields=["status", "numero_processo", "localizacao"])

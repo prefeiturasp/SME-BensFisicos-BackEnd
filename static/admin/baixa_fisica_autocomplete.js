@@ -40,10 +40,10 @@
                 return $btn;
             }
 
-            function isStatusAguardandoEnvio() {
+            function isStatusEditavel() {
                 if (!isEdicao) return false;
                 const txt = ($statusReadonly.text() || '').trim().toLowerCase();
-                return txt === 'aguardando envio' || txt === 'em elaboração' || txt === 'em elaboracao';
+                return txt === 'aguardando envio' || txt === 'em elaboração' || txt === 'em elaboracao' || txt === 'aceita';
             }
 
             function enableAdd($addButton) {
@@ -74,7 +74,7 @@
 
                 // EDIÇÃO
                 if (isEdicao) {
-                    if (isStatusAguardandoEnvio() && getUaVal()) {
+                    if (isStatusEditavel() && getUaVal()) {
                         enableAdd($addButton);
                     } else {
                         disableAdd($addButton);
