@@ -19,6 +19,7 @@ APROVADO = "aprovado"
 NAO_APROVADO = "nao_aprovado"
 BLOQUEADO = "bloqueado"
 BAIXA_FISICA_AGUARDANDO_APROVACAO = "baixa_fisica_aguardando_aprovacao"
+LAUDADO_PARA_BAIXA = "laudado_para_baixa"
 BAIXA_FISICA = "baixa_fisica"
 TRANSFERIDO = "transferido"
 
@@ -28,11 +29,13 @@ STATUS = (
     (NAO_APROVADO, "Não aprovado"),
     (BLOQUEADO, "Bloqueado para movimentação"),
     (BAIXA_FISICA_AGUARDANDO_APROVACAO, "Baixa Física - Aguardando aprovação"),
+    (LAUDADO_PARA_BAIXA, "Laudado para Baixa"),
     (BAIXA_FISICA, "Baixa Física"),
     (TRANSFERIDO, "Transferido"),
 )
 
 STATUS_FINAIS_BEM = (
+    LAUDADO_PARA_BAIXA,
     BAIXA_FISICA,
     TRANSFERIDO,
 )

@@ -1,7 +1,11 @@
+import json
+import re
+
 from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
+from django.test import SimpleTestCase, TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
+from django.utils.html import escape
 
 from bem_patrimonial.models import (
     BemPatrimonial,
@@ -16,6 +20,51 @@ from bem_patrimonial.constants import APROVADO
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+
+
+class MovimentacaoLoteWidgetTestCase(SimpleTestCase):
+    def setUp(self):
+        self.widget = MovimentacaoLoteWidget()
+
+    def test_widget_preserva_selecao_no_campo_oculto_apos_erro(self):
+        valor = json.dumps({
+            "modo": "faixa",
+            "selecoes": [{
+                "id": "faixa-1",
+                "tipo": "faixa",
+                "numeroDe": "001.000000010-0",
+                "numeroAte": "001.000000012-2",
+                "bens": [{"id": 1, "nome": "Mesa"}],
+            }],
+        })
+        html = self.widget.render("itens_lote", valor, {"id": "id_itens_lote"})
+        self.assertIn(str(escape(valor)), html)
+        self.assertEqual(
+            self.widget.value_from_datadict({"itens_lote": valor}, {}, "itens_lote"),
+            valor,
+        )
+
+    def test_widget_escapa_texto_da_selecao_sem_injetar_html(self):
+        valor = json.dumps({"resumo": [{"nome": '<script>alert("teste")</script>'}]})
+        html = self.widget.render("itens_lote", valor, {"id": "id_itens_lote"})
+        self.assertNotIn("<script>", html)
+        self.assertIn(str(escape(valor)), html)
+
+    def test_botoes_do_widget_nao_submetem_formulario(self):
+        html = self.widget.render("itens_lote", "", {"id": "id_itens_lote"})
+        botoes = re.findall(r"<button\b[^>]*>", html)
+        self.assertEqual(len(botoes), 6)
+        for botao in botoes:
+            self.assertIn('type="button"', botao)
+
+    def test_admin_carrega_scripts_e_estilos_dos_modais_na_ordem_correta(self):
+        media = MovimentacaoBemPatrimonialAdmin.Media
+        scripts = [script.split("?")[0] for script in media.js]
+        estilos = [estilo.split("?")[0] for estilo in media.css["all"]]
+        self.assertTrue(scripts[0].endswith("js/bem_patrimonial/prevenir_duplo_submit.js"))
+        self.assertTrue(scripts[-1].endswith("admin/movimentacao_lote.js"))
+        self.assertTrue(any(estilo.endswith("admin/unsaved_changes.css") for estilo in estilos))
+        self.assertTrue(estilos[-1].endswith("css/movimentacao_lote.css"))
 
 
 class MovimentacaoAdminSearchTestCase(TestCase):
@@ -37,6 +86,10 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.assertIn('value="manual"', html)
         self.assertIn('data-modo="geral"', html)
         self.assertIn('data-modo="faixa"', html)
+        self.assertIn('data-modo="visualizar"', html)
+        self.assertIn('movimentacao-lote__visualizar', html)
+        self.assertIn('O dígito após o hífen não é considerado', html)
+        self.assertNotIn('os dígitos finais precisam ser iguais', html)
         self.assertIn('value="todos"', html)
         self.assertIn('role="tablist"', html)
         self.assertIn('Informe o número patrimonial completo do primeiro bem', html)

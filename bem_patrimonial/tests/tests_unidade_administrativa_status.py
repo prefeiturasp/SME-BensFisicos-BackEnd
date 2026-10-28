@@ -169,6 +169,7 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         self.assertIn('value="manual"', html)
         self.assertIn('data-modo="geral"', html)
         self.assertIn('data-modo="faixa"', html)
+        self.assertIn('data-modo="visualizar"', html)
         self.assertIn('value="todos"', html)
         self.assertEqual(html.count('placeholder="000.000000000-0"'), 2)
         self.assertEqual(html.count('maxlength="15"'), 2)

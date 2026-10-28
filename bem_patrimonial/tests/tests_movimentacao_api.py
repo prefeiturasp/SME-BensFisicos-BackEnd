@@ -1023,6 +1023,114 @@ class MovimentacaoApiTestCase(TestCase):
         self.assertEqual(response.data["count"], 0)
         self.assertEqual(response.data["itens"], [])
 
+    def test_busca_sem_filtro_lista_ua_com_impedimentos_e_sem_expor_outra_ua(self):
+        bloqueado = self._criar_bem(
+            "001.000000097-7", self.ua_origem, criado_por=self.operador_origem,
+            bloqueado_conciliacao=True,
+        )
+        self._autenticar(self.operador_origem)
+        response = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+        })
+        self.assertEqual(response.status_code, 200)
+        encontrados = {item["id"]: item for item in response.data["itens"]}
+        self.assertIn(self.bem_visivel.id, encontrados)
+        self.assertNotIn(self.bem_oculto.id, encontrados)
+        self.assertFalse(encontrados[bloqueado.id]["apto"])
+        self.assertIn("inventário", encontrados[bloqueado.id]["motivo"])
+        self.assertEqual(response.data["count"], BemPatrimonial.objects.filter(
+            unidade_administrativa=self.ua_origem,
+        ).count())
+
+    def test_busca_sem_filtro_nao_libera_acesso_a_outra_ua(self):
+        self._autenticar(self.operador_origem)
+        response = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_outra_origem.id,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_busca_com_termo_em_branco_equivale_a_sem_filtro(self):
+        self._autenticar(self.operador_origem)
+        parametros = {"unidade_administrativa_origem": self.ua_origem.id}
+        url = reverse("movimentacoes-buscar-bens")
+        sem_filtro = self.client.get(url, parametros)
+        for termo in ("", "   "):
+            with self.subTest(termo=termo):
+                resposta = self.client.get(url, {**parametros, "termo_busca": termo})
+                self.assertEqual(resposta.status_code, 200)
+                self.assertEqual(resposta.data, sem_filtro.data)
+
+    def test_busca_continua_rejeitando_multiplos_criterios(self):
+        self._autenticar(self.operador_origem)
+        response = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "id": self.bem_visivel.id, "termo_busca": "mesa",
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_busca_e_importacao_ignoram_digito_sem_omitir_bens_dos_limites(self):
+        bens = [self._criar_bem(numero, self.ua_origem, criado_por=self.operador_origem)
+                for numero in ("001.000000010-9", "001.000000011-1",
+                               "001.000000012-0", "001.000000012-7")]
+        self._autenticar(self.operador_origem)
+        faixa = {"numero_patrimonial_de": "001.000000010-0",
+                 "numero_patrimonial_ate": "001.000000012-0"}
+        busca = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id, **faixa,
+        })
+        importacao = self.client.post(reverse("movimentacoes-resolver-itens-lote"), {
+            "unidade_administrativa_origem": self.ua_origem.id, "faixas": [faixa],
+        }, format="json")
+        for resposta in (busca, importacao):
+            with self.subTest(status=resposta.status_code):
+                self.assertEqual(resposta.status_code, 200)
+                self.assertEqual([item["id"] for item in resposta.data["itens"]],
+                                 [bem.id for bem in bens])
+        self.assertEqual(busca.data["count"], 4)
+
+    def test_importacao_aceita_extremos_com_digitos_diferentes(self):
+        bens = [self._criar_bem(numero, self.ua_origem, criado_por=self.operador_origem)
+                for numero in ("001.000000010-9", "001.000000011-1")]
+        self._autenticar(self.operador_origem)
+        resposta = self.client.post(reverse("movimentacoes-resolver-itens-lote"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "faixas": [{"numero_patrimonial_de": bens[0].numero_patrimonial,
+                        "numero_patrimonial_ate": bens[1].numero_patrimonial}],
+        }, format="json")
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual([item["id"] for item in resposta.data["itens"]],
+                         [bem.id for bem in bens])
+
+    def test_de_sem_ate_continua_exato_inclusive_digito(self):
+        bens = [self._criar_bem(numero, self.ua_origem, criado_por=self.operador_origem)
+                for numero in ("001.000000010-0", "001.000000010-9")]
+        self._autenticar(self.operador_origem)
+        faixa = {"numero_patrimonial_de": bens[0].numero_patrimonial}
+        busca = self.client.get(reverse("movimentacoes-buscar-bens"), {
+            "unidade_administrativa_origem": self.ua_origem.id, **faixa,
+        })
+        importacao = self.client.post(reverse("movimentacoes-resolver-itens-lote"), {
+            "unidade_administrativa_origem": self.ua_origem.id, "faixas": [faixa],
+        }, format="json")
+        for resposta in (busca, importacao):
+            self.assertEqual(resposta.status_code, 200)
+            self.assertEqual([item["id"] for item in resposta.data["itens"]], [bens[0].id])
+
+    def test_faixa_com_digito_diferente_mantem_bloqueio_de_inventario(self):
+        inicio = self._criar_bem("001.000000010-9", self.ua_origem,
+                                 criado_por=self.operador_origem)
+        bloqueado = self._criar_bem("001.000000011-1", self.ua_origem,
+                                    criado_por=self.operador_origem,
+                                    bloqueado_conciliacao=True)
+        self._autenticar(self.operador_origem)
+        resposta = self.client.post(reverse("movimentacoes-resolver-itens-lote"), {
+            "unidade_administrativa_origem": self.ua_origem.id,
+            "faixas": [{"numero_patrimonial_de": inicio.numero_patrimonial,
+                        "numero_patrimonial_ate": bloqueado.numero_patrimonial}],
+        }, format="json")
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn(bloqueado.numero_patrimonial, resposta.data["faixas"][0])
+
     def test_busca_mostra_movimentacao_pendente_como_motivo(self):
         self._autenticar(self.operador_origem)
         response = self.client.get(reverse("movimentacoes-buscar-bens"), {

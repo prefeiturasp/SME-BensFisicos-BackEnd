@@ -174,7 +174,7 @@ def _desenhar_cabecalho(canvas, _, baixa: BaixaFisicaBemPatrimonial):
 def _desenhar_rodape(canvas, _, baixa: BaixaFisicaBemPatrimonial):
     """
     Rodapé com identificação do solicitante e data da solicitação:
-      "Solicitado por {RF} em DD/MM/AAAA"
+      "Solicitado por {RF} em DD/MM/AAAA" + paginação padrão "Página X".
     """
     canvas.saveState()
 
@@ -197,6 +197,14 @@ def _desenhar_rodape(canvas, _, baixa: BaixaFisicaBemPatrimonial):
 
     y_rodape = PDFConfig.MARGEM_INFERIOR - 1.0 * cm
     p.drawOn(canvas, PDFConfig.MARGEM_ESQUERDA, y_rodape)
+
+    canvas.setFont("Helvetica", 7)
+    canvas.setFillColor(colors.grey)
+    canvas.drawRightString(
+        A4[0] - PDFConfig.MARGEM_DIREITA,
+        y_rodape + 0.2 * cm,
+        f"Página {canvas.getPageNumber()}",
+    )
 
     # Linha acima do rodapé
     canvas.setStrokeColor(colors.grey)
@@ -279,8 +287,9 @@ def _criar_descricao_legal(styles) -> list:
 
 def _criar_tabela_bens(baixa: BaixaFisicaBemPatrimonial, styles) -> list:
     """
-    Tabela de bens com apenas duas colunas:
-      Nº Patrimonial / Empenho / Proc. Aquisição  |  Descrição do Bem
+    Tabela de bens com três colunas:
+      Nº Patrimonial / Empenho / Proc. Aquisição | Nome do Bem | Descrição do Bem
+    Nome do Bem à esquerda da Descrição, com repetição de cabeçalho.
     Sem colunas de Quantidade ou Baixado Contabilmente.
     """
     bens = _obter_bens_baixa(baixa)
@@ -303,14 +312,16 @@ def _criar_tabela_bens(baixa: BaixaFisicaBemPatrimonial, styles) -> list:
         leading=9,
     )
 
-    # Larguras: col patrimonial ~ 35%, descrição ~ 65%
-    col_pat = LARGURA_UTIL * 0.35
-    col_desc = LARGURA_UTIL * 0.65
+    # Larguras: patrimonial ~28%, nome ~27%, descrição ~45%.
+    col_pat = LARGURA_UTIL * 0.28
+    col_nome = LARGURA_UTIL * 0.27
+    col_desc = LARGURA_UTIL * 0.45
 
     # Cabeçalho
     dados = [
         [
             Paragraph("Nº PATRIMONIAL /<br/>EMPENHO/<br/>PROC. AQUISIÇÃO", estilo_header),
+            Paragraph("NOME DO BEM", estilo_header),
             Paragraph("DESCRIÇÃO DO BEM", estilo_header),
         ]
     ]
@@ -318,19 +329,22 @@ def _criar_tabela_bens(baixa: BaixaFisicaBemPatrimonial, styles) -> list:
     # Linhas de bens
     for bem in bens:
         numero = bem.numero_patrimonial or "-"
+        nome = (bem.nome or "-").upper()
         descricao = (bem.descricao or bem.nome or "-").upper()
         dados.append([
             Paragraph(numero, estilo_celula),
+            Paragraph(nome, estilo_celula),
             Paragraph(descricao, estilo_celula),
         ])
 
     if not bens:
         dados.append([
             Paragraph("-", estilo_celula),
+            Paragraph("-", estilo_celula),
             Paragraph("Nenhum bem vinculado.", estilo_celula),
         ])
 
-    tabela = Table(dados, colWidths=[col_pat, col_desc], repeatRows=1)
+    tabela = Table(dados, colWidths=[col_pat, col_nome, col_desc], repeatRows=1)
     tabela.setStyle(TableStyle([
         # Cabeçalho
         ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_HEADER),

@@ -1,4 +1,5 @@
-.unsaved-changes-dialog {
+.unsaved-changes-dialog,
+.admin-confirm-dialog {
   width: min(32rem, calc(100vw - 2rem));
   padding: 0;
   border: 0;
@@ -8,35 +9,41 @@
   box-shadow: 0 20px 45px rgb(0 0 0 / 30%);
 }
 
-.unsaved-changes-dialog::backdrop {
+.unsaved-changes-dialog::backdrop,
+.admin-confirm-dialog::backdrop {
   background: rgb(0 0 0 / 45%);
 }
 
-.unsaved-changes-dialog__content {
+.unsaved-changes-dialog__content,
+.admin-confirm-dialog__content {
   padding: 24px;
 }
 
-.unsaved-changes-dialog__title {
+.unsaved-changes-dialog__title,
+.admin-confirm-dialog .admin-confirm-dialog__title {
   margin: 0 0 12px;
   color: var(--body-fg);
   font-size: 1.25rem;
   font-weight: 700;
 }
 
-.unsaved-changes-dialog__message {
+.unsaved-changes-dialog__message,
+.admin-confirm-dialog__message {
   margin: 0;
   color: var(--body-quiet-color);
   font-size: 0.875rem;
 }
 
-.unsaved-changes-dialog__actions {
+.unsaved-changes-dialog__actions,
+.admin-confirm-dialog__actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
 }
 
-.unsaved-changes-dialog__actions .button {
+.unsaved-changes-dialog__actions .button,
+.admin-confirm-dialog__actions .button {
   min-height: 40px;
   padding: 10px 18px;
   border: 0;
@@ -45,26 +52,42 @@
   font-weight: 600;
 }
 
-.unsaved-changes-dialog__continue {
+.unsaved-changes-dialog__continue,
+.admin-confirm-dialog__cancel {
   background: var(--close-button-bg);
   color: var(--button-fg);
 }
 
 .unsaved-changes-dialog__continue:hover,
-.unsaved-changes-dialog__continue:focus {
+.unsaved-changes-dialog__continue:focus,
+.admin-confirm-dialog__cancel:hover,
+.admin-confirm-dialog__cancel:focus {
   background: var(--close-button-hover-bg);
 }
 
-.unsaved-changes-dialog__discard {
+.unsaved-changes-dialog__discard,
+.admin-confirm-dialog__discard {
   background: var(--delete-button-bg);
   color: var(--button-fg);
 }
 
 .unsaved-changes-dialog__discard:hover,
-.unsaved-changes-dialog__discard:focus {
+.unsaved-changes-dialog__discard:focus,
+.admin-confirm-dialog__discard:hover,
+.admin-confirm-dialog__discard:focus {
   background: var(--delete-button-hover-bg);
 }
 
 .unsaved-changes-cancel {
   margin-inline-start: 8px;
+}
+
+.admin-confirm-dialog .admin-confirm-dialog__title {
+  padding: 0;
+  background: none;
+}
+
+.admin-confirm-dialog__actions .button:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
