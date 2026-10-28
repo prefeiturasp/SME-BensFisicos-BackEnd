@@ -125,31 +125,36 @@ def _formatar_numero_patrimonial(indice, largura, digito, formato_atual):
 
 def _numeros_patrimoniais_da_faixa(dados_de, dados_ate):
     indice_de, largura, digito_de, formato_atual = dados_de
-    indice_ate, _, digito_ate, _ = dados_ate
-
-    if formato_atual and indice_de == indice_ate:
-        inicio_digito = int(digito_de)
-        fim_digito = int(digito_ate)
-        if fim_digito < inicio_digito:
-            return None
-        quantidade = fim_digito - inicio_digito + 1
-        numeros = [
-            _formatar_numero_patrimonial(
-                indice_de, largura, str(digito), formato_atual
-            )
-            for digito in range(inicio_digito, fim_digito + 1)
-        ]
-        return quantidade, numeros
-
-    if formato_atual and digito_de != digito_ate:
-        return None
+    indice_ate = dados_ate[0]
 
     quantidade = indice_ate - indice_de + 1
+    if quantidade > LIMITE_BENS_POR_FAIXA:
+        return quantidade, []
     numeros = [
         _formatar_numero_patrimonial(indice, largura, digito_de, formato_atual)
         for indice in range(indice_de, indice_ate + 1)
     ]
     return quantidade, numeros
+
+
+def _filtrar_intervalo_patrimonial(bens, inicio, fim):
+    dados_inicio = _dados_numero_patrimonial(inicio)
+    if dados_inicio[3]:
+        return bens.filter(
+            sem_numeracao=False,
+            numero_patrimonial__regex=r"^\d{3}\.\d{9}-\d$",
+            numero_patrimonial__gte=f"{inicio.split('-')[0]}-0",
+            numero_patrimonial__lte=f"{fim.split('-')[0]}-9",
+        )
+    return bens.filter(
+        sem_numeracao=False,
+        numero_patrimonial__gte=inicio,
+        numero_patrimonial__lte=fim,
+    )
+
+
+def _chave_numero_patrimonial(numero, ignorar_digito):
+    return numero.split('-')[0] if ignorar_digito else numero
 
 
 def _mensagem_bens_nao_movimentaveis(numeros_patrimoniais):
@@ -174,7 +179,10 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
     numero_ate = numero_ate_informado or numero_de
     dados_de = _dados_numero_patrimonial(numero_de)
     dados_ate = _dados_numero_patrimonial(numero_ate)
-    if not dados_de or not dados_ate or dados_de[3] != dados_ate[3]:
+    if (
+        not dados_de or not dados_ate
+        or dados_de[3] != dados_ate[3] or dados_de[1] != dados_ate[1]
+    ):
         raise serializers.ValidationError(
             {"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])}
         )
@@ -190,46 +198,50 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
                 )
             }
         )
-    dados_faixa = _numeros_patrimoniais_da_faixa(dados_de, dados_ate)
-    if not dados_faixa:
-        raise serializers.ValidationError(
-            {"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])}
-        )
-
-    quantidade, numeros_esperados = dados_faixa
+    quantidade, numeros_esperados = _numeros_patrimoniais_da_faixa(dados_de, dados_ate)
     if quantidade > LIMITE_BENS_POR_FAIXA:
         raise serializers.ValidationError(
             {"faixas": "Cada faixa pode conter no máximo 500 bens."}
         )
 
-    bens_da_ua = BemPatrimonial.objects.filter(
-        unidade_administrativa=unidade_administrativa,
-        numero_patrimonial__in=numeros_esperados,
+    ignorar_digito = bool(numero_ate_informado) and dados_de[3]
+    return _buscar_e_validar_bens_da_faixa(
+        unidade_administrativa, numero_de, numero_ate, numeros_esperados, ignorar_digito
     )
-    bens_por_numero = {
-        bem.numero_patrimonial: bem
-        for bem in bens_da_ua.order_by("numero_patrimonial", "id")
+
+
+def _buscar_e_validar_bens_da_faixa(ua, numero_de, numero_ate, numeros_esperados, ignorar_digito):
+    bens_da_ua = BemPatrimonial.objects.filter(unidade_administrativa=ua)
+    if ignorar_digito:
+        bens_da_ua = _filtrar_intervalo_patrimonial(bens_da_ua, numero_de, numero_ate)
+    else:
+        bens_da_ua = bens_da_ua.filter(numero_patrimonial__in=numeros_esperados)
+    bens_da_ua = list(bens_da_ua.order_by("numero_patrimonial", "id"))
+    if len(bens_da_ua) > LIMITE_BENS_POR_FAIXA:
+        raise serializers.ValidationError({"faixas": "Cada faixa pode conter no máximo 500 bens."})
+    numeros_encontrados = {
+        _chave_numero_patrimonial(bem.numero_patrimonial, ignorar_digito)
+        for bem in bens_da_ua
     }
     ids_movimentaveis = set(
-        queryset_bens_movimentaveis(unidade_administrativa)
-        .filter(id__in=[bem.id for bem in bens_por_numero.values()])
+        queryset_bens_movimentaveis(ua)
+        .filter(id__in=[bem.id for bem in bens_da_ua])
         .values_list("id", flat=True)
     )
 
-    numeros_invalidos = []
-    bens = []
-    for numero_esperado in numeros_esperados:
-        bem = bens_por_numero.get(numero_esperado)
-        if bem and bem.id in ids_movimentaveis:
-            bens.append(bem)
-            continue
-        numeros_invalidos.append(bem.numero_patrimonial if bem else numero_esperado)
+    numeros_invalidos = [
+        numero for numero in numeros_esperados
+        if _chave_numero_patrimonial(numero, ignorar_digito) not in numeros_encontrados
+    ]
+    numeros_invalidos.extend(
+        bem.numero_patrimonial for bem in bens_da_ua if bem.id not in ids_movimentaveis
+    )
 
     if numeros_invalidos:
         raise serializers.ValidationError(
             {"faixas": _mensagem_bens_nao_movimentaveis(numeros_invalidos)}
         )
-    return bens
+    return bens_da_ua
 
 
 def resolver_bens_movimentacao_lote(unidade_administrativa, faixas, selecionar_todos):
@@ -292,7 +304,7 @@ class BuscaBensMovimentacaoSerializer(serializers.Serializer):
     numero_patrimonial_de = serializers.CharField(required=False)
     numero_patrimonial_ate = serializers.CharField(required=False)
     descricao = serializers.CharField(required=False)
-    termo_busca = serializers.CharField(required=False)
+    termo_busca = serializers.CharField(required=False, allow_blank=True)
     pagina = serializers.IntegerField(required=False, min_value=1, default=1)
 
     def validate(self, attrs):
@@ -306,7 +318,7 @@ class BuscaBensMovimentacaoSerializer(serializers.Serializer):
             "descricao",
             "termo_busca",
         )
-        if sum(bool(attrs.get(modo)) for modo in modos) != 1:
+        if sum(bool(attrs.get(modo)) for modo in modos) > 1:
             raise serializers.ValidationError("Informe apenas um critério de busca.")
         if attrs.get("numero_patrimonial_ate") and not attrs.get("numero_patrimonial_de"):
             raise serializers.ValidationError("Informe o Número Patrimonial - De.")
@@ -321,7 +333,7 @@ class BuscaBensMovimentacaoSerializer(serializers.Serializer):
                 or dados_inicio[1] != dados_fim[1]
             ):
                 raise serializers.ValidationError("Informe números patrimoniais comparáveis.")
-            if dados_inicio[0] > dados_fim[0] or inicio > fim:
+            if dados_inicio[0] > dados_fim[0]:
                 raise serializers.ValidationError(
                     "O Número Patrimonial Até deve ser maior ou igual ao Número Patrimonial De."
                 )
@@ -333,7 +345,7 @@ def buscar_bens_para_movimentacao(criterios):
     bens = BemPatrimonial.objects.filter(unidade_administrativa=ua)
     if "id" in criterios:
         bens = bens.filter(pk=criterios["id"])
-    elif "termo_busca" in criterios:
+    elif criterios.get("termo_busca"):
         termo = criterios["termo_busca"]
         filtro = (
             Q(nome__icontains=termo)
@@ -350,14 +362,13 @@ def buscar_bens_para_movimentacao(criterios):
         )
     elif "descricao" in criterios:
         bens = bens.filter(descricao__icontains=criterios["descricao"])
-    else:
+    elif "numero_patrimonial_de" in criterios:
         inicio = criterios["numero_patrimonial_de"]
-        fim = criterios.get("numero_patrimonial_ate") or inicio
-        bens = bens.filter(
-            sem_numeracao=False,
-            numero_patrimonial__gte=inicio,
-            numero_patrimonial__lte=fim,
-        )
+        fim = criterios.get("numero_patrimonial_ate")
+        if fim:
+            bens = _filtrar_intervalo_patrimonial(bens, inicio, fim)
+        else:
+            bens = bens.filter(sem_numeracao=False, numero_patrimonial=inicio)
 
     total = bens.count()
     pagina = criterios["pagina"]

@@ -216,9 +216,15 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         baixa.status = constants.ACEITA
         baixa.save(update_fields=["status"])
         baixa.refresh_from_db()
-        self.assertFalse(inline.has_add_permission(MagicMock(), baixa))
-        self.assertEqual(inline.get_max_num(MagicMock(), baixa), 0)
-        self.assertEqual(inline.get_readonly_fields(MagicMock(), baixa), ("bem",))
+        # Aceita sem NBBPM: gestor pode editar, operador não.
+        req_gestor = MagicMock()
+        req_gestor.user = self.gestor
+        req_oper = MagicMock()
+        req_oper.user = self.operador
+        self.assertTrue(inline.has_add_permission(req_gestor, baixa))
+        self.assertFalse(inline.has_add_permission(req_oper, baixa))
+        self.assertEqual(inline.get_max_num(req_oper, baixa), 0)
+        self.assertEqual(inline.get_readonly_fields(req_oper, baixa), ("bem",))
         self.assertTrue(inline.has_delete_permission(MagicMock(), None))
 
     def test_resource_e_displays(self):
@@ -444,7 +450,6 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         # has_add/delete com obj None
         self.assertTrue(inline.has_add_permission(MagicMock(), None))
         self.assertTrue(inline.has_delete_permission(MagicMock(), None))
-        # get_max_num com obj None retorna default (None ou 1000)
         max_num = inline.get_max_num(MagicMock(), None)
         self.assertTrue(max_num is None or max_num == 1000)
 
@@ -467,15 +472,16 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         self.assertIsNotNone(field)
 
     def test_inline_cobertura_extra(self):
-        # cobre branches restantes de has_add/delete e resource
         inline = BaixaFisicaBensItemInline(BaixaFisicaBemPatrimonial, AdminSite())
         baixa = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA)
-        # has_delete com obj ACEITA deve ser False
-        self.assertFalse(inline.has_delete_permission(MagicMock(), baixa))
-        # get_max_num com obj ACEITA
-        self.assertEqual(inline.get_max_num(MagicMock(), baixa), 0)
-        # get_readonly_fields com obj ACEITA
-        self.assertEqual(inline.get_readonly_fields(MagicMock(), baixa), ("bem",))
+        req_oper = MagicMock()
+        req_oper.user = self.operador
+        req_gestor = MagicMock()
+        req_gestor.user = self.gestor
+        self.assertFalse(inline.has_delete_permission(req_oper, baixa))
+        self.assertTrue(inline.has_delete_permission(req_gestor, baixa))
+        self.assertEqual(inline.get_max_num(req_oper, baixa), 0)
+        self.assertEqual(inline.get_readonly_fields(req_oper, baixa), ("bem",))
         # cobre BaixaFisicaResource com item sem bem
         from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import BaixaFisicaResource
         res = BaixaFisicaResource()
