@@ -884,9 +884,13 @@ def bempatrimonial_sync_conciliacao_em_aberto(sender, instance, created, **kwarg
     Executa o sync somente após commit para garantir consistência.
     Usa o _old_ua_id capturado no pre_save (inclusive fora do admin).
     """
+    if getattr(instance, "_skip_conciliacao_sync", False):
+        return
     old_ua_id = getattr(instance, "_old_ua_id", None)
 
     def _run():
+        if not sender.all_objects.filter(pk=instance.pk).exists():
+            return
         from inventario.services.conciliacao_sync import sync_bem_pos_save
 
         sync_bem_pos_save(instance, old_ua_id=old_ua_id)
