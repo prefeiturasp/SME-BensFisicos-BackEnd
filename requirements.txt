@@ -1,4 +1,0 @@
-# Compatibilidade: delega para requirements/production.txt.
-# Mantido para não quebrar o Dockerfile de produção e o Jenkins.
-# Futuro: apontar os Dockerfiles direto para requirements/ e remover este shim.
--r requirements/production.txt

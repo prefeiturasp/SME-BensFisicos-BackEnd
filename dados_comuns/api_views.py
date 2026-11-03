@@ -2,7 +2,7 @@ from datetime import datetime
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
@@ -22,6 +22,8 @@ from rest_framework.exceptions import (
     NotFound,
     ValidationError as DRFValidationError,
 )
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 
@@ -806,3 +808,16 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
     @action(detail=False, methods=["get"], url_path="exportar")
     def exportar(self, request):
         return self._build_export_response(request)
+
+
+class HealthCheckView(APIView):
+    """Verificação de saúde pública (sem autenticação)."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        try:
+            connection.ensure_connection()
+            return Response({"status": "ok"})
+        except Exception:
+            return Response({"status": "degraded"}, status=503)

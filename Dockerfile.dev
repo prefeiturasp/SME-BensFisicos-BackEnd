@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --system --gid app --create-home app \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /code/requirements.txt
 COPY requirements /code/requirements
 RUN pip install --upgrade pip \
     && pip install -r /code/requirements/local.txt
@@ -26,7 +25,6 @@ COPY usuario /code/usuario
 COPY bem_patrimonial /code/bem_patrimonial
 COPY inventario /code/inventario
 COPY static /code/static
-COPY scripts /code/scripts
 
 RUN chown -R app:app /code
 

@@ -76,7 +76,7 @@ O provisionamento de grupos/permissões é feito por comando de gestão.
 2. Instale dependências:
 
    ```bash
-   pip install -r requirements.txt
+   pip install -r requirements/local.txt
    ```
 
 3. Configure `.env` e execute migrações:

@@ -15,6 +15,7 @@ from usuario.views import (
     SelecionarUAView,
 )
 from bem_patrimonial.views import download_documento_cimbpm, download_documento_ntbpm
+from dados_comuns.api_views import HealthCheckView
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.conf.urls.static import static
@@ -71,6 +72,8 @@ urlpatterns = [
         name="swagger-ui",
     ),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    # Verificação de saúde pública (sem autenticação, sem versionamento)
+    path("api/health/", HealthCheckView.as_view(), name="health"),
     # Download protegido de documentos CIMBPM
     path(
         "documento-cimbpm/<int:pk>/download/",

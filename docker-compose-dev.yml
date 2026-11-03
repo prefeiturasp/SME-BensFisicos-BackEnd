@@ -13,17 +13,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  db-init:
-    image: postgres:15-alpine
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - .env
-    volumes:
-      - ./scripts/db_init.sql:/scripts/db_init.sql:ro
-    entrypoint: ["/bin/sh", "-c"]
-    restart: "no"
   web:
     build:
       context: .
@@ -41,8 +30,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      db-init:
-        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   postgres_data:
