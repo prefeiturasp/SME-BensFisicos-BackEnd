@@ -1,10 +1,11 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from .models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
-from . import constants as inv_constants
 from bem_patrimonial import constants as bem_constants
 from bem_patrimonial.models import BemPatrimonial
+
+from . import constants as inv_constants
+from .models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 
 
 def _recalcular_bloqueio_bem_por_inventario(bem: BemPatrimonial):

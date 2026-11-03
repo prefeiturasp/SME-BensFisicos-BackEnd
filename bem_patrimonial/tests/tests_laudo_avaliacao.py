@@ -21,21 +21,19 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APIClient, APITestCase
+from rest_framework.test import APIClient
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-
+from bem_patrimonial import constants
+from bem_patrimonial.api_serializers import BaixaFisicaBemPatrimonialDetailSerializer
 from bem_patrimonial.models import (
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
     BemPatrimonial,
 )
-from bem_patrimonial.api_serializers import BaixaFisicaBemPatrimonialDetailSerializer
-from bem_patrimonial import constants
-
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 # ============================================================================
 # HELPERS — idênticos aos de tests_baixa_fisica_api.py
@@ -206,6 +204,7 @@ class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
     def test_rejeita_objeto_invalido(self):
         """Deve lançar ValidationError para objeto que não seja BaixaFisicaBemPatrimonial."""
         from django.core.exceptions import ValidationError
+
         from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao
 
         with self.assertRaises(ValidationError):
@@ -214,6 +213,7 @@ class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
     def test_rejeita_status_solicitada(self):
         """Deve lançar ValidationError para baixa com status SOLICITADA."""
         from django.core.exceptions import ValidationError
+
         from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao
 
         baixa = criar_baixa(self.ua, self.operador, status=constants.SOLICITADA)
@@ -223,6 +223,7 @@ class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
     def test_rejeita_status_aguardando_envio(self):
         """Deve lançar ValidationError para baixa com status AGUARDANDO_ENVIO."""
         from django.core.exceptions import ValidationError
+
         from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao
 
         baixa = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
@@ -232,6 +233,7 @@ class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
     def test_rejeita_status_recusada(self):
         """Deve lançar ValidationError para baixa com status RECUSADA."""
         from django.core.exceptions import ValidationError
+
         from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao
 
         baixa = criar_baixa(self.ua, self.operador, status=constants.RECUSADA)
@@ -645,8 +647,9 @@ class TituloLaudoNovoEssencialTestCase(BaseSetup):
     TITULO_NOVO = "LAUDO DE AVALIAÇÃO DE BENS PATRIMONIAIS MÓVEIS BAIXADOS CONTABILMENTE PARA DESCARTE"
 
     def test_criar_titulo_retorna_titulo_novo(self):
-        from bem_patrimonial.laudo_avaliacao import _criar_titulo
         from reportlab.lib.styles import getSampleStyleSheet
+
+        from bem_patrimonial.laudo_avaliacao import _criar_titulo
 
         para = _criar_titulo(getSampleStyleSheet())[1]
         self.assertEqual(para.text, self.TITULO_NOVO)
@@ -654,8 +657,9 @@ class TituloLaudoNovoEssencialTestCase(BaseSetup):
     @patch("bem_patrimonial.laudo_avaliacao.carregar_logo")
     def test_gerar_pdf_contem_titulo_novo_e_bens(self, mock_logo):
         mock_logo.return_value = MagicMock(wrap=MagicMock(return_value=(50, 30)), drawOn=MagicMock())
-        from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao, _criar_titulo, _obter_bens_baixa
         from reportlab.lib.styles import getSampleStyleSheet
+
+        from bem_patrimonial.laudo_avaliacao import _criar_titulo, _obter_bens_baixa, gerar_pdf_laudo_avaliacao
 
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA, numero_processo_baixa="PROC-ESSENCIAL")
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)

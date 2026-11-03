@@ -1,10 +1,11 @@
-from django.test import TestCase, Client
-from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
+from django.test import Client, TestCase
+from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
-from django.contrib.auth.tokens import default_token_generator
+
 from dados_comuns.tests.auth_test_utils import (
     NEW_PASSWORD1_KEY,
     NEW_PASSWORD2_KEY,

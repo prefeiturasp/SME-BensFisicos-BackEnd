@@ -1,16 +1,16 @@
-from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
-from django.test import TestCase, RequestFactory
-from django.contrib.auth.models import Group
 from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.test import RequestFactory, TestCase
 
-from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
-from usuario.admin import CustomUserModelAdmin
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-from dados_comuns.models import UnidadeAdministrativa
-from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.constants import APROVADO
+from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
+from dados_comuns.tests.factories import criar_ua
+from usuario.admin import CustomUserModelAdmin
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class GestorComUATestCase(TestCase):

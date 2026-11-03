@@ -1,9 +1,9 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.test import RequestFactory, TestCase
 
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from usuario.signals import mark_first_admin_login
 
 User = get_user_model()

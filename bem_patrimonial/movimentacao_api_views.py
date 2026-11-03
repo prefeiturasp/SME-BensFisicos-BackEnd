@@ -1,15 +1,14 @@
+import logging
 from collections import defaultdict
 from datetime import timedelta
-import logging
-
-from django.contrib.contenttypes.models import ContentType
-from django.conf import settings
-from django.db import transaction
-from django.http import FileResponse
-from django.utils import timezone
-from django.db.models import Exists, OuterRef
 
 import django_filters
+from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
+from django.db.models import Exists, OuterRef
+from django.http import FileResponse
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -30,17 +29,16 @@ from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_cancelada,
     envia_email_solicitacao_movimentacao_rejeitada,
 )
-from bem_patrimonial.models import MovimentacaoBemPatrimonial
-from bem_patrimonial.models import MovimentacaoBensItem
+from bem_patrimonial.models import MovimentacaoBemPatrimonial, MovimentacaoBensItem
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
     BuscaBensMovimentacaoSerializer,
-    MovimentacaoBensLotePreviewResponseSerializer,
-    MovimentacaoBensLotePreviewSerializer,
     MovimentacaoBemPatrimonialCreateSerializer,
     MovimentacaoBemPatrimonialDetailSerializer,
     MovimentacaoBemPatrimonialListSerializer,
     MovimentacaoBemPatrimonialUpdateSerializer,
+    MovimentacaoBensLotePreviewResponseSerializer,
+    MovimentacaoBensLotePreviewSerializer,
     MovimentacaoHistoricoGrupoSerializer,
     MovimentacaoUoCadastroOptionSerializer,
     buscar_bens_para_movimentacao,

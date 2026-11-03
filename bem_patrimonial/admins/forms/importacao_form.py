@@ -1,8 +1,8 @@
 from django import forms
+from import_export.forms import ConfirmImportForm, ImportForm
 
 from dados_comuns.escopo import uas_acessiveis_para_importacao
 from dados_comuns.models import UnidadeAdministrativa
-from import_export.forms import ConfirmImportForm, ImportForm
 
 
 def _usuario_precisa_selecionar_ua(user) -> bool:

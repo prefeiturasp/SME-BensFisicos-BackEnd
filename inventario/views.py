@@ -4,8 +4,6 @@ from django.http import FileResponse, Http404
 from django.views.decorators.http import require_GET
 
 from inventario.models import ConciliacaoUA
-
-
 from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
 
 

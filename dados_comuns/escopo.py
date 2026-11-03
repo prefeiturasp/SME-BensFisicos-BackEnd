@@ -1,5 +1,6 @@
-from dados_comuns.models import UnidadeAdministrativa
 from django.db.models import Q
+
+from dados_comuns.models import UnidadeAdministrativa
 
 
 def usuario_e_super_admin(usuario):

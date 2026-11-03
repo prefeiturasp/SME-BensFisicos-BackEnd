@@ -1,11 +1,11 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
-from django.contrib.auth import get_user_model
+from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY, get_user_model
 from django.contrib.auth.middleware import AuthenticationMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
+from django.test import RequestFactory, TestCase
+
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from usuario.middleware import ForcePasswordChangeMiddleware
-from django.contrib.auth import SESSION_KEY, BACKEND_SESSION_KEY, HASH_SESSION_KEY
 
 User = get_user_model()
 

@@ -1,15 +1,17 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import Client
-from django.forms import modelform_factory
-from django.core.exceptions import PermissionDenied
-from django.core.exceptions import ValidationError
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
-from django.test import RequestFactory, TestCase
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.forms import modelform_factory
+from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 
+from bem_patrimonial import constants
+from bem_patrimonial.admins.forms.transferencia_bem_patrimonial_form import (
+    TransferenciaBemPatrimonialForm,
+)
 from bem_patrimonial.admins.inlines.inlines import (
     TransferenciaBensItemInline,
     TransferenciaBensItemInlineForm,
@@ -18,10 +20,6 @@ from bem_patrimonial.admins.inlines.inlines import (
 from bem_patrimonial.admins.transferencia_bem_patrimonial import (
     TransferenciaBemPatrimonialAdmin,
 )
-from bem_patrimonial.admins.forms.transferencia_bem_patrimonial_form import (
-    TransferenciaBemPatrimonialForm,
-)
-from bem_patrimonial import constants
 from bem_patrimonial.models import (
     BemPatrimonial,
     TransferenciaBemPatrimonial,

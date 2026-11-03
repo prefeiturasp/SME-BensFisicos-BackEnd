@@ -3,7 +3,7 @@ import re
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from bem_patrimonial.models import BemPatrimonial, NPAT_NUM_REGEX
+from bem_patrimonial.models import NPAT_NUM_REGEX, BemPatrimonial
 
 
 class Command(BaseCommand):

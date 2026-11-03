@@ -4,13 +4,13 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
-from bem_patrimonial.models import TransferenciaBemPatrimonial
 from bem_patrimonial.admins.forms.transferencia_bem_patrimonial_form import (
     TransferenciaBemPatrimonialForm,
 )
 from bem_patrimonial.admins.inlines.inlines import TransferenciaBensItemInline
-from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
+from bem_patrimonial.models import TransferenciaBemPatrimonial
 from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
+from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
 
 
 class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):

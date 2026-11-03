@@ -1,13 +1,13 @@
-from django.test import TestCase
-from django.db import IntegrityError
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
+from django.test import TestCase
 
-from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial.constants import (
+    AGUARDANDO_APROVACAO,
     APROVADO,
     NAO_APROVADO,
-    AGUARDANDO_APROVACAO,
 )
+from bem_patrimonial.models import BemPatrimonial
 from usuario.tests import tests_models as usuariotests_models
 
 # O model atual formata como: 000.{9 dígitos}-0
@@ -271,7 +271,7 @@ class BemPatrimonialTestCase(TestCase):
             nome='Bem Teste 1',
             status='aguardando_aprovacao'
         )
-        
+
         obj2 = BemPatrimonial(
             numero_patrimonial='123',
             excluido=False,
@@ -279,8 +279,8 @@ class BemPatrimonialTestCase(TestCase):
             nome='Bem Teste 2',
             status='aguardando_aprovacao'
         )
-        
+
         with self.assertRaises(ValidationError) as cm:
             obj2._clean_verifica_numero_patrimonial_cadastrado()
-        
+
         self.assertIn('numero_patrimonial', cm.exception.message_dict)

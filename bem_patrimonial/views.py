@@ -1,53 +1,46 @@
 # bem_patrimonial/views.py
 
+import os
 from collections import defaultdict
 
-from django.utils import timezone
+import django_filters
+import tablib
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import models, transaction
+from django.db.models import OuterRef, Subquery
+from django.db.models.functions import Cast
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.http import require_GET
-from django.db.models import OuterRef, Subquery
-from django.db import models, transaction
-
-import os
-
-import tablib
-
-from rest_framework import viewsets, status as http_status
-from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError as DRFValidationError
-from drf_spectacular.utils import extend_schema, extend_schema_view
-
-import django_filters
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet
-from django.contrib.contenttypes.models import ContentType
-from django.db.models.functions import Cast
+from drf_spectacular.utils import extend_schema, extend_schema_view
+from rest_framework import status as http_status
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
 
 from bem_patrimonial import constants
-from bem_patrimonial.resources_api import BemPatrimonialAPIResource
-from bem_patrimonial.serializers.bem_patrimonial_serializers import (
-    BemPatrimonialListSerializer,
-    BemPatrimonialDetailSerializer,
-    BemPatrimonialMultiCreateSerializer,
-    ImportacaoBemPatrimonialSerializer,
-)
-from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
-
-from dados_comuns.permissions import BemPatrimonialPermission
-
 from bem_patrimonial.models import (
     BaixaFisicaBensItem,
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     TransferenciaBemPatrimonial,
 )
-from dados_comuns.models import HistoricoGeral
+from bem_patrimonial.resources_api import BemPatrimonialAPIResource
+from bem_patrimonial.serializers.bem_patrimonial_serializers import (
+    BemPatrimonialDetailSerializer,
+    BemPatrimonialListSerializer,
+    BemPatrimonialMultiCreateSerializer,
+    ImportacaoBemPatrimonialSerializer,
+)
+from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
 from dados_comuns.context import audit_as
 from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
@@ -56,6 +49,8 @@ from dados_comuns.escopo import (
     uas_acessiveis_para_importacao,
     validar_bem_no_escopo_com_transferencia,
 )
+from dados_comuns.models import HistoricoGeral
+from dados_comuns.permissions import BemPatrimonialPermission
 
 # Mapeamento extensão → formato tablib
 _EXTENSAO_PARA_FORMATO = {
@@ -604,8 +599,8 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         ler/processar a planilha, para não persistir nada quando a importação
         for bloqueada.
         """
-        from inventario.models import ConciliacaoUA
         from inventario import constants as inv_constants
+        from inventario.models import ConciliacaoUA
 
         if ua_destino is None:
             return None
@@ -828,6 +823,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         bem = self.get_object()
 
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)

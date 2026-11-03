@@ -1,20 +1,20 @@
-from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from unittest.mock import patch
 
-from django.contrib.auth.models import Group
-from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.test import RequestFactory, TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.constants import APROVADO
 from dados_comuns.libs.unidade_administrativa import uas_do_usuario
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.admin import CustomUserModelAdmin
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO

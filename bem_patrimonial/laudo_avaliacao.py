@@ -15,12 +15,11 @@ from io import BytesIO
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.utils import timezone
-
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+from reportlab.lib.units import cm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
@@ -35,6 +34,8 @@ from bem_patrimonial import constants
 from bem_patrimonial.models import BaixaFisicaBemPatrimonial
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase as PDFConfig,
+)
+from bem_patrimonial.pdf_utils import (
     carregar_logo,
     criar_estilo_base,
     obter_rf_usuario,

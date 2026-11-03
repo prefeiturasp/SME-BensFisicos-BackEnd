@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import Group
 from django.test import TestCase
@@ -8,34 +8,32 @@ from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.test import APIClient
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-
-from bem_patrimonial.models import (
-    BaixaFisicaBemPatrimonial,
-    BaixaFisicaBensItem,
-    BemPatrimonial,
-    NBBPM,
-)
+from bem_patrimonial import constants
 from bem_patrimonial.api_serializers import (
-    BaixaFisicaBemPatrimonialCreateSerializer,
-    BaixaFisicaBemPatrimonialUpdateSerializer,
-    BaixaFisicaBemPatrimonialDetailSerializer,
     BaixaFisicaAprovarSerializer,
-    BaixaFisicaCancelarSerializer,
-    BaixaFisicaSolicitarCorrecaoSerializer,
-    BaixaFisicaEnviarSolicitacaoSerializer,
+    BaixaFisicaBemPatrimonialCreateSerializer,
+    BaixaFisicaBemPatrimonialDetailSerializer,
+    BaixaFisicaBemPatrimonialUpdateSerializer,
     BaixaFisicaBensItemCreateSerializer,
-    UnidadeAdministrativaSimpleSerializer,
-    UserSimpleSerializer,
+    BaixaFisicaCancelarSerializer,
+    BaixaFisicaEnviarSolicitacaoSerializer,
+    BaixaFisicaSolicitarCorrecaoSerializer,
     BemPatrimonialSimpleSerializer,
     NBBPMGerarLoteSerializer,
     NBBPMSerializer,
+    UnidadeAdministrativaSimpleSerializer,
+    UserSimpleSerializer,
 )
-from bem_patrimonial import constants
-
+from bem_patrimonial.models import (
+    NBBPM,
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+)
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 # ============================================================================
 # HELPERS / SETUP BASE
@@ -257,7 +255,8 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
         self.assertIn("itens", s.errors)
 
     def test_data_baixa_futura_invalida(self):
-        from datetime import datetime, timedelta, timezone as datetime_timezone
+        from datetime import datetime, timedelta
+        from datetime import timezone as datetime_timezone
 
         for hora in (0, 2, 3, 12, 23):
             with self.subTest(hora_utc=hora):
@@ -1714,6 +1713,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
 
     def _contar_historico(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -1734,6 +1734,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
 
     def _obter_historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -1991,13 +1992,13 @@ class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
 
     def _contar_historico(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
         return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk))
 
     def test_corrigir_valido_propaga_para_bens(self):
-        from django.core.exceptions import ValidationError
 
         baixa = self._baixa_aceita_com_bens_baixados()
         nome_antes = self.bem.nome
@@ -2101,6 +2102,7 @@ class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
 
     def _historicos_baixa(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -2179,8 +2181,8 @@ class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
         self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
 
     def test_falha_no_historico_desfaz_nbbpm_e_vinculo(self):
-        from dados_comuns.models import HistoricoGeral
         from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+        from dados_comuns.models import HistoricoGeral
 
         baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000033-0")
         total_antes = NBBPM.objects.count()
@@ -2226,6 +2228,7 @@ class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
 
     def _historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -2344,9 +2347,10 @@ class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_correcao_solicitada")
     def test_solicitar_troca_solicitante_preserva_historico(self, mock_corr, mock_sol):
-        from usuario.models import Usuario
         from django.contrib.auth.models import Group
+
         from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+        from usuario.models import Usuario
 
         operador_b = Usuario.objects.create_user(
             username="operador_b_troca",

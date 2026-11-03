@@ -3,21 +3,20 @@ from collections import Counter
 from decimal import Decimal
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
 from bem_patrimonial.pdf_utils import (
     PDFConfigBase,
-    criar_estilo_base,
     carregar_logo,
-    formatar_moeda_brasileira,
+    criar_estilo_base,
     criar_info_geracao_paragraph,
+    formatar_moeda_brasileira,
     obter_rf_usuario,
 )
-
 
 PADRAO_NUMERO_PATRIMONIAL = re.compile(r"^(\d{3})\.(\d{9})-(\d)$")
 

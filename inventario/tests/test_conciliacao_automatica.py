@@ -1,17 +1,18 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from unittest.mock import PropertyMock, patch
 from datetime import date
+from unittest.mock import PropertyMock, patch
+
 from django.test import TestCase
 from django.utils import timezone
 
+from bem_patrimonial import constants as bens_constants
 from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua
+from inventario import constants
+from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
 from inventario.utils_conciliacao.conciliacao_automatica import (
     processar_conciliacao_anual_automatica,
 )
-from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
-from inventario import constants
-from bem_patrimonial import constants as bens_constants
 from usuario.models import Usuario
 
 

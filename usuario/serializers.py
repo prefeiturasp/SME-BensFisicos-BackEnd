@@ -1,15 +1,16 @@
+import re
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework.exceptions import PermissionDenied
-from django.contrib.auth.password_validation import validate_password
-from usuario.models import Usuario
-from django.utils import timezone
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria, HistoricoGeral
+
 from dados_comuns.escopo import obter_unidade_orcamentaria_id_do_usuario
-from django.contrib.auth.models import Group
-from django.contrib.auth import get_user_model
-import re
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 MSG_SENHAS_NAO_CONFEREM = "As senhas não conferem."
 
@@ -71,7 +72,6 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         return attrs
 
     def save(self):
-        from django.utils import timezone
 
         user = self.validated_data["user"]
         user.set_password(self.validated_data["new_password"])
@@ -133,7 +133,6 @@ class FirstAccessPasswordChangeSerializer(serializers.Serializer):
         return attrs
 
     def save(self):
-        from django.utils import timezone
 
         user = self.context["request"].user
         user.set_password(self.validated_data["new_password"])

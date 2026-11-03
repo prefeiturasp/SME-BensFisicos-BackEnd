@@ -1,38 +1,35 @@
 import json
 
-from django.contrib import admin
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponseNotAllowed, JsonResponse
 from django.templatetags.static import static
 from django.urls import path
 from rest_framework.exceptions import ValidationError as DRFValidationError
+
+from bem_patrimonial import constants
 from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
     verificar_movimentacoes_duplicadas,
+)
+from bem_patrimonial.admins.filters.movimentacao_filters import (
+    IntervaloNpAteFilter,
+    IntervaloNpDeFilter,
+    MovimentacaoAtrasadaFilter,
 )
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,
 )
-from bem_patrimonial.admins.filters.movimentacao_filters import (
-    MovimentacaoAtrasadaFilter,
-    IntervaloNpDeFilter,
-    IntervaloNpAteFilter,
+from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
+from bem_patrimonial.emails import (
+    envia_email_solicitacao_movimentacao_aceita,
+    envia_email_solicitacao_movimentacao_cancelada,
+    envia_email_solicitacao_movimentacao_rejeitada,
 )
-
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.emails import (
-    envia_email_solicitacao_movimentacao_aceita,
-    envia_email_solicitacao_movimentacao_rejeitada,
-    envia_email_solicitacao_movimentacao_cancelada,
-)
-from bem_patrimonial import constants
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
-
-from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
     BuscaBensMovimentacaoSerializer,
@@ -43,7 +40,7 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     queryset_bens_movimentaveis,
     validar_ua_origem_movimentacao,
 )
-
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_queryset_movimentacao_por_escopo,
 )
@@ -639,8 +636,8 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
 
     def get_documento_cimbpm_link(self, obj):
         if obj and obj.numero_cimbpm:
-            from django.utils.html import format_html
             from django.urls import reverse
+            from django.utils.html import format_html
 
             url_protegida = reverse("download_documento_cimbpm", kwargs={"pk": obj.pk})
 

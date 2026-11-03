@@ -1,25 +1,25 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
-from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
+from django.test import RequestFactory, TestCase
 
+from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
+    MENSAGEM_SEM_PONTO_CENTRAL,
+    MovimentacaoBemPatrimonialForm,
+)
+from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
+    MovimentacaoBemPatrimonialAdmin,
+)
+from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
-    MovimentacaoBemPatrimonialAdmin,
-)
-from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
-    MENSAGEM_SEM_PONTO_CENTRAL,
-    MovimentacaoBemPatrimonialForm,
-)
-from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class MovimentacaoEdicaoReadonlyTestCase(TestCase):

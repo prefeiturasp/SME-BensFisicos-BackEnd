@@ -1,10 +1,11 @@
-from django.utils import timezone
-from datetime import date
 from collections import defaultdict
+from datetime import date
 
-from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
+from django.utils import timezone
+
 from dados_comuns.models import UnidadeAdministrativa
 from inventario import constants
+from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
 from inventario.utils_conciliacao.conciliacao_utils import (
     criar_itens_conciliacao,
 )

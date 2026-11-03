@@ -1,6 +1,6 @@
 from datetime import date
-from unittest.mock import patch
 from io import BytesIO
+from unittest.mock import patch
 
 from django.urls import reverse
 from django.utils import timezone

@@ -1,4 +1,3 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -6,29 +5,29 @@ from unittest.mock import MagicMock, patch
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
-from django.test import TestCase, RequestFactory
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
+from bem_patrimonial import constants
+from bem_patrimonial.admins.nbbpm import NBBPMAdmin
+from bem_patrimonial.models import (
+    NBBPM,
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+)
+from bem_patrimonial.nbbpm import (
+    _criar_rodape_nbbpm,
+    gerar_numero_nbbpm,
+    gerar_pdf_nbbpm,
+    http_response_nbbpm,
+    obter_bens_baixa,
+)
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
-
-from bem_patrimonial import constants
-from bem_patrimonial.models import (
-    BemPatrimonial,
-    BaixaFisicaBemPatrimonial,
-    BaixaFisicaBensItem,
-    NBBPM,
-)
-from bem_patrimonial.nbbpm import (
-    obter_bens_baixa,
-    gerar_numero_nbbpm,
-    _criar_rodape_nbbpm,
-    gerar_pdf_nbbpm,
-    http_response_nbbpm,
-)
-from bem_patrimonial.admins.nbbpm import NBBPMAdmin
 
 
 class NBBPMTestBase(TestCase):
@@ -279,7 +278,12 @@ class TestNbbpmCoberturaExtra(NBBPMTestBase):
         with self.assertRaises(ValidationError):
             gerar_numero_nbbpm(object())
         # helpers diretos
-        from bem_patrimonial.nbbpm import _criar_cabecalho_e_registro_nbbpm, _criar_informacoes_gerais, _criar_tabela_bens, _criar_total_bens
+        from bem_patrimonial.nbbpm import (
+            _criar_cabecalho_e_registro_nbbpm,
+            _criar_informacoes_gerais,
+            _criar_tabela_bens,
+            _criar_total_bens,
+        )
         self.assertIsNotNone(_criar_cabecalho_e_registro_nbbpm(self.baixa))
         self.assertIsNotNone(_criar_informacoes_gerais(self.baixa))
         self.assertIsNotNone(_criar_tabela_bens(self.baixa))
@@ -362,8 +366,9 @@ class TestNBBPMAdminCobertura(NBBPMTestBase):
         req.user = self.gestor2
         # fora escopo
         req.user = Usuario.objects.create_user(username="fora_nbb", email="f@t.com", **auth_kwargs("x"), unidade_administrativa=self.ua2, unidade_orcamentaria=self.uo2, is_staff=True)
-        from usuario.constants import GRUPO_GESTOR_PATRIMONIO as G
         from django.contrib.auth.models import Group
+
+        from usuario.constants import GRUPO_GESTOR_PATRIMONIO as G
         g, _ = Group.objects.get_or_create(name=G)
         req.user.groups.add(g)
         with self.assertRaises(Exception):

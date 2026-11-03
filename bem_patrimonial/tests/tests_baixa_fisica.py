@@ -1,36 +1,36 @@
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
+from unittest.mock import patch
+
 from django.contrib.admin.models import LogEntry
+from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
-from unittest.mock import patch
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from import_export.formats.base_formats import XLSX
 
-from bem_patrimonial.models import (
-    BemPatrimonial,
-    BaixaFisicaBemPatrimonial,
-    BaixaFisicaBensItem,
-)
-from bem_patrimonial.constants import (
-    APROVADO,
-    BAIXA_FISICA,
-    BAIXA_FISICA_AGUARDANDO_APROVACAO,
-    LAUDADO_PARA_BAIXA,
-    AGUARDANDO_ENVIO,
-    ENVIADA,
-    ACEITA,
-    SOLICITADA,
-    RECUSADA,
-)
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
     BaixaFisicaBensItemInlineFormSet,
 )
+from bem_patrimonial.constants import (
+    ACEITA,
+    AGUARDANDO_ENVIO,
+    APROVADO,
+    BAIXA_FISICA,
+    BAIXA_FISICA_AGUARDANDO_APROVACAO,
+    ENVIADA,
+    LAUDADO_PARA_BAIXA,
+    RECUSADA,
+    SOLICITADA,
+)
+from bem_patrimonial.models import (
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+)
 
 # reaproveita helpers usados nos testes de movimentação
 from bem_patrimonial.tests.tests_movimentacao_bloqueio import SetupMovimentacaoData
-
 
 # ---------------------------------------------------------------------------
 # Helpers genéricos

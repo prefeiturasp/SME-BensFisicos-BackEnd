@@ -1,17 +1,15 @@
 import os
 import re
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.utils import timezone
-
 from reportlab.lib import colors
-from reportlab.lib.units import cm
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
 from reportlab.platypus import Image, Paragraph, Spacer
-
-from zoneinfo import ZoneInfo
 
 
 class PDFConfigBase:

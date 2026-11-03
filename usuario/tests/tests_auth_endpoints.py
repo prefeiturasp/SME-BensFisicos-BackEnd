@@ -1,19 +1,20 @@
+from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+from rest_framework import status
+from rest_framework.test import APITestCase
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from dados_comuns.tests.auth_test_utils import (
     NEW_PASSWORD_CONFIRM_KEY,
     NEW_PASSWORD_KEY,
     OLD_PASSWORD_KEY,
     auth_kwargs,
 )
-from rest_framework.test import APITestCase
-from rest_framework import status
 from usuario.models import Usuario
-from django.core import mail
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.contrib.auth.tokens import default_token_generator
-from django.conf import settings
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError
 
 
 class AuthEndpointsTestCase(APITestCase):

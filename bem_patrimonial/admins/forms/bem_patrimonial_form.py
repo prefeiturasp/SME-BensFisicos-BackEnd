@@ -1,9 +1,11 @@
+import re
+
 from django import forms
 from django.core.exceptions import ValidationError
+from django.forms.utils import ErrorDict
+
 from bem_patrimonial import constants
 from bem_patrimonial.models import BemPatrimonial
-import re
-from django.forms.utils import ErrorDict
 
 
 class BemPatrimonialAdminForm(forms.ModelForm):

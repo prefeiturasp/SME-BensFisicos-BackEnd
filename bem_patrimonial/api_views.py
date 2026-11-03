@@ -1,55 +1,56 @@
-from rest_framework import viewsets, status, filters, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend, FilterSet
-from django.http import HttpResponse
-from django.db import transaction
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
-from openpyxl.utils import get_column_letter
 from datetime import datetime
-from drf_spectacular.utils import extend_schema, OpenApiResponse
-import django_filters
 
-from dados_comuns.models import HistoricoGeral
+import django_filters
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.http import HttpResponse
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from rest_framework import filters, mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
-from .models import BaixaFisicaBemPatrimonial
-from .api_serializers import (
-    BaixaFisicaBemPatrimonialListSerializer,
-    BaixaFisicaBemPatrimonialDetailSerializer,
-    BaixaFisicaBemPatrimonialCreateSerializer,
-    BaixaFisicaBemPatrimonialUpdateSerializer,
-    BaixaFisicaEnviarSolicitacaoSerializer,
-    BaixaFisicaAprovarSerializer,
-    BaixaFisicaCancelarSerializer,
-    BaixaFisicaCorrigirProcessoSerializer,
-    BaixaFisicaSolicitarCorrecaoSerializer,
-)
+from dados_comuns.context import set_user
+from dados_comuns.escopo import filtrar_queryset_por_escopo
+from dados_comuns.models import HistoricoGeral
+
+from . import constants
 from .api_docs import (
-    LIST_BAIXAS_FISICAS_DOC,
-    CREATE_BAIXAS_FISICAS_DOC,
-    RETRIEVE_BAIXAS_FISICAS_DOC,
-    UPDATE_BAIXAS_FISICAS_DOC,
-    ENVIAR_SOLICITACAO_DOC,
     APROVAR_BAIXA_FISICA_DOC,
     CANCELAR_BAIXA_FISICA_DOC,
     CORRIGIR_PROCESSO_DOC,
-    SOLICITAR_CORRECAO_DOC,
+    CREATE_BAIXAS_FISICAS_DOC,
+    ENVIAR_SOLICITACAO_DOC,
     EXPORTAR_EXCEL_DOC,
+    LIST_BAIXAS_FISICAS_DOC,
+    RETRIEVE_BAIXAS_FISICAS_DOC,
+    SOLICITAR_CORRECAO_DOC,
+    UPDATE_BAIXAS_FISICAS_DOC,
+)
+from .api_serializers import (
+    BaixaFisicaAprovarSerializer,
+    BaixaFisicaBemPatrimonialCreateSerializer,
+    BaixaFisicaBemPatrimonialDetailSerializer,
+    BaixaFisicaBemPatrimonialListSerializer,
+    BaixaFisicaBemPatrimonialUpdateSerializer,
+    BaixaFisicaCancelarSerializer,
+    BaixaFisicaCorrigirProcessoSerializer,
+    BaixaFisicaEnviarSolicitacaoSerializer,
+    BaixaFisicaSolicitarCorrecaoSerializer,
 )
 from .emails import (
-    envia_email_baixa_fisica_solicitada,
     envia_email_baixa_fisica_aprovada,
     envia_email_baixa_fisica_cancelada,
     envia_email_baixa_fisica_correcao_solicitada,
+    envia_email_baixa_fisica_solicitada,
 )
 from .laudo_avaliacao import http_response_laudo_avaliacao
-from . import constants
-from dados_comuns.escopo import filtrar_queryset_por_escopo
-from dados_comuns.context import set_user
+from .models import BaixaFisicaBemPatrimonial
 
 
 class IsGestorPatrimonioOrOperadorInventario(IsAuthenticated):

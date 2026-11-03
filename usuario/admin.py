@@ -1,19 +1,19 @@
-from django.contrib import admin
 from django import forms
+from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django_admin_listfilter_dropdown.filters import DropdownFilter
 from import_export.admin import ImportExportModelAdmin
 from import_export.formats.base_formats import XLSX
 from rangefilter.filters import DateRangeFilter
+
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
+from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 from usuario.resources import UsuarioResource
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
-from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
-from django.core.exceptions import ValidationError
-
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 
 
 def _ensure_uo_obrigatoria(uo):

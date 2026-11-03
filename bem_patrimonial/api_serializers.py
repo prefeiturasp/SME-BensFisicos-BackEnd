@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Any
+from typing import Any, Dict
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -7,10 +7,11 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial, NBBPM
+from dados_comuns.escopo import filtrar_queryset_por_escopo, filtrar_ua_origem_por_escopo
 from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.escopo import filtrar_ua_origem_por_escopo, filtrar_queryset_por_escopo
+
 from . import constants
+from .models import NBBPM, BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial
 
 User = get_user_model()
 

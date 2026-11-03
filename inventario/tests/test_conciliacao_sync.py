@@ -1,19 +1,17 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
 # Testes para inventario/services/conciliacao_sync.py
-
 import datetime
 
 from django.test import TestCase
 
-from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants as bem_constants
+from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.context import audit_as
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
-
-from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 from inventario import constants as inv_constants
+from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 from inventario.services import conciliacao_sync
+from usuario.models import Usuario
 
 
 class ConciliacaoSyncTest(TestCase):

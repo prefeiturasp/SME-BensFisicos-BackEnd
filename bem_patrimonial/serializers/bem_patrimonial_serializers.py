@@ -2,13 +2,12 @@ import os
 import re
 from decimal import Decimal, InvalidOperation
 
-from django.db import IntegrityError
 from django.core.exceptions import ValidationError as DjangoValidationError
-
+from django.db import IntegrityError
 from rest_framework import serializers
 
-from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants
+from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
 
 

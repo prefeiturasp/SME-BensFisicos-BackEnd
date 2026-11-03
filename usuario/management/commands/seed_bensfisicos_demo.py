@@ -1,10 +1,11 @@
 from decimal import Decimal
-from django.core.management.base import BaseCommand, CommandError
+
 from django.apps import apps
-from django.db import transaction, models
-from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand, CommandError
+from django.db import models, transaction
 from django.db.models.signals import post_save
+from django.utils import timezone
 
 
 def get_model(label: str):

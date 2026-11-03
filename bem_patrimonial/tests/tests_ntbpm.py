@@ -1,25 +1,25 @@
+from django.contrib.auth.models import Group
 from django.test import Client, TestCase
 from django.urls import reverse
 
 from bem_patrimonial import constants
-from bem_patrimonial.ntbpm import (
-    _criar_tabela_bens,
-    _criar_total_bens,
-    _criar_informacoes_complementares,
-    _criar_informacoes_gerais,
-    _criar_rodape_ntbpm,
-    gerar_pdf_ntbpm,
-)
 from bem_patrimonial.models import (
     BemPatrimonial,
     TransferenciaBemPatrimonial,
     TransferenciaBensItem,
 )
+from bem_patrimonial.ntbpm import (
+    _criar_informacoes_complementares,
+    _criar_informacoes_gerais,
+    _criar_rodape_ntbpm,
+    _criar_tabela_bens,
+    _criar_total_bens,
+    gerar_pdf_ntbpm,
+)
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 from usuario.models import Usuario
-from django.contrib.auth.models import Group
 
 
 class NTBPMTestCase(TestCase):

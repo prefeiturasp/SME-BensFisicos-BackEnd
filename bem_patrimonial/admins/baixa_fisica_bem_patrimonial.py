@@ -1,43 +1,42 @@
 from django import forms
-from django.urls import path, reverse
 from django.contrib import admin, messages
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
-from django.forms.models import BaseInlineFormSet
 from django.core.exceptions import ValidationError
-from django.forms import DateInput
+from django.core.validators import RegexValidator
 from django.db import models
-from django.utils import timezone
+from django.forms import DateInput
+from django.forms.models import BaseInlineFormSet
+from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
-from django.http import HttpResponseRedirect
+from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.html import format_html
-from rangefilter.filters import DateRangeFilter
-from import_export import resources, fields
-from import_export.widgets import DateWidget
+from django.utils.safestring import mark_safe
+from import_export import fields, resources
 from import_export.admin import ExportMixin
 from import_export.formats.base_formats import XLSX
+from import_export.widgets import DateWidget
+from rangefilter.filters import DateRangeFilter
 
+from bem_patrimonial import constants
+from bem_patrimonial.emails import (
+    envia_email_baixa_fisica_aprovada,
+    envia_email_baixa_fisica_cancelada,
+    envia_email_baixa_fisica_solicitada,
+)
 from bem_patrimonial.models import (
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
 )
-from bem_patrimonial.emails import (
-    envia_email_baixa_fisica_solicitada,
-    envia_email_baixa_fisica_aprovada,
-    envia_email_baixa_fisica_cancelada,
-)
-from bem_patrimonial import constants
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_queryset_por_escopo,
     filtrar_ua_origem_por_escopo,
     usuario_e_super_admin,
 )
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.models import UnidadeAdministrativa
-from django.core.validators import RegexValidator
-from django.utils.safestring import mark_safe
-
 
 NUMERO_PROCESSO_OBRIGATORIO = "Número do processo é obrigatório."
 
@@ -715,8 +714,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             bem.localizacao = texto_localizacao
             bem.save(update_fields=["numero_processo", "localizacao"])
         try:
-            from dados_comuns.models import HistoricoGeral
             from django.contrib.contenttypes.models import ContentType
+
+            from dados_comuns.models import HistoricoGeral
 
             ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
             HistoricoGeral.objects.create(
@@ -998,8 +998,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
                     f"Solicitante atualizado de {solicitante_anterior_nome} para {baixa.criado_por}.",
                 )
                 try:
-                    from dados_comuns.models import HistoricoGeral
                     from django.contrib.contenttypes.models import ContentType
+
+                    from dados_comuns.models import HistoricoGeral
 
                     ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
                     HistoricoGeral.objects.create(
@@ -1277,8 +1278,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
 
     def _registrar_historico_correcao(self, request, baixa, motivo):
         try:
-            from dados_comuns.models import HistoricoGeral
             from django.contrib.contenttypes.models import ContentType
+
+            from dados_comuns.models import HistoricoGeral
 
             ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
             HistoricoGeral.objects.create(

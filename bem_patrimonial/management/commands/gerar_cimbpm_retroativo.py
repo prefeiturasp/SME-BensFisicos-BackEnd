@@ -1,8 +1,9 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
-from bem_patrimonial.models import MovimentacaoBemPatrimonial
+
 from bem_patrimonial.cimbpm import gerar_numero_cimbpm
+from bem_patrimonial.models import MovimentacaoBemPatrimonial
 
 
 class Command(BaseCommand):

@@ -1,6 +1,5 @@
 from textwrap import dedent
 
-
 LIST_TRANSFERENCIAS_DOC = dedent(
     """
     Retorna uma lista paginada de transferências de bens patrimoniais.

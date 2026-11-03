@@ -1,22 +1,13 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib import messages
 from unittest.mock import Mock, patch
 
-from bem_patrimonial.models import (
-    BemPatrimonial,
-    MovimentacaoBemPatrimonial,
-    MovimentacaoBensItem,
-)
-from bem_patrimonial.constants import (
-    APROVADO,
-    BLOQUEADO,
-    ENVIADA,
-    ACEITA,
-    CANCELADA,
-    REJEITADA,
+from django.contrib import messages
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory, TestCase
+
+from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
+    obter_ua_ponto_central,
 )
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
@@ -24,13 +15,23 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     cancelar_solicitacao,
     rejeitar_solicitacao,
 )
-from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
-    obter_ua_ponto_central,
+from bem_patrimonial.constants import (
+    ACEITA,
+    APROVADO,
+    BLOQUEADO,
+    CANCELADA,
+    ENVIADA,
+    REJEITADA,
 )
+from bem_patrimonial.models import (
+    BemPatrimonial,
+    MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
+)
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
-from django.contrib.auth.models import Group
 
 
 class SetupMovimentacaoData:

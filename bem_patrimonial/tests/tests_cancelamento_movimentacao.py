@@ -1,33 +1,34 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib import messages
 from unittest.mock import patch
-from django.contrib.auth.models import Group
 
+from django.contrib import messages
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory, TestCase
+
+from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
+    MovimentacaoBemPatrimonialAdmin,
+    aprovar_solicitacao,
+    cancelar_solicitacao,
+    rejeitar_solicitacao,
+)
+from bem_patrimonial.constants import (
+    ACEITA,
+    APROVADO,
+    BLOQUEADO,
+    CANCELADA,
+    ENVIADA,
+)
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.constants import (
-    APROVADO,
-    BLOQUEADO,
-    ENVIADA,
-    ACEITA,
-    CANCELADA,
-)
-from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
-    MovimentacaoBemPatrimonialAdmin,
-    aprovar_solicitacao,
-    rejeitar_solicitacao,
-    cancelar_solicitacao,
-)
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 
 # Reutiliza setup existente (assumindo versão já atualizada p/ novo model)
 from bem_patrimonial.tests.tests_movimentacao_bloqueio import SetupMovimentacaoData
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO
+from usuario.models import Usuario
 
 
 class CancelamentoMovimentacaoTestCase(TestCase):

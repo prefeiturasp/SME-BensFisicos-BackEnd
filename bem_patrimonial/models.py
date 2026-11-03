@@ -1,30 +1,29 @@
-from datetime import datetime
 import re
-from django.db.models import Q
-from django.dispatch import receiver
-from django.db.models.signals import post_save, pre_save
+from datetime import datetime
+
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
-from django.db import models
-from django.db import transaction
+from django.db import models, transaction
+from django.db.models import Q
 from django.db.models.functions import Substr
+from django.db.models.signals import post_save, pre_save
+from django.dispatch import receiver
 from django.utils import timezone
-from django.contrib.contenttypes.models import ContentType
-from dados_comuns.models import HistoricoGeral
+
+from bem_patrimonial import constants
+from bem_patrimonial.emails import (
+    envia_email_cadastro_nao_aprovado,
+    envia_email_nova_solicitacao_movimentacao,
+)
 from dados_comuns.context import get_user
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.utils import (
     CODIGO_UA_PONTO_CENTRAL,
     dict_changes,
     unidade_orcamentaria_eh_externa,
 )
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.models import Usuario
-from bem_patrimonial.emails import (
-    envia_email_nova_solicitacao_movimentacao,
-    envia_email_cadastro_nao_aprovado,
-)
-from bem_patrimonial import constants
-
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
@@ -323,8 +322,8 @@ class BemPatrimonial(BaseModel):
         self.save()
 
     def _on_soft_delete(self):
-        from inventario.models import ItemConciliacao
         from inventario import constants as inv_constants
+        from inventario.models import ItemConciliacao
 
         ItemConciliacao.objects.filter(
             bem_id=self.pk,

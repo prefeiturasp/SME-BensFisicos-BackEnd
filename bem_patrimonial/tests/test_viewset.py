@@ -1,20 +1,19 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase
-from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.test import TestCase
+from django.urls import reverse
 from rest_framework.test import APIClient
 
-from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial import constants
 from bem_patrimonial.models import (
+    BemPatrimonial,
     TransferenciaBemPatrimonial,
     TransferenciaBensItem,
 )
-from bem_patrimonial import constants
 from dados_comuns.context import audit_as
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
 class BemPatrimonialViewSetTest(TestCase):

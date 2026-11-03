@@ -7,9 +7,9 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from dados_comuns.models import HistoricoGeral
 from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_uo
-from dados_comuns.models import HistoricoGeral
 from inventario.models import ParametroConciliacaoAnual
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario

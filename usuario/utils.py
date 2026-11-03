@@ -1,5 +1,6 @@
 from django.contrib.auth.models import Group, Permission
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
+
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
 def atribuir_permissao(grupo, settings):

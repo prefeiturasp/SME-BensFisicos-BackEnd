@@ -2,30 +2,31 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
-from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib import messages
+from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from rest_framework.exceptions import ValidationError as DRFValidationError
 
-from bem_patrimonial.models import (
-    MovimentacaoBemPatrimonial,
-    MovimentacaoBensItem,
+from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
+    MovimentacaoBemPatrimonialForm,
 )
-from bem_patrimonial.constants import ENVIADA, ACEITA
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
     aprovar_solicitacao,
 )
-from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
-    MovimentacaoBemPatrimonialForm,
-)
 from bem_patrimonial.admins.widgets.movimentacao_lote_widget import (
     MovimentacaoLoteWidget,
 )
+from bem_patrimonial.constants import ACEITA, ENVIADA
+from bem_patrimonial.models import (
+    MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
+)
 from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.tests.factories import criar_ua
+
 from .tests_unidade_administrativa_setup import SetupUnidadeAdministrativaStatusData
 
 

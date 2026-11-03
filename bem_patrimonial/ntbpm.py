@@ -5,29 +5,21 @@ from django.db import transaction
 from django.db.models import IntegerField, Max, Value
 from django.db.models.functions import Cast, Replace, Substr
 from django.utils import timezone
-
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
     PageTemplate,
-    Spacer,
     Paragraph,
+    Spacer,
     Table,
     TableStyle,
 )
 
-from bem_patrimonial.models import TransferenciaBemPatrimonial
-from bem_patrimonial.pdf_utils import (
-    PDFConfigBase as PDFConfig,
-    criar_estilo_base,
-    extrair_codigo_ua,
-    formatar_data,
-)
 from bem_patrimonial.documentos_pdf_utils import (
     aplicar_estilo_tabela_info,
     criar_cabecalho_registro_documento,
@@ -36,6 +28,15 @@ from bem_patrimonial.documentos_pdf_utils import (
     criar_tabela_total_bens,
     desenhar_rodape_padrao,
     desenhar_tabela_no_canvas,
+)
+from bem_patrimonial.models import TransferenciaBemPatrimonial
+from bem_patrimonial.pdf_utils import (
+    PDFConfigBase as PDFConfig,
+)
+from bem_patrimonial.pdf_utils import (
+    criar_estilo_base,
+    extrair_codigo_ua,
+    formatar_data,
 )
 
 DATE_FMT_BR = "%d/%m/%Y"

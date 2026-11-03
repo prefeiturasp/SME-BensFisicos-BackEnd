@@ -1,36 +1,34 @@
+from urllib.parse import urlencode
+
+from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin import SimpleListFilter
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
-from django.contrib.admin import SimpleListFilter
-from urllib.parse import urlencode
 
-from django import forms
-
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_queryset_por_escopo,
     resolver_ids_escopo,
     usuario_e_super_admin,
 )
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
+from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
+from inventario.utils_conciliacao.conciliacao_automatica import (
+    processar_conciliacao_anual_automatica,
+)
 from inventario.utils_conciliacao.conciliacao_utils import (
     criar_itens_conciliacao,
     finalizar_conciliacao,
     remover_itens_baixados_invalidos,
 )
-from inventario.utils_conciliacao.conciliacao_automatica import (
-    processar_conciliacao_anual_automatica,
-)
 
 from . import constants
-from .models import ParametroConciliacaoAnual, ConciliacaoUA, ItemConciliacao
 from .forms import ConciliacaoUAAdminForm
-
-
-from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
+from .models import ConciliacaoUA, ItemConciliacao, ParametroConciliacaoAnual
 
 URL_NAME_CONCILIACAOUA_CHANGE = "admin:inventario_conciliacaoua_change"
 URL_NAME_CONCILIACAOUA_CHANGELIST = "admin:inventario_conciliacaoua_changelist"

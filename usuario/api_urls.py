@@ -1,15 +1,16 @@
 from django.urls import path
+
 from usuario.api_views import (
     CustomTokenObtainPairView,
     CustomTokenRefreshView,
     CustomTokenVerifyView,
-    LogoutAPIView,
-    PasswordResetRequestAPIView,
-    PasswordResetConfirmAPIView,
-    PasswordChangeAPIView,
     FirstAccessPasswordChangeAPIView,
-    UserProfileAPIView,
+    LogoutAPIView,
+    PasswordChangeAPIView,
+    PasswordResetConfirmAPIView,
+    PasswordResetRequestAPIView,
     SelecionarUnidadeAdministrativaAPIView,
+    UserProfileAPIView,
 )
 
 urlpatterns = [

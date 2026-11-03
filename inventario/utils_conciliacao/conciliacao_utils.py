@@ -1,15 +1,13 @@
 from datetime import date
 
 from django.db import transaction
-from django.db.models import OuterRef, Subquery, Q
+from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 
-from bem_patrimonial.models import BemPatrimonial
-from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
-from inventario import constants
-from bem_patrimonial.models import BaixaFisicaBensItem
-
 from bem_patrimonial import constants as bem_constants
+from bem_patrimonial.models import BaixaFisicaBensItem, BemPatrimonial
+from inventario import constants
+from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 
 
 def _get_ano_referencia_conciliacao(conciliacao):

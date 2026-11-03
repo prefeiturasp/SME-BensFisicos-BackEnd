@@ -1,16 +1,16 @@
 from django.contrib.auth.models import Group
-from django.urls import reverse
 from django.test import TestCase
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from bem_patrimonial import constants
 from bem_patrimonial.models import (
     BemPatrimonial,
-    TransferenciaBemPatrimonial,
-    TransferenciaBensItem,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
+    TransferenciaBemPatrimonial,
+    TransferenciaBensItem,
 )
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo

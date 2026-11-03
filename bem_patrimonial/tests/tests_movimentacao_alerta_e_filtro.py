@@ -1,4 +1,3 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from datetime import timedelta
 
 from django.contrib import admin
@@ -8,20 +7,21 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from bem_patrimonial.admins.filters.movimentacao_filters import (
-    MovimentacaoAtrasadaFilter,
-    IntervaloNpDeFilter,
-    IntervaloNpAteFilter,
-)
 from bem_patrimonial import constants
+from bem_patrimonial.admins.filters.movimentacao_filters import (
+    IntervaloNpAteFilter,
+    IntervaloNpDeFilter,
+    MovimentacaoAtrasadaFilter,
+)
 from bem_patrimonial.models import (
+    BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
-    BemPatrimonial,
 )
 from bem_patrimonial.templatetags.movimentacoes_pendentes_tags import (
     alerta_movimentacoes_pendentes,
 )
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario

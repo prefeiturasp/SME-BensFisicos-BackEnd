@@ -1,22 +1,21 @@
 from functools import lru_cache
 
-from django.forms.models import BaseInlineFormSet, ModelForm
-from django.core.exceptions import ValidationError
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
+from django.forms.models import BaseInlineFormSet, ModelForm
 from django.urls import reverse
 from django.utils.html import format_html
 
-from bem_patrimonial.models import (
-    MovimentacaoBensItem,
-    BemPatrimonial,
-    TransferenciaBensItem,
-)
 from bem_patrimonial.constants import (
+    AGUARDANDO_APROVACAO,
     APROVADO,
     BLOQUEADO,
-    ENVIADA,
-    AGUARDANDO_APROVACAO,
+)
+from bem_patrimonial.models import (
+    BemPatrimonial,
+    MovimentacaoBensItem,
+    TransferenciaBensItem,
 )
 from dados_comuns.models import HistoricoGeral
 
@@ -48,8 +47,8 @@ def _validate_bem_para_movimentacao(bem):
             f"Aguarde a resolução da movimentação pendente."
         )
     if getattr(bem, "bloqueado_conciliacao", False):
-        from inventario.models import ItemConciliacao
         from inventario import constants as inv_constants
+        from inventario.models import ItemConciliacao
 
         item_bloqueante = (
             ItemConciliacao.objects.filter(

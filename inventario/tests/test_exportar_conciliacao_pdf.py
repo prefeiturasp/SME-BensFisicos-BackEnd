@@ -1,29 +1,27 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from io import BytesIO
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 
-from django.test import TestCase, Client
-from django.urls import reverse
 from django.contrib.auth.models import Group
+from django.test import Client, TestCase
+from django.urls import reverse
 from django.utils import timezone
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Spacer
 
-from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-
 from bem_patrimonial.models import BemPatrimonial
-
+from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua
+from inventario import constants
 from inventario.models import (
     ConciliacaoUA,
     ItemConciliacao,
     OcorrenciaConciliacao,
     ParametroConciliacaoAnual,
 )
-from inventario import constants
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class ConciliacaoPDFTestBase(TestCase):
@@ -353,8 +351,8 @@ class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
     def test_rodape_e_ocorrencia_exibem_apenas_rf(self):
         from inventario.relatorio_conciliacao_pdf import (
             _criar_rodape_conciliacao,
-            _linhas_tabela_item,
             _estilos_blocos_itens,
+            _linhas_tabela_item,
         )
 
         self.conciliacao.fechado_por = self.gestor
@@ -496,8 +494,9 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         self.assertEqual(posicao_valor_geral, texto.rfind("R$ 1.610,00"))
 
     def test_titulo_categoria_agrupado_com_primeiro_item(self):
-        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
         from reportlab.platypus import KeepTogether, Table
+
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
@@ -510,8 +509,9 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         self.assertIsInstance(conteudo[1], Spacer)
 
     def test_totalizador_categoria_tem_tres_celulas_com_grade(self):
-        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
         from reportlab.platypus import Table
+
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
@@ -527,8 +527,9 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         )
 
     def test_total_geral_ultimo_elemento_com_tres_celulas(self):
-        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
         from reportlab.platypus import Table
+
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
@@ -543,11 +544,12 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         )
 
     def test_espacamentos_entre_categorias_e_apos_titulo(self):
-        from inventario.relatorio_conciliacao_pdf import (
-            _criar_blocos_itens_conciliacao,
-            PDFConfig,
-        )
         from reportlab.platypus import Spacer, Table
+
+        from inventario.relatorio_conciliacao_pdf import (
+            PDFConfig,
+            _criar_blocos_itens_conciliacao,
+        )
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 

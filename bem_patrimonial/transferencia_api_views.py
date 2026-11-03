@@ -1,7 +1,7 @@
 from django.http import FileResponse
 from django.utils import timezone
-from django_filters.rest_framework import DjangoFilterBackend
 from django_filters import CharFilter, FilterSet, NumberFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -34,7 +34,6 @@ from bem_patrimonial.transferencia_api_serializers import (
 )
 from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
 from dados_comuns.permissions import TransferenciaBemPatrimonialPermission
-
 
 TRANSFERENCIA_ID_PATH_PARAM = OpenApiParameter(
     name="id",

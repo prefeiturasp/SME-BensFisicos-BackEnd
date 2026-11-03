@@ -1,5 +1,4 @@
 import re
-from collections import defaultdict
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -13,7 +12,6 @@ from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
 from dados_comuns.escopo import filtrar_ua_origem_por_escopo
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 

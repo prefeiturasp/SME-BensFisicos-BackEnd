@@ -1,6 +1,5 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
-from datetime import timedelta
 import tempfile
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -15,10 +14,10 @@ from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
-
 
 COMMAND_ENVIA_PATH = (
     "bem_patrimonial.management.commands."

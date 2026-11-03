@@ -1,21 +1,22 @@
 import os
 from io import BytesIO
+
 from django.conf import settings
 from django.utils import timezone
 from django.utils.timezone import localtime
 from import_export.formats.base_formats import Format
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
 from reportlab.platypus import (
+    Image,
+    Paragraph,
     SimpleDocTemplate,
+    Spacer,
     Table,
     TableStyle,
-    Paragraph,
-    Spacer,
-    Image,
 )
 
 from bem_patrimonial.pdf_utils import obter_rf_usuario

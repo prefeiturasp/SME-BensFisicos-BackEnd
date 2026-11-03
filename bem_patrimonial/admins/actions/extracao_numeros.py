@@ -1,15 +1,14 @@
-from django.contrib import admin, messages
-from django.db import transaction
-from django.http import HttpResponse
 import csv
 import re
-from django.template.response import TemplateResponse
-from django.contrib.admin import helpers
-from django.core.exceptions import ValidationError
-from django.db import IntegrityError
-from django.db.models import Q
 from collections import Counter
 
+from django.contrib import admin, messages
+from django.contrib.admin import helpers
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.http import HttpResponse
+from django.template.response import TemplateResponse
 
 NEW_PATTERN_STRICT = re.compile(r"^\d{3}\.\d{9}-\d$")
 ALPHA_RE = re.compile(r"[A-Za-zÁ-ú]")

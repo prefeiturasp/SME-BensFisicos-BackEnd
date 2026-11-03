@@ -1,32 +1,35 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
-from django.test import TestCase, Client
-from django.contrib.auth.models import Group
-from django.urls import reverse
-from django.utils import timezone
 from decimal import Decimal
 
+from django.contrib.auth.models import Group
+from django.test import Client, TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from bem_patrimonial import constants
+from bem_patrimonial.cimbpm import (
+    _criar_rodape_cimbpm,
+    _criar_tabela_bens,
+    _criar_total_bens,
+    gerar_pdf_cimbpm,
+    obter_bens_movimentacao,
+)
+from bem_patrimonial.documentos_pdf_utils import agrupar_bens_documento
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.cimbpm import (
-    _criar_tabela_bens,
-    _criar_total_bens,
+from bem_patrimonial.pdf_utils import (
+    criar_info_geracao_paragraph,
     extrair_codigo_ua,
     formatar_moeda_brasileira,
-    obter_bens_movimentacao,
     obter_nome_usuario,
-    _criar_rodape_cimbpm,
-    gerar_pdf_cimbpm,
 )
-from bem_patrimonial.documentos_pdf_utils import agrupar_bens_documento
-from bem_patrimonial.pdf_utils import criar_info_geracao_paragraph
-from bem_patrimonial import constants
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class CIMBPMTestBase(TestCase):
@@ -346,8 +349,8 @@ class TestGeracaoNumeroCIMBPM(CIMBPMTestBase):
         self.assertEqual(mov2.numero_cimbpm, f"379.408.0000002.{ano_atual}")
 
     def test_sequencial_reinicia_ao_mudar_ano(self):
-        from unittest.mock import patch
         from datetime import datetime
+        from unittest.mock import patch
 
         bem1 = self.criar_bem(numero_patrimonial="001.000000001-1")
         bem2 = self.criar_bem(numero_patrimonial="001.000000002-2")

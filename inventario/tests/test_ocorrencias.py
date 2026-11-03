@@ -1,24 +1,24 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
 import datetime
-from django.test import TestCase
-from django.core.exceptions import ValidationError
-from django.contrib.auth.models import Group
-from django import forms
 from uuid import uuid4
 
-from bem_patrimonial.models import BemPatrimonial
-from bem_patrimonial import constants as bem_constants
-from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO
+from django import forms
+from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
+from django.test import TestCase
 
-from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
+from bem_patrimonial import constants as bem_constants
+from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua
 from inventario import constants
 from inventario.conciliacao import (
-    registrar_ocorrencia,
     excluir_ocorrencia,
+    registrar_ocorrencia,
 )
+from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 from inventario.utils_conciliacao.conciliacao_utils import criar_itens_conciliacao
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO
+from usuario.models import Usuario
 
 
 class OcorrenciaBaseTest(TestCase):

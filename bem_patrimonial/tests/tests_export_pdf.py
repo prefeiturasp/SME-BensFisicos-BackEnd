@@ -1,17 +1,18 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from decimal import Decimal
 import re
-from django.test import TestCase, RequestFactory
+from decimal import Decimal
+
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
+from django.test import RequestFactory, TestCase
 
-from bem_patrimonial.models import BemPatrimonial
-from bem_patrimonial.formats import PDFFormat
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
-from bem_patrimonial.constants import APROVADO, NAO_APROVADO, AGUARDANDO_APROVACAO
+from bem_patrimonial.constants import AGUARDANDO_APROVACAO, APROVADO, NAO_APROVADO
+from bem_patrimonial.formats import PDFFormat
+from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"

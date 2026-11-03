@@ -11,9 +11,10 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
 import os
-import environ
-from datetime import timedelta
 import sys
+from datetime import timedelta
+
+import environ
 
 TESTING = "test" in sys.argv
 

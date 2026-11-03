@@ -1,6 +1,7 @@
+import re
+
 from django import forms
 from django.core.exceptions import ValidationError
-import re
 
 from dados_comuns.models import UnidadeAdministrativa
 

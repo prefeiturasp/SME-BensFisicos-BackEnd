@@ -1,31 +1,30 @@
 import os
-from io import BytesIO
 from decimal import Decimal
-from reportlab.pdfgen import canvas
+from io import BytesIO
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.utils import timezone
-
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.pdfgen import canvas
 from reportlab.platypus import (
-    Table,
-    TableStyle,
-    Paragraph,
-    Spacer,
-    Image,
     BaseDocTemplate,
     Frame,
-    PageTemplate,
+    Image,
     KeepTogether,
+    PageTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle,
 )
-from zoneinfo import ZoneInfo
 
-from inventario import constants as inv_constants
 from bem_patrimonial.pdf_utils import obter_rf_usuario
+from inventario import constants as inv_constants
 
 
 class PDFConfig:

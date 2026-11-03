@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.utils import timezone
+
 from config.utils import email_utils
 from usuario.models import Usuario
 

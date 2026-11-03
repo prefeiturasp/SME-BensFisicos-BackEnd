@@ -1,6 +1,5 @@
 from django.db import models
 
-
 PREFIXO_CODIGO_UO_SME = "01.16.10"
 CODIGO_UA_PONTO_CENTRAL = "001"
 NOME_UA_PONTO_CENTRAL = "Ponto Central"

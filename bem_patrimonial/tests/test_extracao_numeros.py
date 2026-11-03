@@ -1,34 +1,33 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
 # Cobertura total de bem_patrimonial/admins/actions/extracao_numeros.py
-
 import csv
 from io import StringIO
-from urllib.parse import urlencode
 from unittest.mock import patch
+from urllib.parse import urlencode
 
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
-from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.admin import helpers
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
+from django.test import RequestFactory, TestCase
 
-from bem_patrimonial.models import BemPatrimonial
-from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.admins.actions.extracao_numeros import (
-    _digits_only,
+    _classify_token,
     _coerce_to_new,
+    _digits_only,
+    _extract,
     _first_token,
     _last_numericish_token,
-    _classify_token,
-    _extract,
-    simular_extracao_numero,
     aplicar_extracao_numero,
+    simular_extracao_numero,
 )
+from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.constants import APROVADO
+from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO
-from django.contrib.auth.models import Group
+from usuario.models import Usuario
 
 
 def _request_with_messages(factory, user, method="POST", post_data=None):

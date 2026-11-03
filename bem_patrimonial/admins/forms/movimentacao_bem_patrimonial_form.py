@@ -13,12 +13,10 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     resolver_bens_movimentacao_lote,
     validar_bens_movimentacao,
 )
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
-
 from dados_comuns.escopo import (
     filtrar_ua_origem_por_escopo,
 )
-
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 
 CODIGO_UA_PONTO_CENTRAL = "001"
 MENSAGEM_ITENS_LOTE_INVALIDOS = "Itens de movimentação inválidos."

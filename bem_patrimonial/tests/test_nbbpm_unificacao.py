@@ -38,10 +38,10 @@ from bem_patrimonial.api_serializers import (
 )
 from bem_patrimonial.api_views import BaixaFisicaBemPatrimonialViewSet
 from bem_patrimonial.models import (
+    NBBPM,
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
     BemPatrimonial,
-    NBBPM,
 )
 from bem_patrimonial.nbbpm_api_views import NBBPMViewSet
 from bem_patrimonial.nbbpm_lote import _criar_tabela_bens, gerar_pdf_nbbpm_lote

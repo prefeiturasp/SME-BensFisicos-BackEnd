@@ -11,24 +11,23 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
-
 from bem_patrimonial import constants
 from bem_patrimonial.models import (
+    NBBPM,
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
     BemPatrimonial,
-    NBBPM,
 )
 from bem_patrimonial.nbbpm_lote import (
+    _criar_informacoes_gerais,
+    _criar_tabela_bens,
     gerar_numero_nbbpm_lote,
     gerar_pdf_nbbpm_lote,
     http_response_nbbpm_lote,
     obter_bens_nbbpm_lote,
-    _criar_informacoes_gerais,
-    _criar_tabela_bens,
 )
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.models import Usuario
 
 # ============================================================================
 # HELPERS / SETUP BASE

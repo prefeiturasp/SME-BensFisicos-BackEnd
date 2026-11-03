@@ -1,32 +1,30 @@
 """Melhorias fluxo Baixa Física: edição Aceita, Laudado->Baixa Física, laudo com Nome."""
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
+from reportlab.lib.styles import getSampleStyleSheet
 from rest_framework import status as drf_status
 from rest_framework.test import APIClient
-
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-from django.contrib.admin.sites import AdminSite
-from django.test import RequestFactory
-from reportlab.lib.styles import getSampleStyleSheet
 
 from bem_patrimonial import constants
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
     BaixaFisicaBensItemInline,
 )
-from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao, _criar_tabela_bens
+from bem_patrimonial.laudo_avaliacao import _criar_tabela_bens, gerar_pdf_laudo_avaliacao
 from bem_patrimonial.models import (
+    NBBPM,
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
     BemPatrimonial,
-    NBBPM,
 )
 from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 def _criar_usuario(username, uo, ua, grupos=None, **kw):

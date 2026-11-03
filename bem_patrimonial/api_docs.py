@@ -1,6 +1,5 @@
 from textwrap import dedent
 
-
 # ==========================================
 # DOCUMENTAÇÃO PARA A API "baixas-fisicas"
 # ==========================================

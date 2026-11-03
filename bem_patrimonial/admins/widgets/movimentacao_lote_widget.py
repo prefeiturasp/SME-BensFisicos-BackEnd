@@ -3,7 +3,6 @@ from django.templatetags.static import static
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-
 AJUDAS_MOVIMENTACAO = {
     "faixa": (
         "Encontre bens da UA de origem pelo intervalo de números patrimoniais informado. "

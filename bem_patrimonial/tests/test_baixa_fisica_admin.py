@@ -1,26 +1,13 @@
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
-
-from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from dados_comuns.tests.factories import criar_ua, criar_uo
-
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from bem_patrimonial import constants
-from bem_patrimonial.models import (
-    BaixaFisicaBemPatrimonial,
-    BemPatrimonial,
-    BaixaFisicaBensItem,
-    NBBPM,
-)
-
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
     BaixaFisicaBensItemInline,
@@ -28,6 +15,16 @@ from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBensItemInlineFormSet,
     BaixaFisicaResource,
 )
+from bem_patrimonial.models import (
+    NBBPM,
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+)
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class BaixaFisicaAdminTestCase(TestCase):
@@ -393,7 +390,10 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         self.factory = RequestFactory()
 
     def test_inline_form_e_resource_cobertura(self):
-        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import BaixaFisicaBensItemInlineForm, BaixaFisicaResource
+        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
+            BaixaFisicaBensItemInlineForm,
+            BaixaFisicaResource,
+        )
         # testa _obter_baixa_atual_id com parent_baixa
         baixa = _criar_baixa_cov(self.ua, self.gestor, status=constants.AGUARDANDO_ENVIO)
         bem = _criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO)
@@ -863,6 +863,7 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def _historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -1006,6 +1007,7 @@ class TestBaixaFisicaUnicidadeSolicitanteAdmin(TestCase):
 
     def _historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)

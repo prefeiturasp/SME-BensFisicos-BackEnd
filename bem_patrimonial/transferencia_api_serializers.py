@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from dados_comuns.context import audit_as
 from django.db import transaction
 from django.urls import reverse
 from rest_framework import serializers
@@ -21,6 +20,7 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     obter_ua_ponto_central,
     obter_uo_referencia_do_usuario,
 )
+from dados_comuns.context import audit_as
 from dados_comuns.models import UnidadeOrcamentaria
 from dados_comuns.utils import PREFIXO_CODIGO_UO_SME, unidade_orcamentaria_eh_externa
 

@@ -1,8 +1,8 @@
-import re
 import logging
+import re
 
 from django.core.exceptions import ValidationError
-from django.db import transaction, IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import IntegerField, Max, Q, Value
 from django.db.models.functions import Cast, Replace, Substr
 from django.utils import timezone
@@ -254,8 +254,9 @@ def _evoluir_bens_para_baixa_fisica(locked_baixas):
 
 
 def _registrar_historico_nbbpm(nbbpm, criado_por, uo_ids, ano, locked):
-    from dados_comuns.models import HistoricoGeral
     from django.contrib.contenttypes.models import ContentType
+
+    from dados_comuns.models import HistoricoGeral
 
     _ = uo_ids
     uo_label = _rotulo_uo_de_baixa(locked[0]) if locked else "-"
@@ -274,10 +275,10 @@ def _registrar_historico_nbbpm(nbbpm, criado_por, uo_ids, ano, locked):
 
 def _registrar_historico_baixas_nbbpm(nbbpm, criado_por, uo_ids, locked):
     """Evento imutável por baixa vinculada à NBBPM (consulta histórica, reemissão e bloqueio)."""
-    from dados_comuns.models import HistoricoGeral
     from django.contrib.contenttypes.models import ContentType
 
     from bem_patrimonial.models import BaixaFisicaBemPatrimonial
+    from dados_comuns.models import HistoricoGeral
 
     ct_baixa = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
     _ = uo_ids

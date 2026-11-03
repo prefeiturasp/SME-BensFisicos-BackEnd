@@ -1,19 +1,20 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase
 from unittest.mock import patch
+
 from django.contrib.auth.models import Group
 from django.template import Context
 from django.template.loader import render_to_string
+from django.test import TestCase
 
+from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.constants import APROVADO
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class EmailNovaMovimentacaoTestCase(TestCase):

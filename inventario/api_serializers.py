@@ -6,7 +6,6 @@ from rest_framework import serializers
 
 from dados_comuns.escopo import filtrar_ua_origem_por_escopo
 from dados_comuns.models import UnidadeAdministrativa
-
 from inventario import constants
 from inventario.models import (
     ConciliacaoUA,

@@ -1,13 +1,12 @@
 from collections import defaultdict
 
+import django_filters
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
-
 from django_filters.rest_framework import DjangoFilterBackend
-import django_filters
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -19,19 +18,21 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import (
     NotFound,
+)
+from rest_framework.exceptions import (
     ValidationError as DRFValidationError,
 )
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
-from dados_comuns.context import audit_as
 from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
+from dados_comuns.context import audit_as
 from dados_comuns.escopo import filtrar_queryset_por_escopo
 from dados_comuns.historico_consulta import consultar_historico
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.utils import dict_changes
-
+from inventario import constants
 from inventario.api_serializers import (
     ConciliacaoExportQuerySerializer,
     ConciliacaoHistoricoGrupoSerializer,
@@ -45,7 +46,6 @@ from inventario.api_serializers import (
     RegistrarOcorrenciaSerializer,
 )
 from inventario.conciliacao import excluir_ocorrencia, registrar_ocorrencia
-from inventario import constants
 from inventario.models import (
     ConciliacaoUA,
     ItemConciliacao,

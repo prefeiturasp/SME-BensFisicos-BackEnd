@@ -1,54 +1,54 @@
-from django.contrib import admin, messages
-from django.core.exceptions import ValidationError, PermissionDenied
-from django.db import IntegrityError, models, transaction
-from django.db.models import OuterRef, Subquery
-from django.http import HttpResponseRedirect
-from django.urls import reverse
-from django.utils.translation import gettext_lazy as _
-from django.utils.html import format_html
-from django.utils import timezone
-from django.template.response import TemplateResponse
 import re
 
+from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.admin import GenericTabularInline
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import IntegrityError, models, transaction
+from django.db.models import OuterRef, Subquery
+from django.db.models.functions import Cast, Concat
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+from import_export.formats.base_formats import CSV, HTML, XLS, XLSX
+from import_export.widgets import DecimalWidget
+from rangefilter.filters import DateRangeFilter
+
+from bem_patrimonial import constants
 from bem_patrimonial.admins.actions.extracao_numeros import (
     aplicar_extracao_numero,
     simular_extracao_numero,
 )
-from bem_patrimonial.admins.filters.bem_patrimonial_filters import SemNumeroFilter
-from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
-from bem_patrimonial.models import (
-    BaixaFisicaBensItem,
-    BemPatrimonial,
-    StatusBemPatrimonial,
-)
-from bem_patrimonial.formats import PDFFormat
-from import_export.admin import ImportExportModelAdmin
-from import_export import resources
-from import_export.widgets import DecimalWidget
-from rangefilter.filters import DateRangeFilter
-from import_export.formats.base_formats import CSV, XLS, XLSX, HTML
-from django.contrib.contenttypes.models import ContentType
-from django.contrib.auth import get_user_model
-
-from django.contrib.contenttypes.admin import GenericTabularInline
-from django.db.models.functions import Cast, Concat
-from bem_patrimonial import constants
-from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     BaixadosMaisDeUmPeriodoFilter,
     BuscaGeralTodasUOsFilter,
     StatusBemPatrimonialFilter,
 )
+from bem_patrimonial.admins.filters.bem_patrimonial_filters import SemNumeroFilter
+from bem_patrimonial.admins.forms.bem_patrimonial_form import BemPatrimonialAdminForm
+from bem_patrimonial.formats import PDFFormat
+from bem_patrimonial.models import (
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+    StatusBemPatrimonial,
+)
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
     filtrar_queryset_por_escopo,
     filtrar_ua_origem_por_escopo,
-    uas_acessiveis_para_importacao,
-    validar_objeto_no_escopo,
     obter_unidade_orcamentaria_id_do_usuario,
+    uas_acessiveis_para_importacao,
     usuario_e_super_admin,
+    validar_objeto_no_escopo,
 )
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 
 HTML_END_FORM_CONTAINER = "</div><!-- END form-container -->"
 HTML_END_FORM = "</form>"

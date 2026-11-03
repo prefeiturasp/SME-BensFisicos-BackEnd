@@ -3,35 +3,36 @@ from io import BytesIO
 
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
-
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.units import cm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
     PageTemplate,
-    Spacer,
     Paragraph,
+    Spacer,
     Table,
     TableStyle,
 )
 
-from bem_patrimonial.models import NBBPM
-from bem_patrimonial.pdf_utils import (
-    PDFConfigBase as PDFConfig,
-    criar_estilo_base,
-    formatar_moeda_brasileira,
-    formatar_data,
-)
 from bem_patrimonial.documentos_pdf_utils import (
     agrupar_bens_documento,
     criar_cabecalho_registro_documento,
     criar_tabela_rodape_responsaveis,
     desenhar_rodape_padrao,
     desenhar_tabela_no_canvas,
+)
+from bem_patrimonial.models import NBBPM
+from bem_patrimonial.pdf_utils import (
+    PDFConfigBase as PDFConfig,
+)
+from bem_patrimonial.pdf_utils import (
+    criar_estilo_base,
+    formatar_data,
+    formatar_moeda_brasileira,
 )
 
 DATE_FMT_BR = "%d/%m/%Y"

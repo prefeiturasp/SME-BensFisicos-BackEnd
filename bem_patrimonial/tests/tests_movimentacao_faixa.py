@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 from django.test import SimpleTestCase
 from rest_framework.exceptions import ValidationError
-from bem_patrimonial import constants
 
+from bem_patrimonial import constants
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BuscaBensMovimentacaoSerializer,
     MovimentacaoBensItemCreateSerializer,
@@ -15,7 +15,6 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     buscar_bens_para_movimentacao,
     motivo_impedimento_movimentacao,
 )
-
 
 MODULO = "bem_patrimonial.serializers.movimentacao_serializers"
 

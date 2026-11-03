@@ -1,7 +1,8 @@
 # usuario/middleware.py
+from urllib.parse import urlencode
+
 from django.shortcuts import redirect
 from django.urls import reverse
-from urllib.parse import urlencode
 
 ADMIN_PREFIX = "/admin/"
 PASSWORD_CHANGE_URLNAME = "password_change"

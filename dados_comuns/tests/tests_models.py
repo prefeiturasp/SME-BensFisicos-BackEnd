@@ -1,13 +1,13 @@
 from datetime import date
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
-from django.test import TestCase
-from django.test import RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from django.test import RequestFactory, TestCase
+
 from dados_comuns.admin import UnidadeAdministrativaAdmin, UnidadeOrcamentariaAdmin
 from dados_comuns.formats import UnidadeOrcamentariaPDFFormat
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from dados_comuns.utils import (
     PREFIXO_CODIGO_UO_SME,
@@ -148,6 +148,7 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
 
     def test_admin_queryset_ordering(self):
         from django.test import RequestFactory
+
         from usuario.models import Usuario
 
         factory = RequestFactory()

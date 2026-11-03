@@ -1,18 +1,17 @@
-from rest_framework.test import APIClient
-from unittest.mock import patch as mock_patch
 from io import BytesIO
 from unittest.mock import MagicMock, patch
+from unittest.mock import patch as mock_patch
 
 import tablib
-
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.http import HttpResponse
-from django.test import TestCase, RequestFactory, Client
+from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
+from rest_framework.test import APIClient
 
 from bem_patrimonial.admins.bem_patrimonial import (
     BemPatrimonialAdmin,
@@ -29,7 +28,6 @@ from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -152,8 +150,8 @@ class _Base(TestCase):
         self.admin = BemPatrimonialAdmin(BemPatrimonial, self.site)
 
         # Permissões necessárias para add_view e has_view_permission funcionarem
-        from django.contrib.contenttypes.models import ContentType
         from django.contrib.auth.models import Permission
+        from django.contrib.contenttypes.models import ContentType
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         for codename in ("add_bempatrimonial", "view_bempatrimonial",
                          "change_bempatrimonial", "delete_bempatrimonial"):
@@ -1585,7 +1583,7 @@ class ImportacaoEndpointTest(_Base):
     def _xlsx_bytes(self, rows, headers=None):
         """Gera bytes de um XLSX em memória para upload."""
         import openpyxl
-        from openpyxl.styles import PatternFill, Font
+        from openpyxl.styles import Font, PatternFill
         wb = openpyxl.Workbook()
         ws = wb.active
         cols = list(headers or _COLUNAS_IMPORTACAO)
@@ -1642,8 +1640,9 @@ class ImportacaoEndpointTest(_Base):
         O patch é aplicado tanto no módulo do admin quanto no da view para
         garantir que o objeto instanciado dentro do endpoint seja o fake.
         """
-        from django.core.exceptions import ValidationError as DjVE
         from unittest.mock import MagicMock
+
+        from django.core.exceptions import ValidationError as DjVE
 
         fake_resource = MagicMock()
         fake_resource._erros_por_linha = erros_por_linha
@@ -1688,8 +1687,9 @@ class ImportacaoEndpointTest(_Base):
 
     def _mock_import_data_403(self, mensagem):
         """Substitui BemPatrimonialResource por um fake que levanta ValidationError de UA."""
-        from django.core.exceptions import ValidationError as DjVE
         from unittest.mock import MagicMock
+
+        from django.core.exceptions import ValidationError as DjVE
 
         fake_resource = MagicMock()
         fake_resource._erros_por_linha = []

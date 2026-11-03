@@ -7,7 +7,6 @@ from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -20,12 +19,14 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import (
     NotFound,
+)
+from rest_framework.exceptions import (
     ValidationError as DRFValidationError,
 )
-from rest_framework.permissions import AllowAny
-from rest_framework.views import APIView
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from dados_comuns.api_serializers import (
     UnidadeAdministrativaDetailSerializer,
@@ -38,25 +39,24 @@ from dados_comuns.api_serializers import (
     UnidadeOrcamentariaListSerializer,
 )
 from dados_comuns.context import audit_as
-from dados_comuns.historico_consulta import consultar_historico
 from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
 from dados_comuns.formats import (
     UnidadeAdministrativaPDFFormat,
     UnidadeOrcamentariaPDFFormat,
 )
+from dados_comuns.historico_consulta import consultar_historico
+from dados_comuns.libs.pagination import SafePagination
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.permissions import (
     UnidadeAdministrativaPermission,
     UnidadeOrcamentariaPermission,
 )
-from dados_comuns.libs.pagination import SafePagination
 from dados_comuns.resources import (
     UnidadeAdministrativaResource,
     UnidadeOrcamentariaResource,
 )
 from dados_comuns.utils import dict_changes, garantir_ua_ponto_central_externa
 from usuario.serializers import UnidadeAdministrativaUsuarioSerializer
-
 
 User = get_user_model()
 

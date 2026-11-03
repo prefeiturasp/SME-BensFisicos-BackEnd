@@ -1,46 +1,43 @@
+import logging
 from datetime import datetime
+from urllib.parse import urlencode
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import SetPasswordForm
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import (
     LoginView,
     PasswordChangeView,
-    PasswordResetView,
     PasswordResetConfirmView,
+    PasswordResetView,
 )
-from dados_comuns.permissions import UsuarioPermission
-from dados_comuns.libs.pagination import SafePagination
-from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.exceptions import NotFound, PermissionDenied
-from django_filters.rest_framework import DjangoFilterBackend
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.tokens import default_token_generator
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.utils import ProgrammingError
-from django.shortcuts import get_object_or_404, redirect
 from django.http import HttpResponse
-from django.urls import reverse_lazy, reverse
-from urllib.parse import urlencode
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import TemplateView
-from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
-from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
-from dados_comuns.historico_consulta import consultar_historico
-from dados_comuns.utils import dict_changes
-import logging
-from django.contrib.auth import get_user_model
-from rest_framework import viewsets, mixins, status
-from rest_framework.permissions import IsAdminUser
-from usuario.serializers import UsuarioSerializer
-from usuario.resources import UsuarioResource
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.response import Response
-from usuario.filters import UsuarioFilter
-from rest_framework.decorators import action
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
-    extend_schema,
     OpenApiResponse,
+    extend_schema,
 )
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.response import Response
+
+from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
+from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
+from dados_comuns.historico_consulta import consultar_historico
+from dados_comuns.libs.pagination import SafePagination
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from dados_comuns.permissions import UsuarioPermission
+from dados_comuns.utils import dict_changes
 from usuario.api_doc import (
     CREATE_USERS_DOC,
     DELETE_USERS_DOC,
@@ -51,7 +48,9 @@ from usuario.api_doc import (
     RETRIEVE_USERS_DOC,
     UPDATE_USERS_DOC,
 )
-from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
+from usuario.filters import UsuarioFilter
+from usuario.resources import UsuarioResource
+from usuario.serializers import UsuarioSerializer
 
 logger = logging.getLogger(__name__)
 User = get_user_model()

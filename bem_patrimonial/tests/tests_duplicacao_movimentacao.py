@@ -1,22 +1,22 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory, TransactionTestCase
 from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.db import transaction
+from django.test import RequestFactory, TestCase, TransactionTestCase
 
+from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
+    MovimentacaoBemPatrimonialAdmin,
+)
+from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.constants import APROVADO
-from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
-    MovimentacaoBemPatrimonialAdmin,
-)
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO
-from django.contrib.auth.models import Group
+from usuario.models import Usuario
 
 
 class SetupDuplicacaoData:
@@ -123,10 +123,11 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
             solicitado_por=self.operador,
         )
 
+        from django.forms.models import inlineformset_factory
+
         from bem_patrimonial.admins.inlines.inlines import (
             MovimentacaoBensItemInlineFormSet,
         )
-        from django.forms.models import inlineformset_factory
 
         data = {
             "itens-TOTAL_FORMS": "1",

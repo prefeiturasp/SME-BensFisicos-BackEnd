@@ -1,9 +1,9 @@
 from django.db import transaction
 
-from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
-from inventario import constants as inv_constants
 from bem_patrimonial import constants as bem_constants
 from dados_comuns.context import get_user
+from inventario import constants as inv_constants
+from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 
 
 def _conciliacoes_em_aberto(ua_id):

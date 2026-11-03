@@ -1,8 +1,7 @@
-from rest_framework.permissions import BasePermission
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import BasePermission
 
-from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
-from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
+from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo, filtrar_queryset_transferencia_por_escopo
 
 
 class BemPatrimonialPermission(BasePermission):

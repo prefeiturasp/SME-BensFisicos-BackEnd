@@ -1,11 +1,12 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from itertools import count
+
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import status
 from rest_framework.test import APITestCase
-from itertools import count
 
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario

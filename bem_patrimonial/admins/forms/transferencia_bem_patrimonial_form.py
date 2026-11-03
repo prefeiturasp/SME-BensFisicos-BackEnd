@@ -1,13 +1,13 @@
 from django import forms
 from django.core.exceptions import ValidationError
 
-from bem_patrimonial.models import TransferenciaBemPatrimonial
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MENSAGEM_SEM_PONTO_CENTRAL,
     obter_ua_ponto_central,
     obter_uo_referencia_do_usuario,
     queryset_uas_da_uo,
 )
+from bem_patrimonial.models import TransferenciaBemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.utils import PREFIXO_CODIGO_UO_SME
 

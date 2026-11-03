@@ -1,20 +1,19 @@
-from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
-from django.test import TestCase, RequestFactory
-from django.contrib.auth.models import Group
-from django.contrib.admin.sites import AdminSite
-from django.core.exceptions import ValidationError
-from unittest.mock import patch
 from types import SimpleNamespace
-from import_export.formats.base_formats import XLSX
+from unittest.mock import patch
 
-from dados_comuns.tests.factories import criar_ua, criar_uo
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
-from usuario.models import Usuario
-from usuario.admin import CustomUserModelAdmin
-from usuario.resources import UsuarioResource
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
-
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
+from django.test import RequestFactory, TestCase
+
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.admin import CustomUserModelAdmin
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
+from usuario.resources import UsuarioResource
 
 User = get_user_model()
 

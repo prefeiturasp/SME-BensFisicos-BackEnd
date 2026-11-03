@@ -1,17 +1,16 @@
-from rest_framework import viewsets, status, filters, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend
 import django_filters
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import filters, mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
+from bem_patrimonial.api_serializers import NBBPMDetailSerializer, NBBPMGerarLoteSerializer, NBBPMSerializer
 from bem_patrimonial.models import NBBPM
-from bem_patrimonial.api_serializers import NBBPMSerializer, NBBPMDetailSerializer, NBBPMGerarLoteSerializer
 from bem_patrimonial.nbbpm_lote import http_response_nbbpm_lote
 from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
 from dados_comuns.escopo import resolver_ids_escopo
-
-from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 
 class IsGestorPatrimonioOrSuperUser(IsAuthenticated):
