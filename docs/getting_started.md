@@ -19,7 +19,7 @@ Serviços (`docker-compose-dev.yml`): `db` (Postgres 15 + healthcheck), `web` (D
 ## Banco e acesso inicial
 
 ```bash
-make init-db                # migrate + cria superusuário (defaults embutidos no Makefile)
+make init-db                # migrate + cria superusuário (exige SUPER_USER_* no .env)
 make setup-grupos-permissoes
 make seed-base              # massa de demonstração (opcional)
 ```

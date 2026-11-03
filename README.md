@@ -43,7 +43,7 @@ O provisionamento de grupos/permissões é feito por comando de gestão.
 1. Copie o arquivo de ambiente:
 
    ```bash
-   cp env.sample .env
+   cp .env.example .env
    ```
 
 2. Suba o ambiente de desenvolvimento:
