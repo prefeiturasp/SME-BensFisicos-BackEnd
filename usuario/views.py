@@ -455,7 +455,7 @@ class UsuarioViewSet(
     # =========================================================
 
     @extend_schema(
-        tags=["Usuarios"],
+        tags=["Usuários"],
         summary="Exportar usuarios",
         description=EXPORT_USERS_DOC,
         responses={

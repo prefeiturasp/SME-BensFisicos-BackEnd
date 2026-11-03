@@ -358,6 +358,10 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         return Response(buscar_bens_para_movimentacao(serializer.validated_data))
 
+    @extend_schema(
+        tags=["Movimentações"],
+        summary="Opções para cadastro de movimentação",
+    )
     @action(detail=False, methods=["get"], url_path="opcoes-cadastro")
     def opcoes_cadastro(self, request):
         uos = UnidadeOrcamentaria.objects.filter(ativa=True).order_by("codigo", "nome")

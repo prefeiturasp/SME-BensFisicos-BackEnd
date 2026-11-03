@@ -22,6 +22,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet
@@ -190,6 +191,19 @@ class BemPatrimonialFilter(FilterSet):
         ]
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Bens Patrimoniais"]),
+    create=extend_schema(tags=["Bens Patrimoniais"]),
+    retrieve=extend_schema(tags=["Bens Patrimoniais"]),
+    update=extend_schema(tags=["Bens Patrimoniais"]),
+    partial_update=extend_schema(tags=["Bens Patrimoniais"]),
+    destroy=extend_schema(tags=["Bens Patrimoniais"]),
+    create_multi=extend_schema(tags=["Bens Patrimoniais"]),
+    aprovar_bens=extend_schema(tags=["Bens Patrimoniais"]),
+    reprovar_bens=extend_schema(tags=["Bens Patrimoniais"]),
+    importar=extend_schema(tags=["Bens Patrimoniais"]),
+    historico=extend_schema(tags=["Bens Patrimoniais"]),
+)
 class BemPatrimonialViewSet(viewsets.ModelViewSet):
     permission_classes = [BemPatrimonialPermission]
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]

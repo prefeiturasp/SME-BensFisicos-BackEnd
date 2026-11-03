@@ -571,6 +571,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
     )
 
     @extend_schema(
+        tags=["Unidades Administrativas"],
         parameters=[
             UA_ID_PATH_PARAM,
             OpenApiParameter(
@@ -815,6 +816,11 @@ class HealthCheckView(APIView):
 
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        tags=["Health"],
+        summary="Verificação de saúde",
+        responses={200: OpenApiResponse(description="API e banco operacionais.")},
+    )
     def get(self, request):
         try:
             connection.ensure_connection()
