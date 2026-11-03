@@ -1,0 +1,97 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bens-fisicos-backend"
+version = "2.7.0"
+description = "Backend Django do sistema de gestão patrimonial da SME-SP."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "SME" }]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bem_patrimonial*", "usuario*", "inventario*", "dados_comuns*", "config*"]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+exclude = "/migrations/"
+extend-exclude = '''
+/(\
+		\.venv\
+	| \.mypy_cache\
+	| \.pytest_cache\
+	| \.ruff_cache\
+	| docs/_build\
+	| docs/_cov\
+	| staticfiles\
+	| static\
+	| bens_fisicos_backend\.egg-info\
+)/
+'''
+
+# Regras começam conservadoras (E,F,W,I) para não quebrar no legado sem docstrings.
+# Ampliar para D,SIM,C4 quando o código estiver conformado.
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [
+		"migrations",
+		".venv",
+		".mypy_cache",
+		".pytest_cache",
+		".ruff_cache",
+		"docs/_build",
+		"docs/_cov",
+		"staticfiles",
+		"static",
+		"bens_fisicos_backend.egg-info",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
+"**/tests/**/*.py" = ["E501"]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 120
+
+[tool.mypy]
+python_version = "3.11"
+exclude = ".*/migrations/.*"
+plugins = ["mypy_django_plugin.main"]
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings.local"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.local"
+pythonpath = ["."]
+python_files = ["test_*.py", "tests_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+testpaths = ["bem_patrimonial", "usuario", "inventario", "dados_comuns"]
+
+[tool.coverage.run]
+source = ["bem_patrimonial", "usuario", "inventario", "dados_comuns"]
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "*/test_*.py",
+    "*/tests_*.py",
+    "*/factories.py",
+    "manage.py",
+]
+
+[tool.coverage.report]
+show_missing = true
