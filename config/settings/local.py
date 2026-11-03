@@ -1,11 +1,5 @@
-from . import base
-
-# Re-export all settings from base so this module exposes them to Django
-for _name in dir(base):
-    if not _name.startswith("_"):
-        globals()[_name] = getattr(base, _name)
-
-env = base.env
+from .base import *  # noqa: F401,F403
+from .base import env  # noqa: F401
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#debug
 
