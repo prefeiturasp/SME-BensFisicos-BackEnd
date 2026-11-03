@@ -3,7 +3,7 @@
 Histórico anterior completo em [GitHub Releases](https://github.com/prefeiturasp/SME-BensFisicos-BackEnd/releases).
 
 ## Não lançado
-- Lote 1 da padronização (estrutura segura): criado `.env.example` e enxugado `.gitignore`.
+- Padronização da estrutura (etapa segura): criado `.env.example` e enxugado `.gitignore`.
 - Criados `CHANGELOG.md` e `sonar-project.properties` como base da padronização.
 
 ## 2.7.0 - 2026-11-03

@@ -1,6 +1,9 @@
 COMPOSE_DEV ?= docker compose -f docker-compose-dev.yml
-RUN_WEB = $(COMPOSE_DEV) run --rm web
-RUN_WEB_NODEPS = $(COMPOSE_DEV) run --rm --no-deps web
+# Roda como o usuário do host para não gerar arquivos como root no volume montado
+# (a imagem dev usa usuário não-root).
+RUN_USER ?= --user $(shell id -u):$(shell id -g)
+RUN_WEB = $(COMPOSE_DEV) run --rm $(RUN_USER) web
+RUN_WEB_NODEPS = $(COMPOSE_DEV) run --rm --no-deps $(RUN_USER) web
 PYTEST_ARGS ?= -q -p no:cacheprovider
 
 .PHONY: help ensure-env up down logs shell migrate init-db seed-base setup-grupos-permissoes test coverage lint typecheck schema docs docs-clean precommit quality clean-local
@@ -82,7 +85,7 @@ docs-clean:
 	rm -rf docs/_build docs/_cov
 
 precommit: ensure-env
-	$(RUN_WEB_NODEPS) sh -c 'git config --global --add safe.directory /code && python -m pre_commit run --files $$(find bem_patrimonial usuario inventario dados_comuns config docs scripts -type f) .env.example .gitignore .pre-commit-config.yaml Dockerfile Dockerfile.dev docker-compose-dev.yml pyproject.toml README.md CHANGELOG.md Makefile manage.py'
+	$(RUN_WEB_NODEPS) sh -c 'export HOME=/tmp && git config --global --add safe.directory /code && python -m pre_commit run --files $$(find bem_patrimonial usuario inventario dados_comuns config docs scripts -type f) .env.example .gitignore .pre-commit-config.yaml Dockerfile Dockerfile.dev docker-compose-dev.yml pyproject.toml README.md CHANGELOG.md Makefile manage.py'
 
 quality: lint typecheck test docs
 
