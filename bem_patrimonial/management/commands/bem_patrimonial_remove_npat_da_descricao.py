@@ -7,10 +7,7 @@ from bem_patrimonial.models import NPAT_NUM_REGEX, BemPatrimonial
 
 
 class Command(BaseCommand):
-    help = (
-        "Remove o número patrimonial da descrição dos bens e limpa caracteres "
-        "especiais no início da descrição."
-    )
+    help = "Remove o número patrimonial da descrição dos bens e limpa caracteres " "especiais no início da descrição."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -34,8 +31,7 @@ class Command(BaseCommand):
             return False
         self.stdout.write(
             self.style.WARNING(
-                f"[#{bem.pk}] Número '{numero}' deveria ser formato novo "
-                f"mas não bate regex. Ignorando."
+                f"[#{bem.pk}] Número '{numero}' deveria ser formato novo " f"mas não bate regex. Ignorando."
             )
         )
         return True
@@ -55,9 +51,7 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
         limit = options["limit"]
 
-        qs = BemPatrimonial.objects.exclude(numero_patrimonial__isnull=True).exclude(
-            numero_patrimonial__exact=""
-        )
+        qs = BemPatrimonial.objects.exclude(numero_patrimonial__isnull=True).exclude(numero_patrimonial__exact="")
         if limit:
             qs = qs[:limit]
 
@@ -65,10 +59,7 @@ class Command(BaseCommand):
         total_alterados = 0
 
         self.stdout.write(
-            self.style.WARNING(
-                f"Processando {qs.count()} bens "
-                f"({'DRY RUN' if dry_run else 'EXECUÇÃO REAL'})..."
-            )
+            self.style.WARNING(f"Processando {qs.count()} bens " f"({'DRY RUN' if dry_run else 'EXECUÇÃO REAL'})...")
         )
 
         with transaction.atomic():
@@ -80,9 +71,7 @@ class Command(BaseCommand):
                 if self._deve_ignorar_bem(bem, numero):
                     continue
 
-                descricao_limpa, alterou = self._processar_descricao_bem(
-                    numero, descricao_original
-                )
+                descricao_limpa, alterou = self._processar_descricao_bem(numero, descricao_original)
 
                 if not alterou:
                     continue

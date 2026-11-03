@@ -47,9 +47,7 @@ class ParametroConciliacaoAnualListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class ParametroConciliacaoAnualDetailSerializer(
-    ParametroConciliacaoAnualListSerializer
-):
+class ParametroConciliacaoAnualDetailSerializer(ParametroConciliacaoAnualListSerializer):
     class Meta(ParametroConciliacaoAnualListSerializer.Meta):
         read_only_fields = ["id", "esta_vigente"]
 
@@ -63,10 +61,7 @@ def _resumo_situacoes(conciliacao):
         ("baixa_fisica", constants.BAIXA_FISICA),
         ("encontrados_com_divergencia", constants.ENCONTRADO),
     ]
-    return {
-        chave: conciliacao.itens.filter(situacao=valor).count()
-        for chave, valor in situacoes
-    }
+    return {chave: conciliacao.itens.filter(situacao=valor).count() for chave, valor in situacoes}
 
 
 class ConciliacaoUACreateSerializer(serializers.ModelSerializer):
@@ -95,12 +90,8 @@ class ConciliacaoUACreateSerializer(serializers.ModelSerializer):
         user = getattr(request, "user", None)
 
         if "unidade_administrativa" in self.fields and user is not None:
-            base_qs = UnidadeAdministrativa.objects.filter(
-                status=UnidadeAdministrativa.ATIVA
-            )
-            self.fields["unidade_administrativa"].queryset = (
-                filtrar_ua_origem_por_escopo(user, base_qs)
-            )
+            base_qs = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
+            self.fields["unidade_administrativa"].queryset = filtrar_ua_origem_por_escopo(user, base_qs)
 
     def validate_tipo(self, value):
         if value is None:
@@ -118,9 +109,7 @@ class ConciliacaoUACreateSerializer(serializers.ModelSerializer):
 
         unidade_administrativa = attrs.get("unidade_administrativa")
         if unidade_administrativa is None:
-            raise serializers.ValidationError(
-                {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
-            )
+            raise serializers.ValidationError({"unidade_administrativa": "Unidade Administrativa é obrigatória."})
 
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -131,9 +120,7 @@ class ConciliacaoUACreateSerializer(serializers.ModelSerializer):
         periodo_final = attrs.get("periodo_final")
 
         if tipo == constants.CONCILIACAO_EVENTUAL and not periodo_final:
-            raise serializers.ValidationError(
-                {"periodo_final": "Este campo é obrigatório para conciliação eventual."}
-            )
+            raise serializers.ValidationError({"periodo_final": "Este campo é obrigatório para conciliação eventual."})
 
         if tipo == constants.CONCILIACAO_EVENTUAL and periodo_final:
             hoje = timezone.localdate()
@@ -159,11 +146,7 @@ class ConciliacaoUACreateSerializer(serializers.ModelSerializer):
         )
         if not allowed_qs.filter(pk=unidade_administrativa.pk).exists():
             raise serializers.ValidationError(
-                {
-                    "unidade_administrativa": (
-                        "Você não tem permissão para usar esta Unidade Administrativa."
-                    )
-                }
+                {"unidade_administrativa": ("Você não tem permissão para usar esta Unidade Administrativa.")}
             )
 
     def _validar_sem_conciliacao_aberta(self, unidade_administrativa):
@@ -229,9 +212,7 @@ class ConciliacaoUAListSerializer(serializers.ModelSerializer):
         read_only=True,
         default="",
     )
-    status_display = serializers.CharField(
-        source="get_status_display", read_only=True
-    )
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
     tipo_display = serializers.CharField(source="get_tipo_display", read_only=True)
     total_itens = serializers.SerializerMethodField()
     resumo_situacoes = serializers.SerializerMethodField()
@@ -274,18 +255,10 @@ class ConciliacaoUAListSerializer(serializers.ModelSerializer):
 
 
 class ConciliacaoUADetailSerializer(ConciliacaoUAListSerializer):
-    criado_por_nome = serializers.CharField(
-        source="criado_por.nome", read_only=True, default=""
-    )
-    criado_por_rf = serializers.CharField(
-        source="criado_por.rf", read_only=True, default=""
-    )
-    fechado_por_nome = serializers.CharField(
-        source="fechado_por.nome", read_only=True, default=""
-    )
-    fechado_por_rf = serializers.CharField(
-        source="fechado_por.rf", read_only=True, default=""
-    )
+    criado_por_nome = serializers.CharField(source="criado_por.nome", read_only=True, default="")
+    criado_por_rf = serializers.CharField(source="criado_por.rf", read_only=True, default="")
+    fechado_por_nome = serializers.CharField(source="fechado_por.nome", read_only=True, default="")
+    fechado_por_rf = serializers.CharField(source="fechado_por.rf", read_only=True, default="")
     esta_aberto = serializers.BooleanField(read_only=True)
 
     class Meta(ConciliacaoUAListSerializer.Meta):
@@ -310,24 +283,16 @@ class BemPatrimonialSimplificadoSerializer(serializers.Serializer):
     descricao = serializers.CharField(read_only=True)
     marca = serializers.CharField(read_only=True)
     modelo = serializers.CharField(read_only=True)
-    valor_unitario = serializers.DecimalField(
-        max_digits=16, decimal_places=2, read_only=True
-    )
+    valor_unitario = serializers.DecimalField(max_digits=16, decimal_places=2, read_only=True)
     status = serializers.CharField(read_only=True)
     localizacao = serializers.CharField(read_only=True)
     bloqueado_conciliacao = serializers.BooleanField(read_only=True)
 
 
 class OcorrenciaConciliacaoSerializer(serializers.ModelSerializer):
-    situacao_display = serializers.CharField(
-        source="get_situacao_display", read_only=True
-    )
-    registrado_por_nome = serializers.CharField(
-        source="registrado_por.nome", read_only=True, default=""
-    )
-    registrado_por_rf = serializers.CharField(
-        source="registrado_por.rf", read_only=True, default=""
-    )
+    situacao_display = serializers.CharField(source="get_situacao_display", read_only=True)
+    registrado_por_nome = serializers.CharField(source="registrado_por.nome", read_only=True, default="")
+    registrado_por_rf = serializers.CharField(source="registrado_por.rf", read_only=True, default="")
 
     class Meta:
         model = OcorrenciaConciliacao
@@ -347,24 +312,14 @@ class OcorrenciaConciliacaoSerializer(serializers.ModelSerializer):
 
 class ItemConciliacaoListSerializer(serializers.ModelSerializer):
     bem = BemPatrimonialSimplificadoSerializer(read_only=True)
-    situacao_display = serializers.CharField(
-        source="get_situacao_display", read_only=True
-    )
-    conciliacao_numero = serializers.CharField(
-        source="conciliacao.numero_conciliacao", read_only=True
-    )
-    conciliacao_status = serializers.CharField(
-        source="conciliacao.status", read_only=True
-    )
-    unidade_administrativa = serializers.IntegerField(
-        source="conciliacao.unidade_administrativa_id", read_only=True
-    )
+    situacao_display = serializers.CharField(source="get_situacao_display", read_only=True)
+    conciliacao_numero = serializers.CharField(source="conciliacao.numero_conciliacao", read_only=True)
+    conciliacao_status = serializers.CharField(source="conciliacao.status", read_only=True)
+    unidade_administrativa = serializers.IntegerField(source="conciliacao.unidade_administrativa_id", read_only=True)
     unidade_administrativa_sigla = serializers.CharField(
         source="conciliacao.unidade_administrativa.sigla", read_only=True
     )
-    atualizado_por_nome = serializers.CharField(
-        source="atualizado_por.nome", read_only=True, default=""
-    )
+    atualizado_por_nome = serializers.CharField(source="atualizado_por.nome", read_only=True, default="")
     tem_ocorrencia = serializers.BooleanField(read_only=True)
     permite_registrar_ocorrencia = serializers.BooleanField(read_only=True)
 
@@ -395,9 +350,7 @@ class ItemConciliacaoDetailSerializer(ItemConciliacaoListSerializer):
     ocorrencias = OcorrenciaConciliacaoSerializer(many=True, read_only=True)
     pode_marcar_como_encontrado = serializers.BooleanField(read_only=True)
     pode_resolver_situacao = serializers.BooleanField(read_only=True)
-    conciliacao_esta_aberto = serializers.BooleanField(
-        source="conciliacao.esta_aberto", read_only=True
-    )
+    conciliacao_esta_aberto = serializers.BooleanField(source="conciliacao.esta_aberto", read_only=True)
 
     class Meta(ItemConciliacaoListSerializer.Meta):
         fields = ItemConciliacaoListSerializer.Meta.fields + [

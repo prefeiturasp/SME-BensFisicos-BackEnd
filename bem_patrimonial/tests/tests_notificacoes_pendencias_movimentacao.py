@@ -132,9 +132,7 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
 
 class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
     def setUp(self):
-        self.ua_origem = criar_ua(
-            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 30), sigla="UA-O"
-        )
+        self.ua_origem = criar_ua(nome="UA Origem", codigo=codigo_ua(0, 0, 0, 30), sigla="UA-O")
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
@@ -220,9 +218,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         kwargs = mock_envia.call_args.kwargs
         self.assertEqual(args[0], self.ua_destino)
         self.assertEqual(len(args[1]), 1)
-        self.assertEqual(
-            sorted(args[2]), sorted(["operador@test.com", "gestor@test.com"])
-        )
+        self.assertEqual(sorted(args[2]), sorted(["operador@test.com", "gestor@test.com"]))
         self.assertEqual(len(args[2]), len(set(args[2])))
         self.assertEqual(kwargs.get("dias_minimo"), 7)
         self.assertEqual(kwargs.get("dias_urgente"), 30)

@@ -21,6 +21,4 @@ CSRF_COOKIE_SECURE = True
 # Email
 # https://docs.djangoproject.com/en/4.1/topics/email/
 
-EMAIL_BACKEND = env(
-    "DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
-)
+EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")

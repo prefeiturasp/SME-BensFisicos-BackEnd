@@ -44,9 +44,7 @@ class AnoVigenciaSelectFilter(SimpleListFilter):
     template = "admin/filters/ano_select.html"
 
     def lookups(self, request, model_admin):
-        anos = ConciliacaoUA.objects.exclude(periodo_final__isnull=True).dates(
-            "periodo_final", "year", order="DESC"
-        )
+        anos = ConciliacaoUA.objects.exclude(periodo_final__isnull=True).dates("periodo_final", "year", order="DESC")
         return [(str(a.year), str(a.year)) for a in anos]
 
     def queryset(self, request, queryset):
@@ -81,16 +79,12 @@ class ParametroConciliacaoAnualAdminForm(forms.ModelForm):
                 fld.initial = uo_user.pk
 
                 if not fld.queryset.filter(pk=uo_user.pk).exists():
-                    fld.queryset = (
-                        fld.queryset.model.objects.filter(pk=uo_user.pk) | fld.queryset
-                    )
+                    fld.queryset = fld.queryset.model.objects.filter(pk=uo_user.pk) | fld.queryset
 
                 fld.disabled = True
 
             if not uo_user and user and not usuario_e_super_admin(user):
-                raise ValidationError(
-                    "Usuário precisa estar vinculado a uma Unidade Orçamentária (UO)."
-                )
+                raise ValidationError("Usuário precisa estar vinculado a uma Unidade Orçamentária (UO).")
 
         if self.instance and self.instance.pk and "unidade_orcamentaria" in self.fields:
             self.fields["unidade_orcamentaria"].disabled = True
@@ -102,26 +96,16 @@ class ParametroConciliacaoAnualAdminForm(forms.ModelForm):
         if user and not usuario_e_super_admin(user):
             uo_user = getattr(user, "unidade_orcamentaria", None)
             if not uo_user:
-                raise ValidationError(
-                    "Usuário precisa estar vinculado a uma Unidade Orçamentária (UO)."
-                )
+                raise ValidationError("Usuário precisa estar vinculado a uma Unidade Orçamentária (UO).")
 
             cleaned["unidade_orcamentaria"] = uo_user
 
         if user and not usuario_e_super_admin(user):
             _is_super, _is_gestor, _ua_id, user_uo_id = resolver_ids_escopo(user)
 
-            cleaned_uo_id = (
-                cleaned.get("unidade_orcamentaria").id
-                if cleaned.get("unidade_orcamentaria")
-                else None
-            )
+            cleaned_uo_id = cleaned.get("unidade_orcamentaria").id if cleaned.get("unidade_orcamentaria") else None
             if cleaned_uo_id != user_uo_id:
-                raise ValidationError(
-                    {
-                        "unidade_orcamentaria": "Você não tem permissão para usar esta UO."
-                    }
-                )
+                raise ValidationError({"unidade_orcamentaria": "Você não tem permissão para usar esta UO."})
 
         return cleaned
 
@@ -283,18 +267,13 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         return super().history_view(request, object_id, extra_context)
 
     def get_search_results(self, request, queryset, search_term):
-        queryset, use_distinct = super().get_search_results(
-            request, queryset, search_term
-        )
+        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
 
         termo = (search_term or "").strip()
         if not termo:
             return queryset, use_distinct
 
-        queryset = queryset.filter(
-            Q(bem__numero_patrimonial__icontains=termo)
-            | Q(bem__nome__icontains=termo)
-        )
+        queryset = queryset.filter(Q(bem__numero_patrimonial__icontains=termo) | Q(bem__nome__icontains=termo))
         return queryset, use_distinct
 
     def changelist_view(self, request, extra_context=None):
@@ -302,15 +281,17 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         conciliacao_id = request.GET.get("conciliacao__id__exact")
 
         if conciliacao_id:
-            conciliacao = filtrar_queryset_por_escopo(
-                usuario=request.user,
-                queryset=ConciliacaoUA.objects.select_related("unidade_administrativa"),
-                campo_ua="unidade_administrativa",
-            ).filter(pk=conciliacao_id).first()
-            if conciliacao:
-                extra_context["title"] = (
-                    f"Itens da Conciliação {conciliacao.numero_conciliacao}"
+            conciliacao = (
+                filtrar_queryset_por_escopo(
+                    usuario=request.user,
+                    queryset=ConciliacaoUA.objects.select_related("unidade_administrativa"),
+                    campo_ua="unidade_administrativa",
                 )
+                .filter(pk=conciliacao_id)
+                .first()
+            )
+            if conciliacao:
+                extra_context["title"] = f"Itens da Conciliação {conciliacao.numero_conciliacao}"
                 extra_context["conciliacao_origem"] = conciliacao
                 extra_context["voltar_conciliacao_url"] = reverse(
                     URL_NAME_CONCILIACAOUA_CHANGE,
@@ -348,8 +329,8 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
 
         return format_html(
             '<span style="display:inline-flex; align-items:center; justify-content:center; '
-            'white-space:nowrap; min-width: 148px; box-sizing: border-box; '
-            'background-color: {}; color: {}; padding: 3px 8px; '
+            "white-space:nowrap; min-width: 148px; box-sizing: border-box; "
+            "background-color: {}; color: {}; padding: 3px 8px; "
             'border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.2;">{}</span>',
             cor_fundo,
             cor_texto,
@@ -566,9 +547,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         extra_context["show_save"] = (obj is None) or (obj and obj.esta_aberto)
         if obj:
-            extra_context["itens_conciliacao_url"] = self._get_itens_conciliacao_url(
-                obj
-            )
+            extra_context["itens_conciliacao_url"] = self._get_itens_conciliacao_url(obj)
 
         return super().changeform_view(request, object_id, form_url, extra_context)
 
@@ -612,8 +591,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         cor = cores.get(obj.status, "#000")
 
         return format_html(
-            '<span style="background-color: {}; color: white; padding: 2px 4px; '
-            'border-radius: 3px;">{}</span>',
+            '<span style="background-color: {}; color: white; padding: 2px 4px; ' 'border-radius: 3px;">{}</span>',
             cor,
             obj.get_status_display(),
         )
@@ -624,9 +602,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     def periodo_display(self, obj):
         if not obj.periodo_final:
             return "-"
-        return format_html(
-            "<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y")
-        )
+        return format_html("<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y"))
 
     periodo_display.short_description = "Período"
     periodo_display.admin_order_field = "periodo_final"
@@ -637,16 +613,10 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         total = obj.itens.count()
         por_situacao = {
-            "Encontrados": obj.itens.filter(
-                situacao=constants.ENCONTRADO_SEM_DIVERGENCIA
-            ).count(),
-            "Não encontrados": obj.itens.filter(
-                situacao=constants.NAO_ENCONTRADO
-            ).count(),
+            "Encontrados": obj.itens.filter(situacao=constants.ENCONTRADO_SEM_DIVERGENCIA).count(),
+            "Não encontrados": obj.itens.filter(situacao=constants.NAO_ENCONTRADO).count(),
             "Divergentes": obj.itens.filter(situacao=constants.DIVERGENTE).count(),
-            "Em processo de baixa": obj.itens.filter(
-                situacao=constants.EM_PROCESSO_BAIXA_FISICA
-            ).count(),
+            "Em processo de baixa": obj.itens.filter(situacao=constants.EM_PROCESSO_BAIXA_FISICA).count(),
             "Baixa Física": obj.itens.filter(situacao=constants.BAIXA_FISICA).count(),
         }
 
@@ -663,8 +633,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     def acao_visualizar(self, obj):
         url = reverse(URL_NAME_CONCILIACAOUA_CHANGE, args=[obj.pk])
         return format_html(
-            '<a class="button" href="{}" '
-            'style="padding: 4px 12px; font-size: 12px; color: white;">Visualizar</a>',
+            '<a class="button" href="{}" ' 'style="padding: 4px 12px; font-size: 12px; color: white;">Visualizar</a>',
             url,
         )
 
@@ -719,8 +688,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         messages.error(
             request,
-            "Bem com status 'Baixa Física' não pode ter ocorrência registrada. "
-            "Este status é definitivo.",
+            "Bem com status 'Baixa Física' não pode ter ocorrência registrada. " "Este status é definitivo.",
         )
         return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
@@ -744,27 +712,17 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
     def _get_situacoes_disponiveis_para_item(self, item):
         situacoes_disponiveis = list(constants.SITUACOES_ITEM_CONCILIACAO)
-        situacoes_disponiveis = [
-            s for s in situacoes_disponiveis if s[0] != constants.BAIXA_FISICA
-        ]
+        situacoes_disponiveis = [s for s in situacoes_disponiveis if s[0] != constants.BAIXA_FISICA]
 
         if not item.pode_resolver_situacao:
-            situacoes_disponiveis = [
-                s
-                for s in situacoes_disponiveis
-                if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
-            ]
+            situacoes_disponiveis = [s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA]
 
         if not item.pode_marcar_como_encontrado:
-            situacoes_disponiveis = [
-                s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO
-            ]
+            situacoes_disponiveis = [s for s in situacoes_disponiveis if s[0] != constants.ENCONTRADO]
 
         return situacoes_disponiveis
 
-    def _get_registrar_ocorrencia_context(
-        self, request, item, voltar_url, erro_formulario
-    ):
+    def _get_registrar_ocorrencia_context(self, request, item, voltar_url, erro_formulario):
         is_edicao = item.tem_ocorrencia
         return {
             **self.admin_site.each_context(request),
@@ -843,9 +801,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             messages.error(request, "Conciliação fechada não permite edições")
             return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 
-        voltar_url = request.GET.get("next") or self._get_itens_conciliacao_url(
-            item.conciliacao
-        )
+        voltar_url = request.GET.get("next") or self._get_itens_conciliacao_url(item.conciliacao)
 
         if request.method == "POST":
             try:

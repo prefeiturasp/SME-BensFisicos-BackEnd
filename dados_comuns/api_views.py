@@ -181,9 +181,7 @@ class AuditHistoryExportMixin:
             content_type = "application/vnd.ms-excel"
         else:
             content = dataset.xlsx
-            content_type = (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -644,10 +642,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
         # ordenação em seguida, o que poderia gerar duplicidade de linhas.
         usuario_ids = (
             filtrar_queryset_usuario_por_escopo(request.user, User.objects.all())
-            .filter(
-                Q(unidade_administrativa_id=unidade.id)
-                | Q(unidades_administrativas__id=unidade.id)
-            )
+            .filter(Q(unidade_administrativa_id=unidade.id) | Q(unidades_administrativas__id=unidade.id))
             .values_list("id", flat=True)
             .distinct()
         )
@@ -656,9 +651,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
         search_term = (request.query_params.get("search") or "").strip()
         if search_term:
             queryset = queryset.filter(
-                Q(nome__icontains=search_term)
-                | Q(username__icontains=search_term)
-                | Q(rf__icontains=search_term)
+                Q(nome__icontains=search_term) | Q(username__icontains=search_term) | Q(rf__icontains=search_term)
             )
 
         ordering_param = request.query_params.get("ordering") or ""
@@ -717,9 +710,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
             nova_uo = instance.unidade_orcamentaria
 
         if nova_uo is None:
-            raise DRFValidationError(
-                {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-            )
+            raise DRFValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
         if getattr(user, "is_superuser", False):
             return

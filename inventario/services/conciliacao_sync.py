@@ -10,9 +10,7 @@ def _conciliacoes_em_aberto(ua_id):
     if not ua_id:
         return ConciliacaoUA.objects.none()
 
-    return ConciliacaoUA.objects.filter(
-        unidade_administrativa_id=ua_id, status=inv_constants.CONCILIACAO_EM_ABERTO
-    )
+    return ConciliacaoUA.objects.filter(unidade_administrativa_id=ua_id, status=inv_constants.CONCILIACAO_EM_ABERTO)
 
 
 def _status_pendente_acao(bem):
@@ -42,9 +40,7 @@ def remover_bem_de_conciliacoes_em_aberto(bem_id, ua_id):
     if not ua_id:
         return
 
-    ItemConciliacao.objects.filter(
-        bem_id=bem_id, conciliacao__in=_conciliacoes_em_aberto(ua_id)
-    ).delete()
+    ItemConciliacao.objects.filter(bem_id=bem_id, conciliacao__in=_conciliacoes_em_aberto(ua_id)).delete()
 
 
 @transaction.atomic

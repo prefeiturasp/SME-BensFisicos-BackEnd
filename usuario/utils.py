@@ -13,11 +13,7 @@ def atribuir_permissao(grupo, settings):
             for verb in verb_options:
                 if (verb + key == permission.codename) and verb in verbs_by_key:
                     grupo.permissions.add(permission)
-                    print(
-                        "Permissão adicionada ao grupo {} => {}".format(
-                            grupo, permission.codename
-                        )
-                    )
+                    print("Permissão adicionada ao grupo {} => {}".format(grupo, permission.codename))
 
 
 def setup_grupos_e_permissoes():

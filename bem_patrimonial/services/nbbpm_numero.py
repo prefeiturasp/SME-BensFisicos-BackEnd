@@ -153,7 +153,9 @@ def _validar_uo_baixas(baixas):
         uo_id = getattr(ua, "unidade_orcamentaria_id", None)
         if uo_id is None:
             try:
-                uo_id = getattr(ua.unidade_orcamentaria, "pk", None) if getattr(ua, "unidade_orcamentaria", None) else None
+                uo_id = (
+                    getattr(ua.unidade_orcamentaria, "pk", None) if getattr(ua, "unidade_orcamentaria", None) else None
+                )
             except Exception:
                 uo_id = None
         uo_ids.add(uo_id)
@@ -204,7 +206,17 @@ def _rotulo_uo_de_baixa(baixa):
     return "-"
 
 
-def _criar_nbbpm_atomico(baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final, ano, uo_ids, tentativa):
+def _criar_nbbpm_atomico(
+    baixas,
+    numero_processo_baixa,
+    data_autorizacao,
+    responsavel,
+    criado_por,
+    numero_processo_destinacao_final,
+    ano,
+    uo_ids,
+    tentativa,
+):
     from bem_patrimonial.models import NBBPM, BaixaFisicaBemPatrimonial
 
     baixa_ids = [b.pk for b in baixas]
@@ -312,7 +324,16 @@ def _registrar_historico_baixas_nbbpm(nbbpm, criado_por, uo_ids, locked):
         HistoricoGeral.objects.bulk_create(registros)
 
 
-def criar_nbbpm_com_retry(*, baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final="", max_tentativas=3):
+def criar_nbbpm_com_retry(
+    *,
+    baixas,
+    numero_processo_baixa,
+    data_autorizacao,
+    responsavel,
+    criado_por,
+    numero_processo_destinacao_final="",
+    max_tentativas=3,
+):
     """Cria NBBPM com select_for_update e retry em IntegrityError. Sequencial global por ano, escopo por UO."""
     if not baixas:
         raise ValidationError("Selecione ao menos uma Baixa.")
@@ -329,7 +350,15 @@ def criar_nbbpm_com_retry(*, baixas, numero_processo_baixa, data_autorizacao, re
         try:
             with transaction.atomic():
                 return _criar_nbbpm_atomico(
-                    baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final, ano, uo_ids, tentativa + 1
+                    baixas,
+                    numero_processo_baixa,
+                    data_autorizacao,
+                    responsavel,
+                    criado_por,
+                    numero_processo_destinacao_final,
+                    ano,
+                    uo_ids,
+                    tentativa + 1,
                 )
         except IntegrityError as exc:
             logger.warning(

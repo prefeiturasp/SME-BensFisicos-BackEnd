@@ -313,10 +313,7 @@ class BemPatrimonialResource(resources.ModelResource):
         importação; linhas parcialmente preenchidas NÃO entram aqui e seguem
         para a validação normal (podendo gerar erro por campo obrigatório).
         """
-        return all(
-            self._normalizar_valor(row.get(coluna)) == ""
-            for coluna in COLUNAS_MODELO
-        )
+        return all(self._normalizar_valor(row.get(coluna)) == "" for coluna in COLUNAS_MODELO)
 
     def _remover_linhas_vazias(self, dataset):
         """
@@ -333,9 +330,7 @@ class BemPatrimonialResource(resources.ModelResource):
         linhas = dataset.dict
         # Números originais (1-based) das linhas que NÃO são vazias, em ordem.
         self._numeros_linha_originais = [
-            idx
-            for idx, row in enumerate(linhas, start=1)
-            if not self._linha_completamente_vazia(row)
+            idx for idx, row in enumerate(linhas, start=1) if not self._linha_completamente_vazia(row)
         ]
 
         removidas = 0
@@ -358,12 +353,14 @@ class BemPatrimonialResource(resources.ModelResource):
 
     def _registrar_erro(self, linha: int, numero_patrimonial: str, campo: str, mensagem: str):
         """Registra erro padronizado: {linha, numero_patrimonial, campo, mensagem}"""
-        self._erros_por_linha.append({
-            "linha": linha,
-            "numero_patrimonial": numero_patrimonial or "-",
-            "campo": campo,
-            "mensagem": mensagem,
-        })
+        self._erros_por_linha.append(
+            {
+                "linha": linha,
+                "numero_patrimonial": numero_patrimonial or "-",
+                "campo": campo,
+                "mensagem": mensagem,
+            }
+        )
 
     def _parse_valor_unitario(self, raw: str, linha: int, numero_patrimonial: str):
         """Converte string para Decimal. Registra erro e retorna None se inválido."""
@@ -372,19 +369,16 @@ class BemPatrimonialResource(resources.ModelResource):
             return None
         try:
             from decimal import Decimal, InvalidOperation
+
             normalizado = raw.strip().replace(".", "").replace(",", ".")
             valor = Decimal(normalizado)
         except (InvalidOperation, ValueError):
             self._registrar_erro(
-                linha, numero_patrimonial, "valor_unitario",
-                "Valor inválido. Use o formato 0,00 ou 0.000,00."
+                linha, numero_patrimonial, "valor_unitario", "Valor inválido. Use o formato 0,00 ou 0.000,00."
             )
             return None
         if valor < 0:
-            self._registrar_erro(
-                linha, numero_patrimonial, "valor_unitario",
-                "O valor unitário não pode ser negativo."
-            )
+            self._registrar_erro(linha, numero_patrimonial, "valor_unitario", "O valor unitário não pode ser negativo.")
             return None
         return valor
 
@@ -424,9 +418,7 @@ class BemPatrimonialResource(resources.ModelResource):
         A comparação considera o valor já normalizado (máscara padrão),
         de modo que "10538588879" e "001.053858887-9" são a mesma chave.
         """
-        normalizado, sem_numeracao, _ = self._normalizar_numero_patrimonial(
-            numero_patrimonial
-        )
+        normalizado, sem_numeracao, _ = self._normalizar_numero_patrimonial(numero_patrimonial)
         if sem_numeracao or not normalizado:
             return
 
@@ -435,21 +427,17 @@ class BemPatrimonialResource(resources.ModelResource):
 
         if linha_anterior:
             self._registrar_erro(
-                idx, normalizado, "numero_patrimonial",
-                f"Número patrimonial duplicado no arquivo. "
-                f"Primeira ocorrência na linha {linha_anterior}."
+                idx,
+                normalizado,
+                "numero_patrimonial",
+                f"Número patrimonial duplicado no arquivo. " f"Primeira ocorrência na linha {linha_anterior}.",
             )
             return
 
         numeros_vistos[numero_key] = idx
 
-        if BemPatrimonial.objects.filter(
-            numero_patrimonial__iexact=normalizado
-        ).exists():
-            self._registrar_erro(
-                idx, normalizado, "numero_patrimonial",
-                "Número patrimonial já cadastrado no sistema."
-            )
+        if BemPatrimonial.objects.filter(numero_patrimonial__iexact=normalizado).exists():
+            self._registrar_erro(idx, normalizado, "numero_patrimonial", "Número patrimonial já cadastrado no sistema.")
 
     def _validar_dataset_completo(self, dataset):
         """
@@ -468,9 +456,7 @@ class BemPatrimonialResource(resources.ModelResource):
 
             self._validar_campos_obrigatorios(linha_original, numero_para_erro, row)
             self._parse_valor_unitario(valor_raw, linha_original, numero_para_erro)
-            self._validar_numero_patrimonial(
-                linha_original, raw_numero, numeros_vistos
-            )
+            self._validar_numero_patrimonial(linha_original, raw_numero, numeros_vistos)
 
         return self._erros_por_linha
 
@@ -545,16 +531,12 @@ class BemPatrimonialResource(resources.ModelResource):
                     self.request,
                     "Importação não realizada: existe Conciliação em aberto.",
                 )
-            self._falhar_importacao(
-                "Importação não realizada: existe Conciliação em aberto."
-            )
+            self._falhar_importacao("Importação não realizada: existe Conciliação em aberto.")
 
     def _preparar_dataset(self, dataset):
         """Checa cabeçalho e remove linhas vazias, ou rejeita planilha vazia."""
         if len(dataset) == 0:
-            self._falhar_importacao(
-                "A planilha está vazia ou não contém linhas de dados."
-            )
+            self._falhar_importacao("A planilha está vazia ou não contém linhas de dados.")
 
         erro_cabecalho = self._validar_cabecalho(dataset)
         if erro_cabecalho:
@@ -569,46 +551,32 @@ class BemPatrimonialResource(resources.ModelResource):
         # Após remover as linhas vazias, a planilha pode ter ficado sem nenhuma
         # linha de dados — trata como planilha vazia.
         if len(dataset) == 0:
-            self._falhar_importacao(
-                "A planilha está vazia ou não contém linhas de dados."
-            )
+            self._falhar_importacao("A planilha está vazia ou não contém linhas de dados.")
 
     def _rejeitar_erros_dataset(self, erros):
         """Exibe os erros padronizados e rejeita a carga inteira."""
         if self.request:
             qtd = len(erros)
-            messages.error(
-                self.request,
-                f"Importação rejeitada: {qtd} linha(s) com erro. Nenhum bem foi importado."
-            )
+            messages.error(self.request, f"Importação rejeitada: {qtd} linha(s) com erro. Nenhum bem foi importado.")
             for erro in erros[:20]:
                 messages.warning(
                     self.request,
-                    f"Linha {erro['linha']} | {erro['numero_patrimonial']} | "
-                    f"{erro['campo']}: {erro['mensagem']}"
+                    f"Linha {erro['linha']} | {erro['numero_patrimonial']} | " f"{erro['campo']}: {erro['mensagem']}",
                 )
             if qtd > 20:
-                messages.warning(
-                    self.request,
-                    f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima."
-                )
+                messages.warning(self.request, f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima.")
         raise ValidationError(
-            f"Importação rejeitada: {len(erros)} linha(s) com erro. "
-            "Corrija o arquivo e tente novamente."
+            f"Importação rejeitada: {len(erros)} linha(s) com erro. " "Corrija o arquivo e tente novamente."
         )
 
     def before_import_row(self, row, row_number=None, **kwargs):
         """Força status, limpa ID, normaliza marca/modelo e valor_unitario."""
         if getattr(self, "_bloquear_linhas_por_erro", False):
-            raise ValidationError(
-                "Importação rejeitada: corrija o arquivo e tente novamente."
-            )
+            raise ValidationError("Importação rejeitada: corrija o arquivo e tente novamente.")
         # Remove colunas que não fazem parte do modelo de importação para
         # evitar que o django-import-export tente mapeá-las (ex: id, status
         # presentes em planilhas exportadas pelo próprio sistema).
-        colunas_extras = [
-            header for header in row.keys() if header.lower() not in COLUNAS_MODELO
-        ]
+        colunas_extras = [header for header in row.keys() if header.lower() not in COLUNAS_MODELO]
         for header in colunas_extras:
             del row[header]
 
@@ -639,9 +607,7 @@ class BemPatrimonialResource(resources.ModelResource):
                 instance.criado_por = self.request.user
             instance.unidade_administrativa = self._ua_para_importacao()
         instance.status = constants.AGUARDANDO_APROVACAO
-        normalizado, sem_numeracao, formato_antigo = self._normalizar_numero_patrimonial(
-            instance.numero_patrimonial
-        )
+        normalizado, sem_numeracao, formato_antigo = self._normalizar_numero_patrimonial(instance.numero_patrimonial)
         if sem_numeracao:
             instance.numero_patrimonial = None
             instance.sem_numeracao = True
@@ -752,9 +718,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             # 2ª etapa: campo oculto entrega o id (int).
             ua_id = valor
 
-        return (
-            uas_acessiveis_para_importacao(request.user).filter(id=ua_id).first()
-        )
+        return uas_acessiveis_para_importacao(request.user).filter(id=ua_id).first()
 
     list_filter = (
         StatusBemPatrimonialFilter,
@@ -795,9 +759,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
 
         if obj is None:
             return HttpResponseRedirect(
-                reverse(
-                    f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
-                )
+                reverse(f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist")
             )
 
         if not self.has_delete_permission(request, obj=obj):
@@ -808,9 +770,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
                 obj.delete()
             messages.success(request, _("Bem patrimonial apagado com sucesso."))
             return HttpResponseRedirect(
-                reverse(
-                    f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
-                )
+                reverse(f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist")
             )
 
         context = {
@@ -925,11 +885,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         if obj is not None:
             return obj
 
-        if (
-            request.user.is_superuser
-            or request.user.is_gestor_patrimonio
-            or request.user.is_operador_inventario
-        ):
+        if request.user.is_superuser or request.user.is_gestor_patrimonio or request.user.is_operador_inventario:
             base_qs = self.model._default_manager.all()
             model_field = from_field or self.model._meta.pk.attname
             try:
@@ -970,9 +926,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         if obj.status in constants.STATUS_FINAIS_BEM:
             return False
 
-        if not validar_objeto_no_escopo(
-            request.user, obj, campo_ua="unidade_administrativa"
-        ):
+        if not validar_objeto_no_escopo(request.user, obj, campo_ua="unidade_administrativa"):
             return False
 
         return True
@@ -988,9 +942,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             self_inner.fields["localizacao"].required = False
         fld = self_inner.fields["unidade_administrativa"]
         fld.required = True
-        qs_ativas = UnidadeAdministrativa.objects.filter(
-            status=UnidadeAdministrativa.ATIVA
-        )
+        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
         fld.queryset = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
         ua_user = getattr(request.user, "unidade_administrativa", None)
         if ua_user and not usuario_e_super_admin(request.user):
@@ -1000,24 +952,14 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
     def _validate_create_form_ua(self, cleaned_data, request):
         ua_form = cleaned_data.get("unidade_administrativa")
         if not ua_form:
-            raise ValidationError(
-                {"unidade_administrativa": "Selecione a Unidade Administrativa."}
-            )
+            raise ValidationError({"unidade_administrativa": "Selecione a Unidade Administrativa."})
         if ua_form.status != UnidadeAdministrativa.ATIVA:
-            raise ValidationError(
-                {
-                    "unidade_administrativa": "A Unidade Administrativa selecionada está inativa."
-                }
-            )
-        qs_ativas = UnidadeAdministrativa.objects.filter(
-            status=UnidadeAdministrativa.ATIVA
-        )
+            raise ValidationError({"unidade_administrativa": "A Unidade Administrativa selecionada está inativa."})
+        qs_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
         qs_permitidas = filtrar_ua_origem_por_escopo(request.user, qs_ativas)
         if not qs_permitidas.filter(pk=ua_form.pk).exists():
             raise ValidationError(
-                {
-                    "unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."
-                }
+                {"unidade_administrativa": "Você não tem permissão para usar essa Unidade Administrativa."}
             )
         ua_user = getattr(request.user, "unidade_administrativa", None)
         if ua_user and not ua_user.is_ativa:
@@ -1033,14 +975,10 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         ua_post = cleaned.get("unidade_administrativa") or ua_original
         if ua_post != ua_original:
             raise ValidationError(
-                {
-                    "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
-                }
+                {"unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."}
             )
         if not ua_post:
-            raise ValidationError(
-                {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
-            )
+            raise ValidationError({"unidade_administrativa": "Unidade Administrativa é obrigatória."})
 
         if not user.is_operador_inventario:
             nome_original = instance.nome
@@ -1055,10 +993,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             numero_alterado = numero_post != numero_original
 
             if (nome_alterado or numero_alterado) and not justificativa:
-                msg = (
-                    "A justificativa é obrigatória quando o Nome ou "
-                    "o Número Patrimonial forem alterados."
-                )
+                msg = "A justificativa é obrigatória quando o Nome ou " "o Número Patrimonial forem alterados."
                 raise ValidationError(
                     {
                         "justificativa": msg,
@@ -1100,9 +1035,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
 
             def clean(self_inner):
                 cleaned = super().clean()
-                admin_ref._validate_edit_form_ua(
-                    cleaned, getattr(self_inner, "instance", None), request.user
-                )
+                admin_ref._validate_edit_form_ua(cleaned, getattr(self_inner, "instance", None), request.user)
                 return cleaned
 
         return EditForm
@@ -1156,11 +1089,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         return request.GET.get("busca_geral_todas_uos") == "1"
 
     def _get_queryset_com_auditoria(self, request, aplicar_escopo=True):
-        qs = (
-            super()
-            .get_queryset(request)
-            .select_related("unidade_administrativa", "criado_por")
-        )
+        qs = super().get_queryset(request).select_related("unidade_administrativa", "criado_por")
 
         if aplicar_escopo:
             qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
@@ -1170,9 +1099,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
 
-        hist_qs = HistoricoGeral.objects.filter(
-            content_type=ct, object_id=pk_as_char
-        ).order_by("-alterado_em")
+        hist_qs = HistoricoGeral.objects.filter(content_type=ct, object_id=pk_as_char).order_by("-alterado_em")
 
         return qs.annotate(
             audit_last_at=Subquery(hist_qs.values("alterado_em")[:1]),
@@ -1183,13 +1110,9 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         queryset_ampliado = self._get_queryset_com_auditoria(request)
 
         if StatusBemPatrimonialFilter.deve_ocultar_transferidos(request):
-            queryset_ampliado = queryset_ampliado.exclude(
-                status=constants.TRANSFERIDO
-            )
+            queryset_ampliado = queryset_ampliado.exclude(status=constants.TRANSFERIDO)
 
-        qs, use_distinct = super().get_search_results(
-            request, queryset_ampliado, search_term
-        )
+        qs, use_distinct = super().get_search_results(request, queryset_ampliado, search_term)
 
         qs = filtrar_queryset_por_escopo(
             usuario=request.user,
@@ -1320,9 +1243,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             return None, f"Linha {idx}: Informe a Localização (obrigatória)."
 
         numero_patrimonial_raw = (row.get("numero_patrimonial") or "").strip()
-        numero_formato_antigo = self._add_view_multi_to_bool(
-            row.get("numero_formato_antigo")
-        )
+        numero_formato_antigo = self._add_view_multi_to_bool(row.get("numero_formato_antigo"))
         sem_numeracao = self._add_view_multi_to_bool(row.get("sem_numeracao"))
         numero_patrimonial = None if sem_numeracao else (numero_patrimonial_raw or None)
         bem = BemPatrimonial(
@@ -1373,9 +1294,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             )
             return super().add_view(request, form_url, extra_context)
         messages.success(request, f"{len(criados)} bens criados com sucesso.")
-        changelist_url = reverse(
-            f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
-        )
+        changelist_url = reverse(f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist")
         return HttpResponseRedirect(changelist_url)
 
     def add_view(self, request, form_url="", extra_context=None):
@@ -1395,9 +1314,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
 
         server_payload = request.POST.get("multi_payload") or "[]"
         is_multi_by_radio = request.POST.get("cadastro_modo") == "multi"
-        has_rows_payload = bool(
-            server_payload.strip()
-        ) and server_payload.strip() not in ("[]", "")
+        has_rows_payload = bool(server_payload.strip()) and server_payload.strip() not in ("[]", "")
         force_multi = "1" if (is_multi_by_radio or has_rows_payload) else "0"
 
         from django.utils.safestring import mark_safe
@@ -1436,9 +1353,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             return "—"
         user_model = get_user_model()
         try:
-            u = user_model.objects.only("first_name", "last_name", "username").get(
-                id=user_id
-            )
+            u = user_model.objects.only("first_name", "last_name", "username").get(id=user_id)
             return u.get_full_name() or u.username
         except user_model.DoesNotExist:
             return "—"
@@ -1462,13 +1377,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
     @admin.display(description="Pré-visualização")
     def foto_preview(self, obj):
         try:
-            if (
-                obj
-                and obj.pk
-                and getattr(obj, "foto", None)
-                and hasattr(obj.foto, "url")
-                and obj.foto.url
-            ):
+            if obj and obj.pk and getattr(obj, "foto", None) and hasattr(obj.foto, "url") and obj.foto.url:
                 return format_html(
                     '<a href="{}" target="_blank" rel="noopener">'
                     '<img src="{}" style="max-height:200px;border-radius:8px;border:1px solid #e5e7eb;padding:4px;background:#fff;" />'  # noqa E501
@@ -1487,8 +1396,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
 
         if not (
             app_label == "bem_patrimonial"
-            and model_name
-            in ("movimentacaobensitem", "baixafisicabensitem", "transferenciabensitem")
+            and model_name in ("movimentacaobensitem", "baixafisicabensitem", "transferenciabensitem")
             and field_name == "bem"
         ):
             return qs, use_distinct
@@ -1500,9 +1408,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             if not uo_referencia_id:
                 return qs.none(), use_distinct
 
-            qs = qs.filter(
-                unidade_administrativa__unidade_orcamentaria_id=uo_referencia_id
-            )
+            qs = qs.filter(unidade_administrativa__unidade_orcamentaria_id=uo_referencia_id)
 
             ua_origem = request.GET.get("ua_origem")
             uo_origem = request.GET.get("uo_origem")
@@ -1561,18 +1467,12 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
                     queryset=qs,
                     campo_ua="unidade_administrativa",
                 )
-            return self._aplicar_filtros_autocomplete_bem(
-                request, qs, use_distinct
-            )
+            return self._aplicar_filtros_autocomplete_bem(request, qs, use_distinct)
 
         if not self._deve_aplicar_busca_geral_todas_uos(request):
             qs = filtrar_queryset_bem_por_escopo_com_transferencia(request.user, qs)
 
-        if (
-            search_term
-            and "baixados_mais_de_um_periodo" not in request.GET
-            and not qs.exists()
-        ):
+        if search_term and "baixados_mais_de_um_periodo" not in request.GET and not qs.exists():
             request._busca_com_baixados_antigos = True
             return self._buscar_com_baixados_antigos(request, search_term)
 

@@ -33,9 +33,7 @@ from usuario.models import Usuario
 class NBBPMTestBase(TestCase):
     def setUp(self):
         self.grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
-        self.grupo_operador, _ = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )
+        self.grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
         self.ua_origem = criar_ua(
             codigo="01.16.10.287",
             sigla="UATEST",
@@ -284,6 +282,7 @@ class TestNbbpmCoberturaExtra(NBBPMTestBase):
             _criar_tabela_bens,
             _criar_total_bens,
         )
+
         self.assertIsNotNone(_criar_cabecalho_e_registro_nbbpm(self.baixa))
         self.assertIsNotNone(_criar_informacoes_gerais(self.baixa))
         self.assertIsNotNone(_criar_tabela_bens(self.baixa))
@@ -298,17 +297,32 @@ class TestNBBPMAdminCobertura(NBBPMTestBase):
     def setUp(self):
         super().setUp()
         from dados_comuns.models import UnidadeOrcamentaria
+
         self.uo = self.ua_origem.unidade_orcamentaria
         self.uo2, _ = UnidadeOrcamentaria.objects.get_or_create(codigo="200", defaults={"nome": "UO2", "sigla": "UO2"})
         self.ua2 = criar_ua(uo=self.uo2, codigo="200", sigla="UA200", nome="UA200")
         self.gestor2 = self.gestor
         self.oper2 = self.operador
-        self.super2 = Usuario.objects.create_user(username="super_nbb2", email="a2@t.com", **auth_kwargs("x"), unidade_administrativa=None, unidade_orcamentaria=self.uo, is_superuser=True, is_staff=True)
+        self.super2 = Usuario.objects.create_user(
+            username="super_nbb2",
+            email="a2@t.com",
+            **auth_kwargs("x"),
+            unidade_administrativa=None,
+            unidade_orcamentaria=self.uo,
+            is_superuser=True,
+            is_staff=True,
+        )
         self.admin2 = NBBPMAdmin(NBBPM, AdminSite())
         self.factory2 = RequestFactory()
         self.baixa2 = self.criar_baixa()
         self.vincular_bem_na_baixa(self.baixa2, self.criar_bem())
-        self.nbbpm2 = NBBPM.objects.create(numero="001.0000001/2026", numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        self.nbbpm2 = NBBPM.objects.create(
+            numero="001.0000001/2026",
+            numero_processo_baixa="P",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         self.nbbpm2.baixas.set([self.baixa2])
 
     def test_permissoes_e_queryset(self):
@@ -319,7 +333,9 @@ class TestNBBPMAdminCobertura(NBBPMTestBase):
         self.assertFalse(self.admin2.has_delete_permission(req, self.nbbpm2))
         self.assertTrue(self.admin2.has_view_permission(req))
         req2 = self.factory2.get("/")
-        req2.user = MagicMock(is_authenticated=False, is_gestor_patrimonio=False, is_superuser=False, is_operador_inventario=False)
+        req2.user = MagicMock(
+            is_authenticated=False, is_gestor_patrimonio=False, is_superuser=False, is_operador_inventario=False
+        )
         self.assertFalse(self.admin2.has_view_permission(req2))
         for user in [self.gestor2, self.oper2]:
             req.user = user
@@ -327,6 +343,7 @@ class TestNBBPMAdminCobertura(NBBPMTestBase):
         req.user = self.super2
         self.assertGreaterEqual(self.admin2.get_queryset(req).count(), 1)
         from unittest.mock import patch
+
         with patch("bem_patrimonial.admins.nbbpm.resolver_ids_escopo", return_value=(True, False, None, None)):
             req.user = self.super2
             self.assertGreaterEqual(self.admin2.get_queryset(req).count(), 1)
@@ -348,7 +365,13 @@ class TestNBBPMAdminCobertura(NBBPMTestBase):
         self.nbbpm2.baixas.set([self.baixa2])
         self.assertIn("PDF", self.admin2.pdf_link_list(self.nbbpm2))
         self.assertIn("Baixa", self.admin2.baixas_detail(self.nbbpm2))
-        empty = NBBPM.objects.create(numero="001.0000002/2026", numero_processo_baixa="P2", data_autorizacao=timezone.localdate(), responsavel="G2", criado_por=self.gestor2)
+        empty = NBBPM.objects.create(
+            numero="001.0000002/2026",
+            numero_processo_baixa="P2",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G2",
+            criado_por=self.gestor2,
+        )
         self.assertEqual(self.admin2.baixas_detail(empty), "-")
         self.assertIn("TOTAL GERAL", self.admin2.bens_detail(self.nbbpm2))
         self.assertIn("Nenhum bem", self.admin2.bens_detail(empty))
@@ -358,17 +381,28 @@ class TestNBBPMAdminCobertura(NBBPMTestBase):
         req = self.factory2.get("/")
         req.user = self.gestor2
         from django.http import Http404
+
         with self.assertRaises(Http404):
             self.admin2.pdf_view(req, 999999)
-        req.user = MagicMock(is_authenticated=False, is_gestor_patrimonio=False, is_superuser=False, is_operador_inventario=False)
+        req.user = MagicMock(
+            is_authenticated=False, is_gestor_patrimonio=False, is_superuser=False, is_operador_inventario=False
+        )
         with self.assertRaises(Exception):
             self.admin2.pdf_view(req, self.nbbpm2.pk)
         req.user = self.gestor2
         # fora escopo
-        req.user = Usuario.objects.create_user(username="fora_nbb", email="f@t.com", **auth_kwargs("x"), unidade_administrativa=self.ua2, unidade_orcamentaria=self.uo2, is_staff=True)
+        req.user = Usuario.objects.create_user(
+            username="fora_nbb",
+            email="f@t.com",
+            **auth_kwargs("x"),
+            unidade_administrativa=self.ua2,
+            unidade_orcamentaria=self.uo2,
+            is_staff=True,
+        )
         from django.contrib.auth.models import Group
 
         from usuario.constants import GRUPO_GESTOR_PATRIMONIO as G
+
         g, _ = Group.objects.get_or_create(name=G)
         req.user.groups.add(g)
         with self.assertRaises(Exception):

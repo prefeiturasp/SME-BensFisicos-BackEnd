@@ -35,9 +35,7 @@ class AuthEndpointsTestCase(APITestCase):
 
     def test_password_reset_email_not_found(self):
         reset_url = "/api/auth/password-reset/"
-        resp = self.client.post(
-            reset_url, {"email": "naoexiste@example.com"}, format="json"
-        )
+        resp = self.client.post(reset_url, {"email": "naoexiste@example.com"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(len(mail.outbox), 0)
 
@@ -81,9 +79,7 @@ class AuthEndpointsTestCase(APITestCase):
         self.user.is_active = False
         self.user.save()
         url = "/api/auth/login/"
-        resp = self.client.post(
-            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
-        )
+        resp = self.client.post(url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_password_change_unauthenticated(self):
@@ -106,9 +102,7 @@ class AuthEndpointsTestCase(APITestCase):
 
     def test_login_success(self):
         url = "/api/auth/login/"
-        resp = self.client.post(
-            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
-        )
+        resp = self.client.post(url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("access", resp.data)
         self.assertNotIn("refresh", resp.data)
@@ -121,16 +115,12 @@ class AuthEndpointsTestCase(APITestCase):
 
     def test_login_fail(self):
         url = "/api/auth/login/"
-        resp = self.client.post(
-            url, {"username": "testuser", **auth_kwargs("wrongpass")}, format="json"
-        )
+        resp = self.client.post(url, {"username": "testuser", **auth_kwargs("wrongpass")}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_me_authenticated(self):
         url = "/api/auth/login/"
-        resp = self.client.post(
-            url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json"
-        )
+        resp = self.client.post(url, {"username": "testuser", **auth_kwargs("testpass123")}, format="json")
         access = resp.data["access"]
         me_url = "/api/auth/me/"
         resp = self.client.get(me_url, HTTP_AUTHORIZATION=f"Bearer {access}")
@@ -219,9 +209,7 @@ class AuthEndpointsTestCase(APITestCase):
 
     def test_password_reset_flow(self):
         reset_url = "/api/auth/password-reset/"
-        resp = self.client.post(
-            reset_url, {"email": "testuser@example.com"}, format="json"
-        )
+        resp = self.client.post(reset_url, {"email": "testuser@example.com"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(len(mail.outbox), 1)
         # Simula confirmação

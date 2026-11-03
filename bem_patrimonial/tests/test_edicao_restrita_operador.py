@@ -171,7 +171,7 @@ class EdicaoRestritaOperadorTestCase(TestCase):
             "unidade_administrativa": self.ua1.pk,
             "numero_formato_antigo": False,
             "sem_numeracao": False,
-            "justificativa": "Teste"
+            "justificativa": "Teste",
         }
 
         form = form_class(data=form_data, instance=self.bem_ua1)

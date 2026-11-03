@@ -26,9 +26,7 @@ User = get_user_model()
 class PasswordChangeViewTests(TestCase):
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="alice", **auth_kwargs("a123456"), must_change_password=False
-        )
+        self.user = User.objects.create_user(username="alice", **auth_kwargs("a123456"), must_change_password=False)
         self.staff = User.objects.create_user(
             username="admin1",
             **auth_kwargs("a123456"),
@@ -240,13 +238,9 @@ class SelecionarUAViewTests(TestCase):
             nome="Unidade 2",
         )
 
-        self.grupo_gestor = Group.objects.get_or_create(
-            name=GRUPO_GESTOR_PATRIMONIO
-        )[0]
+        self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
 
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor = User.objects.create_user(
             username="gestor1",
@@ -500,12 +494,8 @@ class UsuarioExportViewSetTests(TestCase):
         self.client = APIClient()
         self.senha = "S3nh@123"
 
-        self.group_gestor = Group.objects.get_or_create(
-            name=GRUPO_GESTOR_PATRIMONIO
-        )[0]
-        self.group_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.group_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
+        self.group_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.uo1 = criar_uo(codigo="101", nome="UO 101")
         self.ua1 = criar_ua(
@@ -629,6 +619,7 @@ class UsuarioExportViewSetTests(TestCase):
 # TESTES NEGATIVOS DE SEGURANÇA (AUDITORIA)
 # =========================================
 
+
 class UsuarioPermissionNegativeTests(APITestCase):
 
     def setUp(self):
@@ -638,13 +629,9 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         self.client = APIClient()
 
-        self.grupo_gestor = Group.objects.get_or_create(
-            name=GRUPO_GESTOR_PATRIMONIO
-        )[0]
+        self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
 
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.ua1 = criar_ua(codigo="001", sigla="UA1", nome="Unidade 1")
 
@@ -706,9 +693,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         resp = self.client.patch(
             self.detail_url,
-            {
-                "email": "hack@test.com"
-            },
+            {"email": "hack@test.com"},
             format="json",
         )
 
@@ -720,9 +705,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         resp = self.client.patch(
             self.detail_url,
-            {
-                "is_superuser": True
-            },
+            {"is_superuser": True},
             format="json",
         )
 
@@ -734,9 +717,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         resp = self.client.patch(
             self.detail_url,
-            {
-                "is_staff": True
-            },
+            {"is_staff": True},
             format="json",
         )
 
@@ -750,9 +731,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         resp = self.client.patch(
             self.detail_url,
-            {
-                "groups": [gestor_group.id]
-            },
+            {"groups": [gestor_group.id]},
             format="json",
         )
 
@@ -760,18 +739,9 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
     def test_acesso_fora_do_escopo_uo(self):
 
-        uo_externa = criar_uo(
-            codigo="998",
-            sigla="UOEXT",
-            nome="UO Externa"
-        )
+        uo_externa = criar_uo(codigo="998", sigla="UOEXT", nome="UO Externa")
 
-        ua_externa = criar_ua(
-            codigo="999",
-            sigla="EXT",
-            nome="Externa",
-            uo=uo_externa
-        )
+        ua_externa = criar_ua(codigo="999", sigla="EXT", nome="Externa", uo=uo_externa)
 
         user_externo = User.objects.create_user(
             username="externo",
@@ -794,9 +764,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         resp = self.client.patch(
             self.detail_url,
-            {
-                "is_superuser": True
-            },
+            {"is_superuser": True},
             format="json",
         )
 
@@ -825,9 +793,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         resp = self.client.patch(
             self.detail_url,
-            {
-                "is_staff": True
-            },
+            {"is_staff": True},
             format="json",
         )
 
@@ -843,9 +809,7 @@ class UsuarioPermissionNegativeTests(APITestCase):
 
         resp = self.client.patch(
             url,
-            {
-                "groups": [gestor_group.id]
-            },
+            {"groups": [gestor_group.id]},
             format="json",
         )
 
@@ -858,12 +822,8 @@ class UsuarioCreateUoScopeValidationTests(APITestCase):
         self.client = APIClient()
         self.senha = "T3st@123"
 
-        self.grupo_gestor = Group.objects.get_or_create(
-            name=GRUPO_GESTOR_PATRIMONIO
-        )[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.uo1 = criar_uo(codigo="101", sigla="UO1", nome="UO 1")
         self.uo2 = criar_uo(codigo="102", sigla="UO2", nome="UO 2")

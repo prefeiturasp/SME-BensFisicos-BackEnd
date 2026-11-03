@@ -103,14 +103,10 @@ class Command(BaseCommand):
         )
 
         if ua_id:
-            movimentacoes = movimentacoes.filter(
-                unidade_administrativa_destino_id=ua_id
-            )
+            movimentacoes = movimentacoes.filter(unidade_administrativa_destino_id=ua_id)
 
         if ua_codigo:
-            movimentacoes = movimentacoes.filter(
-                unidade_administrativa_destino__codigo=ua_codigo
-            )
+            movimentacoes = movimentacoes.filter(unidade_administrativa_destino__codigo=ua_codigo)
 
         if not movimentacoes.exists():
             self.stdout.write(self.style.SUCCESS("Nenhuma movimentação pendente."))
@@ -130,10 +126,7 @@ class Command(BaseCommand):
             ua_label = f"{getattr(ua, 'codigo', '')} - {ua.nome}".strip(" -")
             if not emails:
                 total_sem_email += 1
-                msg = (
-                    f"UA: {ua_label} | Movimentações: {len(movs)} | "
-                    "Destinatários: 0 | NÃO ENVIADO (sem e-mail)"
-                )
+                msg = f"UA: {ua_label} | Movimentações: {len(movs)} | " "Destinatários: 0 | NÃO ENVIADO (sem e-mail)"
                 self.stdout.write(self.style.WARNING(msg))
                 linhas_log.append(msg)
                 continue

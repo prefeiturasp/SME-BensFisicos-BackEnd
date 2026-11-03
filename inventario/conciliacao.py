@@ -24,9 +24,7 @@ def _recalcular_bloqueio_bem_por_inventario(bem: BemPatrimonial):
 
     if bem.bloqueado_conciliacao != novo_valor:
         bem.bloqueado_conciliacao = novo_valor
-        bem.__class__.objects.filter(pk=bem.pk).update(
-            bloqueado_conciliacao=novo_valor
-        )
+        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=novo_valor)
 
 
 @transaction.atomic
@@ -36,14 +34,11 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
 
     if situacao == inv_constants.BAIXA_FISICA:
         raise ValidationError(
-            "Situação 'Baixa Física' é definitiva e não pode ser registrada manualmente. "
-            "Use 'Em processo de baixa'."
+            "Situação 'Baixa Física' é definitiva e não pode ser registrada manualmente. " "Use 'Em processo de baixa'."
         )
 
     if situacao == inv_constants.DIVERGENTE and not divergencia:
-        raise ValidationError(
-            "Campo divergência é obrigatório quando situação é Divergente"
-        )
+        raise ValidationError("Campo divergência é obrigatório quando situação é Divergente")
 
     # Se já tem ocorrência, estamos editando - atualiza a última ao invés de criar nova
     ultima_ocorrencia = item.ocorrencias.order_by("-registrado_em").first()
@@ -52,9 +47,7 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
         # Edição: atualiza a última ocorrência existente
         ultima_ocorrencia.situacao = situacao
         ultima_ocorrencia.observacao = observacao
-        ultima_ocorrencia.divergencia = (
-            divergencia if situacao == inv_constants.DIVERGENTE else ""
-        )
+        ultima_ocorrencia.divergencia = divergencia if situacao == inv_constants.DIVERGENTE else ""
         ultima_ocorrencia.save()
         ocorrencia = ultima_ocorrencia
     else:
@@ -88,9 +81,7 @@ def excluir_ocorrencia(item, usuario):
         raise ValidationError("Item não tem ocorrência para excluir")
 
     ocorrencia_anterior = (
-        item.ocorrencias.filter(registrado_em__lt=ultima_ocorrencia.registrado_em)
-        .order_by("-registrado_em")
-        .first()
+        item.ocorrencias.filter(registrado_em__lt=ultima_ocorrencia.registrado_em).order_by("-registrado_em").first()
     )
 
     ultima_ocorrencia.delete()
@@ -115,9 +106,7 @@ def excluir_ocorrencia(item, usuario):
         observacao_inicial = ""
 
         if conciliacao_anterior:
-            item_anterior = ItemConciliacao.objects.filter(
-                conciliacao=conciliacao_anterior, bem=item.bem
-            ).first()
+            item_anterior = ItemConciliacao.objects.filter(conciliacao=conciliacao_anterior, bem=item.bem).first()
             if item_anterior and item_anterior.situacao in (
                 inv_constants.NAO_ENCONTRADO,
                 inv_constants.DIVERGENTE,

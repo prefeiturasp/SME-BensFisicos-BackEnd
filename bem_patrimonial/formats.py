@@ -40,9 +40,7 @@ class PDFFormat(Format):
         total_registros = len(bens_list)
 
         valor_total = sum(bem.valor_unitario or Decimal("0.00") for bem in bens_list)
-        localizacoes_unicas = len(
-            {bem.localizacao for bem in bens_list if bem.localizacao}
-        )
+        localizacoes_unicas = len({bem.localizacao for bem in bens_list if bem.localizacao})
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -53,11 +51,7 @@ class PDFFormat(Format):
             topMargin=0.9 * cm,
             bottomMargin=0.9 * cm,
             title="Relatório de Bens Patrimoniais",
-            author=(
-                obter_rf_usuario(request.user)
-                if request
-                else "Sistema Bens Físicos"
-            ),
+            author=(obter_rf_usuario(request.user) if request else "Sistema Bens Físicos"),
         )
 
         elements = []
@@ -66,9 +60,7 @@ class PDFFormat(Format):
         elements.extend(self._criar_tabela_bens(bens_list))
 
         if bens_list:
-            elements.extend(
-                self._criar_resumo(total_registros, valor_total, localizacoes_unicas)
-            )
+            elements.extend(self._criar_resumo(total_registros, valor_total, localizacoes_unicas))
 
         elements.extend(self._criar_rodape())
 
@@ -88,9 +80,7 @@ class PDFFormat(Format):
         styles = getSampleStyleSheet()
 
         def _carregar_logo(filename, fallback_text):
-            static_root = settings.STATIC_ROOT or (
-                settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None
-            )
+            static_root = settings.STATIC_ROOT or (settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None)
             if static_root:
                 logo_path = os.path.join(static_root, "img", filename)
                 if os.path.exists(logo_path):
@@ -172,9 +162,7 @@ class PDFFormat(Format):
             ],
         ]
 
-        info_table = Table(
-            info_data, colWidths=[3 * cm, 4.5 * cm, 2.5 * cm, 5 * cm, 3.5 * cm, 2 * cm]
-        )
+        info_table = Table(info_data, colWidths=[3 * cm, 4.5 * cm, 2.5 * cm, 5 * cm, 3.5 * cm, 2 * cm])
         info_table.setStyle(
             TableStyle(
                 [
@@ -205,11 +193,7 @@ class PDFFormat(Format):
 
     def _criar_linha_bem_para_tabela(self, bem, cell_style):
         valor = f"{bem.valor_unitario:.2f}" if bem.valor_unitario else "-"
-        unidade_adm_text = (
-            str(bem.unidade_administrativa.nome)
-            if bem.unidade_administrativa
-            else "-"
-        )
+        unidade_adm_text = str(bem.unidade_administrativa.nome) if bem.unidade_administrativa else "-"
         return [
             self._cell_paragraph(bem.numero_patrimonial, cell_style),
             self._cell_paragraph(bem.nome, cell_style),
@@ -330,9 +314,7 @@ class PDFFormat(Format):
             ],
             [
                 str(total_registros),
-                f"{valor_total:,.2f}".replace(",", "X")
-                .replace(".", ",")
-                .replace("X", "."),
+                f"{valor_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
                 str(localizacoes_unicas),
             ],
         ]

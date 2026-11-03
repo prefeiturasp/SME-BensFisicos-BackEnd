@@ -26,9 +26,7 @@ class UsuarioResource(resources.ModelResource):
         if queryset is None:
             queryset = self.get_queryset()
 
-        usuarios = list(
-            queryset.filter(groups__name=GRUPO_OPERADOR_INVENTARIO).distinct()
-        )
+        usuarios = list(queryset.filter(groups__name=GRUPO_OPERADOR_INVENTARIO).distinct())
         dataset = Dataset()
         max_unidades = max(
             (len(self._listar_unidades_administrativas(usuario)) for usuario in usuarios),

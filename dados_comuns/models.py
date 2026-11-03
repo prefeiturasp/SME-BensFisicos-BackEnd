@@ -108,9 +108,7 @@ class UnidadeAdministrativa(models.Model):
     )
     # controle
     created_at = models.DateTimeField("Criado em", auto_now=True)
-    updated_at = models.DateTimeField(
-        "Atualizado em", auto_now=True, null=True, blank=True
-    )
+    updated_at = models.DateTimeField("Atualizado em", auto_now=True, null=True, blank=True)
 
     def __str__(self):
         return "{} - {}".format(self.codigo, self.sigla)
@@ -124,9 +122,7 @@ class UnidadeAdministrativa(models.Model):
         super().clean()
 
         if not self.unidade_orcamentaria_id:
-            raise ValidationError(
-                {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-            )
+            raise ValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
     def save(self, *args, **kwargs):
         self.updated_at = datetime.now()
@@ -156,9 +152,7 @@ class HistoricoGeral(models.Model):
         blank=True,
         verbose_name="Alterado por",
     )
-    alterado_em = models.DateTimeField(
-        "Alterado em", default=timezone.now, db_index=True
-    )
+    alterado_em = models.DateTimeField("Alterado em", default=timezone.now, db_index=True)
 
     justificativa = models.TextField("Justificativa", null=True, blank=True)
 

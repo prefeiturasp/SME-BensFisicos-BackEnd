@@ -21,15 +21,12 @@ from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 CODIGO_UA_PONTO_CENTRAL = "001"
 MENSAGEM_ITENS_LOTE_INVALIDOS = "Itens de movimentação inválidos."
 MENSAGEM_SEM_PONTO_CENTRAL = (
-    "Não há ponto central cadastrado na Unidade Orçamentária de destino. "
-    "Por favor, entrar em contato com o gestor"
+    "Não há ponto central cadastrado na Unidade Orçamentária de destino. " "Por favor, entrar em contato com o gestor"
 )
 
 
 def q_codigo_ponto_central():
-    return Q(codigo=CODIGO_UA_PONTO_CENTRAL) | Q(
-        codigo__endswith=f".{CODIGO_UA_PONTO_CENTRAL}"
-    )
+    return Q(codigo=CODIGO_UA_PONTO_CENTRAL) | Q(codigo__endswith=f".{CODIGO_UA_PONTO_CENTRAL}")
 
 
 def serializar_ua_para_opcao(ua):
@@ -71,12 +68,7 @@ def obter_ua_ponto_central(unidade_orcamentaria):
     if not unidade_orcamentaria:
         return None
 
-    return (
-        queryset_uas_da_uo(unidade_orcamentaria)
-        .filter(q_codigo_ponto_central())
-        .order_by("id")
-        .first()
-    )
+    return queryset_uas_da_uo(unidade_orcamentaria).filter(q_codigo_ponto_central()).order_by("id").first()
 
 
 def montar_configuracao_destino_widget(usuario):
@@ -89,9 +81,7 @@ def montar_configuracao_destino_widget(usuario):
 
     opcoes_mesma_uo = []
     if uo_referencia:
-        opcoes_mesma_uo = [
-            serializar_ua_para_opcao(ua) for ua in queryset_uas_da_uo(uo_referencia)
-        ]
+        opcoes_mesma_uo = [serializar_ua_para_opcao(ua) for ua in queryset_uas_da_uo(uo_referencia)]
 
     return json.dumps(
         {
@@ -206,9 +196,7 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             self.fields["unidade_orcamentaria_destino"].initial = uo_referencia.pk
 
     def _configure_destino_field_for_change(self, campo_destino, qs_ativas):
-        campo_destino.queryset = qs_ativas.filter(
-            pk=self.instance.unidade_administrativa_destino_id
-        )
+        campo_destino.queryset = qs_ativas.filter(pk=self.instance.unidade_administrativa_destino_id)
         campo_destino.initial = self.instance.unidade_administrativa_destino_id
         campo_destino.disabled = True
         if "unidade_orcamentaria_destino" in self.fields:
@@ -251,15 +239,13 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
 
         if possui_campo_uo_destino:
             self.fields["unidade_orcamentaria_destino"].queryset = qs_uos
-            self.fields["unidade_orcamentaria_destino"].widget.attrs[
-                "data-movimentacao-destino-config"
-            ] = montar_configuracao_destino_widget(user)
+            self.fields["unidade_orcamentaria_destino"].widget.attrs["data-movimentacao-destino-config"] = (
+                montar_configuracao_destino_widget(user)
+            )
 
         if possui_campo_origem:
             if user:
-                self.fields["unidade_administrativa_origem"].queryset = (
-                    filtrar_ua_origem_por_escopo(user, qs_ativas)
-                )
+                self.fields["unidade_administrativa_origem"].queryset = filtrar_ua_origem_por_escopo(user, qs_ativas)
             else:
                 self.fields["unidade_administrativa_origem"].queryset = qs_ativas
 
@@ -273,11 +259,7 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             self._set_initial_uo_destino(uo_referencia)
 
         uo_destino = self._get_selected_uo_destino(qs_uos, uo_referencia)
-        destino_mesma_uo = (
-            uo_destino is not None
-            and uo_referencia is not None
-            and uo_destino.pk == uo_referencia.pk
-        )
+        destino_mesma_uo = uo_destino is not None and uo_referencia is not None and uo_destino.pk == uo_referencia.pk
 
         if not possui_campo_ua_destino:
             if self.instance.pk and possui_campo_uo_destino:
@@ -306,22 +288,12 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             cleaned_data["unidade_orcamentaria_destino"] = uo_destino
 
         if not uo_destino:
-            raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": "Unidade Orçamentária de destino é obrigatória."
-                }
-            )
+            raise ValidationError({"unidade_orcamentaria_destino": "Unidade Orçamentária de destino é obrigatória."})
 
         if not getattr(uo_destino, "ativa", False):
-            raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": "Unidade Orçamentária de destino está inativa."
-                }
-            )
+            raise ValidationError({"unidade_orcamentaria_destino": "Unidade Orçamentária de destino está inativa."})
 
-        destino_mesma_uo = (
-            uo_referencia is not None and uo_destino.pk == uo_referencia.pk
-        )
+        destino_mesma_uo = uo_referencia is not None and uo_destino.pk == uo_referencia.pk
         return uo_destino, uo_referencia, destino_mesma_uo
 
     def _obter_ua_destino(self, cleaned_data, uo_destino, destino_mesma_uo):
@@ -329,19 +301,13 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         if destino_mesma_uo:
             if not ua_destino:
                 raise ValidationError(
-                    {
-                        "unidade_administrativa_destino": "Unidade administrativa de destino é obrigatória."
-                    }
+                    {"unidade_administrativa_destino": "Unidade administrativa de destino é obrigatória."}
                 )
             return ua_destino
 
         ua_destino = obter_ua_ponto_central(uo_destino)
         if not ua_destino:
-            raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL
-                }
-            )
+            raise ValidationError({"unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL})
         cleaned_data["unidade_administrativa_destino"] = ua_destino
         return ua_destino
 
@@ -365,15 +331,12 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                 }
             )
         if ua_destino == ua_origem:
-            raise ValidationError(
-                "Operação não permitida: origem e destino são iguais."
-            )
+            raise ValidationError("Operação não permitida: origem e destino são iguais.")
         if ua_destino.unidade_orcamentaria_id != uo_destino.id:
             raise ValidationError(
                 {
                     "unidade_administrativa_destino": (
-                        "A Unidade Administrativa de destino não pertence à Unidade "
-                        "Orçamentária selecionada."
+                        "A Unidade Administrativa de destino não pertence à Unidade " "Orçamentária selecionada."
                     )
                 }
             )
@@ -390,44 +353,26 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
         if not user:
             return
 
-        qs_origem = filtrar_ua_origem_por_escopo(
-            user, UnidadeAdministrativa.objects.all()
-        )
+        qs_origem = filtrar_ua_origem_por_escopo(user, UnidadeAdministrativa.objects.all())
         if not qs_origem.filter(pk=ua_origem.pk).exists():
-            raise ValidationError(
-                {
-                    "unidade_administrativa_origem": "UA de origem fora do seu escopo de acesso."
-                }
-            )
+            raise ValidationError({"unidade_administrativa_origem": "UA de origem fora do seu escopo de acesso."})
 
         if destino_mesma_uo:
             qs_destino = queryset_uas_da_uo(uo_referencia)
             if not qs_destino.filter(pk=ua_destino.pk).exists():
                 raise ValidationError(
-                    {
-                        "unidade_administrativa_destino": (
-                            "UA de destino fora das UAs permitidas para sua UO."
-                        )
-                    }
+                    {"unidade_administrativa_destino": ("UA de destino fora das UAs permitidas para sua UO.")}
                 )
 
         qs_uos = queryset_uos_destino()
         if not qs_uos.filter(pk=uo_destino.pk).exists():
-            raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": "UO de destino fora das opções disponíveis."
-                }
-            )
+            raise ValidationError({"unidade_orcamentaria_destino": "UO de destino fora das opções disponíveis."})
 
     def _validate_ua_origem_destino_new(self, cleaned_data, user):
         ua_origem = cleaned_data.get("unidade_administrativa_origem")
 
         if not ua_origem:
-            raise ValidationError(
-                {
-                    "unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."
-                }
-            )
+            raise ValidationError({"unidade_administrativa_origem": "Unidade administrativa de origem é obrigatória."})
 
         uo_destino, uo_referencia, destino_mesma_uo = self._obter_uo_destino(
             cleaned_data,
@@ -466,9 +411,7 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             self._validate_ua_origem_destino_new(cleaned_data, user)
         except ValidationError as error:
             self._acumular_erros_validacao(validation_errors, error)
-            origem_invalida = (
-                "unidade_administrativa_origem" in getattr(error, "error_dict", {})
-            )
+            origem_invalida = "unidade_administrativa_origem" in getattr(error, "error_dict", {})
 
         if not origem_invalida:
             try:
@@ -491,9 +434,7 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             )
         if is_editing and user and getattr(user, "is_operador_inventario", False):
             if self.instance.solicitado_por_id != user.id:
-                raise ValidationError(
-                    "Não é permitido alterar uma movimentação solicitada por outro usuário."
-                )
+                raise ValidationError("Não é permitido alterar uma movimentação solicitada por outro usuário.")
         return cleaned_data
 
     def _validar_itens_lote(self, cleaned_data):
@@ -516,13 +457,9 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             raise ValidationError({"itens_lote": MENSAGEM_ITENS_LOTE_INVALIDOS})
         modos = sum((bool(faixas), bool(selecionar_todos), bool(ids)))
         if modos == 0:
-            raise ValidationError(
-                {"itens_lote": "Informe uma ou mais faixas ou selecione todos os bens da UA."}
-            )
+            raise ValidationError({"itens_lote": "Informe uma ou mais faixas ou selecione todos os bens da UA."})
         if modos != 1:
-            raise ValidationError(
-                {"itens_lote": "Informe uma ou mais faixas, selecione bens ou todos os bens da UA."}
-            )
+            raise ValidationError({"itens_lote": "Informe uma ou mais faixas, selecione bens ou todos os bens da UA."})
 
         try:
             if ids:
@@ -542,8 +479,6 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
                 )
             validar_bens_movimentacao(cleaned_data["unidade_administrativa_origem"], bens)
         except DRFValidationError as error:
-            raise ValidationError(
-                {"itens_lote": obter_mensagem_erro_validacao(error.detail)}
-            ) from error
+            raise ValidationError({"itens_lote": obter_mensagem_erro_validacao(error.detail)}) from error
 
         cleaned_data["bens_lote_resolvidos"] = bens

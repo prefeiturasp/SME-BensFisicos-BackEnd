@@ -241,9 +241,7 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
         if db_field.name == "unidade_orcamentaria":
 
             if request.user.unidade_orcamentaria_id:
-                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(
-                    pk=request.user.unidade_orcamentaria_id
-                )
+                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(pk=request.user.unidade_orcamentaria_id)
             else:
                 kwargs["queryset"] = UnidadeOrcamentaria.objects.none()
 
@@ -255,14 +253,8 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
         if "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].required = True
 
-        if (
-            obj is None
-            and request.user.unidade_orcamentaria_id
-            and "unidade_orcamentaria" in form.base_fields
-        ):
-            form.base_fields["unidade_orcamentaria"].initial = (
-                request.user.unidade_orcamentaria_id
-            )
+        if obj is None and request.user.unidade_orcamentaria_id and "unidade_orcamentaria" in form.base_fields:
+            form.base_fields["unidade_orcamentaria"].initial = request.user.unidade_orcamentaria_id
 
         if not request.user.is_superuser and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].disabled = True
@@ -274,9 +266,7 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
             uo = cleaned_data.get("unidade_orcamentaria")
 
             if not uo:
-                raise ValidationError(
-                    {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-                )
+                raise ValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
             if uo != request.user.unidade_orcamentaria:
                 raise ValidationError(
@@ -291,9 +281,7 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
         return form
 
     def get_search_results(self, request, queryset, search_term):
-        queryset, use_distinct = super().get_search_results(
-            request, queryset, search_term
-        )
+        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
 
         field_name = request.GET.get("field_name")
 

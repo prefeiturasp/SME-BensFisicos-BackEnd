@@ -9,7 +9,15 @@ from dados_comuns.escopo import resolver_ids_escopo
 
 @admin.register(NBBPM)
 class NBBPMAdmin(admin.ModelAdmin):
-    list_display = ("numero", "unidade_orcamentaria_display", "responsavel", "data_autorizacao", "total_baixas", "criado_por", "pdf_link_list")
+    list_display = (
+        "numero",
+        "unidade_orcamentaria_display",
+        "responsavel",
+        "data_autorizacao",
+        "total_baixas",
+        "criado_por",
+        "pdf_link_list",
+    )
     list_filter = (("data_autorizacao", DateRangeFilter), ("data_criacao", DateRangeFilter))
     search_fields = (
         "numero",
@@ -38,10 +46,17 @@ class NBBPMAdmin(admin.ModelAdmin):
 
     def has_view_permission(self, request, obj=None):
         user = request.user
-        return bool(user.is_authenticated and (user.is_gestor_patrimonio or user.is_superuser or user.is_operador_inventario))
+        return bool(
+            user.is_authenticated and (user.is_gestor_patrimonio or user.is_superuser or user.is_operador_inventario)
+        )
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request).select_related("criado_por").prefetch_related("baixas__unidade_administrativa_origem__unidade_orcamentaria", "baixas__itens__bem")
+        qs = (
+            super()
+            .get_queryset(request)
+            .select_related("criado_por")
+            .prefetch_related("baixas__unidade_administrativa_origem__unidade_orcamentaria", "baixas__itens__bem")
+        )
         user = request.user
         is_super, is_gestor, ua_id, uo_id = resolver_ids_escopo(user)
         if ua_id:
@@ -73,7 +88,21 @@ class NBBPMAdmin(admin.ModelAdmin):
     def get_fieldsets(self, request, obj=None):
         if obj:
             fieldsets = (
-                ("Dados da NBBPM", {"fields": ("numero", "numero_processo_baixa", "data_autorizacao", "responsavel", "numero_processo_destinacao_final", "unidade_orcamentaria_display", "criado_por", "data_criacao")}),
+                (
+                    "Dados da NBBPM",
+                    {
+                        "fields": (
+                            "numero",
+                            "numero_processo_baixa",
+                            "data_autorizacao",
+                            "responsavel",
+                            "numero_processo_destinacao_final",
+                            "unidade_orcamentaria_display",
+                            "criado_por",
+                            "data_criacao",
+                        )
+                    },
+                ),
                 ("Baixas vinculadas", {"fields": ("baixas_detail",)}),
                 ("Bens vinculados", {"fields": ("bens_detail",)}),
             )
@@ -83,6 +112,7 @@ class NBBPMAdmin(admin.ModelAdmin):
 
     def total_baixas(self, obj):
         return obj.baixas.count()
+
     total_baixas.short_description = "Quantidade de Baixas"
 
     def unidade_orcamentaria_display(self, obj):
@@ -90,6 +120,7 @@ class NBBPMAdmin(admin.ModelAdmin):
         if uo:
             return f"{uo.sigla or ''} - {uo.nome or ''} ({uo.codigo or ''})".strip()
         return "-"
+
     unidade_orcamentaria_display.short_description = "Unidade Orçamentária"
 
     def pdf_link_list(self, obj):
@@ -98,10 +129,20 @@ class NBBPMAdmin(admin.ModelAdmin):
             '<a class="button" href="{}" target="_blank" style="background:#198754; border-color:#198754; color:#fff !important; padding:4px 10px; text-decoration:none;">PDF</a>',
             url,
         )
+
     pdf_link_list.short_description = "PDF"
 
     def baixas_detail(self, obj):
-        baixas = obj.baixas.select_related("unidade_administrativa_origem", "unidade_administrativa_origem__unidade_orcamentaria", "criado_por", "aprovado_por").prefetch_related("itens__bem").all()
+        baixas = (
+            obj.baixas.select_related(
+                "unidade_administrativa_origem",
+                "unidade_administrativa_origem__unidade_orcamentaria",
+                "criado_por",
+                "aprovado_por",
+            )
+            .prefetch_related("itens__bem")
+            .all()
+        )
         if not baixas:
             return "-"
         rows = []
@@ -133,11 +174,10 @@ class NBBPMAdmin(admin.ModelAdmin):
             "<th style='padding:4px; border:1px solid #ddd;'>Itens</th>"
             "<th style='padding:4px; border:1px solid #ddd;'>Solicitante</th>"
             "<th style='padding:4px; border:1px solid #ddd;'>Aprovação</th>"
-            "</tr></thead><tbody>"
-            + "".join(rows)
-            + "</tbody></table>"
+            "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
         )
         return format_html(html)
+
     baixas_detail.short_description = ""
 
     def bens_detail(self, obj):
@@ -175,6 +215,7 @@ class NBBPMAdmin(admin.ModelAdmin):
             + "</tbody></table>"
         )
         return format_html(html)
+
     bens_detail.short_description = ""
 
     def get_urls(self):

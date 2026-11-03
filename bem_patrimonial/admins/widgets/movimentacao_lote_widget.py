@@ -84,12 +84,12 @@ class MovimentacaoLoteWidget(Widget):
             '<h3 class="movimentacao-lote__resultados-titulo" hidden>Resultados da Busca (0)</h3>'
             '<div class="movimentacao-lote__tabelas"><table class="movimentacao-lote__resultados">'
             '<thead><tr><th class="movimentacao-lote__coluna-selecao"><input type="checkbox" class="movimentacao-lote__selecionar-resultados" aria-label="Selecionar todos os resultados"></th>'
-            '<th>ID</th><th>Número Patrimonial</th><th>Nome</th><th>Descrição</th><th>Localização</th>'
+            "<th>ID</th><th>Número Patrimonial</th><th>Nome</th><th>Descrição</th><th>Localização</th>"
             '<th>Situação <span class="movimentacao-lote__ajuda" role="img" tabindex="0" aria-label="{ajuda_regras}">?</span></th></tr></thead><tbody></tbody></table></div>'
             '<button type="button" class="button movimentacao-lote__mais" hidden>Carregar mais</button>'
             '<h3 class="movimentacao-lote__selecionados-titulo">Selecionados (0)</h3>'
             '<div class="movimentacao-lote__tabelas"><table class="movimentacao-lote__selecionados">'
-            '<thead><tr><th>Número Patrimonial</th><th>Quantidade</th><th>Nome do Bem</th><th>Ação</th></tr></thead>'
+            "<thead><tr><th>Número Patrimonial</th><th>Quantidade</th><th>Nome do Bem</th><th>Ação</th></tr></thead>"
             '<tbody><tr class="movimentacao-lote__sem-selecao"><td colspan="4">Nenhum bem selecionado.</td></tr></tbody></table></div>'
             '<p class="movimentacao-lote__erro" role="alert"></p>{hidden}</div>',
             resolver=resolver_url,

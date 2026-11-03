@@ -42,14 +42,10 @@ class UnidadeAdministrativaAdminForm(forms.ModelForm):
         sufixo = cleaned.get("codigo_sufixo")
 
         if not uo:
-            raise ValidationError(
-                {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-            )
+            raise ValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
         if not sufixo:
-            raise ValidationError(
-                {"codigo_sufixo": "Informe os 3 últimos dígitos do código."}
-            )
+            raise ValidationError({"codigo_sufixo": "Informe os 3 últimos dígitos do código."})
 
         cleaned["codigo"] = f"{uo.codigo.strip()}.{sufixo}"
 

@@ -56,9 +56,13 @@ class NBBPMViewSet(
     ordering = ["-data_criacao"]
 
     def get_queryset(self):
-        qs = NBBPM.objects.all().select_related("criado_por").prefetch_related(
-            "baixas__unidade_administrativa_origem__unidade_orcamentaria",
-            "baixas__itens__bem",
+        qs = (
+            NBBPM.objects.all()
+            .select_related("criado_por")
+            .prefetch_related(
+                "baixas__unidade_administrativa_origem__unidade_orcamentaria",
+                "baixas__itens__bem",
+            )
         )
 
         user = self.request.user
@@ -68,9 +72,7 @@ class NBBPMViewSet(
             return qs.filter(baixas__unidade_administrativa_origem_id=ua_id).distinct()
 
         if is_gestor and uo_id:
-            return qs.filter(
-                baixas__unidade_administrativa_origem__unidade_orcamentaria_id=uo_id
-            ).distinct()
+            return qs.filter(baixas__unidade_administrativa_origem__unidade_orcamentaria_id=uo_id).distinct()
 
         return qs.none()
 

@@ -8,6 +8,7 @@ Valida:
 - data migration idempotente e tratamento ACEITA sem número via admin
 - PDF layout lote e export Excel buscando nova tabela
 """
+
 import importlib.util
 import pathlib
 import threading
@@ -74,7 +75,7 @@ def criar_usuario(username, uo, ua, grupos=None, is_superuser=False, **kwargs):
         is_staff=True,
         **kwargs,
     )
-    for g in (grupos or []):
+    for g in grupos or []:
         grp, _ = Group.objects.get_or_create(name=g)
         user.groups.add(grp)
     return user
@@ -153,6 +154,7 @@ def _setup_uo_ua_gestor(username="gestor_padrao", ua_codigo="001", ua_sigla="UAT
 # 1. Prefixo UA (último grupo) e extração
 # =====================================================================
 
+
 class TestExtrairCodigoUa(TestCase):
     def test_ua_01_16_10_287_retorna_287(self):
         self.assertEqual(extrair_codigo_ua("01.16.10.287"), "287")
@@ -173,6 +175,7 @@ class TestExtrairCodigoUa(TestCase):
 # 2. Geração por UA/ano com continuidade (não reseta para 0000001)
 # =====================================================================
 
+
 class TestGeracaoPorUOAnoContinuidade(TestCase):
     def setUp(self):
         self.uo = criar_uo(**UO_SME)
@@ -187,7 +190,12 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         criar_baixa(self.ua1, self.gestor, status=constants.ACEITA, numero_nbbpm=legado_num)
         baixa2, _ = _nova_baixa_com_item(self.ua1, self.gestor, bem=self.bem, status=constants.ACEITA)
         nbbpm = _novo_nbbpm_com_baixas(
-            "", [baixa2], self.gestor, data_autorizacao=timezone.datetime(ano, 6, 15).date(), numero_processo_baixa="PROC-NEW", responsavel="Gestor"
+            "",
+            [baixa2],
+            self.gestor,
+            data_autorizacao=timezone.datetime(ano, 6, 15).date(),
+            numero_processo_baixa="PROC-NEW",
+            responsavel="Gestor",
         )
         self.assertEqual(gerar_numero_nbbpm_unificado(nbbpm), f"001.{1235:07d}/{ano}")
 
@@ -200,29 +208,46 @@ class TestGeracaoPorUOAnoContinuidade(TestCase):
         for i in range(5):
             criar_baixa(self.ua1, self.gestor, status=constants.ACEITA, numero_nbbpm=f"001.{i+1:07d}/{ano}")
         baixa_b, _ = _nova_baixa_com_item(ua_b, gestor_b, bem=bem_b, status=constants.ACEITA)
-        nbbpm_b = _novo_nbbpm_com_baixas("", [baixa_b], gestor_b, data_autorizacao=timezone.datetime(ano, 6, 15).date(), numero_processo_baixa="PROC-B")
+        nbbpm_b = _novo_nbbpm_com_baixas(
+            "",
+            [baixa_b],
+            gestor_b,
+            data_autorizacao=timezone.datetime(ano, 6, 15).date(),
+            numero_processo_baixa="PROC-B",
+        )
         numero_b = gerar_numero_nbbpm_unificado(nbbpm_b)
         self.assertEqual(numero_b, f"001.{6:07d}/{ano}")
         nbbpm_b.numero = numero_b
         nbbpm_b.save(update_fields=["numero"])
         baixa_a2, _ = _nova_baixa_com_item(self.ua1, self.gestor, bem=self.bem, status=constants.ACEITA)
-        nbbpm_a = _novo_nbbpm_com_baixas("", [baixa_a2], self.gestor, data_autorizacao=timezone.datetime(ano, 6, 15).date(), numero_processo_baixa="PROC-A")
+        nbbpm_a = _novo_nbbpm_com_baixas(
+            "",
+            [baixa_a2],
+            self.gestor,
+            data_autorizacao=timezone.datetime(ano, 6, 15).date(),
+            numero_processo_baixa="PROC-A",
+        )
         self.assertEqual(gerar_numero_nbbpm_unificado(nbbpm_a), f"001.{7:07d}/{ano}")
 
     def test_ano_diferente_reseta_sequencial(self):
         ano1, ano2 = 2025, 2026
         criar_baixa(self.ua1, self.gestor, status=constants.ACEITA, numero_nbbpm=f"001.{10:07d}/{ano1}")
         baixa, _ = _nova_baixa_com_item(self.ua1, self.gestor, bem=self.bem, status=constants.ACEITA)
-        nbbpm = _novo_nbbpm_com_baixas("", [baixa], self.gestor, data_autorizacao=timezone.datetime(ano1, 5, 1).date(), numero_processo_baixa="P")
+        nbbpm = _novo_nbbpm_com_baixas(
+            "", [baixa], self.gestor, data_autorizacao=timezone.datetime(ano1, 5, 1).date(), numero_processo_baixa="P"
+        )
         self.assertEqual(gerar_numero_nbbpm_unificado(nbbpm), f"001.{11:07d}/{ano1}")
         baixa2, _ = _nova_baixa_com_item(self.ua1, self.gestor, bem=self.bem, status=constants.ACEITA)
-        nbbpm2 = _novo_nbbpm_com_baixas("", [baixa2], self.gestor, data_autorizacao=timezone.datetime(ano2, 5, 1).date(), numero_processo_baixa="P2")
+        nbbpm2 = _novo_nbbpm_com_baixas(
+            "", [baixa2], self.gestor, data_autorizacao=timezone.datetime(ano2, 5, 1).date(), numero_processo_baixa="P2"
+        )
         self.assertEqual(gerar_numero_nbbpm_unificado(nbbpm2), f"001.{1:07d}/{ano2}")
 
 
 # =====================================================================
 # 3. Unicidade e formato
 # =====================================================================
+
 
 class TestUnicidadeEFormato(TestCase):
     def setUp(self):
@@ -252,7 +277,13 @@ class TestUnicidadeEFormato(TestCase):
                 _novo_nbbpm_com_baixas("001.0000001/2026", [], self.gestor, numero_processo_baixa="P2")
 
     def test_validador_regex_impede_lixo(self):
-        nbbpm = NBBPM(numero="abc", numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        nbbpm = NBBPM(
+            numero="abc",
+            numero_processo_baixa="P",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         with self.assertRaises(ValidationError):
             nbbpm.full_clean()
 
@@ -260,6 +291,7 @@ class TestUnicidadeEFormato(TestCase):
 # =====================================================================
 # 4. Concorrência primeira NBBPM do ano (UO) e reuso mesma baixa
 # =====================================================================
+
 
 class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
     def setUp(self):
@@ -278,7 +310,13 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
 
         def criar(baixa, key):
             try:
-                resultados[key] = criar_nbbpm_com_retry(baixas=[baixa], numero_processo_baixa=baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
+                resultados[key] = criar_nbbpm_com_retry(
+                    baixas=[baixa],
+                    numero_processo_baixa=baixa.numero_processo_baixa,
+                    data_autorizacao=timezone.localdate(),
+                    responsavel="Gestor",
+                    criado_por=self.gestor,
+                ).numero
             except Exception as e:
                 erros.append(str(e))
             finally:
@@ -304,9 +342,21 @@ class TestConcorrenciaPrimeiraNBBPM(TransactionTestCase):
 
     def test_unicidade_via_retry_em_integrity_error(self):
         NBBPM.objects.all().delete()
-        n1 = criar_nbbpm_com_retry(baixas=[self.baixa1], numero_processo_baixa=self.baixa1.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        n1 = criar_nbbpm_com_retry(
+            baixas=[self.baixa1],
+            numero_processo_baixa=self.baixa1.numero_processo_baixa,
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         self.assertEqual(n1.numero, "001.0000001/" + str(timezone.localdate().year))
-        n2 = criar_nbbpm_com_retry(baixas=[self.baixa2], numero_processo_baixa=self.baixa2.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        n2 = criar_nbbpm_com_retry(
+            baixas=[self.baixa2],
+            numero_processo_baixa=self.baixa2.numero_processo_baixa,
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         self.assertEqual(n2.numero, "001.0000002/" + str(timezone.localdate().year))
 
 
@@ -323,7 +373,13 @@ class TestReusoMesmaBaixaConcorrente(TransactionTestCase):
 
         def tentar(key):
             try:
-                resultados[key] = criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa=self.baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="Gestor", criado_por=self.gestor).numero
+                resultados[key] = criar_nbbpm_com_retry(
+                    baixas=[self.baixa],
+                    numero_processo_baixa=self.baixa.numero_processo_baixa,
+                    data_autorizacao=timezone.localdate(),
+                    responsavel="Gestor",
+                    criado_por=self.gestor,
+                ).numero
             except Exception as e:
                 erros.append(str(e))
             finally:
@@ -345,12 +401,15 @@ class TestReusoMesmaBaixaConcorrente(TransactionTestCase):
 # 5. Permissão apenas gestor/superuser e visibilidade superuser
 # =====================================================================
 
+
 class TestPermissaoESuperuser(TestCase):
     def setUp(self):
         self.uo, self.ua, self.gestor = _setup_uo_ua_gestor("gestor_perm")
         self.ua2 = criar_ua(uo=self.uo, codigo="002", nome="UA2", sigla="UAT2")
         self.operador = criar_usuario("operador_perm", self.uo, self.ua, grupos=[GRUPO_OPERADOR_INVENTARIO])
-        self.superuser = criar_usuario("superuser_perm", self.uo, None, grupos=[GRUPO_GESTOR_PATRIMONIO], is_superuser=True)
+        self.superuser = criar_usuario(
+            "superuser_perm", self.uo, None, grupos=[GRUPO_GESTOR_PATRIMONIO], is_superuser=True
+        )
         self.bem = criar_bem(self.ua, self.gestor)
         self.baixa = criar_baixa(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="P-PERM")
         BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
@@ -358,12 +417,19 @@ class TestPermissaoESuperuser(TestCase):
         self.baixa2 = criar_baixa(self.ua2, self.gestor, status=constants.ACEITA, numero_processo_baixa="P2")
         bem2 = criar_bem(self.ua2, self.gestor, numero_patrimonial="000.000000002-0")
         BaixaFisicaBensItem.objects.create(baixa=self.baixa2, bem=bem2)
-        self.nbbpm2 = _novo_nbbpm_com_baixas("016.0000002.2026", [self.baixa2], self.gestor, numero_processo_baixa="PROC2")
+        self.nbbpm2 = _novo_nbbpm_com_baixas(
+            "016.0000002.2026", [self.baixa2], self.gestor, numero_processo_baixa="PROC2"
+        )
 
     def _post_nbbpm(self, user, baixa):
         client = APIClient()
         client.force_authenticate(user=user)
-        payload = {"baixas": [baixa.id], "numero_processo_baixa": baixa.numero_processo_baixa, "data_autorizacao": str(timezone.localdate()), "responsavel": "X"}
+        payload = {
+            "baixas": [baixa.id],
+            "numero_processo_baixa": baixa.numero_processo_baixa,
+            "data_autorizacao": str(timezone.localdate()),
+            "responsavel": "X",
+        }
         return client.post("/api/nbbpm/", payload, format="json")
 
     def test_operador_nao_pode_gerar_nbbpm_via_api(self):
@@ -371,13 +437,23 @@ class TestPermissaoESuperuser(TestCase):
         self.assertIn(resp.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_400_BAD_REQUEST])
 
     def test_gestor_pode_gerar_nbbpm_via_api(self):
-        baixa_nova, _ = _nova_baixa_com_item(self.ua, self.gestor, numero_processo_baixa="P-NEW-GESTOR", bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000003-0"))
+        baixa_nova, _ = _nova_baixa_com_item(
+            self.ua,
+            self.gestor,
+            numero_processo_baixa="P-NEW-GESTOR",
+            bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000003-0"),
+        )
         resp = self._post_nbbpm(self.gestor, baixa_nova)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertRegex(resp.data["numero"], r"^\d{3}\.\d{7}[\./]\d{4}$")
 
     def test_superuser_pode_gerar_nbbpm_via_api(self):
-        baixa_nova, _ = _nova_baixa_com_item(self.ua, self.gestor, numero_processo_baixa="P-NEW-SUPER", bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000004-0"))
+        baixa_nova, _ = _nova_baixa_com_item(
+            self.ua,
+            self.gestor,
+            numero_processo_baixa="P-NEW-SUPER",
+            bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000004-0"),
+        )
         resp = self._post_nbbpm(self.superuser, baixa_nova)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
@@ -415,6 +491,7 @@ class TestPermissaoESuperuser(TestCase):
 # =====================================================================
 # 5b. Detalhe da NBBPM (GET /api/nbbpm/{id}/) — tela de visualização
 # =====================================================================
+
 
 class TestNBBPMRetrieve(TestCase):
     def setUp(self):
@@ -464,9 +541,7 @@ class TestNBBPMRetrieve(TestCase):
         self.assertEqual(baixa_1_data["unidade_administrativa_origem"]["id"], self.ua.id)
         self.assertEqual(baixa_1_data["numero_processo_baixa"], "P-DET-1")
         self.assertEqual(len(baixa_1_data["itens"]), 1)
-        self.assertEqual(
-            baixa_1_data["itens"][0]["bem"]["numero_patrimonial"], "000.000000101-0"
-        )
+        self.assertEqual(baixa_1_data["itens"][0]["bem"]["numero_patrimonial"], "000.000000101-0")
 
         # UAs diferentes na mesma NBBPM — a UA vem por Baixa, não pela nota inteira
         self.assertEqual(baixa_2_data["unidade_administrativa_origem"]["id"], self.ua2.id)
@@ -474,9 +549,7 @@ class TestNBBPMRetrieve(TestCase):
             baixa_1_data["unidade_administrativa_origem"]["id"],
             baixa_2_data["unidade_administrativa_origem"]["id"],
         )
-        self.assertEqual(
-            baixa_2_data["itens"][0]["bem"]["numero_patrimonial"], "000.000000102-0"
-        )
+        self.assertEqual(baixa_2_data["itens"][0]["bem"]["numero_patrimonial"], "000.000000102-0")
 
     def test_baixas_vem_ordenadas_por_id(self):
         resp = self.client.get(f"/api/nbbpm/{self.nbbpm.id}/")
@@ -485,9 +558,7 @@ class TestNBBPMRetrieve(TestCase):
         self.assertEqual(ids, sorted(ids))
 
     def test_operador_nao_pode_acessar_o_detalhe(self):
-        operador_outra_ua = criar_usuario(
-            "operador_fora", self.uo, self.ua2, grupos=[GRUPO_OPERADOR_INVENTARIO]
-        )
+        operador_outra_ua = criar_usuario("operador_fora", self.uo, self.ua2, grupos=[GRUPO_OPERADOR_INVENTARIO])
         client = APIClient()
         client.force_authenticate(user=operador_outra_ua)
 
@@ -510,6 +581,7 @@ class TestNBBPMRetrieve(TestCase):
 # =====================================================================
 # 6. Data migration idempotente
 # =====================================================================
+
 
 class TestDataMigrationIdempotente(TestCase):
     def setUp(self):
@@ -560,6 +632,7 @@ class TestDataMigrationIdempotente(TestCase):
 # 7. PDF padronizado lote 6 colunas
 # =====================================================================
 
+
 class TestPDFPadronizado(TestCase):
     def setUp(self):
         self.uo, self.ua, self.gestor = _setup_uo_ua_gestor("gestor_pdf")
@@ -590,13 +663,16 @@ class TestPDFPadronizado(TestCase):
 # 8. Export Excel busca número na nova tabela
 # =====================================================================
 
+
 class TestExcelExportNovaTabela(TestCase):
     def setUp(self):
         self.uo, self.ua, self.gestor = _setup_uo_ua_gestor("gestor_excel")
         self.bem = criar_bem(self.ua, self.gestor)
         self.baixa = criar_baixa(self.ua, self.gestor, status=constants.ACEITA, numero_nbbpm="")
         BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
-        self.nbbpm = _novo_nbbpm_com_baixas("016.0000999.2026", [self.baixa], self.gestor, numero_processo_baixa="PROC-EXCEL")
+        self.nbbpm = _novo_nbbpm_com_baixas(
+            "016.0000999.2026", [self.baixa], self.gestor, numero_processo_baixa="PROC-EXCEL"
+        )
         self.client = APIClient()
         self.client.force_authenticate(user=self.gestor)
 
@@ -613,7 +689,9 @@ class TestExcelExportNovaTabela(TestCase):
         self.assertEqual(BaixaFisicaResource().dehydrate_nbbpm(baixa), "016.0000999.2026")
 
     def test_excel_admin_fallback_legado_quando_sem_nbbpm(self):
-        baixa2 = criar_baixa(self.ua, self.gestor, status=constants.ACEITA, numero_nbbpm="016.0000001.2026", numero_processo_baixa="P2")
+        baixa2 = criar_baixa(
+            self.ua, self.gestor, status=constants.ACEITA, numero_nbbpm="016.0000001.2026", numero_processo_baixa="P2"
+        )
         baixa2.save()
         self.assertEqual(BaixaFisicaResource().dehydrate_nbbpm(baixa2), "016.0000001.2026")
 
@@ -621,6 +699,7 @@ class TestExcelExportNovaTabela(TestCase):
 # =====================================================================
 # 9. Desativação rotas antigas
 # =====================================================================
+
 
 class TestDesativacaoRotasAntigas(TestCase):
     def setUp(self):
@@ -643,8 +722,18 @@ class TestDesativacaoRotasAntigas(TestCase):
         self.assertEqual(admin.baixar_nbbpm(request, self.baixa.pk).status_code, 410)
 
     def test_nova_api_nbbpm_funciona(self):
-        baixa_nova, _ = _nova_baixa_com_item(self.ua, self.gestor, numero_processo_baixa="P-NOVA", bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000009-0"))
-        payload = {"baixas": [baixa_nova.id], "numero_processo_baixa": "P-NOVA", "data_autorizacao": str(timezone.localdate()), "responsavel": "Gestor"}
+        baixa_nova, _ = _nova_baixa_com_item(
+            self.ua,
+            self.gestor,
+            numero_processo_baixa="P-NOVA",
+            bem=criar_bem(self.ua, self.gestor, numero_patrimonial="000.000000009-0"),
+        )
+        payload = {
+            "baixas": [baixa_nova.id],
+            "numero_processo_baixa": "P-NOVA",
+            "data_autorizacao": str(timezone.localdate()),
+            "responsavel": "Gestor",
+        }
         resp = self.client.post("/api/nbbpm/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         resp_pdf = self.client.get(f"/api/nbbpm/{resp.data['id']}/pdf/")
@@ -656,6 +745,7 @@ class TestDesativacaoRotasAntigas(TestCase):
 # 10. Validação de vínculo e bloqueio de reuso
 # =====================================================================
 
+
 class TestValidacaoVinculoEReuso(TestCase):
     def setUp(self):
         self.uo, self.ua, self.gestor = _setup_uo_ua_gestor("gestor_vinc")
@@ -665,7 +755,12 @@ class TestValidacaoVinculoEReuso(TestCase):
         self.nbbpm = _novo_nbbpm_com_baixas("016.0000001.2026", [self.baixa], self.gestor)
 
     def _assert_serializer_invalido(self, baixa):
-        data = {"baixas": [baixa.id], "numero_processo_baixa": baixa.numero_processo_baixa, "data_autorizacao": str(timezone.localdate()), "responsavel": "G"}
+        data = {
+            "baixas": [baixa.id],
+            "numero_processo_baixa": baixa.numero_processo_baixa,
+            "data_autorizacao": str(timezone.localdate()),
+            "responsavel": "G",
+        }
         req = MagicMock()
         req.user = self.gestor
         serializer = NBBPMGerarLoteSerializer(data=data, context={"request": req})
@@ -694,7 +789,9 @@ class TestValidacaoVinculoEReuso(TestCase):
 
 class TestServiceNBBPMNumeroCoberturaExtra(TestCase):
     def setUp(self):
-        self.uo, self.ua, self.gestor = _setup_uo_ua_gestor("gest_svc2", ua_codigo=codigo_ua(1, 16, 10, 40), ua_sigla="UA40", ua_nome="UA40")
+        self.uo, self.ua, self.gestor = _setup_uo_ua_gestor(
+            "gest_svc2", ua_codigo=codigo_ua(1, 16, 10, 40), ua_sigla="UA40", ua_nome="UA40"
+        )
         self.baixa = criar_baixa(self.ua, self.gestor)
         BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=criar_bem(self.ua, self.gestor))
 
@@ -709,7 +806,13 @@ class TestServiceNBBPMNumeroCoberturaExtra(TestCase):
         self.assertEqual(svc.obter_proximo_sequencial_por_ano(2099), 8)
 
     def test_extrair_e_retry(self):
-        n = NBBPM(numero="", data_autorizacao=timezone.localdate(), numero_processo_baixa="P", responsavel="G", criado_por=self.gestor)
+        n = NBBPM(
+            numero="",
+            data_autorizacao=timezone.localdate(),
+            numero_processo_baixa="P",
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         self.assertIsNotNone(svc._extrair_ano_nbbpm(n))
         self.assertEqual(svc._extrair_ano_nbbpm(MagicMock(data_autorizacao=None, data_aprovacao="2022-01-01")), 2022)
         self.assertIsNone(svc._extrair_ano_nbbpm(MagicMock(data_autorizacao=None, data_aprovacao=None)))
@@ -724,14 +827,28 @@ class TestServiceNBBPMNumeroCoberturaExtra(TestCase):
         uo_tmp, _ = UO_Model.objects.get_or_create(codigo="555", defaults={"nome": "UO555", "sigla": "UO555"})
         ua2 = criar_ua(uo=uo_tmp, codigo="555", sigla="U2", nome="U2")
         b2 = criar_baixa(ua2, self.gestor)
-        BaixaFisicaBensItem.objects.create(baixa=b2, bem=criar_bem(ua2, self.gestor, numero_patrimonial="000.000000010-0"))
+        BaixaFisicaBensItem.objects.create(
+            baixa=b2, bem=criar_bem(ua2, self.gestor, numero_patrimonial="000.000000010-0")
+        )
         with self.assertRaises(ValidationError):
-            svc.criar_nbbpm_com_retry(baixas=[self.baixa, b2], numero_processo_baixa=self.baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+            svc.criar_nbbpm_com_retry(
+                baixas=[self.baixa, b2],
+                numero_processo_baixa=self.baixa.numero_processo_baixa,
+                data_autorizacao=timezone.localdate(),
+                responsavel="G",
+                criado_por=self.gestor,
+            )
         self.baixa.nbbpms_lote.clear()
         self.baixa.numero_nbbpm = ""
         self.baixa.save(update_fields=["numero_nbbpm"])
         NBBPM.objects.filter(numero="001.0000001/2026").delete()
-        n = svc.criar_nbbpm_com_retry(baixas=[self.baixa], numero_processo_baixa=self.baixa.numero_processo_baixa, data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        n = svc.criar_nbbpm_com_retry(
+            baixas=[self.baixa],
+            numero_processo_baixa=self.baixa.numero_processo_baixa,
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         self.assertTrue(n.numero.startswith("001."))
         ua_sem_id = MagicMock(pk=1, unidade_orcamentaria_id=None, unidade_orcamentaria=MagicMock(pk=99))
         b_mock = MagicMock(pk=1, unidade_administrativa_origem=ua_sem_id)

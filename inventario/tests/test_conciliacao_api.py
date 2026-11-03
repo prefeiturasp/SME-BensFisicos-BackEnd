@@ -104,14 +104,10 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         self._auth(self.gestor_com_ua)
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            set(response.data["results"][0].keys()), self.LIST_FIELDS
-        )
+        self.assertEqual(set(response.data["results"][0].keys()), self.LIST_FIELDS)
 
     def test_listagem_filtros_status_tipo_e_ano(self):
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua2.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua2.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.gestor_sem_ua)
 
         response = self.client.get(
@@ -128,26 +124,18 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
-        self.assertEqual(
-            ids, {self.conciliacao_ua1.id, self.conciliacao_ua2.id}
-        )
+        self.assertEqual(ids, {self.conciliacao_ua1.id, self.conciliacao_ua2.id})
 
     def test_listagem_filtro_multi_status(self):
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua2.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua2.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.gestor_sem_ua)
         response = self.client.get(
             self.list_url,
-            {
-                "status": f"{constants.CONCILIACAO_EM_ABERTO},{constants.CONCILIACAO_FECHADO}"
-            },
+            {"status": f"{constants.CONCILIACAO_EM_ABERTO},{constants.CONCILIACAO_FECHADO}"},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
-        self.assertEqual(
-            ids, {self.conciliacao_ua1.id, self.conciliacao_ua2.id}
-        )
+        self.assertEqual(ids, {self.conciliacao_ua1.id, self.conciliacao_ua2.id})
 
     def test_listagem_filtro_periodo_final_range(self):
         self._auth(self.gestor_sem_ua)
@@ -184,9 +172,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         response = self.client.get(self._detail_url(self.conciliacao_ua1.id))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.conciliacao_ua1.id)
-        self.assertTrue(
-            self.DETAIL_EXTRA_FIELDS.issubset(set(response.data.keys()))
-        )
+        self.assertTrue(self.DETAIL_EXTRA_FIELDS.issubset(set(response.data.keys())))
         self.assertIn("encontrados", response.data["resumo_situacoes"])
         self.assertTrue(response.data["esta_aberto"])
 
@@ -197,30 +183,22 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_retrieve_remove_itens_baixados_invalidos(self):
         self._auth(self.gestor_com_ua)
-        with patch(
-            "inventario.api_views.remover_itens_baixados_invalidos"
-        ) as mock_remover:
+        with patch("inventario.api_views.remover_itens_baixados_invalidos") as mock_remover:
             mock_remover.return_value = 0
             response = self.client.get(self._detail_url(self.conciliacao_ua1.id))
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             mock_remover.assert_called_once()
 
     def test_retrieve_conciliacao_fechada_nao_remove_itens(self):
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.gestor_com_ua)
-        with patch(
-            "inventario.api_views.remover_itens_baixados_invalidos"
-        ) as mock_remover:
+        with patch("inventario.api_views.remover_itens_baixados_invalidos") as mock_remover:
             response = self.client.get(self._detail_url(self.conciliacao_ua1.id))
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             mock_remover.assert_not_called()
 
     def test_create_eventual_por_gestor_com_ua(self):
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.gestor_com_ua)
 
         payload = self._payload_create(
@@ -236,9 +214,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         self.assertTrue(nova.itens.exists())
 
     def test_create_por_operador_no_escopo(self):
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.operador)
         payload = self._payload_create(
             periodo_final=str(date.today() - timezone.timedelta(days=1)),
@@ -281,9 +257,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         self.assertIn("periodo_final", response.data)
 
     def test_create_eventual_com_periodo_final_futuro_retorna_400(self):
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.gestor_com_ua)
         payload = self._payload_create(
             periodo_final=str(date.today() + timezone.timedelta(days=1)),
@@ -315,9 +289,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         self._auth(self.gestor_com_ua)
         url = self._detail_url(self.conciliacao_ua1.id)
 
-        put = self.client.put(
-            url, self._payload_create(), format="json"
-        )
+        put = self.client.put(url, self._payload_create(), format="json")
         self.assertEqual(put.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
         patch = self.client.patch(url, {"status": "fechado"}, format="json")
@@ -332,15 +304,11 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.conciliacao_ua1.refresh_from_db()
-        self.assertEqual(
-            self.conciliacao_ua1.status, constants.CONCILIACAO_FECHADO
-        )
+        self.assertEqual(self.conciliacao_ua1.status, constants.CONCILIACAO_FECHADO)
         self.assertEqual(self.conciliacao_ua1.fechado_por, self.gestor_com_ua)
 
     def test_finalizar_ja_fechada_retorna_400(self):
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.gestor_com_ua)
         url = reverse("conciliacoes-finalizar", args=[self.conciliacao_ua1.id])
         response = self.client.post(url)
@@ -352,9 +320,7 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.conciliacao_ua1.refresh_from_db()
-        self.assertEqual(
-            self.conciliacao_ua1.status, constants.CONCILIACAO_FECHADO
-        )
+        self.assertEqual(self.conciliacao_ua1.status, constants.CONCILIACAO_FECHADO)
         self.assertEqual(self.conciliacao_ua1.fechado_por, self.operador)
 
     def test_finalizar_fora_do_escopo_retorna_404(self):
@@ -372,20 +338,12 @@ class ConciliacaoUAAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_historico_registra_finalizar(self):
         self._auth(self.gestor_com_ua)
-        url_finalizar = reverse(
-            "conciliacoes-finalizar", args=[self.conciliacao_ua1.id]
-        )
+        url_finalizar = reverse("conciliacoes-finalizar", args=[self.conciliacao_ua1.id])
         self.client.post(url_finalizar)
 
-        url_historico = reverse(
-            "conciliacoes-historico", args=[self.conciliacao_ua1.id]
-        )
+        url_historico = reverse("conciliacoes-historico", args=[self.conciliacao_ua1.id])
         response = self.client.get(url_historico)
-        campos = {
-            acao["campo"]
-            for grupo in response.data
-            for acao in grupo["acoes"]
-        }
+        campos = {acao["campo"] for grupo in response.data for acao in grupo["acoes"]}
         self.assertIn("status", campos)
         self.assertIn("fechado_por", campos)
 

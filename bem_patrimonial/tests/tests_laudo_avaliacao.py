@@ -39,6 +39,7 @@ from usuario.models import Usuario
 # HELPERS — idênticos aos de tests_baixa_fisica_api.py
 # ============================================================================
 
+
 def criar_usuario(username, uo, ua, grupos=None, **kwargs):
     user = Usuario.objects.create_user(
         username=username,
@@ -48,14 +49,13 @@ def criar_usuario(username, uo, ua, grupos=None, **kwargs):
         unidade_orcamentaria=uo,
         **kwargs,
     )
-    for grupo_nome in (grupos or []):
+    for grupo_nome in grupos or []:
         grupo, _ = Group.objects.get_or_create(name=grupo_nome)
         user.groups.add(grupo)
     return user
 
 
-def criar_bem(ua, criado_por, numero_patrimonial="000.000000001-0",
-              status=constants.APROVADO, **kwargs):
+def criar_bem(ua, criado_por, numero_patrimonial="000.000000001-0", status=constants.APROVADO, **kwargs):
     return BemPatrimonial.objects.create(
         nome=kwargs.pop("nome", "Notebook Dell"),
         descricao=kwargs.pop("descricao", "Notebook para testes"),
@@ -89,22 +89,29 @@ class BaseSetup(TestCase):
         self.ua2 = criar_ua(uo=self.uo, codigo="002", nome="UA Dois", sigla="UAD")
 
         self.gestor = criar_usuario(
-            "gestor_laudo", self.uo, self.ua,
+            "gestor_laudo",
+            self.uo,
+            self.ua,
             grupos=[GRUPO_GESTOR_PATRIMONIO],
             is_staff=True,
         )
         self.operador = criar_usuario(
-            "operador_laudo", self.uo, self.ua,
+            "operador_laudo",
+            self.uo,
+            self.ua,
             grupos=[GRUPO_OPERADOR_INVENTARIO],
         )
         self.operador2 = criar_usuario(
-            "operador2_laudo", self.uo, self.ua2,
+            "operador2_laudo",
+            self.uo,
+            self.ua2,
             grupos=[GRUPO_OPERADOR_INVENTARIO],
         )
 
         self.bem = criar_bem(self.ua, self.operador)
         self.bem2 = criar_bem(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             numero_patrimonial="000.000000002-0",
             nome="Monitor LG",
             descricao="Monitor 24 polegadas",
@@ -127,6 +134,7 @@ class BaseAPISetup(BaseSetup):
 # TESTES UNITÁRIOS — gerar_pdf_laudo_avaliacao()
 # ============================================================================
 
+
 class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
     """
     Testa a função gerar_pdf_laudo_avaliacao() diretamente,
@@ -138,7 +146,8 @@ class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
 
     def _criar_baixa_aceita(self, **kwargs):
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa=kwargs.pop("numero_processo_baixa", "PROC-LAUDO-001"),
             **kwargs,
@@ -192,7 +201,8 @@ class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
         from bem_patrimonial.laudo_avaliacao import gerar_pdf_laudo_avaliacao
 
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa="PROC-VAZIO",
         )
@@ -244,6 +254,7 @@ class GerarPdfLaudoAvaliacaoTestCase(BaseSetup):
 # ============================================================================
 # TESTES UNITÁRIOS — http_response_laudo_avaliacao()
 # ============================================================================
+
 
 class HttpResponseLaudoAvaliacaoTestCase(BaseSetup):
     """
@@ -318,6 +329,7 @@ class HttpResponseLaudoAvaliacaoTestCase(BaseSetup):
 # TESTES DO ENDPOINT — GET /api/baixa-fisica/{id}/gerar-laudo/
 # ============================================================================
 
+
 class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
     """
     Testa o endpoint gerar-laudo via API.
@@ -328,7 +340,8 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
     def setUp(self):
         super().setUp()
         self.baixa_aceita = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa="PROC-LAUDO-API",
         )
@@ -389,7 +402,8 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
     def test_gerar_laudo_status_solicitada_retorna_400(self):
         """Deve retornar 400 para baixa com status SOLICITADA."""
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.SOLICITADA,
             numero_processo_baixa="PROC-SOL",
         )
@@ -400,7 +414,8 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
     def test_gerar_laudo_status_aguardando_envio_retorna_400(self):
         """Deve retornar 400 para baixa com status AGUARDANDO_ENVIO."""
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.AGUARDANDO_ENVIO,
             numero_processo_baixa="PROC-AG",
         )
@@ -411,7 +426,8 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
     def test_gerar_laudo_status_recusada_retorna_400(self):
         """Deve retornar 400 para baixa com status RECUSADA."""
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.RECUSADA,
             numero_processo_baixa="PROC-REC",
         )
@@ -422,7 +438,8 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
     def test_gerar_laudo_mensagem_erro_status_invalido(self):
         """Resposta 400 deve conter mensagem de erro descritiva."""
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.SOLICITADA,
             numero_processo_baixa="PROC-MSG",
         )
@@ -454,6 +471,7 @@ class BaixaFisicaViewSetGerarLaudoTestCase(BaseAPISetup):
 # TESTES DO SERIALIZER — campo url_gerar_laudo
 # ============================================================================
 
+
 class BaixaFisicaDetailSerializerUrlGerarLaudoTestCase(BaseSetup):
     """
     Testa o campo url_gerar_laudo no BaixaFisicaBemPatrimonialDetailSerializer.
@@ -464,9 +482,7 @@ class BaixaFisicaDetailSerializerUrlGerarLaudoTestCase(BaseSetup):
         req = MagicMock()
         req.user = user or self.gestor
         req.build_absolute_uri = lambda path: f"https://testserver{path}"
-        return BaixaFisicaBemPatrimonialDetailSerializer(
-            baixa, context={"request": req}
-        )
+        return BaixaFisicaBemPatrimonialDetailSerializer(baixa, context={"request": req})
 
     def test_url_gerar_laudo_presente_quando_aceita(self):
         """url_gerar_laudo deve ser não-nulo para baixas com status ACEITA."""
@@ -506,7 +522,8 @@ class BaixaFisicaDetailSerializerUrlGerarLaudoTestCase(BaseSetup):
         """
         # Sem NBBPM
         baixa_sem_nbbpm = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa="PROC-SEM-NBBPM",
         )
@@ -515,7 +532,8 @@ class BaixaFisicaDetailSerializerUrlGerarLaudoTestCase(BaseSetup):
 
         # Com NBBPM
         baixa_com_nbbpm = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_nbbpm="NBBPM-TEST-001",
             numero_processo_baixa="PROC-COM-NBBPM",
@@ -528,7 +546,8 @@ class BaixaFisicaDetailSerializerUrlGerarLaudoTestCase(BaseSetup):
         Confirma que url_gerar_nbbpm ainda exige numero_nbbpm (sem regressão).
         """
         baixa_sem_nbbpm = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa="PROC-REG",
         )
@@ -541,9 +560,7 @@ class BaixaFisicaDetailSerializerUrlGerarLaudoTestCase(BaseSetup):
     def test_url_gerar_laudo_sem_request_retorna_none(self):
         """Sem request no contexto, url_gerar_laudo deve ser None."""
         baixa = criar_baixa(self.ua, self.operador, status=constants.ACEITA)
-        serializer = BaixaFisicaBemPatrimonialDetailSerializer(
-            baixa, context={}
-        )
+        serializer = BaixaFisicaBemPatrimonialDetailSerializer(baixa, context={})
         data = serializer.data
         self.assertIsNone(data["url_gerar_laudo"])
 
@@ -557,6 +574,7 @@ class BaixaFisicaDetailSerializerUrlGerarLaudoTestCase(BaseSetup):
 # ============================================================================
 # TESTES DE HELPERS INTERNOS — funções de formatação
 # ============================================================================
+
 
 class LaudoAvaliacaoHelpersTestCase(BaseSetup):
     """
@@ -588,13 +606,14 @@ class LaudoAvaliacaoHelpersTestCase(BaseSetup):
         from bem_patrimonial.laudo_avaliacao import _obter_bens_baixa
 
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa="PROC-ORD",
         )
         # Adiciona bens fora de ordem
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem2)  # 000.000000002-0
-        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)   # 000.000000001-0
+        BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)  # 000.000000001-0
 
         bens = _obter_bens_baixa(baixa)
 
@@ -607,7 +626,8 @@ class LaudoAvaliacaoHelpersTestCase(BaseSetup):
         from bem_patrimonial.laudo_avaliacao import _obter_bens_baixa
 
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa="PROC-VAZIO",
         )
@@ -619,7 +639,8 @@ class LaudoAvaliacaoHelpersTestCase(BaseSetup):
         from bem_patrimonial.laudo_avaliacao import _obter_bens_baixa
 
         baixa = criar_baixa(
-            self.ua, self.operador,
+            self.ua,
+            self.operador,
             status=constants.ACEITA,
             numero_processo_baixa="PROC-NULL",
         )

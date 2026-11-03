@@ -24,9 +24,7 @@ def alerta_movimentacoes_pendentes(context, css_class=""):
     if not ua:
         return {"pendencias": None, "css_class": css_class}
 
-    if not (
-        user.is_gestor_patrimonio or user.is_operador_inventario or user.is_superuser
-    ):
+    if not (user.is_gestor_patrimonio or user.is_operador_inventario or user.is_superuser):
         return {"pendencias": None, "css_class": css_class}
 
     limite = timezone.now() - timedelta(days=7)
@@ -40,10 +38,7 @@ def alerta_movimentacoes_pendentes(context, css_class=""):
     if total == 0:
         return {"pendencias": None, "css_class": css_class}
 
-    url = (
-        reverse("admin:bem_patrimonial_movimentacaobempatrimonial_changelist")
-        + "?atrasada=1"
-    )
+    url = reverse("admin:bem_patrimonial_movimentacaobempatrimonial_changelist") + "?atrasada=1"
 
     return {
         "pendencias": {

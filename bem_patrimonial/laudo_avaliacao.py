@@ -53,6 +53,7 @@ LARGURA_UTIL = A4[0] - PDFConfig.MARGEM_ESQUERDA - PDFConfig.MARGEM_DIREITA
 # HELPERS INTERNOS
 # ===========================================================================
 
+
 def _obter_bens_baixa(baixa: BaixaFisicaBemPatrimonial):
     """Retorna lista de bens ordenada por número patrimonial."""
     itens = baixa.itens.select_related("bem").all()
@@ -73,6 +74,7 @@ def _formatar_data_criacao(baixa: BaixaFisicaBemPatrimonial) -> str:
     if hasattr(dt, "date"):
         try:
             from zoneinfo import ZoneInfo
+
             tz = ZoneInfo(PDFConfig.TZ_PADRAO)
             if timezone.is_aware(dt):
                 dt = dt.astimezone(tz).date()
@@ -87,6 +89,7 @@ def _formatar_data_criacao(baixa: BaixaFisicaBemPatrimonial) -> str:
 # ===========================================================================
 # CABEÇALHO — desenhado no onPage para repetir em todas as páginas
 # ===========================================================================
+
 
 def _desenhar_cabecalho(canvas, _, baixa: BaixaFisicaBemPatrimonial):
     """
@@ -172,6 +175,7 @@ def _desenhar_cabecalho(canvas, _, baixa: BaixaFisicaBemPatrimonial):
 # RODAPÉ — desenhado no onPage
 # ===========================================================================
 
+
 def _desenhar_rodape(canvas, _, baixa: BaixaFisicaBemPatrimonial):
     """
     Rodapé com identificação do solicitante e data da solicitação:
@@ -224,6 +228,7 @@ def _desenhar_rodape(canvas, _, baixa: BaixaFisicaBemPatrimonial):
 # ELEMENTOS DO CONTEÚDO
 # ===========================================================================
 
+
 def _criar_titulo(styles) -> list:
     """Título centralizado do documento."""
     estilo_titulo = criar_estilo_base(
@@ -275,8 +280,8 @@ def _criar_descricao_legal(styles) -> list:
         "Irrecuperáveis</b></u>, conforme Artigo 20 do Decreto 53.484/2012:"
     )
     citacao = (
-        "<i>\" I – irrecuperável: quando não puder mais ser utilizado para o fim "
-        "a que se destina devido à perda de suas características;\"</i>"
+        '<i>" I – irrecuperável: quando não puder mais ser utilizado para o fim '
+        'a que se destina devido à perda de suas características;"</i>'
     )
 
     return [
@@ -332,40 +337,45 @@ def _criar_tabela_bens(baixa: BaixaFisicaBemPatrimonial, styles) -> list:
         numero = bem.numero_patrimonial or "-"
         nome = (bem.nome or "-").upper()
         descricao = (bem.descricao or bem.nome or "-").upper()
-        dados.append([
-            Paragraph(numero, estilo_celula),
-            Paragraph(nome, estilo_celula),
-            Paragraph(descricao, estilo_celula),
-        ])
+        dados.append(
+            [
+                Paragraph(numero, estilo_celula),
+                Paragraph(nome, estilo_celula),
+                Paragraph(descricao, estilo_celula),
+            ]
+        )
 
     if not bens:
-        dados.append([
-            Paragraph("-", estilo_celula),
-            Paragraph("-", estilo_celula),
-            Paragraph("Nenhum bem vinculado.", estilo_celula),
-        ])
+        dados.append(
+            [
+                Paragraph("-", estilo_celula),
+                Paragraph("-", estilo_celula),
+                Paragraph("Nenhum bem vinculado.", estilo_celula),
+            ]
+        )
 
     tabela = Table(dados, colWidths=[col_pat, col_nome, col_desc], repeatRows=1)
-    tabela.setStyle(TableStyle([
-        # Cabeçalho
-        ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_HEADER),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        # Bordas
-        ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-        ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.grey),
-        # Padding
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        # Zebra nas linhas de dados
-        *[
-            ("BACKGROUND", (0, i), (-1, i), PDFConfig.COR_CINZA_ZEBRA)
-            for i in range(2, len(dados), 2)
-        ],
-    ]))
+    tabela.setStyle(
+        TableStyle(
+            [
+                # Cabeçalho
+                ("BACKGROUND", (0, 0), (-1, 0), PDFConfig.COR_HEADER),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                # Bordas
+                ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                # Padding
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                # Zebra nas linhas de dados
+                *[("BACKGROUND", (0, i), (-1, i), PDFConfig.COR_CINZA_ZEBRA) for i in range(2, len(dados), 2)],
+            ]
+        )
+    )
 
     return [tabela, Spacer(1, 0.6 * cm)]
 
@@ -406,14 +416,18 @@ def _criar_bloco_assinaturas(styles) -> list:
         colWidths=[largura_celula, largura_celula],
         rowHeights=[2.0 * cm, None, None],
     )
-    tabela.setStyle(TableStyle([
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ]))
+    tabela.setStyle(
+        TableStyle(
+            [
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
 
     return [Spacer(1, 1.0 * cm), tabela]
 
@@ -421,6 +435,7 @@ def _criar_bloco_assinaturas(styles) -> list:
 # ===========================================================================
 # FUNÇÃO PRINCIPAL DE GERAÇÃO
 # ===========================================================================
+
 
 def gerar_pdf_laudo_avaliacao(
     baixa: BaixaFisicaBemPatrimonial,
@@ -441,9 +456,7 @@ def gerar_pdf_laudo_avaliacao(
         raise ValidationError("Objeto inválido para gerar Laudo de Avaliação.")
 
     if baixa.status != constants.ACEITA:
-        raise ValidationError(
-            "O Laudo de Avaliação só pode ser gerado para Baixas Físicas aceitas."
-        )
+        raise ValidationError("O Laudo de Avaliação só pode ser gerado para Baixas Físicas aceitas.")
 
     buffer = BytesIO()
 
@@ -490,6 +503,7 @@ def gerar_pdf_laudo_avaliacao(
 # ===========================================================================
 # HTTP RESPONSE HELPER
 # ===========================================================================
+
 
 def http_response_laudo_avaliacao(
     baixa: BaixaFisicaBemPatrimonial,

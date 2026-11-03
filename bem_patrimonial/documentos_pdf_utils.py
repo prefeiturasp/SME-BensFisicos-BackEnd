@@ -386,7 +386,9 @@ def criar_tabela_bens_padrao(
     subheaders = [
         Paragraph("<b>DE</b>", header_style),
         Paragraph("<b>ATÉ</b>", header_style),
-        "", "", "",
+        "",
+        "",
+        "",
     ]
 
     data = [headers, subheaders]

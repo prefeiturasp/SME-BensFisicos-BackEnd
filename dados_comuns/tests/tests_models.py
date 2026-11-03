@@ -105,9 +105,7 @@ class UnidadeAdministrativaOrderingTestCase(TestCase):
         self.assertEqual(unidades_codigo_050[2].sigla, "DRE-CS")
 
     def test_model_meta_ordering(self):
-        self.assertEqual(
-            UnidadeAdministrativa._meta.ordering, ["codigo", "sigla", "nome"]
-        )
+        self.assertEqual(UnidadeAdministrativa._meta.ordering, ["codigo", "sigla", "nome"])
 
     def test_str_representation(self):
         unidade = UnidadeAdministrativa.objects.first()

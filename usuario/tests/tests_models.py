@@ -40,9 +40,7 @@ class SetupData:
         return usuario
 
     def add_group(self, usuario):
-        group_operador_inventario, _ = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )
+        group_operador_inventario, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
         usuario.groups.add(group_operador_inventario)
 
 
@@ -91,9 +89,7 @@ class CustomUserModelAdminTestCase(TestCase):
         )
 
         self.group_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.group_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.group_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
     def test_list_display_contains_correct_fields(self):
         expected_fields = ("nome", "email", "unidade_administrativa", "get_grupo")
@@ -220,9 +216,7 @@ class CustomUserModelAdminExportTestCase(TestCase):
         )
 
         self.group_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.group_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.group_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.superuser = Usuario.objects.create_user(
             username="superuser_export",
@@ -317,9 +311,7 @@ class CustomUserModelAdminExportTestCase(TestCase):
 
         resource = UsuarioResource()
         dataset = resource.export(
-            Usuario.objects.filter(
-                pk__in=[self.gestor.pk, self.operador.pk, usuario_sem_grupo.pk]
-            )
+            Usuario.objects.filter(pk__in=[self.gestor.pk, self.operador.pk, usuario_sem_grupo.pk])
         )
 
         self.assertEqual(
@@ -702,9 +694,7 @@ class CustomUserModelAdminFieldsetsTestCase(TestCase):
         nome_index = fields_list.index("nome")
         rf_index = fields_list.index("rf")
 
-        self.assertEqual(
-            rf_index, nome_index + 1, "RF deve estar logo após o campo nome"
-        )
+        self.assertEqual(rf_index, nome_index + 1, "RF deve estar logo após o campo nome")
 
 
 class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
@@ -780,23 +770,17 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
             .first()
         )
         if not expected_first_uo_id:
-            expected_first_uo = UnidadeOrcamentaria.objects.order_by(
-                "codigo", "id"
-            ).first()
+            expected_first_uo = UnidadeOrcamentaria.objects.order_by("codigo", "id").first()
             self.assertIsNotNone(expected_first_uo)
             expected_first_uo_id = expected_first_uo.id
 
         fk_field = Usuario._meta.get_field("unidade_administrativa")
         fk_formfield = self.admin.formfield_for_foreignkey(fk_field, request)
-        fk_uo_ids = set(
-            fk_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True)
-        )
+        fk_uo_ids = set(fk_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True))
 
         m2m_field = Usuario._meta.get_field("unidades_administrativas")
         m2m_formfield = self.admin.formfield_for_manytomany(m2m_field, request)
-        m2m_uo_ids = set(
-            m2m_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True)
-        )
+        m2m_uo_ids = set(m2m_formfield.queryset.values_list("unidade_orcamentaria_id", flat=True))
 
         self.assertEqual(fk_uo_ids, {expected_first_uo_id})
         self.assertEqual(m2m_uo_ids, {expected_first_uo_id})
@@ -885,9 +869,7 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         request.user = self.superuser
         form = SimpleNamespace(instance=usuario, cleaned_data={})
 
-        with patch(
-            "django.contrib.auth.admin.UserAdmin.save_related", return_value=None
-        ):
+        with patch("django.contrib.auth.admin.UserAdmin.save_related", return_value=None):
             self.admin.save_related(request, form, [], change=True)
 
         usuario.refresh_from_db()
@@ -905,20 +887,14 @@ class CustomUserModelAdminManyToManyQuerysetTestCase(TestCase):
         nome_index = fields_list.index("nome")
         rf_index = fields_list.index("rf")
 
-        self.assertEqual(
-            rf_index, nome_index + 1, "RF deve estar logo após o campo nome"
-        )
+        self.assertEqual(rf_index, nome_index + 1, "RF deve estar logo após o campo nome")
 
 
 class UsuarioModelTests(TestCase):
     def test_defaults_flags(self):
         u = User.objects.create_user(username="u1", **auth_kwargs("x"))
-        self.assertTrue(
-            u.must_change_password, "must_change_password deve iniciar como True"
-        )
-        self.assertIsNone(
-            u.last_password_change, "last_password_change deve iniciar como None"
-        )
+        self.assertTrue(u.must_change_password, "must_change_password deve iniciar como True")
+        self.assertIsNone(u.last_password_change, "last_password_change deve iniciar como None")
 
     def test_can_update_last_password_change_and_flag(self):
         u = User.objects.create_user(username="u2", **auth_kwargs("old"))

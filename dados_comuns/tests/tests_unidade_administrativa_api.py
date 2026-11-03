@@ -406,9 +406,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self.assertIn("acoes", response.data[0])
 
         self._auth(self.superuser)
-        historico_fora_escopo = self.client.get(
-            reverse("unidades-administrativas-historico", args=[self.ua3.id])
-        )
+        historico_fora_escopo = self.client.get(reverse("unidades-administrativas-historico", args=[self.ua3.id]))
         self.assertEqual(historico_fora_escopo.status_code, status.HTTP_404_NOT_FOUND)
 
     # ===============================
@@ -551,9 +549,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
         for termo, esperado in cenarios:
             with self.subTest(termo=termo):
-                response = self.client.get(
-                    self._usuarios_url(self.ua1.id), {"search": termo}
-                )
+                response = self.client.get(self._usuarios_url(self.ua1.id), {"search": termo})
                 usernames = [item["username"] for item in response.data["results"]]
                 self.assertEqual(usernames, [esperado])
 
@@ -561,9 +557,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self._criar_usuarios_da_ua1()
         self._auth(self.gestor)
 
-        response = self.client.get(
-            self._usuarios_url(self.ua1.id), {"search": "   Bruno   "}
-        )
+        response = self.client.get(self._usuarios_url(self.ua1.id), {"search": "   Bruno   "})
 
         usernames = [item["username"] for item in response.data["results"]]
         self.assertEqual(usernames, ["bruno_m2m"])
@@ -580,9 +574,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self._criar_usuarios_da_ua1()
         self._auth(self.gestor)
 
-        response = self.client.get(
-            self._usuarios_url(self.ua1.id), {"search": "inexistente"}
-        )
+        response = self.client.get(self._usuarios_url(self.ua1.id), {"search": "inexistente"})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 0)
@@ -602,12 +594,8 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
 
         for campo in ("id", "nome", "username", "rf"):
             with self.subTest(campo=campo):
-                asc = self.client.get(
-                    self._usuarios_url(self.ua1.id), {"ordering": campo}
-                )
-                desc = self.client.get(
-                    self._usuarios_url(self.ua1.id), {"ordering": f"-{campo}"}
-                )
+                asc = self.client.get(self._usuarios_url(self.ua1.id), {"ordering": campo})
+                desc = self.client.get(self._usuarios_url(self.ua1.id), {"ordering": f"-{campo}"})
 
                 valores_asc = [item[campo] for item in asc.data["results"]]
                 valores_desc = [item[campo] for item in desc.data["results"]]
@@ -624,9 +612,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self._criar_usuarios_da_ua1()
         self._auth(self.gestor)
 
-        response = self.client.get(
-            self._usuarios_url(self.ua1.id), {"ordering": "email; drop table"}
-        )
+        response = self.client.get(self._usuarios_url(self.ua1.id), {"ordering": "email; drop table"})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         nomes = [item["nome"] for item in response.data["results"]]
@@ -636,9 +622,7 @@ class UnidadeAdministrativaAPITestCase(APITestCase):
         self._criar_usuarios_da_ua1()
         self._auth(self.gestor)
 
-        primeira = self.client.get(
-            self._usuarios_url(self.ua1.id), {"page_size": 3, "ordering": "nome"}
-        )
+        primeira = self.client.get(self._usuarios_url(self.ua1.id), {"page_size": 3, "ordering": "nome"})
         self.assertEqual(primeira.data["count"], self.TOTAL_USUARIOS_UA1)
         self.assertEqual(len(primeira.data["results"]), 3)
         self.assertIsNotNone(primeira.data["next"])

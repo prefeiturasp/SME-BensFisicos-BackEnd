@@ -72,10 +72,7 @@ class ParametroConciliacaoAnualPermission(BasePermission):
         return bool(getattr(user, "is_gestor_patrimonio", False))
 
     def _pode_gerenciar(self, user):
-        return bool(
-            getattr(user, "is_superuser", False)
-            or getattr(user, "is_gestor_patrimonio", False)
-        )
+        return bool(getattr(user, "is_superuser", False) or getattr(user, "is_gestor_patrimonio", False))
 
     def has_permission(self, request, view):
         if not self._pode_acessar_modulo(request.user):
@@ -106,8 +103,7 @@ class ParametroConciliacaoAnualPermission(BasePermission):
         tags=["Inventário"],
         summary="Listar parâmetros de conciliação anual",
         description=(
-            "Lista paginada com busca, filtros e ordenação. "
-            "Acesso restrito a superusuário e gestor de patrimônio."
+            "Lista paginada com busca, filtros e ordenação. " "Acesso restrito a superusuário e gestor de patrimônio."
         ),
     ),
     retrieve=extend_schema(
@@ -193,31 +189,18 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
 
         if instance is not None and nova_uo is not None:
             if nova_uo != instance.unidade_orcamentaria:
-                raise DRFValidationError(
-                    {
-                        "unidade_orcamentaria": (
-                            "A Unidade Orçamentária não pode ser alterada."
-                        )
-                    }
-                )
+                raise DRFValidationError({"unidade_orcamentaria": ("A Unidade Orçamentária não pode ser alterada.")})
 
         if instance is not None and nova_uo is None:
             nova_uo = instance.unidade_orcamentaria
 
         if nova_uo is None:
-            raise DRFValidationError(
-                {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-            )
+            raise DRFValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
         user_uo = getattr(user, "unidade_orcamentaria", None)
         if user_uo is None or nova_uo != user_uo:
             raise DRFValidationError(
-                {
-                    "unidade_orcamentaria": (
-                        "Você não pode gerenciar parâmetros de outra "
-                        "Unidade Orçamentária."
-                    )
-                }
+                {"unidade_orcamentaria": ("Você não pode gerenciar parâmetros de outra " "Unidade Orçamentária.")}
             )
 
     def _raise_drf_validation_error(self, exc):
@@ -290,12 +273,7 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
             instance.delete()
         except ProtectedError:
             raise DRFValidationError(
-                {
-                    "detail": (
-                        "Não foi possível excluir este parâmetro porque "
-                        "existem vínculos ativos no sistema."
-                    )
-                }
+                {"detail": ("Não foi possível excluir este parâmetro porque " "existem vínculos ativos no sistema.")}
             )
 
 
@@ -328,10 +306,7 @@ CONCILIACAO_LIST_QUERY_PARAMETERS = [
         name="search",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
-        description=(
-            "Busca em: número da conciliação, código/nome/sigla da Unidade "
-            "Administrativa."
-        ),
+        description=("Busca em: número da conciliação, código/nome/sigla da Unidade " "Administrativa."),
     ),
     OpenApiParameter(
         name="ordering",
@@ -348,10 +323,7 @@ CONCILIACAO_LIST_QUERY_PARAMETERS = [
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
         enum=[c[0] for c in constants.STATUS_CONCILIACAO],
-        description=(
-            "Filtra por status da conciliação. Aceita um valor ou vários "
-            "separados por vírgula."
-        ),
+        description=("Filtra por status da conciliação. Aceita um valor ou vários " "separados por vírgula."),
     ),
     OpenApiParameter(
         name="tipo",
@@ -415,9 +387,7 @@ ITEM_LIST_QUERY_PARAMETERS = [
         name="search",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
-        description=(
-            "Busca em: número patrimonial e nome do bem."
-        ),
+        description=("Busca em: número patrimonial e nome do bem."),
     ),
     OpenApiParameter(
         name="ordering",
@@ -482,18 +452,10 @@ class ConciliacaoUAFilter(django_filters.FilterSet):
     """
 
     status = django_filters.CharFilter(method="filter_status")
-    periodo_final__gte = django_filters.DateFilter(
-        field_name="periodo_final", lookup_expr="gte"
-    )
-    periodo_final__lte = django_filters.DateFilter(
-        field_name="periodo_final", lookup_expr="lte"
-    )
-    criado_em__gte = django_filters.DateTimeFilter(
-        field_name="criado_em", lookup_expr="gte"
-    )
-    criado_em__lte = django_filters.DateTimeFilter(
-        field_name="criado_em", lookup_expr="lte"
-    )
+    periodo_final__gte = django_filters.DateFilter(field_name="periodo_final", lookup_expr="gte")
+    periodo_final__lte = django_filters.DateFilter(field_name="periodo_final", lookup_expr="lte")
+    criado_em__gte = django_filters.DateTimeFilter(field_name="criado_em", lookup_expr="gte")
+    criado_em__lte = django_filters.DateTimeFilter(field_name="criado_em", lookup_expr="lte")
 
     class Meta:
         model = ConciliacaoUA
@@ -531,9 +493,7 @@ class ItemConciliacaoFilter(django_filters.FilterSet):
         valores_validos = {c[0] for c in constants.SITUACOES_ITEM_CONCILIACAO}
         invalidos = [v for v in valores if v not in valores_validos]
         if invalidos:
-            raise DRFValidationError(
-                {"situacao": f"Valor(es) inválido(s): {', '.join(invalidos)}"}
-            )
+            raise DRFValidationError({"situacao": f"Valor(es) inválido(s): {', '.join(invalidos)}"})
         return queryset.filter(situacao__in=valores)
 
 
@@ -544,9 +504,7 @@ class AuditHistoryConciliacaoMixin:
     def _get_audit_content_type(self):
         return ContentType.objects.get_for_model(self.audit_model)
 
-    def _registrar_historico(
-        self, obj, campo, valor_antigo, valor_novo, usuario, justificativa=""
-    ):
+    def _registrar_historico(self, obj, campo, valor_antigo, valor_novo, usuario, justificativa=""):
         ct = self._get_audit_content_type()
         HistoricoGeral.objects.create(
             content_type=ct,
@@ -579,9 +537,7 @@ class AuditHistoryConciliacaoMixin:
                 {
                     "alterado_em": alterado_em,
                     "alterado_por": alterado_por_id,
-                    "alterado_por_nome": (
-                        itens[0].alterado_por.nome if itens[0].alterado_por else None
-                    ),
+                    "alterado_por_nome": (itens[0].alterado_por.nome if itens[0].alterado_por else None),
                     "acoes": [
                         {
                             "campo": i.campo,
@@ -620,9 +576,7 @@ class AuditHistoryConciliacaoMixin:
         responses={
             200: OpenApiResponse(description="Lista retornada com sucesso."),
             401: OpenApiResponse(description="Usuário não autenticado."),
-            403: OpenApiResponse(
-                description="Usuário sem permissão para acessar o recurso."
-            ),
+            403: OpenApiResponse(description="Usuário sem permissão para acessar o recurso."),
         },
     ),
     retrieve=extend_schema(
@@ -735,9 +689,7 @@ class ConciliacaoUAViewSet(
             )
             criar_itens_conciliacao(conciliacao)
 
-        detail_serializer = ConciliacaoUADetailSerializer(
-            conciliacao, context={"request": request}
-        )
+        detail_serializer = ConciliacaoUADetailSerializer(conciliacao, context={"request": request})
         return Response(detail_serializer.data, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, *args, **kwargs):
@@ -796,25 +748,15 @@ class ConciliacaoUAViewSet(
     )
     @action(detail=True, methods=["get"], url_path="exportar")
     def exportar(self, request, pk=None):
-        serializer = ConciliacaoExportQuerySerializer(
-            data=request.query_params or {"formato": "pdf"}
-        )
+        serializer = ConciliacaoExportQuerySerializer(data=request.query_params or {"formato": "pdf"})
         serializer.is_valid(raise_exception=True)
 
         conciliacao = self.get_object()
-        pdf_buffer = gerar_pdf_conciliacao(
-            conciliacao, usuario_gerador=request.user
-        )
+        pdf_buffer = gerar_pdf_conciliacao(conciliacao, usuario_gerador=request.user)
 
         numero = conciliacao.numero_conciliacao or str(conciliacao.pk)
-        ua_codigo = (
-            conciliacao.unidade_administrativa.codigo
-            if conciliacao.unidade_administrativa
-            else ""
-        )
-        ano = (
-            conciliacao.periodo_final.year if conciliacao.periodo_final else ""
-        )
+        ua_codigo = conciliacao.unidade_administrativa.codigo if conciliacao.unidade_administrativa else ""
+        ano = conciliacao.periodo_final.year if conciliacao.periodo_final else ""
         partes = ["CONCILIACAO", numero]
         if ano:
             partes.append(str(ano))
@@ -853,9 +795,7 @@ class ConciliacaoUAViewSet(
         conciliacao = self.get_object()
 
         if not conciliacao.esta_aberto:
-            raise DRFValidationError(
-                {"detail": "Conciliação já está finalizada."}
-            )
+            raise DRFValidationError({"detail": "Conciliação já está finalizada."})
 
         with transaction.atomic():
             with audit_as(request.user):
@@ -878,9 +818,7 @@ class ConciliacaoUAViewSet(
             )
 
         conciliacao.refresh_from_db()
-        detail_serializer = ConciliacaoUADetailSerializer(
-            conciliacao, context={"request": request}
-        )
+        detail_serializer = ConciliacaoUADetailSerializer(conciliacao, context={"request": request})
         return Response(detail_serializer.data, status=status.HTTP_200_OK)
 
 
@@ -1022,18 +960,14 @@ class ItemConciliacaoViewSet(
         self._get_conciliacao()
         item = self.get_object()
         situacoes = self._get_situacoes_disponiveis_para_item(item)
-        return Response(
-            [{"value": v, "label": l} for v, l in situacoes]
-        )
+        return Response([{"value": v, "label": l} for v, l in situacoes])
 
     def _get_situacoes_disponiveis_para_item(self, item):
         situacoes = list(constants.SITUACOES_ITEM_CONCILIACAO)
         situacoes = [s for s in situacoes if s[0] != constants.BAIXA_FISICA]
 
         if not item.pode_resolver_situacao:
-            situacoes = [
-                s for s in situacoes if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA
-            ]
+            situacoes = [s for s in situacoes if s[0] != constants.ENCONTRADO_SEM_DIVERGENCIA]
 
         if not item.pode_marcar_como_encontrado:
             situacoes = [s for s in situacoes if s[0] != constants.ENCONTRADO]
@@ -1093,9 +1027,7 @@ class ItemConciliacaoViewSet(
         )
 
         item.refresh_from_db()
-        detail_serializer = ItemConciliacaoDetailSerializer(
-            item, context={"request": request}
-        )
+        detail_serializer = ItemConciliacaoDetailSerializer(item, context={"request": request})
         return Response(detail_serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -1121,9 +1053,7 @@ class ItemConciliacaoViewSet(
         item = self.get_object()
 
         if not item.conciliacao.esta_aberto:
-            raise DRFValidationError(
-                {"detail": "Conciliação fechada não permite edições."}
-            )
+            raise DRFValidationError({"detail": "Conciliação fechada não permite edições."})
 
         situacao_anterior = item.get_situacao_display()
 
@@ -1142,9 +1072,7 @@ class ItemConciliacaoViewSet(
         )
 
         item.refresh_from_db()
-        detail_serializer = ItemConciliacaoDetailSerializer(
-            item, context={"request": request}
-        )
+        detail_serializer = ItemConciliacaoDetailSerializer(item, context={"request": request})
         return Response(detail_serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -1168,15 +1096,12 @@ class ItemConciliacaoViewSet(
 
     def _validar_item_para_ocorrencia(self, item):
         if not item.conciliacao.esta_aberto:
-            raise DRFValidationError(
-                {"detail": "Conciliação fechada não permite edições."}
-            )
+            raise DRFValidationError({"detail": "Conciliação fechada não permite edições."})
         if not item.permite_registrar_ocorrencia:
             raise DRFValidationError(
                 {
                     "detail": (
-                        "Bem com status 'Baixa Física' não pode ter ocorrência "
-                        "registrada. Este status é definitivo."
+                        "Bem com status 'Baixa Física' não pode ter ocorrência " "registrada. Este status é definitivo."
                     )
                 }
             )

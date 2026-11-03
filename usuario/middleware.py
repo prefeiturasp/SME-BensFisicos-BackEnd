@@ -16,11 +16,7 @@ class ForcePasswordChangeMiddleware:
         user = getattr(request, "user", None)
         path = request.path
 
-        if (
-            user is not None
-            and getattr(user, "is_authenticated", False)
-            and path.startswith(ADMIN_PREFIX)
-        ):
+        if user is not None and getattr(user, "is_authenticated", False) and path.startswith(ADMIN_PREFIX):
             if path.startswith("/admin/password-change/"):
                 return self.get_response(request)
 

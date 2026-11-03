@@ -74,9 +74,7 @@ class OcorrenciaBaseTest(TestCase):
 
         return inv
 
-    def criar_item(
-        self, conciliacao, bem, situacao=constants.ENCONTRADO_SEM_DIVERGENCIA, **kwargs
-    ):
+    def criar_item(self, conciliacao, bem, situacao=constants.ENCONTRADO_SEM_DIVERGENCIA, **kwargs):
         defaults = {
             "situacao": situacao,
             "observacao": kwargs.get("observacao", ""),
@@ -230,9 +228,7 @@ class RegistrarOcorrenciaTest(OcorrenciaBaseTest):
         item = self.criar_item(conciliacao, bem)
 
         with self.assertRaises(ValidationError) as ctx:
-            registrar_ocorrencia(
-                item=item, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario
-            )
+            registrar_ocorrencia(item=item, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario)
         self.assertIn("fechado", str(ctx.exception))
 
 
@@ -317,9 +313,7 @@ class HerancaSituacaoTest(OcorrenciaBaseTest):
     def test_heranca_nao_encontrado(self):
         inv_anterior = self.criar_conciliacao(fechado=True, ano=2024)
         bem = self.criar_bem()
-        self.criar_item_com_ocorrencia(
-            inv_anterior, bem, situacao=constants.NAO_ENCONTRADO
-        )
+        self.criar_item_com_ocorrencia(inv_anterior, bem, situacao=constants.NAO_ENCONTRADO)
 
         inv_novo = self.criar_conciliacao(ano=2025)
         criar_itens_conciliacao(inv_novo)
@@ -348,14 +342,10 @@ class HerancaSituacaoTest(OcorrenciaBaseTest):
     def test_heranca_baixa_fisica_e_encontrado(self):
         inv_anterior = self.criar_conciliacao(fechado=True, ano=2024)
         bem1 = self.criar_bem()
-        self.criar_item_com_ocorrencia(
-            inv_anterior, bem1, situacao=constants.BAIXA_FISICA
-        )
+        self.criar_item_com_ocorrencia(inv_anterior, bem1, situacao=constants.BAIXA_FISICA)
 
         bem2 = self.criar_bem()
-        self.criar_item_com_ocorrencia(
-            inv_anterior, bem2, situacao=constants.ENCONTRADO
-        )
+        self.criar_item_com_ocorrencia(inv_anterior, bem2, situacao=constants.ENCONTRADO)
 
         inv_novo = self.criar_conciliacao(ano=2025)
         criar_itens_conciliacao(inv_novo)
@@ -369,9 +359,7 @@ class HerancaSituacaoTest(OcorrenciaBaseTest):
     def test_heranca_ignora_conciliacao_aberto(self):
         inv_aberto = self.criar_conciliacao(fechado=False, ano=2024)
         bem = self.criar_bem()
-        self.criar_item_com_ocorrencia(
-            inv_aberto, bem, situacao=constants.NAO_ENCONTRADO
-        )
+        self.criar_item_com_ocorrencia(inv_aberto, bem, situacao=constants.NAO_ENCONTRADO)
 
         inv_novo = self.criar_conciliacao(ano=2025)
         criar_itens_conciliacao(inv_novo)
@@ -429,9 +417,7 @@ class PropertiesItemConciliacaoTest(OcorrenciaBaseTest):
 
         bem = self.criar_bem()
         item = self.criar_item(conciliacao, bem, situacao=constants.DIVERGENTE)
-        registrar_ocorrencia(
-            item=item, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario
-        )
+        registrar_ocorrencia(item=item, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario)
         item.refresh_from_db()
         self.assertFalse(item.pode_resolver_situacao)
 
@@ -474,9 +460,7 @@ class PropertiesItemConciliacaoTest(OcorrenciaBaseTest):
         # Mesmo com situação diferente, não tem ocorrência (foi herdado)
         self.assertFalse(item.tem_ocorrencia)
 
-        registrar_ocorrencia(
-            item=item, situacao=constants.ENCONTRADO, usuario=self.usuario
-        )
+        registrar_ocorrencia(item=item, situacao=constants.ENCONTRADO, usuario=self.usuario)
         item.refresh_from_db()
         self.assertTrue(item.tem_ocorrencia)
 
@@ -535,9 +519,7 @@ class FluxoCompletoTest(OcorrenciaBaseTest):
         # Inventário 2024 - bem não encontrado
         inv_2024 = self.criar_conciliacao(ano=2024)
         item_2024 = self.criar_item(inv_2024, bem)
-        registrar_ocorrencia(
-            item=item_2024, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario
-        )
+        registrar_ocorrencia(item=item_2024, situacao=constants.NAO_ENCONTRADO, usuario=self.usuario)
         ConciliacaoUA.objects.filter(pk=inv_2024.pk).update(
             status=constants.CONCILIACAO_FECHADO,
             fechado_por=self.usuario,
@@ -552,9 +534,7 @@ class FluxoCompletoTest(OcorrenciaBaseTest):
         self.assertEqual(item_2025.situacao, constants.NAO_ENCONTRADO)
         self.assertTrue(item_2025.pode_marcar_como_encontrado)
 
-        registrar_ocorrencia(
-            item=item_2025, situacao=constants.ENCONTRADO, usuario=self.usuario
-        )
+        registrar_ocorrencia(item=item_2025, situacao=constants.ENCONTRADO, usuario=self.usuario)
         ConciliacaoUA.objects.filter(pk=inv_2025.pk).update(
             status=constants.CONCILIACAO_FECHADO,
             fechado_por=self.usuario,

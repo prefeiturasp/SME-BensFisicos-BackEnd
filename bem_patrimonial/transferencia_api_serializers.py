@@ -25,15 +25,12 @@ from dados_comuns.models import UnidadeOrcamentaria
 from dados_comuns.utils import PREFIXO_CODIGO_UO_SME, unidade_orcamentaria_eh_externa
 
 MENSAGEM_SEM_PONTO_CENTRAL = (
-    "Não há ponto central cadastrado na Unidade Orçamentária de destino. "
-    "Por favor, entrar em contato com o gestor."
+    "Não há ponto central cadastrado na Unidade Orçamentária de destino. " "Por favor, entrar em contato com o gestor."
 )
 
 
 def queryset_uos_destino_externas(uo_origem_id: int | None = None):
-    qs = UnidadeOrcamentaria.objects.filter(ativa=True).exclude(
-        codigo__startswith=PREFIXO_CODIGO_UO_SME
-    )
+    qs = UnidadeOrcamentaria.objects.filter(ativa=True).exclude(codigo__startswith=PREFIXO_CODIGO_UO_SME)
 
     if uo_origem_id:
         qs = qs.exclude(pk=uo_origem_id)
@@ -59,9 +56,7 @@ class TransferenciaBensItemSimpleSerializer(serializers.ModelSerializer):
 
 
 class TransferenciaBensItemCreateSerializer(serializers.Serializer):
-    bem = serializers.PrimaryKeyRelatedField(
-        queryset=BemPatrimonial.objects.select_related("unidade_administrativa")
-    )
+    bem = serializers.PrimaryKeyRelatedField(queryset=BemPatrimonial.objects.select_related("unidade_administrativa"))
 
 
 class TransferenciaBemPatrimonialBaseSerializer(serializers.ModelSerializer):
@@ -111,9 +106,7 @@ class TransferenciaBemPatrimonialBaseSerializer(serializers.ModelSerializer):
             return None
 
 
-class TransferenciaBemPatrimonialListSerializer(
-    TransferenciaBemPatrimonialBaseSerializer
-):
+class TransferenciaBemPatrimonialListSerializer(TransferenciaBemPatrimonialBaseSerializer):
     nome_bem = serializers.SerializerMethodField()
 
     class Meta(TransferenciaBemPatrimonialBaseSerializer.Meta):
@@ -132,9 +125,7 @@ class TransferenciaBemPatrimonialListSerializer(
         ]
 
 
-class TransferenciaBemPatrimonialDetailSerializer(
-    TransferenciaBemPatrimonialBaseSerializer
-):
+class TransferenciaBemPatrimonialDetailSerializer(TransferenciaBemPatrimonialBaseSerializer):
     itens = TransferenciaBensItemSimpleSerializer(many=True, read_only=True)
 
     class Meta(TransferenciaBemPatrimonialBaseSerializer.Meta):
@@ -143,9 +134,7 @@ class TransferenciaBemPatrimonialDetailSerializer(
 
 class TransferenciaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
     itens = TransferenciaBensItemCreateSerializer(many=True)
-    unidade_orcamentaria_destino = serializers.PrimaryKeyRelatedField(
-        queryset=queryset_uos_destino_externas()
-    )
+    unidade_orcamentaria_destino = serializers.PrimaryKeyRelatedField(queryset=queryset_uos_destino_externas())
 
     class Meta:
         model = TransferenciaBemPatrimonial
@@ -173,9 +162,7 @@ class TransferenciaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
 
         bem_ids = [item["bem"].pk for item in value]
         if len(set(bem_ids)) != len(bem_ids):
-            raise serializers.ValidationError(
-                "Não é permitido repetir o mesmo bem na transferência."
-            )
+            raise serializers.ValidationError("Não é permitido repetir o mesmo bem na transferência.")
         return value
 
     def validate(self, attrs):
@@ -188,30 +175,18 @@ class TransferenciaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         uo_origem = obter_uo_referencia_do_usuario(user)
         if not uo_origem:
             raise serializers.ValidationError(
-                {
-                    "unidade_orcamentaria_origem": (
-                        "Não foi possível identificar a UO de origem do usuário."
-                    )
-                }
+                {"unidade_orcamentaria_origem": ("Não foi possível identificar a UO de origem do usuário.")}
             )
 
         uo_destino = attrs.get("unidade_orcamentaria_destino")
         if not uo_destino:
             raise serializers.ValidationError(
-                {
-                    "unidade_orcamentaria_destino": (
-                        "Unidade Orçamentária de destino é obrigatória."
-                    )
-                }
+                {"unidade_orcamentaria_destino": ("Unidade Orçamentária de destino é obrigatória.")}
             )
 
         if not unidade_orcamentaria_eh_externa(uo_destino):
             raise serializers.ValidationError(
-                {
-                    "unidade_orcamentaria_destino": (
-                        "A Unidade Orçamentária de destino deve ser externa à SME."
-                    )
-                }
+                {"unidade_orcamentaria_destino": ("A Unidade Orçamentária de destino deve ser externa à SME.")}
             )
 
         if uo_destino.pk == uo_origem.pk:
@@ -243,18 +218,12 @@ class TransferenciaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
             bem = item["bem"]
 
             if bem.unidade_administrativa_id is None:
-                erros[str(idx)] = {
-                    "bem": (
-                        f"O bem '{bem.numero_patrimonial}' não possui unidade administrativa."
-                    )
-                }
+                erros[str(idx)] = {"bem": (f"O bem '{bem.numero_patrimonial}' não possui unidade administrativa.")}
                 continue
 
             if bem.unidade_administrativa.unidade_orcamentaria_id != uo_origem.id:
                 erros[str(idx)] = {
-                    "bem": (
-                        f"O bem '{bem.numero_patrimonial}' não pertence à UO de origem da transferência."
-                    )
+                    "bem": (f"O bem '{bem.numero_patrimonial}' não pertence à UO de origem da transferência.")
                 }
                 continue
 
@@ -275,11 +244,7 @@ class TransferenciaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
                 continue
 
             if getattr(bem, "tem_movimentacao_pendente", False):
-                erros[str(idx)] = {
-                    "bem": (
-                        f"O bem '{bem.numero_patrimonial}' já possui uma movimentação pendente."
-                    )
-                }
+                erros[str(idx)] = {"bem": (f"O bem '{bem.numero_patrimonial}' já possui uma movimentação pendente.")}
 
         if erros:
             raise serializers.ValidationError({"itens": erros})

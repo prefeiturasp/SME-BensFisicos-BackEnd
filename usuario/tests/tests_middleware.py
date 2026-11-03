@@ -33,18 +33,14 @@ class ForcePasswordChangeMiddlewareTests(TestCase):
         return ForcePasswordChangeMiddleware(lambda req: HttpResponse("OK"))
 
     def test_redirects_when_must_change_password_true(self):
-        u = User.objects.create_user(
-            username="maria", **auth_kwargs("x"), must_change_password=True
-        )
+        u = User.objects.create_user(username="maria", **auth_kwargs("x"), must_change_password=True)
         req = get_request_with_user("/admin/", u)
         resp = self.get_mw()(req)
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/admin/password-change/?next=%2Fadmin%2F", resp["Location"])
 
     def test_redirects_when_session_flag_set(self):
-        u = User.objects.create_user(
-            username="joao", **auth_kwargs("x"), must_change_password=False
-        )
+        u = User.objects.create_user(username="joao", **auth_kwargs("x"), must_change_password=False)
         req = get_request_with_user("/admin/", u)
         req.session["force_pw_change_first_admin"] = True
         req.session.save()
@@ -53,9 +49,7 @@ class ForcePasswordChangeMiddlewareTests(TestCase):
         self.assertIn("/admin/password-change/?next=%2Fadmin%2F", resp["Location"])
 
     def test_allows_when_ok(self):
-        u = User.objects.create_user(
-            username="ok", **auth_kwargs("x"), must_change_password=False
-        )
+        u = User.objects.create_user(username="ok", **auth_kwargs("x"), must_change_password=False)
         req = get_request_with_user("/admin/", u)
         resp = self.get_mw()(req)
         self.assertEqual(resp.status_code, 200)

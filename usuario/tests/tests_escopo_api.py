@@ -31,9 +31,7 @@ class EscopoEndpointsTestCase(APITestCase):
         self.ua3 = criar_ua(uo=self.uo2, codigo=ua3_codigo, sigla="UA3", nome="UA 3")
 
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor = Usuario.objects.create_user(
             username="gestor",

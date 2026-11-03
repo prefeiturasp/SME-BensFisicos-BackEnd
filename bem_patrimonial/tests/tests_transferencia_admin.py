@@ -207,9 +207,7 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
             numero_processo="SEI-123/2026",
             criado_por=self.gestor,
         )
-        request = self.factory.get(
-            f"/admin/bem_patrimonial/transferenciabempatrimonial/{transferencia.pk}/change/"
-        )
+        request = self.factory.get(f"/admin/bem_patrimonial/transferenciabempatrimonial/{transferencia.pk}/change/")
         request.user = self.gestor
 
         form_class = self.admin.get_form(request, obj=transferencia)
@@ -258,9 +256,7 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
         self.assertEqual(fields[-1], "unidade_administrativa_filtro")
 
     def test_inline_formset_exige_ao_menos_um_bem(self):
-        formset = TransferenciaBensItemInlineFormSet.__new__(
-            TransferenciaBensItemInlineFormSet
-        )
+        formset = TransferenciaBensItemInlineFormSet.__new__(TransferenciaBensItemInlineFormSet)
         formset.forms = [SimpleNamespace(cleaned_data={"bem": None, "DELETE": False})]
         formset._errors = []
 
@@ -271,9 +267,7 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
         self.assertIn("ao menos um bem", str(ctx.exception))
 
     def test_inline_formset_ignora_validacao_quando_ha_erros(self):
-        formset = TransferenciaBensItemInlineFormSet.__new__(
-            TransferenciaBensItemInlineFormSet
-        )
+        formset = TransferenciaBensItemInlineFormSet.__new__(TransferenciaBensItemInlineFormSet)
         formset.forms = []
         formset._errors = [{"bem": ["erro"]}]
 

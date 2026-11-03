@@ -214,11 +214,7 @@ def _criar_informacoes_gerais(baixa):
                     value_style,
                 ),
                 Paragraph(
-                    str(
-                        baixa.get_status_display()
-                        if hasattr(baixa, "get_status_display")
-                        else baixa.status
-                    ).upper(),
+                    str(baixa.get_status_display() if hasattr(baixa, "get_status_display") else baixa.status).upper(),
                     value_style,
                 ),
             ],

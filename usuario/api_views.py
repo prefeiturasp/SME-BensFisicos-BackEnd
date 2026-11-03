@@ -225,9 +225,7 @@ class PasswordResetRequestAPIView(generics.GenericAPIView):
             token_generator = PasswordResetTokenGenerator()
             reset_token = token_generator.make_token(user)
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
-            reset_url = (
-                f"{settings.FRONTEND_URL}/recuperar-senha/{uidb64}/{reset_token}/"
-            )
+            reset_url = f"{settings.FRONTEND_URL}/recuperar-senha/{uidb64}/{reset_token}/"
 
             context = {
                 "user": user,
@@ -235,9 +233,7 @@ class PasswordResetRequestAPIView(generics.GenericAPIView):
             }
 
             subject = "Recuperação de Senha - SME Bens Físicos"
-            html_message = render_to_string(
-                "admin/password_recovery_email_api.html", context
-            )
+            html_message = render_to_string("admin/password_recovery_email_api.html", context)
 
             send_mail(
                 subject,
@@ -251,9 +247,7 @@ class PasswordResetRequestAPIView(generics.GenericAPIView):
             pass
 
         return Response(
-            {
-                "detail": "Se o email informado estiver cadastrado, você receberá instruções para recuperação de senha."
-            },
+            {"detail": "Se o email informado estiver cadastrado, você receberá instruções para recuperação de senha."},
             status=status.HTTP_200_OK,
         )
 
@@ -307,9 +301,7 @@ class PasswordResetConfirmAPIView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(
-            {"detail": "Senha redefinida com sucesso."}, status=status.HTTP_200_OK
-        )
+        return Response({"detail": "Senha redefinida com sucesso."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -348,9 +340,7 @@ class PasswordChangeAPIView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(
-            {"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK
-        )
+        return Response({"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -362,9 +352,7 @@ class PasswordChangeAPIView(generics.GenericAPIView):
             examples=[
                 OpenApiExample(
                     "Sucesso",
-                    value={
-                        "detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."
-                    },
+                    value={"detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."},
                 )
             ],
         ),
@@ -373,9 +361,7 @@ class PasswordChangeAPIView(generics.GenericAPIView):
             examples=[
                 OpenApiExample(
                     "Não marcado para troca",
-                    value={
-                        "detail": "Usuário não está marcado para troca obrigatória de senha."
-                    },
+                    value={"detail": "Usuário não está marcado para troca obrigatória de senha."},
                 )
             ],
         ),
@@ -394,9 +380,7 @@ class FirstAccessPasswordChangeAPIView(generics.GenericAPIView):
         serializer.save()
 
         return Response(
-            {
-                "detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."
-            },
+            {"detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."},
             status=status.HTTP_200_OK,
         )
 

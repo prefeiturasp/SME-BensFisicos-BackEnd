@@ -12,6 +12,4 @@ CORS_ORIGIN_ALLOW_ALL = True
 # Email
 # https://docs.djangoproject.com/en/4.1/topics/email/
 
-EMAIL_BACKEND = env(
-    "DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
-)
+EMAIL_BACKEND = env("DJANGO_EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")

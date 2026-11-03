@@ -33,12 +33,8 @@ from .tests_unidade_administrativa_setup import SetupUnidadeAdministrativaStatus
 class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
     def setUp(self):
         setup = SetupUnidadeAdministrativaStatusData()
-        self.ua_ativa_1, self.ua_ativa_2, self.ua_inativa = (
-            setup.create_unidades_administrativas()
-        )
-        self.operador_1, self.operador_2, self.gestor = setup.create_usuarios(
-            self.ua_ativa_1, self.ua_ativa_2
-        )
+        self.ua_ativa_1, self.ua_ativa_2, self.ua_inativa = setup.create_unidades_administrativas()
+        self.operador_1, self.operador_2, self.gestor = setup.create_usuarios(self.ua_ativa_1, self.ua_ativa_2)
         self.bem = setup.create_bem_patrimonial(self.operador_1, self.ua_ativa_1)
 
         self.factory = RequestFactory()
@@ -124,12 +120,8 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
             self.operador_1,
             {
                 "unidade_administrativa_origem": self.ua_ativa_1.pk,
-                "unidade_orcamentaria_destino": (
-                    self.ua_ativa_1.unidade_orcamentaria_id
-                ),
-                "itens_lote": json.dumps(
-                    {"modo": "geral", "selecionar_todos": False, "itens": []}
-                ),
+                "unidade_orcamentaria_destino": (self.ua_ativa_1.unidade_orcamentaria_id),
+                "itens_lote": json.dumps({"modo": "geral", "selecionar_todos": False, "itens": []}),
             },
         )
 
@@ -143,9 +135,7 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
             {
                 "unidade_administrativa_origem": self.ua_ativa_1.pk,
                 "unidade_administrativa_destino": self.ua_ativa_1.pk,
-                "itens_lote": json.dumps(
-                    {"modo": "geral", "selecionar_todos": False, "itens": []}
-                ),
+                "itens_lote": json.dumps({"modo": "geral", "selecionar_todos": False, "itens": []}),
             },
         )
 
@@ -199,8 +189,7 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         }
 
         with patch(
-            "bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form."
-            "resolver_bens_movimentacao_lote",
+            "bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form." "resolver_bens_movimentacao_lote",
             side_effect=DRFValidationError({"faixas": [mensagem]}),
         ):
             form = self._create_form_with_request(self.operador_1, data)
@@ -301,9 +290,7 @@ class CriacaoMovimentacaoComUAInativaTestCase(TestCase):
         self.assertIn(str(self.bem.pk), response.content.decode())
 
     def test_admin_pesquisa_por_id_bem_sem_numero(self):
-        admin_instance = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, AdminSite()
-        )
+        admin_instance = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, AdminSite())
         request = self.factory.get(
             "/admin/bem_patrimonial/movimentacaobempatrimonial/pesquisar-bens/",
             {"unidade_administrativa_origem": self.ua_ativa_1.pk, "id": self.bem.pk},
@@ -337,11 +324,7 @@ class ValidacaoCriacaoMovimentacaoUnitTest(SimpleTestCase):
     def test_nao_valida_bens_quando_origem_e_invalida(self):
         form = MovimentacaoBemPatrimonialForm.__new__(MovimentacaoBemPatrimonialForm)
         erro_origem = ValidationError(
-            {
-                "unidade_administrativa_origem": (
-                    "Unidade administrativa de origem é obrigatória."
-                )
-            }
+            {"unidade_administrativa_origem": ("Unidade administrativa de origem é obrigatória.")}
         )
 
         with (
@@ -361,15 +344,9 @@ class ValidacaoCriacaoMovimentacaoUnitTest(SimpleTestCase):
     def test_acumula_erros_de_destino_e_itens(self):
         form = MovimentacaoBemPatrimonialForm.__new__(MovimentacaoBemPatrimonialForm)
         erro_destino = ValidationError(
-            {
-                "unidade_administrativa_destino": (
-                    "Unidade administrativa de destino é obrigatória."
-                )
-            }
+            {"unidade_administrativa_destino": ("Unidade administrativa de destino é obrigatória.")}
         )
-        erro_itens = ValidationError(
-            {"itens_lote": "Informe uma ou mais faixas ou selecione bens."}
-        )
+        erro_itens = ValidationError({"itens_lote": "Informe uma ou mais faixas ou selecione bens."})
 
         with (
             patch.object(
@@ -390,11 +367,9 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
 
     def setUp(self):
         setup = SetupUnidadeAdministrativaStatusData()
-        self.ua_origem, self.ua_destino, self.ua_inativa = (
-            setup.create_unidades_administrativas()
-        )
-        self.operador_origem, self.operador_destino, self.gestor = (
-            setup.create_usuarios(self.ua_origem, self.ua_destino)
+        self.ua_origem, self.ua_destino, self.ua_inativa = setup.create_unidades_administrativas()
+        self.operador_origem, self.operador_destino, self.gestor = setup.create_usuarios(
+            self.ua_origem, self.ua_destino
         )
         self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
@@ -406,9 +381,7 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _create_request_with_messages(self, user):
         request = self.factory.post("/admin/")
@@ -478,9 +451,7 @@ class AprovacaoRejeicaoMovimentacaoComUAInativaTestCase(TestCase):
             side_effect=executar_fluxo,
         ):
             with patch("django.contrib.admin.options.ModelAdmin.save_related"):
-                with patch(
-                    "bem_patrimonial.models.envia_email_nova_solicitacao_movimentacao"
-                ):
+                with patch("bem_patrimonial.models.envia_email_nova_solicitacao_movimentacao"):
                     with patch.object(
                         MovimentacaoBensItem.objects,
                         "create",
@@ -547,12 +518,8 @@ class InativacaoUAComBensTestCase(TestCase):
 
     def setUp(self):
         setup = SetupUnidadeAdministrativaStatusData()
-        self.ua_ativa_1, self.ua_ativa_2, self.ua_inativa = (
-            setup.create_unidades_administrativas()
-        )
-        self.operador_1, self.operador_2, self.gestor = setup.create_usuarios(
-            self.ua_ativa_1, self.ua_ativa_2
-        )
+        self.ua_ativa_1, self.ua_ativa_2, self.ua_inativa = setup.create_unidades_administrativas()
+        self.operador_1, self.operador_2, self.gestor = setup.create_usuarios(self.ua_ativa_1, self.ua_ativa_2)
         self.bem = setup.create_bem_patrimonial(self.operador_1, self.ua_ativa_1)
 
     def test_nao_pode_inativar_ua_com_bens(self):
@@ -576,12 +543,8 @@ class InativacaoUAComBensTestCase(TestCase):
 class AutocompleteComUAInativaTestCase(TestCase):
     def setUp(self):
         setup = SetupUnidadeAdministrativaStatusData()
-        self.ua_ativa_1, self.ua_ativa_2, self.ua_inativa = (
-            setup.create_unidades_administrativas()
-        )
-        self.operador_1, self.operador_2, self.gestor = setup.create_usuarios(
-            self.ua_ativa_1, self.ua_ativa_2
-        )
+        self.ua_ativa_1, self.ua_ativa_2, self.ua_inativa = setup.create_unidades_administrativas()
+        self.operador_1, self.operador_2, self.gestor = setup.create_usuarios(self.ua_ativa_1, self.ua_ativa_2)
         self.bem = setup.create_bem_patrimonial(self.operador_1, self.ua_ativa_1)
 
     def test_form_filtra_uas_ativas_origem(self):

@@ -20,9 +20,7 @@ from usuario.models import Usuario
 class EmailNovaMovimentacaoTestCase(TestCase):
     def setUp(self):
 
-        self.ua_origem = criar_ua(
-            nome="DRE Centro", codigo="01.16.10.500", sigla="DRE-CENTRO"
-        )
+        self.ua_origem = criar_ua(nome="DRE Centro", codigo="01.16.10.500", sigla="DRE-CENTRO")
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="MEMORIAL",

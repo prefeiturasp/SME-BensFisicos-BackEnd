@@ -57,20 +57,13 @@ def _obter_uo_id_do_usuario(usuario):
 
 
 def _movimentacao_entre_uos_diferentes(mov):
-    origem_uo_id = getattr(
-        mov.unidade_administrativa_origem, "unidade_orcamentaria_id", None
-    )
-    destino_uo_id = getattr(
-        mov.unidade_administrativa_destino, "unidade_orcamentaria_id", None
-    )
+    origem_uo_id = getattr(mov.unidade_administrativa_origem, "unidade_orcamentaria_id", None)
+    destino_uo_id = getattr(mov.unidade_administrativa_destino, "unidade_orcamentaria_id", None)
     return bool(origem_uo_id and destino_uo_id and origem_uo_id != destino_uo_id)
 
 
 def _usuario_e_gestor_da_uo(usuario, uo_id):
-    return bool(
-        getattr(usuario, "is_gestor_patrimonio", False)
-        and _obter_uo_id_do_usuario(usuario) == uo_id
-    )
+    return bool(getattr(usuario, "is_gestor_patrimonio", False) and _obter_uo_id_do_usuario(usuario) == uo_id)
 
 
 def _bens_da_movimentacao(mov):
@@ -109,8 +102,7 @@ def _check_operador_destino_mesma_uo(mov, request, acao):
         messages.add_message(
             request,
             messages.ERROR,
-            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
-            f"podem {acao} esta movimentação.",
+            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino " f"podem {acao} esta movimentação.",
         )
         return True
     if mov.solicitado_por_id == request.user.pk:
@@ -244,9 +236,7 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 bem.status = constants.APROVADO
                 bem.save()
                 if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_aceita(
-                        bem, mov.solicitado_por.email
-                    )
+                    envia_email_solicitacao_movimentacao_aceita(bem, mov.solicitado_por.email)
             mov.status = constants.ACEITA
             mov.aprovado_por = request.user
             mov.save()
@@ -302,9 +292,7 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                 bem.status = constants.APROVADO
                 bem.save()
                 if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_rejeitada(
-                        bem, mov.solicitado_por.email
-                    )
+                    envia_email_solicitacao_movimentacao_rejeitada(bem, mov.solicitado_por.email)
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -366,9 +354,7 @@ def cancelar_solicitacao(modeladmin, request, queryset):
                 bem.status = constants.APROVADO
                 bem.save()
                 if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_cancelada(
-                        bem, request.user, mov.solicitado_por.email
-                    )
+                    envia_email_solicitacao_movimentacao_cancelada(bem, request.user, mov.solicitado_por.email)
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -445,9 +431,7 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         "Unidade Orçamentária."
     )
 
-    autocomplete_fields = (
-        "unidade_administrativa_origem",
-    )
+    autocomplete_fields = ("unidade_administrativa_origem",)
 
     readonly_fields = (
         "solicitado_por",
@@ -574,17 +558,19 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         try:
             ua_origem = validar_ua_origem_movimentacao(
                 request.user,
-                UnidadeAdministrativa.objects.filter(
-                    pk=request.GET.get("unidade_administrativa_origem")
-                ).first(),
+                UnidadeAdministrativa.objects.filter(pk=request.GET.get("unidade_administrativa_origem")).first(),
             )
         except DRFValidationError as error:
             return JsonResponse({"detail": str(error)}, status=400)
 
         consulta = request.GET.get("q", "").strip()
-        bens = queryset_bens_movimentaveis(ua_origem).filter(
-            numero_patrimonial__icontains=consulta,
-        ).order_by("numero_patrimonial")[:50]
+        bens = (
+            queryset_bens_movimentaveis(ua_origem)
+            .filter(
+                numero_patrimonial__icontains=consulta,
+            )
+            .order_by("numero_patrimonial")[:50]
+        )
         itens = BemPatrimonialSimpleSerializer(bens, many=True).data
         return JsonResponse({"itens": itens})
 
@@ -593,13 +579,9 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
             raise PermissionDenied
         if request.method != "GET":
             return HttpResponseNotAllowed(["GET"])
-        serializer = BuscaBensMovimentacaoSerializer(
-            data=request.GET, context={"request": request}
-        )
+        serializer = BuscaBensMovimentacaoSerializer(data=request.GET, context={"request": request})
         if not serializer.is_valid():
-            return JsonResponse(
-                {"detail": obter_mensagem_erro_validacao(serializer.errors)}, status=400
-            )
+            return JsonResponse({"detail": obter_mensagem_erro_validacao(serializer.errors)}, status=400)
         return JsonResponse(buscar_bens_para_movimentacao(serializer.validated_data))
 
     def get_queryset(self, request):
@@ -654,9 +636,7 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
             return "-"
         return obj.unidade_administrativa_destino.unidade_orcamentaria
 
-    get_unidade_orcamentaria_destino.short_description = (
-        "Unidade orçamentária de destino"
-    )
+    get_unidade_orcamentaria_destino.short_description = "Unidade orçamentária de destino"
 
     def response_action(self, request, queryset):
 
@@ -670,9 +650,7 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         return super().response_action(request, queryset)
 
     def get_inline_formsets(self, request, formsets, inline_instances, obj=None):
-        inline_formsets = super().get_inline_formsets(
-            request, formsets, inline_instances, obj
-        )
+        inline_formsets = super().get_inline_formsets(request, formsets, inline_instances, obj)
 
         if obj is not None:
             for formset in inline_formsets:

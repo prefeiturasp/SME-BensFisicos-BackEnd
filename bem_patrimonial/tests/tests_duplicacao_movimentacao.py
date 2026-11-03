@@ -23,9 +23,7 @@ class SetupDuplicacaoData:
 
     def create_unidades_administrativas(self):
         ua_origem = criar_ua()
-        ua_destino = criar_ua(
-            uo=ua_origem.unidade_orcamentaria, nome="DRE Sul", codigo="DRE-SUL"
-        )
+        ua_destino = criar_ua(uo=ua_origem.unidade_orcamentaria, nome="DRE Sul", codigo="DRE-SUL")
         return ua_origem, ua_destino
 
     def create_usuario(self, ua_origem):
@@ -69,17 +67,13 @@ class SetupDuplicacaoData:
 class ValidacaoMovimentacaoPendenteTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         self.operador = self.test_data.create_usuario(self.ua_origem)
         self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _create_request_with_messages(self, user):
         request = self.factory.post("/admin/")
@@ -220,17 +214,13 @@ class ValidacaoMovimentacaoPendenteTestCase(TestCase):
 class LockTransacionalTestCase(TransactionTestCase):
     def setUp(self):
         self.test_data = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         self.operador = self.test_data.create_usuario(self.ua_origem)
         self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _create_request_with_messages(self, user):
         request = self.factory.post("/admin/")
@@ -264,9 +254,7 @@ class LockTransacionalTestCase(TransactionTestCase):
 class EdicaoMovimentacaoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupDuplicacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         self.operador = self.test_data.create_usuario(self.ua_origem)
         self.bem = self.test_data.create_bem_patrimonial(self.operador, self.ua_origem)
 
@@ -283,9 +271,7 @@ class EdicaoMovimentacaoTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _create_request_with_messages(self, user):
         request = self.factory.post("/admin/")

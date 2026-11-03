@@ -57,14 +57,8 @@ def gerar_numero_ntbpm(transferencia):
     Ex: 001.0000001.2026
     """
 
-    ano_transferencia = (
-        transferencia.criado_em.year
-        if transferencia.criado_em
-        else timezone.localdate().year
-    )
-    codigo_ua_destino = extrair_codigo_ua(
-        getattr(transferencia.unidade_administrativa_destino, "codigo", "")
-    )
+    ano_transferencia = transferencia.criado_em.year if transferencia.criado_em else timezone.localdate().year
+    codigo_ua_destino = extrair_codigo_ua(getattr(transferencia.unidade_administrativa_destino, "codigo", ""))
 
     with transaction.atomic():
         qs = (
@@ -79,9 +73,9 @@ def gerar_numero_ntbpm(transferencia):
         sequencial_raw = Substr("numero_ntbpm", 5, 7)
         sequencial_digits = Replace(sequencial_raw, Value("."), Value(""))
 
-        ultimo_sequencial = qs.annotate(
-            sequencial_int=Cast(sequencial_digits, IntegerField())
-        ).aggregate(max_seq=Max("sequencial_int"))["max_seq"]
+        ultimo_sequencial = qs.annotate(sequencial_int=Cast(sequencial_digits, IntegerField())).aggregate(
+            max_seq=Max("sequencial_int")
+        )["max_seq"]
 
         numero_sequencial = (ultimo_sequencial or 0) + 1
 
@@ -224,9 +218,7 @@ def _criar_tabela_resumo_transferencia(transferencia, label_style, value_style):
                     value_style,
                 ),
                 Paragraph(
-                    transferencia.criado_em.strftime(DATE_FMT_BR)
-                    if transferencia.criado_em
-                    else "-",
+                    transferencia.criado_em.strftime(DATE_FMT_BR) if transferencia.criado_em else "-",
                     value_style,
                 ),
                 Paragraph("TRANSFERIDO", value_style),

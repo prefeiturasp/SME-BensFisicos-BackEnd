@@ -72,18 +72,14 @@ class ConciliacaoSyncTest(TestCase):
     def test_incluir_ou_atualizar_ua_id_none_retorna_cedo(self):
         bem = self._criar_bem()
         with audit_as(self.usuario):
-            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(
-                bem, None
-            )
+            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, None)
         self.assertEqual(ItemConciliacao.objects.count(), 0)
 
     def test_incluir_bem_novo_em_conciliacao_cria_item(self):
         conciliacao = self._criar_conciliacao_aberta()
         bem = self._criar_bem()
         with audit_as(self.usuario):
-            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(
-                bem, self.ua.pk
-            )
+            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, self.ua.pk)
         item = ItemConciliacao.objects.get(conciliacao=conciliacao, bem=bem)
         self.assertEqual(item.situacao, inv_constants.ENCONTRADO_SEM_DIVERGENCIA)
         self.assertEqual(item.atualizado_por, self.usuario)
@@ -105,9 +101,7 @@ class ConciliacaoSyncTest(TestCase):
             registrado_por=self.usuario,
         )
         with audit_as(self.usuario):
-            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(
-                bem, self.ua.pk
-            )
+            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, self.ua.pk)
         self.assertEqual(OcorrenciaConciliacao.objects.filter(item=item).count(), 1)
         item.refresh_from_db()
         # Quando pendente=True o código faz continue e não atualiza o item
@@ -133,9 +127,7 @@ class ConciliacaoSyncTest(TestCase):
             registrado_por=self.usuario,
         )
         with audit_as(self.usuario):
-            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(
-                bem, self.ua.pk
-            )
+            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, self.ua.pk)
         self.assertEqual(OcorrenciaConciliacao.objects.filter(item=item).count(), 1)
         item.refresh_from_db()
         self.assertEqual(item.situacao, inv_constants.EM_PROCESSO_BAIXA_FISICA)
@@ -158,9 +150,7 @@ class ConciliacaoSyncTest(TestCase):
             registrado_por=self.usuario,
         )
         with audit_as(self.usuario):
-            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(
-                bem, self.ua.pk
-            )
+            conciliacao_sync.incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, self.ua.pk)
         self.assertEqual(OcorrenciaConciliacao.objects.filter(item=item).count(), 0)
         item.refresh_from_db()
         self.assertEqual(item.situacao, inv_constants.ENCONTRADO_SEM_DIVERGENCIA)
@@ -202,13 +192,9 @@ class ConciliacaoSyncTest(TestCase):
         bem.unidade_administrativa_id = ua2.pk
         with audit_as(self.usuario):
             conciliacao_sync.sync_bem_pos_save(bem, old_ua_id=self.ua.pk)
+        self.assertEqual(ItemConciliacao.objects.filter(conciliacao=conciliacao_antiga).count(), 0)
         self.assertEqual(
-            ItemConciliacao.objects.filter(conciliacao=conciliacao_antiga).count(), 0
-        )
-        self.assertEqual(
-            ItemConciliacao.objects.filter(
-                conciliacao=conciliacao_nova, bem=bem
-            ).count(),
+            ItemConciliacao.objects.filter(conciliacao=conciliacao_nova, bem=bem).count(),
             1,
         )
 
@@ -229,9 +215,7 @@ class ConciliacaoSyncTest(TestCase):
         bem.unidade_administrativa = ua2
         bem.unidade_administrativa_id = ua2.pk
         conciliacao_sync.sync_bem_pos_save(bem, old_ua_id=self.ua.pk)
-        self.assertEqual(
-            ItemConciliacao.objects.filter(conciliacao=conciliacao_antiga).count(), 0
-        )
+        self.assertEqual(ItemConciliacao.objects.filter(conciliacao=conciliacao_antiga).count(), 0)
         self.assertEqual(ItemConciliacao.objects.filter(bem=bem).count(), 0)
 
     def test_sync_bem_mesma_ua_com_conciliacao_inclui_ou_atualiza(self):
@@ -239,9 +223,7 @@ class ConciliacaoSyncTest(TestCase):
         bem = self._criar_bem()
         with audit_as(self.usuario):
             conciliacao_sync.sync_bem_pos_save(bem)
-        self.assertEqual(
-            ItemConciliacao.objects.filter(conciliacao=conciliacao, bem=bem).count(), 1
-        )
+        self.assertEqual(ItemConciliacao.objects.filter(conciliacao=conciliacao, bem=bem).count(), 1)
 
     def test_sync_bem_mesma_ua_sem_conciliacao_nao_faz_nada(self):
         bem = self._criar_bem()

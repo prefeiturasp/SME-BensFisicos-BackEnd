@@ -1,4 +1,5 @@
 """Melhorias fluxo Baixa Física: edição Aceita, Laudado->Baixa Física, laudo com Nome."""
+
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.test import RequestFactory, TestCase
@@ -29,11 +30,15 @@ from usuario.models import Usuario
 
 def _criar_usuario(username, uo, ua, grupos=None, **kw):
     u = Usuario.objects.create_user(
-        username=username, email=f"{username}@t.com", **auth_kwargs("x"),
-        unidade_administrativa=ua, unidade_orcamentaria=uo,
-        is_staff=True, **kw,
+        username=username,
+        email=f"{username}@t.com",
+        **auth_kwargs("x"),
+        unidade_administrativa=ua,
+        unidade_orcamentaria=uo,
+        is_staff=True,
+        **kw,
     )
-    for g in (grupos or []):
+    for g in grupos or []:
         grp, _ = Group.objects.get_or_create(name=g)
         u.groups.add(grp)
     return u
@@ -41,16 +46,25 @@ def _criar_usuario(username, uo, ua, grupos=None, **kw):
 
 def _criar_bem(ua, user, numero="000.000000001-0", st=constants.APROVADO, nome="Bem X", desc="Desc X"):
     return BemPatrimonial.objects.create(
-        nome=nome, descricao=desc, valor_unitario=100,
-        marca="M", modelo="Md", numero_patrimonial=numero,
-        unidade_administrativa=ua, criado_por=user, status=st,
+        nome=nome,
+        descricao=desc,
+        valor_unitario=100,
+        marca="M",
+        modelo="Md",
+        numero_patrimonial=numero,
+        unidade_administrativa=ua,
+        criado_por=user,
+        status=st,
     )
 
 
 def _criar_baixa(ua, user, st=constants.AGUARDANDO_ENVIO, processo="PROC-BX"):
     return BaixaFisicaBemPatrimonial.objects.create(
-        unidade_administrativa_origem=ua, numero_processo_baixa=processo,
-        status=st, criado_por=user, data_baixa=timezone.localdate(),
+        unidade_administrativa_origem=ua,
+        numero_processo_baixa=processo,
+        status=st,
+        criado_por=user,
+        data_baixa=timezone.localdate(),
     )
 
 
@@ -80,8 +94,10 @@ class AprovacaoLaudadoNBBPMTestCase(BaseBaixa):
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
         baixa.aprovar(self.gestor, numero_processo_baixa="6016.2025/0117371-7")
         nbbpm = criar_nbbpm_com_retry(
-            baixas=[baixa], numero_processo_baixa="6016.2025/0117371-7",
-            data_autorizacao=timezone.localdate(), responsavel="G",
+            baixas=[baixa],
+            numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
             criado_por=self.gestor,
         )
         self.assertTrue(nbbpm.numero.startswith("001."))
@@ -92,9 +108,11 @@ class AprovacaoLaudadoNBBPMTestCase(BaseBaixa):
         self.client.force_authenticate(user=self.oper)
         resp = self.client.post(
             reverse("baixas-fisicas-list"),
-            {"unidade_administrativa_origem": self.ua.id,
-             "itens": [{"bem": self.bem.id}],
-             "data_baixa": str(timezone.localdate())},
+            {
+                "unidade_administrativa_origem": self.ua.id,
+                "itens": [{"bem": self.bem.id}],
+                "data_baixa": str(timezone.localdate()),
+            },
             format="json",
         )
         self.assertEqual(resp.status_code, drf_status.HTTP_201_CREATED)
@@ -113,8 +131,7 @@ class AprovacaoLaudadoNBBPMTestCase(BaseBaixa):
 
 class EdicaoAceitaAPITestCase(BaseBaixa):
     def _baixa_aceita(self):
-        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA,
-                             processo="6016.2025/0117371-7")
+        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA, processo="6016.2025/0117371-7")
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
         self.bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
         self.bem.save(update_fields=["status"])
@@ -129,7 +146,8 @@ class EdicaoAceitaAPITestCase(BaseBaixa):
         self.client.force_authenticate(user=self.gestor)
         resp = self.client.patch(
             reverse("baixas-fisicas-detail", kwargs={"pk": baixa.pk}),
-            {"itens": [{"bem": self.bem2.id}]}, format="json",
+            {"itens": [{"bem": self.bem2.id}]},
+            format="json",
         )
         self.assertEqual(resp.status_code, drf_status.HTTP_200_OK)
         self.bem.refresh_from_db()
@@ -143,14 +161,18 @@ class EdicaoAceitaAPITestCase(BaseBaixa):
     def test_edicao_aceita_bloqueada_com_nbbpm_400(self):
         baixa = self._baixa_aceita()
         nbbpm = NBBPM.objects.create(
-            numero="001.0000001/2026", numero_processo_baixa="6016.2025/0117371-7",
-            data_autorizacao=timezone.localdate(), responsavel="G",
-            criado_por=self.gestor)
+            numero="001.0000001/2026",
+            numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         nbbpm.baixas.set([baixa])
         self.client.force_authenticate(user=self.gestor)
         resp = self.client.patch(
             reverse("baixas-fisicas-detail", kwargs={"pk": baixa.pk}),
-            {"itens": [{"bem": self.bem.id}]}, format="json",
+            {"itens": [{"bem": self.bem.id}]},
+            format="json",
         )
         self.assertEqual(resp.status_code, drf_status.HTTP_400_BAD_REQUEST)
 
@@ -159,7 +181,8 @@ class EdicaoAceitaAPITestCase(BaseBaixa):
         self.client.force_authenticate(user=self.oper)
         resp = self.client.patch(
             reverse("baixas-fisicas-detail", kwargs={"pk": baixa.pk}),
-            {"itens": [{"bem": self.bem.id}]}, format="json",
+            {"itens": [{"bem": self.bem.id}]},
+            format="json",
         )
         self.assertEqual(resp.status_code, drf_status.HTTP_403_FORBIDDEN)
 
@@ -170,7 +193,8 @@ class EdicaoAceitaAPITestCase(BaseBaixa):
         self.client.force_authenticate(user=self.gestor)
         resp = self.client.patch(
             reverse("baixas-fisicas-detail", kwargs={"pk": baixa.pk}),
-            {"itens": [{"bem": bem_outra.id}]}, format="json",
+            {"itens": [{"bem": bem_outra.id}]},
+            format="json",
         )
         self.assertEqual(resp.status_code, drf_status.HTTP_400_BAD_REQUEST)
 
@@ -180,7 +204,8 @@ class EdicaoAceitaAPITestCase(BaseBaixa):
         self.client.force_authenticate(user=self.gestor)
         resp = self.client.post(
             reverse("baixas-fisicas-aprovar", kwargs={"pk": baixa.pk}),
-            {"numero_processo_baixa": "RUIM"}, format="json",
+            {"numero_processo_baixa": "RUIM"},
+            format="json",
         )
         self.assertEqual(resp.status_code, drf_status.HTTP_400_BAD_REQUEST)
 
@@ -189,6 +214,7 @@ class EdicaoAceitaAdminTestCase(BaseBaixa):
     def _req(self, user):
         from django.contrib.messages.storage.fallback import FallbackStorage
         from django.contrib.sessions.backends.db import SessionStore
+
         rf = RequestFactory()
         req = rf.post("/admin/")
         req.user = user
@@ -199,8 +225,7 @@ class EdicaoAceitaAdminTestCase(BaseBaixa):
 
     def test_admin_gestor_edita_aceita_adiciona_remove(self):
         admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, AdminSite())
-        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA,
-                             processo="6016.2025/0117371-7")
+        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA, processo="6016.2025/0117371-7")
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
         self.bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
         self.bem.save(update_fields=["status"])
@@ -210,12 +235,9 @@ class EdicaoAceitaAdminTestCase(BaseBaixa):
         # Simula remoção via métodos internos do admin.
         item = baixa.itens.select_related("bem").get(bem_id=self.bem.id)
         req = self._req(self.gestor)
-        self.assertTrue(
-            admin._baixa_permite_edicao_via_save_related(req, baixa))
+        self.assertTrue(admin._baixa_permite_edicao_via_save_related(req, baixa))
         # Reverte removido -> Aprovado.
-        admin._reverter_bens_removidos(
-            type("FS", (), {"deleted_objects": [item]})(),
-            constants.LAUDADO_PARA_BAIXA)
+        admin._reverter_bens_removidos(type("FS", (), {"deleted_objects": [item]})(), constants.LAUDADO_PARA_BAIXA)
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.status, constants.APROVADO)
         self.assertEqual(self.bem.numero_processo, "")
@@ -223,21 +245,21 @@ class EdicaoAceitaAdminTestCase(BaseBaixa):
         # Ativa novo -> Laudado com processo propagado.
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem2)
         novo_item = baixa.itens.select_related("bem").get(bem_id=self.bem2.id)
-        admin._ativar_bens_novos(
-            type("FS", (), {"new_objects": [novo_item]})(),
-            constants.LAUDADO_PARA_BAIXA, baixa)
+        admin._ativar_bens_novos(type("FS", (), {"new_objects": [novo_item]})(), constants.LAUDADO_PARA_BAIXA, baixa)
         self.bem2.refresh_from_db()
         self.assertEqual(self.bem2.status, constants.LAUDADO_PARA_BAIXA)
         self.assertEqual(self.bem2.numero_processo, "6016.2025/0117371-7")
 
     def test_admin_bloqueia_edicao_aceita_com_nbbpm(self):
         inline = BaixaFisicaBensItemInline(BaixaFisicaBemPatrimonial, AdminSite())
-        baixa = _criar_baixa(self.ua, self.oper, st=constants.ACEITA,
-                             processo="6016.2025/0117371-7")
+        baixa = _criar_baixa(self.ua, self.oper, st=constants.ACEITA, processo="6016.2025/0117371-7")
         nbbpm = NBBPM.objects.create(
-            numero="001.0000009/2026", numero_processo_baixa="6016.2025/0117371-7",
-            data_autorizacao=timezone.localdate(), responsavel="G",
-            criado_por=self.gestor)
+            numero="001.0000009/2026",
+            numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         nbbpm.baixas.set([baixa])
         req = self._req(self.gestor)
         self.assertFalse(inline._baixa_permite_edicao_itens(req, baixa))
@@ -245,8 +267,7 @@ class EdicaoAceitaAdminTestCase(BaseBaixa):
 
 class LaudoNomeBemTestCase(BaseBaixa):
     def test_laudo_contem_nome_do_bem_pdf_integro(self):
-        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA,
-                             processo="6016.2025/0117371-7")
+        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA, processo="6016.2025/0117371-7")
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
         self.bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
         self.bem.save(update_fields=["status"])
@@ -270,8 +291,7 @@ class LaudoNomeBemTestCase(BaseBaixa):
         self.assertEqual(resp.status_code, drf_status.HTTP_400_BAD_REQUEST)
 
     def test_laudo_aceita_retorna_200_pdf(self):
-        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA,
-                             processo="6016.2025/0117371-7")
+        baixa = _criar_baixa(self.ua, self.oper, st=constants.SOLICITADA, processo="6016.2025/0117371-7")
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=self.bem)
         self.bem.status = constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
         self.bem.save(update_fields=["status"])

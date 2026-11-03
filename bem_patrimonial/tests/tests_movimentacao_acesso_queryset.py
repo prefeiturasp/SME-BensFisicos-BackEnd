@@ -38,9 +38,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
         )
 
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor_sem_ua = Usuario.objects.create_user(
             username="gestor_sem_ua",
@@ -145,9 +143,7 @@ class MovimentacaoQuerysetAcessoTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def test_gestor_sem_ua_ve_todas_movimentacoes(self):
         request = self.factory.get("/admin/bem_patrimonial/movimentacaobempatrimonial/")

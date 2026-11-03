@@ -36,9 +36,7 @@ class UnidadeAdministrativaAutocompleteTestCase(TestCase):
         )
 
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor_sem_ua = Usuario.objects.create_user(
             username="gestor_sem_ua",
@@ -70,9 +68,7 @@ class UnidadeAdministrativaAutocompleteTestCase(TestCase):
             {"field_name": "unidade_administrativa_origem", "term": ""},
         )
         request_operador.user = self.operador_com_ua1
-        qs_operador, _ = self.admin.get_search_results(
-            request_operador, UnidadeAdministrativa.objects.all(), ""
-        )
+        qs_operador, _ = self.admin.get_search_results(request_operador, UnidadeAdministrativa.objects.all(), "")
         self.assertEqual(qs_operador.count(), 1)
         self.assertIn(self.ua1_ativa, qs_operador)
 
@@ -81,8 +77,6 @@ class UnidadeAdministrativaAutocompleteTestCase(TestCase):
             {"field_name": "unidade_administrativa_origem", "term": ""},
         )
         request_gestor.user = self.gestor_sem_ua
-        qs_gestor, _ = self.admin.get_search_results(
-            request_gestor, UnidadeAdministrativa.objects.all(), ""
-        )
+        qs_gestor, _ = self.admin.get_search_results(request_gestor, UnidadeAdministrativa.objects.all(), "")
         self.assertEqual(qs_gestor.count(), 2)
         self.assertNotIn(self.ua3_inativa, qs_gestor)

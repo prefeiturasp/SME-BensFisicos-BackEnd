@@ -11,9 +11,7 @@ def _eh_criacao_usuario(registro):
 
 
 def _operacao_registro(registro):
-    if _eh_criacao_usuario(registro) or (
-        registro.campo == "acao" and registro.valor_novo == "criado"
-    ):
+    if _eh_criacao_usuario(registro) or (registro.campo == "acao" and registro.valor_novo == "criado"):
         return "criacao"
     return "alteracao"
 
@@ -54,10 +52,7 @@ def _consultar_registros(content_type, objeto_id):
         )
         agrupados[chave].append(registro)
 
-    return [
-        _grupo_registros(data, usuario_id, itens)
-        for (data, usuario_id, _), itens in agrupados.items()
-    ]
+    return [_grupo_registros(data, usuario_id, itens) for (data, usuario_id, _), itens in agrupados.items()]
 
 
 def _grupo_log(log):

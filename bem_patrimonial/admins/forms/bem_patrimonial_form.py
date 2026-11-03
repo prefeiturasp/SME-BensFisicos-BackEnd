@@ -144,40 +144,24 @@ class BemPatrimonialAdminForm(forms.ModelForm):
                 return
             if not antigo and not re.fullmatch(self.NEW_FMT_RE, numero):
                 raise ValidationError(
-                    {
-                        "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                    }
+                    {"numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."}
                 )
         else:
             if not sem:
-                raise ValidationError(
-                    {
-                        "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                    }
-                )
+                raise ValidationError({"numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."})
             cleaned["numero_formato_antigo"] = False
 
     def _validate_numero_patrimonial_new(self, cleaned, sem, antigo, numero):
         if sem and antigo:
-            raise ValidationError(
-                "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
-            )
+            raise ValidationError("Selecione 'Formato antigo' OU 'Sem numeração' — não ambos.")
         if sem:
             cleaned["numero_patrimonial"] = None
             cleaned["numero_formato_antigo"] = False
             return
         if not numero:
-            raise ValidationError(
-                {
-                    "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                }
-            )
+            raise ValidationError({"numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."})
         if not antigo and not re.fullmatch(self.NEW_FMT_RE, numero):
-            raise ValidationError(
-                {
-                    "numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-                }
-            )
+            raise ValidationError({"numero_patrimonial": "Use o formato 000.000000000-0 ou marque 'Formato antigo'."})
 
     def clean(self):
         cleaned = super().clean()

@@ -13,9 +13,11 @@ from dados_comuns.utils import PREFIXO_CODIGO_UO_SME
 
 
 def queryset_uos_destino_externas():
-    return UnidadeOrcamentaria.objects.filter(ativa=True).exclude(
-        codigo__startswith=PREFIXO_CODIGO_UO_SME
-    ).order_by("codigo", "nome")
+    return (
+        UnidadeOrcamentaria.objects.filter(ativa=True)
+        .exclude(codigo__startswith=PREFIXO_CODIGO_UO_SME)
+        .order_by("codigo", "nome")
+    )
 
 
 class TransferenciaBemPatrimonialForm(forms.ModelForm):
@@ -62,9 +64,7 @@ class TransferenciaBemPatrimonialForm(forms.ModelForm):
             self.fields["unidade_orcamentaria_destino"].queryset = queryset_uos_destino_externas()
 
         if "unidade_administrativa_filtro" in self.fields and uo_origem:
-            self.fields["unidade_administrativa_filtro"].queryset = queryset_uas_da_uo(
-                uo_origem
-            )
+            self.fields["unidade_administrativa_filtro"].queryset = queryset_uas_da_uo(uo_origem)
 
     def _configurar_campos_edicao(self):
         if "unidade_orcamentaria_origem" in self.fields:
@@ -94,9 +94,7 @@ class TransferenciaBemPatrimonialForm(forms.ModelForm):
             return
 
         if uo_origem:
-            self.fields["unidade_orcamentaria_origem"].queryset = UnidadeOrcamentaria.objects.filter(
-                pk=uo_origem.pk
-            )
+            self.fields["unidade_orcamentaria_origem"].queryset = UnidadeOrcamentaria.objects.filter(pk=uo_origem.pk)
             self.fields["unidade_orcamentaria_origem"].initial = uo_origem.pk
 
         self.fields["unidade_orcamentaria_origem"].disabled = True
@@ -115,34 +113,22 @@ class TransferenciaBemPatrimonialForm(forms.ModelForm):
             uo_origem = obter_uo_referencia_do_usuario(user)
             if not uo_origem:
                 raise ValidationError(
-                    {
-                        "unidade_orcamentaria_origem": "Não foi possível identificar a UO de origem do usuário."
-                    }
+                    {"unidade_orcamentaria_origem": "Não foi possível identificar a UO de origem do usuário."}
                 )
             cleaned_data["unidade_orcamentaria_origem"] = uo_origem
 
         uo_destino = cleaned_data.get("unidade_orcamentaria_destino")
         if not uo_destino:
-            raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": "Unidade Orçamentária de destino é obrigatória."
-                }
-            )
+            raise ValidationError({"unidade_orcamentaria_destino": "Unidade Orçamentária de destino é obrigatória."})
 
         if uo_origem and uo_destino.pk == uo_origem.pk:
             raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": "A UO de destino deve ser diferente da UO de origem."
-                }
+                {"unidade_orcamentaria_destino": "A UO de destino deve ser diferente da UO de origem."}
             )
 
         ua_destino = obter_ua_ponto_central(uo_destino)
         if not ua_destino:
-            raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL
-                }
-            )
+            raise ValidationError({"unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL})
 
         cleaned_data["unidade_administrativa_destino"] = ua_destino
         return cleaned_data

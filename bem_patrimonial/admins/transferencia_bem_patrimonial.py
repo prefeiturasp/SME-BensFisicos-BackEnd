@@ -56,9 +56,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
         "itens__bem__numero_patrimonial",
         "itens__bem__nome",
     )
-    search_help_text = (
-        "Pesquise por número do processo, UO de origem/destino e número patrimonial ou nome do bem."
-    )
+    search_help_text = "Pesquise por número do processo, UO de origem/destino e número patrimonial ou nome do bem."
     readonly_fields = (
         "numero_ntbpm",
         "get_documento_ntbpm_link",
@@ -139,9 +137,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
     def save_model(self, request, obj, form, change):
         if obj.pk is None:
             obj.criado_por = request.user
-        obj.unidade_administrativa_destino = form.cleaned_data[
-            "unidade_administrativa_destino"
-        ]
+        obj.unidade_administrativa_destino = form.cleaned_data["unidade_administrativa_destino"]
         super().save_model(request, obj, form, change)
 
     def get_documento_ntbpm_link(self, obj):
@@ -205,9 +201,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         if object_id is not None and request.method == "POST":
-            raise PermissionDenied(
-                "Transferencias existentes estao disponiveis apenas para visualizacao."
-            )
+            raise PermissionDenied("Transferencias existentes estao disponiveis apenas para visualizacao.")
 
         with transaction.atomic():
             return super().changeform_view(
@@ -225,9 +219,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
             transferencia.efetivar_transferencia(request.user)
 
     def get_inline_formsets(self, request, formsets, inline_instances, obj=None):
-        inline_formsets = super().get_inline_formsets(
-            request, formsets, inline_instances, obj
-        )
+        inline_formsets = super().get_inline_formsets(request, formsets, inline_instances, obj)
 
         if obj is not None:
             for formset in inline_formsets:

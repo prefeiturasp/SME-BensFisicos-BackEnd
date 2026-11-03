@@ -42,9 +42,7 @@ def redirect_admin_password(request, user_id: int):
     return redirect(url)
 
 
-redirect_admin_password = login_required(
-    require_GET(redirect_admin_password), login_url="admin_login"
-)
+redirect_admin_password = login_required(require_GET(redirect_admin_password), login_url="admin_login")
 
 
 urlpatterns = [

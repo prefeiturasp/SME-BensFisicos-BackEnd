@@ -27,16 +27,20 @@ class MovimentacaoLoteWidgetTestCase(SimpleTestCase):
         self.widget = MovimentacaoLoteWidget()
 
     def test_widget_preserva_selecao_no_campo_oculto_apos_erro(self):
-        valor = json.dumps({
-            "modo": "faixa",
-            "selecoes": [{
-                "id": "faixa-1",
-                "tipo": "faixa",
-                "numeroDe": "001.000000010-0",
-                "numeroAte": "001.000000012-2",
-                "bens": [{"id": 1, "nome": "Mesa"}],
-            }],
-        })
+        valor = json.dumps(
+            {
+                "modo": "faixa",
+                "selecoes": [
+                    {
+                        "id": "faixa-1",
+                        "tipo": "faixa",
+                        "numeroDe": "001.000000010-0",
+                        "numeroAte": "001.000000012-2",
+                        "bens": [{"id": 1, "nome": "Mesa"}],
+                    }
+                ],
+            }
+        )
         html = self.widget.render("itens_lote", valor, {"id": "id_itens_lote"})
         self.assertIn(str(escape(valor)), html)
         self.assertEqual(
@@ -87,19 +91,19 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.assertIn('data-modo="geral"', html)
         self.assertIn('data-modo="faixa"', html)
         self.assertIn('data-modo="visualizar"', html)
-        self.assertIn('movimentacao-lote__visualizar', html)
-        self.assertIn('O dígito após o hífen não é considerado', html)
-        self.assertNotIn('os dígitos finais precisam ser iguais', html)
+        self.assertIn("movimentacao-lote__visualizar", html)
+        self.assertIn("O dígito após o hífen não é considerado", html)
+        self.assertNotIn("os dígitos finais precisam ser iguais", html)
         self.assertIn('value="todos"', html)
         self.assertIn('role="tablist"', html)
-        self.assertIn('Informe o número patrimonial completo do primeiro bem', html)
+        self.assertIn("Informe o número patrimonial completo do primeiro bem", html)
         self.assertIn('data-pesquisar-url="/pesquisar/"', html)
         self.assertIn('data-buscar-url="/autocomplete/"', html)
         self.assertIn('class="movimentacao-lote__termo" type="text"', html)
         self.assertIn('class="movimentacao-lote__opcoes" hidden', html)
         self.assertIn('class="movimentacao-lote__acoes"', html)
-        self.assertNotIn('Buscar e selecionar bens', html)
-        self.assertNotIn('<fieldset', html)
+        self.assertNotIn("Buscar e selecionar bens", html)
+        self.assertNotIn("<fieldset", html)
 
     def setUp(self):
         self.uo_a = criar_uo(codigo="UO-100", nome="UO Alfa", sigla="UOA")
@@ -111,9 +115,7 @@ class MovimentacaoAdminSearchTestCase(TestCase):
         self.ua4 = criar_ua(uo=self.uo_b, codigo="004", nome="DRE Leste", sigla="DRL")
 
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor_uo_a = Usuario.objects.create_user(
             username="gestor_uo_a",
@@ -215,14 +217,10 @@ class MovimentacaoAdminSearchTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _search(self, user, term):
-        request = self.factory.get(
-            "/admin/bem_patrimonial/movimentacaobempatrimonial/", {"q": term}
-        )
+        request = self.factory.get("/admin/bem_patrimonial/movimentacaobempatrimonial/", {"q": term})
         request.user = user
         qs = self.admin.get_queryset(request)
         qs, _ = self.admin.get_search_results(request, qs, term)
@@ -257,9 +255,7 @@ class MovimentacaoAdminSearchTestCase(TestCase):
                 self._assert_search_contains(self.gestor_uo_a, termo, mov, self.mov3)
 
     def test_busca_por_numero_cimbpm(self):
-        self._assert_search_contains(
-            self.gestor_uo_a, "CIMBPM-002", self.mov2, self.mov1
-        )
+        self._assert_search_contains(self.gestor_uo_a, "CIMBPM-002", self.mov2, self.mov1)
 
     def test_busca_por_ua_origem_destino(self):
         qs = self._search(self.gestor_uo_a, "DRE Centro")

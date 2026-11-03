@@ -64,17 +64,13 @@ class BemPatrimonialTestCase(TestCase):
     def test_nao_aprovado_status_change_sync(self):
         instance = self.entity.objects.first()
         instance.statusbempatrimonial_set.create(status=NAO_APROVADO)
-        self.assertEqual(
-            instance.status, instance.statusbempatrimonial_set.last().status
-        )
+        self.assertEqual(instance.status, instance.statusbempatrimonial_set.last().status)
         self.assertEqual(instance.status, NAO_APROVADO)
 
     def test_aprovado_status_change_sync(self):
         instance = self.entity.objects.first()
         instance.statusbempatrimonial_set.create(status=APROVADO)
-        self.assertEqual(
-            instance.status, instance.statusbempatrimonial_set.last().status
-        )
+        self.assertEqual(instance.status, instance.statusbempatrimonial_set.last().status)
         self.assertEqual(instance.status, APROVADO)
 
     def test_regex_valido_quando_formato_novo_e_sem_flags(self):
@@ -265,22 +261,22 @@ class BemPatrimonialTestCase(TestCase):
 
     def test_numero_patrimonial_duplicado(self):
         BemPatrimonial.objects.create(
-            numero_patrimonial='123',
+            numero_patrimonial="123",
             excluido=False,
             valor_unitario=100.0,
-            nome='Bem Teste 1',
-            status='aguardando_aprovacao'
+            nome="Bem Teste 1",
+            status="aguardando_aprovacao",
         )
 
         obj2 = BemPatrimonial(
-            numero_patrimonial='123',
+            numero_patrimonial="123",
             excluido=False,
             valor_unitario=150.0,
-            nome='Bem Teste 2',
-            status='aguardando_aprovacao'
+            nome="Bem Teste 2",
+            status="aguardando_aprovacao",
         )
 
         with self.assertRaises(ValidationError) as cm:
             obj2._clean_verifica_numero_patrimonial_cadastrado()
 
-        self.assertIn('numero_patrimonial', cm.exception.message_dict)
+        self.assertIn("numero_patrimonial", cm.exception.message_dict)

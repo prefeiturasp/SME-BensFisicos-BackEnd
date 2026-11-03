@@ -108,16 +108,13 @@ TRANSFERENCIA_LIST_QUERY_PARAMETERS = [
     ),
 ]
 
+
 class TransferenciaBemPatrimonialFilter(FilterSet):
     numero_ntbpm = CharFilter(field_name="numero_ntbpm", lookup_expr="icontains")
     numero_processo = CharFilter(field_name="numero_processo", lookup_expr="icontains")
     nome_bem = CharFilter(field_name="itens__bem__nome", lookup_expr="icontains")
-    unidade_orcamentaria_origem = NumberFilter(
-        field_name="unidade_orcamentaria_origem__id"
-    )
-    unidade_orcamentaria_destino = NumberFilter(
-        field_name="unidade_orcamentaria_destino__id"
-    )
+    unidade_orcamentaria_origem = NumberFilter(field_name="unidade_orcamentaria_origem__id")
+    unidade_orcamentaria_destino = NumberFilter(field_name="unidade_orcamentaria_destino__id")
 
     class Meta:
         model = TransferenciaBemPatrimonial
@@ -128,6 +125,8 @@ class TransferenciaBemPatrimonialFilter(FilterSet):
             "unidade_orcamentaria_origem",
             "unidade_orcamentaria_destino",
         ]
+
+
 @extend_schema_view(
     list=extend_schema(
         tags=["Transferências"],
@@ -188,15 +187,12 @@ class TransferenciaBemPatrimonialViewSet(
     ordering = ["-criado_em"]
 
     def get_queryset(self):
-        qs = (
-            TransferenciaBemPatrimonial.objects.select_related(
-                "unidade_orcamentaria_origem",
-                "unidade_orcamentaria_destino",
-                "unidade_administrativa_destino",
-                "criado_por",
-            )
-            .prefetch_related("itens__bem", "itens__bem__unidade_administrativa")
-        )
+        qs = TransferenciaBemPatrimonial.objects.select_related(
+            "unidade_orcamentaria_origem",
+            "unidade_orcamentaria_destino",
+            "unidade_administrativa_destino",
+            "criado_por",
+        ).prefetch_related("itens__bem", "itens__bem__unidade_administrativa")
         return filtrar_queryset_transferencia_por_escopo(self.request.user, qs).distinct()
 
     def get_serializer_class(self):

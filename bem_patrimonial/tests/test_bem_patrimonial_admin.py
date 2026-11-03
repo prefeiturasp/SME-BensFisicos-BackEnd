@@ -33,6 +33,7 @@ from usuario.models import Usuario
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _request_with_messages(factory, user, method="GET", path="/admin/", data=None):
     if method == "POST":
         request = factory.post(path, data=data or {})
@@ -87,6 +88,7 @@ def _linha_valida(
 # Setup compartilhado
 # ---------------------------------------------------------------------------
 
+
 class _Base(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -139,9 +141,7 @@ class _Base(TestCase):
         cls.superuser.unidade_administrativa = cls.ua
         cls.superuser.unidade_orcamentaria = cls.uo
         cls.superuser.must_change_password = False
-        cls.superuser.save(
-            update_fields=["unidade_administrativa", "unidade_orcamentaria", "must_change_password"]
-        )
+        cls.superuser.save(update_fields=["unidade_administrativa", "unidade_orcamentaria", "must_change_password"])
         cls.superuser.groups.add(cls.grupo_gestor)
 
     def setUp(self):
@@ -152,9 +152,9 @@ class _Base(TestCase):
         # Permissões necessárias para add_view e has_view_permission funcionarem
         from django.contrib.auth.models import Permission
         from django.contrib.contenttypes.models import ContentType
+
         ct = ContentType.objects.get_for_model(BemPatrimonial)
-        for codename in ("add_bempatrimonial", "view_bempatrimonial",
-                         "change_bempatrimonial", "delete_bempatrimonial"):
+        for codename in ("add_bempatrimonial", "view_bempatrimonial", "change_bempatrimonial", "delete_bempatrimonial"):
             perm, _ = Permission.objects.get_or_create(
                 codename=codename,
                 content_type=ct,
@@ -190,6 +190,7 @@ class _Base(TestCase):
 # 1. reprovar_bens: count_aguardando == 0  (linhas 118-122)
 # ===========================================================================
 
+
 class ReprovarBensCountZeroTest(_Base):
     def test_reprovar_bens_count_zero_emite_warning(self):
         bem = self._criar_bem(status=APROVADO)
@@ -202,6 +203,7 @@ class ReprovarBensCountZeroTest(_Base):
 # ===========================================================================
 # 2. BemPatrimonialResource — helpers internos
 # ===========================================================================
+
 
 class ResourceHelpersTest(_Base):
     def setUp(self):
@@ -253,6 +255,7 @@ class ResourceHelpersTest(_Base):
 
     def test_parse_valor_unitario_virgula_retorna_decimal(self):
         from decimal import Decimal
+
         resultado = self.resource._parse_valor_unitario("2,50", 1, "001.000000001-0")
         self.assertEqual(resultado, Decimal("2.50"))
         self.assertEqual(len(self.resource._erros_por_linha), 0)
@@ -261,6 +264,7 @@ class ResourceHelpersTest(_Base):
 # ===========================================================================
 # 3. _validar_dataset_completo — duplicidade
 # ===========================================================================
+
 
 class ValidarDatasetCompletoTest(_Base):
     def setUp(self):
@@ -296,6 +300,7 @@ class ValidarDatasetCompletoTest(_Base):
 # ===========================================================================
 # 4. before_import
 # ===========================================================================
+
 
 class BeforeImportTest(_Base):
     def _make_resource(self, user=None):
@@ -333,8 +338,7 @@ class BeforeImportTest(_Base):
     def test_before_import_reinicia_estado(self):
         resource = self._make_resource(user=self.gestor)
         # Seta estado sujo simulando uma execução anterior
-        resource._erros_por_linha = [{"linha": 1, "numero_patrimonial": "-",
-                                      "campo": "nome", "mensagem": "lixo"}]
+        resource._erros_por_linha = [{"linha": 1, "numero_patrimonial": "-", "campo": "nome", "mensagem": "lixo"}]
         resource._mensagens_exibidas = True
         ds = _dataset_importacao(_linha_valida())
         resource.before_import(ds)
@@ -346,6 +350,7 @@ class BeforeImportTest(_Base):
 # ===========================================================================
 # 5. get_instance
 # ===========================================================================
+
 
 class GetInstanceTest(_Base):
     def setUp(self):
@@ -361,6 +366,7 @@ class GetInstanceTest(_Base):
 # ===========================================================================
 # 6. before_save_instance  (linhas 442-465)
 # ===========================================================================
+
 
 class BeforeSaveInstanceTest(_Base):
     def _resource_com_request(self):
@@ -432,6 +438,7 @@ class BeforeSaveInstanceTest(_Base):
 # 7. after_import — delega ao super sem emitir mensagens próprias
 # ===========================================================================
 
+
 class AfterImportTest(_Base):
     _AFTER_IMPORT_EXTRA = (True, False)
 
@@ -467,14 +474,13 @@ class AfterImportTest(_Base):
 # 8. delete_view: extra_context  (linha 598)
 # ===========================================================================
 
+
 class DeleteViewExtraContextTest(_Base):
     def test_delete_view_get_com_extra_context(self):
         bem = self._criar_bem()
         request = _request_with_messages(self.factory, self.gestor)
         request.resolver_match = MagicMock()
-        resp = self.admin.delete_view(
-            request, str(bem.pk), extra_context={"custom_key": "custom_value"}
-        )
+        resp = self.admin.delete_view(request, str(bem.pk), extra_context={"custom_key": "custom_value"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context_data.get("custom_key"), "custom_value")
 
@@ -483,18 +489,17 @@ class DeleteViewExtraContextTest(_Base):
 # 9. _usuario_pode_editar_obj  (linhas 676-680)
 # ===========================================================================
 
+
 class UsuarioPodeEditarObjTest(_Base):
     def test_superuser_pode_editar_qualquer_bem(self):
         outra_uo = criar_uo(codigo="910", nome="UO 910")
-        outra_ua = criar_ua(uo=outra_uo, codigo="910", sigla="U910", nome="UA 910",
-                            status=UnidadeAdministrativa.ATIVA)
+        outra_ua = criar_ua(uo=outra_uo, codigo="910", sigla="U910", nome="UA 910", status=UnidadeAdministrativa.ATIVA)
         bem = self._criar_bem(unidade_administrativa=outra_ua)
         self.assertTrue(self.admin._usuario_pode_editar_obj(self.superuser, bem))
 
     def test_usuario_comum_nao_pode_editar_bem_de_outra_ua(self):
         outra_uo = criar_uo(codigo="911", nome="UO 911")
-        outra_ua = criar_ua(uo=outra_uo, codigo="911", sigla="U911", nome="UA 911",
-                            status=UnidadeAdministrativa.ATIVA)
+        outra_ua = criar_ua(uo=outra_uo, codigo="911", sigla="U911", nome="UA 911", status=UnidadeAdministrativa.ATIVA)
         bem = self._criar_bem(unidade_administrativa=outra_ua)
         self.assertFalse(self.admin._usuario_pode_editar_obj(self.gestor, bem))
 
@@ -502,6 +507,7 @@ class UsuarioPodeEditarObjTest(_Base):
 # ===========================================================================
 # 10. has_view_permission  (linhas 690-696)
 # ===========================================================================
+
 
 class HasViewPermissionTest(_Base):
     def test_superuser_tem_view_permission_em_obj(self):
@@ -537,6 +543,7 @@ class HasViewPermissionTest(_Base):
 # ===========================================================================
 # 11. get_object fallback  (linhas 703-717)
 # ===========================================================================
+
 
 class GetObjectFallbackTest(_Base):
     def test_get_object_fallback_gestor_encontra_bem(self):
@@ -582,11 +589,11 @@ class GetObjectFallbackTest(_Base):
 # 12. has_change_permission: obj fora do escopo  (linha 725)
 # ===========================================================================
 
+
 class HasChangePermissionEscopoTest(_Base):
     def test_has_change_permission_false_obj_fora_do_escopo(self):
         outra_uo = criar_uo(codigo="920", nome="UO 920")
-        outra_ua = criar_ua(uo=outra_uo, codigo="920", sigla="U920", nome="UA 920",
-                            status=UnidadeAdministrativa.ATIVA)
+        outra_ua = criar_ua(uo=outra_uo, codigo="920", sigla="U920", nome="UA 920", status=UnidadeAdministrativa.ATIVA)
         bem = self._criar_bem(unidade_administrativa=outra_ua)
         request = _request_with_messages(self.factory, self.gestor)
         self.assertFalse(self.admin.has_change_permission(request, obj=bem))
@@ -595,6 +602,7 @@ class HasChangePermissionEscopoTest(_Base):
 # ===========================================================================
 # 13. _validate_create_form_ua  (linhas 778-802)
 # ===========================================================================
+
 
 class ValidateCreateFormUaTest(_Base):
     def _cleaned(self, ua=None):
@@ -607,7 +615,10 @@ class ValidateCreateFormUaTest(_Base):
 
     def test_ua_inativa_levanta(self):
         ua_inativa = criar_ua(
-            uo=self.uo, codigo="930", sigla="INATIVA", nome="UA Inativa",
+            uo=self.uo,
+            codigo="930",
+            sigla="INATIVA",
+            nome="UA Inativa",
             status=UnidadeAdministrativa.INATIVA,
         )
         request = _request_with_messages(self.factory, self.gestor)
@@ -616,8 +627,7 @@ class ValidateCreateFormUaTest(_Base):
 
     def test_ua_fora_do_escopo_levanta(self):
         outra_uo = criar_uo(codigo="931", nome="UO 931")
-        ua_outra = criar_ua(uo=outra_uo, codigo="931", sigla="U931", nome="UA 931",
-                            status=UnidadeAdministrativa.ATIVA)
+        ua_outra = criar_ua(uo=outra_uo, codigo="931", sigla="U931", nome="UA 931", status=UnidadeAdministrativa.ATIVA)
         request = _request_with_messages(self.factory, self.gestor)
         with self.assertRaises(ValidationError):
             self.admin._validate_create_form_ua(self._cleaned(ua_outra), request)
@@ -638,6 +648,7 @@ class ValidateCreateFormUaTest(_Base):
 # 14. _validate_edit_form_ua  (linhas 806-818)
 # ===========================================================================
 
+
 class ValidateEditFormUaTest(_Base):
     def test_instance_sem_pk_retorna_sem_erro(self):
         instance = BemPatrimonial()
@@ -645,8 +656,7 @@ class ValidateEditFormUaTest(_Base):
 
     def test_ua_alterada_levanta(self):
         outra_uo = criar_uo(codigo="940", nome="UO 940")
-        outra_ua = criar_ua(uo=outra_uo, codigo="940", sigla="U940", nome="UA 940",
-                            status=UnidadeAdministrativa.ATIVA)
+        outra_ua = criar_ua(uo=outra_uo, codigo="940", sigla="U940", nome="UA 940", status=UnidadeAdministrativa.ATIVA)
         bem = self._criar_bem()
         cleaned = {"unidade_administrativa": outra_ua}
         with self.assertRaises(ValidationError):
@@ -656,6 +666,7 @@ class ValidateEditFormUaTest(_Base):
 # ===========================================================================
 # 15. save_model: IntegrityError  (linhas 895-906)
 # ===========================================================================
+
 
 class SaveModelIntegrityErrorTest(_Base):
     def test_integrity_error_com_numero_patrimonial_adiciona_erro_no_form(self):
@@ -710,6 +721,7 @@ class SaveModelIntegrityErrorTest(_Base):
 # 16. save_status: deleted_objects e instâncias  (linhas 1022-1025)
 # ===========================================================================
 
+
 class SaveStatusTest(_Base):
     def test_save_status_deleta_e_salva_com_atualizado_por(self):
         bem = self._criar_bem()
@@ -740,6 +752,7 @@ class SaveStatusTest(_Base):
 # 17. _add_view_multi_base_data: status None  (linhas 1040-1046)
 # ===========================================================================
 
+
 class AddViewMultiBaseDataTest(_Base):
     def test_status_none_usa_default_do_campo(self):
         form = MagicMock()
@@ -762,10 +775,12 @@ class AddViewMultiBaseDataTest(_Base):
 # 18. _add_view_multi_parse_payload: JSON inválido  (linhas 1055-1056)
 # ===========================================================================
 
+
 class AddViewMultiParsePayloadTest(_Base):
     def test_json_invalido_retorna_lista_vazia(self):
-        request = _request_with_messages(self.factory, self.gestor, method="POST",
-                                         data={"multi_payload": "nao-e-json{"})
+        request = _request_with_messages(
+            self.factory, self.gestor, method="POST", data={"multi_payload": "nao-e-json{"}
+        )
         result = self.admin._add_view_multi_parse_payload(request)
         self.assertEqual(result, [])
 
@@ -773,6 +788,7 @@ class AddViewMultiParsePayloadTest(_Base):
 # ===========================================================================
 # 19. _add_view_multi_to_bool  (linhas 1059-1063)
 # ===========================================================================
+
 
 class AddViewMultiToBoolTest(_Base):
     def test_bool_true(self):
@@ -797,10 +813,11 @@ class AddViewMultiToBoolTest(_Base):
 # 20. _add_view_multi_process_row_validate_save: ramos de erro  (linhas 1067-1081)
 # ===========================================================================
 
+
 class AddViewMultiProcessRowValidateSaveTest(_Base):
     def _bem_invalido(self):
         return BemPatrimonial(
-            nome="",   # nome vazio — irá falhar no full_clean
+            nome="",  # nome vazio — irá falhar no full_clean
             unidade_administrativa=self.ua,
             criado_por=self.gestor,
         )
@@ -832,6 +849,7 @@ class AddViewMultiProcessRowValidateSaveTest(_Base):
 # ===========================================================================
 # 21. _add_view_multi_process_row: sem localizacao e com sem_numeracao  (linhas 1084-1102)
 # ===========================================================================
+
 
 class AddViewMultiProcessRowTest(_Base):
     def _base(self):
@@ -876,6 +894,7 @@ class AddViewMultiProcessRowTest(_Base):
 # 22. _add_view_multi_process_linhas: com erros faz rollback  (linhas 1104-1115)
 # ===========================================================================
 
+
 class AddViewMultiProcessLinhasTest(_Base):
     def _base(self):
         return {
@@ -901,12 +920,14 @@ class AddViewMultiProcessLinhasTest(_Base):
 
     def test_sem_erro_cria_bens(self):
         request = _request_with_messages(self.factory, self.gestor)
-        linhas = [{
-            "localizacao": "Sala A",
-            "numero_patrimonial": "",
-            "sem_numeracao": "1",
-            "numero_formato_antigo": "0",
-        }]
+        linhas = [
+            {
+                "localizacao": "Sala A",
+                "numero_patrimonial": "",
+                "sem_numeracao": "1",
+                "numero_formato_antigo": "0",
+            }
+        ]
         count_antes = BemPatrimonial.objects.count()
         _, errors = self.admin._add_view_multi_process_linhas(request, linhas, self._base())
         self.assertEqual(len(errors), 0)
@@ -917,17 +938,21 @@ class AddViewMultiProcessLinhasTest(_Base):
 # 23. _add_view_handle_multi_post: form inválido e payload com erro  (linhas 1126-1145)
 # ===========================================================================
 
+
 class AddViewHandleMultiPostTest(_Base):
     def test_form_invalido_retorna_super_add_view(self):
         url = reverse("admin:bem_patrimonial_bempatrimonial_add")
         client = Client()
         client.force_login(self.gestor)
         # POST sem campos obrigatórios → form inválido
-        resp = client.post(url, data={
-            "cadastro_modo": "multi",
-            "multi_payload": '[{"localizacao":"Sala","sem_numeracao":"1","numero_patrimonial":"","numero_formato_antigo":"0"}]',
-            # nome, descricao, etc. ausentes → form base inválido
-        })
+        resp = client.post(
+            url,
+            data={
+                "cadastro_modo": "multi",
+                "multi_payload": '[{"localizacao":"Sala","sem_numeracao":"1","numero_patrimonial":"","numero_formato_antigo":"0"}]',
+                # nome, descricao, etc. ausentes → form base inválido
+            },
+        )
         self.assertIn(resp.status_code, (200, 302))
 
     def test_payload_com_linha_com_erro_exibe_mensagem_e_nao_cria(self):
@@ -936,17 +961,20 @@ class AddViewHandleMultiPostTest(_Base):
         client.force_login(self.gestor)
         count_antes = BemPatrimonial.objects.count()
         # linha sem localizacao → gera erro
-        resp = client.post(url, data={
-            "cadastro_modo": "multi",
-            "multi_payload": '[{"localizacao":"","sem_numeracao":"1","numero_patrimonial":"","numero_formato_antigo":"0"}]',
-            "unidade_administrativa": str(self.ua.pk),
-            "nome": "N",
-            "descricao": "D",
-            "valor_unitario": "1,00",
-            "marca": "M",
-            "modelo": "X",
-            "numero_processo": "P",
-        })
+        resp = client.post(
+            url,
+            data={
+                "cadastro_modo": "multi",
+                "multi_payload": '[{"localizacao":"","sem_numeracao":"1","numero_patrimonial":"","numero_formato_antigo":"0"}]',
+                "unidade_administrativa": str(self.ua.pk),
+                "nome": "N",
+                "descricao": "D",
+                "valor_unitario": "1,00",
+                "marca": "M",
+                "modelo": "X",
+                "numero_processo": "P",
+            },
+        )
         self.assertIn(resp.status_code, (200, 302))
         self.assertEqual(BemPatrimonial.objects.count(), count_antes)
 
@@ -954,6 +982,7 @@ class AddViewHandleMultiPostTest(_Base):
 # ===========================================================================
 # 24. render_change_form: HTML_END_FORM_CONTAINER  (linha 1181)
 # ===========================================================================
+
 
 class RenderChangeFormContainerTest(_Base):
     def test_injeta_anchor_quando_html_end_form_container_presente(self):
@@ -980,6 +1009,7 @@ class RenderChangeFormContainerTest(_Base):
 # 25. alterado_por_ultimo: retorna nome quando user existe  (linha 1208)
 # ===========================================================================
 
+
 class AlteradoPorUltimoComUserTest(_Base):
     def test_retorna_full_name_quando_user_existe(self):
         self.gestor.first_name = "José"
@@ -1004,6 +1034,7 @@ class AlteradoPorUltimoComUserTest(_Base):
 # 26. get_inline_instances: obj não None  (linha 1215)
 # ===========================================================================
 
+
 class GetInlineInstancesObjTest(_Base):
     def test_get_inline_instances_com_obj_chama_super(self):
         bem = self._criar_bem()
@@ -1017,13 +1048,17 @@ class GetInlineInstancesObjTest(_Base):
 # 27. _aplicar_filtros_autocomplete_bem: app_label diferente  (linha 1260)
 # ===========================================================================
 
+
 class AplicarFiltrosAutocompleteBemTest(_Base):
     def test_app_label_diferente_retorna_qs_inalterado(self):
-        request = self.factory.get("/admin/", {
-            "app_label": "outro_app",
-            "model_name": "baixafisicabensitem",
-            "field_name": "bem",
-        })
+        request = self.factory.get(
+            "/admin/",
+            {
+                "app_label": "outro_app",
+                "model_name": "baixafisicabensitem",
+                "field_name": "bem",
+            },
+        )
         request.user = self.gestor
         qs = BemPatrimonial.objects.all()
         result_qs, _ = self.admin._aplicar_filtros_autocomplete_bem(request, qs, False)
@@ -1037,11 +1072,14 @@ class AplicarFiltrosAutocompleteBemTest(_Base):
             **auth_kwargs("x"),
             is_staff=True,
         )
-        request = self.factory.get("/admin/", {
-            "app_label": "bem_patrimonial",
-            "model_name": "transferenciabensitem",
-            "field_name": "bem",
-        })
+        request = self.factory.get(
+            "/admin/",
+            {
+                "app_label": "bem_patrimonial",
+                "model_name": "transferenciabensitem",
+                "field_name": "bem",
+            },
+        )
         request.user = user_sem_uo
         qs = BemPatrimonial.objects.all()
         result_qs, _ = self.admin._aplicar_filtros_autocomplete_bem(request, qs, False)
@@ -1049,12 +1087,15 @@ class AplicarFiltrosAutocompleteBemTest(_Base):
 
     def test_transferencia_uo_origem_diferente_da_referencia_retorna_none_qs(self):
         outra_uo = criar_uo(codigo="950", nome="UO 950")
-        request = self.factory.get("/admin/", {
-            "app_label": "bem_patrimonial",
-            "model_name": "transferenciabensitem",
-            "field_name": "bem",
-            "uo_origem": str(outra_uo.pk),
-        })
+        request = self.factory.get(
+            "/admin/",
+            {
+                "app_label": "bem_patrimonial",
+                "model_name": "transferenciabensitem",
+                "field_name": "bem",
+                "uo_origem": str(outra_uo.pk),
+            },
+        )
         request.user = self.gestor
         qs = BemPatrimonial.objects.all()
         result_qs, _ = self.admin._aplicar_filtros_autocomplete_bem(request, qs, False)
@@ -1064,6 +1105,7 @@ class AplicarFiltrosAutocompleteBemTest(_Base):
 # ===========================================================================
 # 28. changelist_view: sem flag não redireciona  (linha 1316)
 # ===========================================================================
+
 
 class ChangelistViewSemFlagTest(_Base):
     def test_changelist_view_sem_busca_com_baixados_retorna_response_normal(self):
@@ -1090,18 +1132,22 @@ class ChangelistViewSemFlagTest(_Base):
 # 29. COLUNAS_MODELO — metadados do Resource
 # ===========================================================================
 
+
 class ColunasModeloMetadadosTest(_Base):
     def test_colunas_modelo_tem_exatamente_6_campos(self):
         from bem_patrimonial.admins.bem_patrimonial import COLUNAS_MODELO
+
         self.assertEqual(len(COLUNAS_MODELO), 6)
 
     def test_colunas_modelo_contem_campos_esperados(self):
         from bem_patrimonial.admins.bem_patrimonial import COLUNAS_MODELO
+
         for campo in ("numero_patrimonial", "nome", "descricao", "valor_unitario", "marca", "modelo"):
             self.assertIn(campo, COLUNAS_MODELO)
 
     def test_meta_fields_alinhados_com_colunas_modelo(self):
         from bem_patrimonial.admins.bem_patrimonial import COLUNAS_MODELO
+
         resource = BemPatrimonialResource()
         meta_fields = set(resource._meta.fields)
         for campo in COLUNAS_MODELO:
@@ -1115,6 +1161,7 @@ class ColunasModeloMetadadosTest(_Base):
 # ===========================================================================
 # 30. Contexto do usuário na importação
 # ===========================================================================
+
 
 class ImportacaoContextoUsuarioTest(_Base):
     def _resource(self, user):
@@ -1130,7 +1177,10 @@ class ImportacaoContextoUsuarioTest(_Base):
 
     def test_ua_inativa_levanta_validation_error(self):
         ua_inativa = criar_ua(
-            uo=self.uo, codigo="802", sigla="UA802", nome="UA 802 Inativa",
+            uo=self.uo,
+            codigo="802",
+            sigla="UA802",
+            nome="UA 802 Inativa",
             status=UnidadeAdministrativa.INATIVA,
         )
         gestor_inativo = Usuario.objects.create_user(
@@ -1157,6 +1207,7 @@ class ImportacaoContextoUsuarioTest(_Base):
 # ===========================================================================
 # 31. Planilha vazia e cabeçalho inválido
 # ===========================================================================
+
 
 class ImportacaoCabecalhoTest(_Base):
     def _resource(self):
@@ -1194,6 +1245,7 @@ class ImportacaoCabecalhoTest(_Base):
 # 32. Validações obrigatórias de campos — tudo ou nada
 # (marca e modelo vazios são NORMALIZADOS para "-", não rejeitados)
 # ===========================================================================
+
 
 class ImportacaoValidacaoCamposTest(_Base):
     def _resource(self):
@@ -1293,6 +1345,7 @@ class ImportacaoValidacaoCamposTest(_Base):
 # 33. Duplicidade no arquivo e no banco
 # ===========================================================================
 
+
 class ImportacaoDuplicidadeTest(_Base):
     def _resource(self):
         req = _request_with_messages(self.factory, self.gestor)
@@ -1327,15 +1380,14 @@ class ImportacaoDuplicidadeTest(_Base):
 # 34. Normalização de marca e modelo — vazios persistem como "-"
 # ===========================================================================
 
+
 class ImportacaoNormalizacaoMarcaModeloTest(_Base):
     def _resource(self):
         req = _request_with_messages(self.factory, self.gestor)
         return BemPatrimonialResource(request=req)
 
     def _row(self, numero="001.000000040-0", marca="BIC", modelo="Cristal"):
-        return dict(zip(_COLUNAS_IMPORTACAO, _linha_valida(
-            numero_patrimonial=numero, marca=marca, modelo=modelo
-        )))
+        return dict(zip(_COLUNAS_IMPORTACAO, _linha_valida(numero_patrimonial=numero, marca=marca, modelo=modelo)))
 
     def test_marca_vazia_nao_registra_erro(self):
         """marca vazia é normalizada para "-", não gera erro de validação."""
@@ -1396,6 +1448,7 @@ class ImportacaoNormalizacaoMarcaModeloTest(_Base):
 # 35. Retorno de erros padronizado (Ponto 5)
 # ===========================================================================
 
+
 class ImportacaoRetornoPadronizadoTest(_Base):
     def _resource(self):
         req = _request_with_messages(self.factory, self.gestor)
@@ -1436,6 +1489,7 @@ class ImportacaoRetornoPadronizadoTest(_Base):
 # ===========================================================================
 # 36. Importação bem-sucedida — fluxo completo de integração
 # ===========================================================================
+
 
 class ImportacaoSucessoIntegracaoTest(_Base):
     def _importar(self, dataset):
@@ -1498,6 +1552,7 @@ class ImportacaoSucessoIntegracaoTest(_Base):
 # 37. Integração: marca e modelo vazios persistem como "-" no banco
 # ===========================================================================
 
+
 class ImportacaoMarcaModeloIntegracaoTest(_Base):
     def _importar(self, dataset):
         req = _request_with_messages(self.factory, self.gestor)
@@ -1545,6 +1600,7 @@ class ImportacaoMarcaModeloIntegracaoTest(_Base):
 # 38. Admin: get_import_formats restringe a CSV, XLS e XLSX
 # ===========================================================================
 
+
 class AdminImportFormatsTest(_Base):
     def test_get_import_formats_retorna_apenas_3_formatos(self):
         formatos = self.admin.get_import_formats()
@@ -1584,6 +1640,7 @@ class ImportacaoEndpointTest(_Base):
         """Gera bytes de um XLSX em memória para upload."""
         import openpyxl
         from openpyxl.styles import Font, PatternFill
+
         wb = openpyxl.Workbook()
         ws = wb.active
         cols = list(headers or _COLUNAS_IMPORTACAO)
@@ -1601,8 +1658,10 @@ class ImportacaoEndpointTest(_Base):
 
     def _upload(self, client, xlsx_bytes, filename="planilha.xlsx"):
         from django.core.files.uploadedfile import SimpleUploadedFile
+
         f = SimpleUploadedFile(
-            filename, xlsx_bytes,
+            filename,
+            xlsx_bytes,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         return client.post("/api/bens/importar/", {"arquivo": f}, format="multipart")
@@ -1648,9 +1707,7 @@ class ImportacaoEndpointTest(_Base):
         fake_resource._erros_por_linha = erros_por_linha
 
         def _import_data_raise(*args, **kwargs):
-            raise DjVE(
-                f"Importação rejeitada: {len(erros_por_linha)} linha(s) com erro."
-            )
+            raise DjVE(f"Importação rejeitada: {len(erros_por_linha)} linha(s) com erro.")
 
         fake_resource.import_data.side_effect = _import_data_raise
 
@@ -1735,10 +1792,10 @@ class ImportacaoEndpointTest(_Base):
         self.assertEqual(resp.status_code, 422)
 
     def test_422_cabecalho_invalido(self):
-        erros = [{"linha": 0, "numero_patrimonial": "-",
-                  "campo": "cabecalho", "mensagem": "Cabeçalho inválido."}]
+        erros = [{"linha": 0, "numero_patrimonial": "-", "campo": "cabecalho", "mensagem": "Cabeçalho inválido."}]
         with self._mock_import_data_422(erros):
             import openpyxl
+
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.append(["numero_patrimonial", "nome", "coluna_errada"])
@@ -1751,12 +1808,15 @@ class ImportacaoEndpointTest(_Base):
         self.assertEqual(resp.status_code, 422)
 
     def test_422_com_erros_por_linha_retorna_estrutura_padronizada(self):
-        erros = [{"linha": 1, "numero_patrimonial": "001.000000083-0",
-                  "campo": "nome", "mensagem": "Campo obrigatório."}]
+        erros = [
+            {"linha": 1, "numero_patrimonial": "001.000000083-0", "campo": "nome", "mensagem": "Campo obrigatório."}
+        ]
         with self._mock_import_data_422(erros):
-            data = self._xlsx_bytes([
-                ("001.000000083-0", "", "Desc", "2,50", "BIC", "Cristal"),
-            ])
+            data = self._xlsx_bytes(
+                [
+                    ("001.000000083-0", "", "Desc", "2,50", "BIC", "Cristal"),
+                ]
+            )
             resp = self._upload(self._client(), data)
         self.assertEqual(resp.status_code, 422)
         self.assertIn("erros_por_linha", resp.data)
@@ -1770,26 +1830,40 @@ class ImportacaoEndpointTest(_Base):
 
     def test_422_duplicidade_no_arquivo(self):
         numero = "001.000000084-0"
-        erros = [{"linha": 2, "numero_patrimonial": numero,
-                  "campo": "numero_patrimonial",
-                  "mensagem": "Número patrimonial duplicado no arquivo."}]
+        erros = [
+            {
+                "linha": 2,
+                "numero_patrimonial": numero,
+                "campo": "numero_patrimonial",
+                "mensagem": "Número patrimonial duplicado no arquivo.",
+            }
+        ]
         with self._mock_import_data_422(erros):
-            data = self._xlsx_bytes([
-                _linha_valida(numero_patrimonial=numero),
-                _linha_valida(numero_patrimonial=numero, nome="Outro"),
-            ])
+            data = self._xlsx_bytes(
+                [
+                    _linha_valida(numero_patrimonial=numero),
+                    _linha_valida(numero_patrimonial=numero, nome="Outro"),
+                ]
+            )
             resp = self._upload(self._client(), data)
         self.assertEqual(resp.status_code, 422)
         self.assertIn("erros_por_linha", resp.data)
 
     def test_422_valor_unitario_invalido(self):
-        erros = [{"linha": 1, "numero_patrimonial": "001.000000085-0",
-                  "campo": "valor_unitario",
-                  "mensagem": "Valor inválido. Use o formato 0,00 ou 0.000,00."}]
+        erros = [
+            {
+                "linha": 1,
+                "numero_patrimonial": "001.000000085-0",
+                "campo": "valor_unitario",
+                "mensagem": "Valor inválido. Use o formato 0,00 ou 0.000,00.",
+            }
+        ]
         with self._mock_import_data_422(erros):
-            data = self._xlsx_bytes([
-                ("001.000000085-0", "Nome", "Desc", "abc", "BIC", "Cristal"),
-            ])
+            data = self._xlsx_bytes(
+                [
+                    ("001.000000085-0", "Nome", "Desc", "abc", "BIC", "Cristal"),
+                ]
+            )
             resp = self._upload(self._client(), data)
         self.assertEqual(resp.status_code, 422)
 
@@ -1797,6 +1871,7 @@ class ImportacaoEndpointTest(_Base):
 # ===========================================================================
 # Admin aplica as MESMAS regras da API (perfil + UA de destino)
 # ===========================================================================
+
 
 class AdminUsaResourceDaAPITest(_Base):
     """
@@ -1814,9 +1889,8 @@ class AdminUsaResourceDaAPITest(_Base):
 
     def test_admin_usa_resource_da_api(self):
         from bem_patrimonial.resources_api import BemPatrimonialAPIResource
-        self.assertEqual(
-            self.admin.get_resource_classes()[0], BemPatrimonialAPIResource
-        )
+
+        self.assertEqual(self.admin.get_resource_classes()[0], BemPatrimonialAPIResource)
 
     def test_gestor_importa_pelo_admin_status_aprovado(self):
         req = _request_with_messages(self.factory, self.gestor)
@@ -1825,9 +1899,7 @@ class AdminUsaResourceDaAPITest(_Base):
         resource.import_data(ds, dry_run=False, raise_errors=True, use_transactions=True)
         bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000631-0")
         self.assertEqual(bem.status, APROVADO)
-        self.assertTrue(
-            bem.statusbempatrimonial_set.filter(status=APROVADO).exists()
-        )
+        self.assertTrue(bem.statusbempatrimonial_set.filter(status=APROVADO).exists())
 
     def test_operador_importa_pelo_admin_status_aguardando(self):
         req = _request_with_messages(self.factory, self.operador)
@@ -1841,12 +1913,17 @@ class AdminUsaResourceDaAPITest(_Base):
         from bem_patrimonial.admins.forms.importacao_form import (
             BemPatrimonialImportForm,
         )
+
         # Gestor em UO: sem UA direta.
         uo = criar_uo(codigo=codigo_uo(2, 99, 99), nome="UO X", sigla="UOX")
         ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 99, 99, 1), nome="UA X", sigla="UAX")
         gestor_uo = Usuario.objects.create_user(
-            username="gestor_uo_admin", email="guoa@t.com", **auth_kwargs("x"),
-            nome="G", is_staff=True, unidade_orcamentaria=uo,
+            username="gestor_uo_admin",
+            email="guoa@t.com",
+            **auth_kwargs("x"),
+            nome="G",
+            is_staff=True,
+            unidade_orcamentaria=uo,
         )
         gestor_uo.groups.add(self.grupo_gestor)
 
@@ -1859,6 +1936,7 @@ class AdminUsaResourceDaAPITest(_Base):
         from bem_patrimonial.admins.forms.importacao_form import (
             BemPatrimonialImportForm,
         )
+
         # Gestor com UA direta.
         form = BemPatrimonialImportForm(self.admin.get_import_formats(), user=self.gestor)
         self.assertNotIn("unidade_administrativa", form.fields)
@@ -1867,8 +1945,12 @@ class AdminUsaResourceDaAPITest(_Base):
         uo = criar_uo(codigo=codigo_uo(2, 98, 98), nome="UO Y", sigla="UOY")
         ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 98, 98, 1), nome="UA Y", sigla="UAY")
         gestor_uo = Usuario.objects.create_user(
-            username="gestor_uo_admin2", email="guoa2@t.com", **auth_kwargs("x"),
-            nome="G", is_staff=True, unidade_orcamentaria=uo,
+            username="gestor_uo_admin2",
+            email="guoa2@t.com",
+            **auth_kwargs("x"),
+            nome="G",
+            is_staff=True,
+            unidade_orcamentaria=uo,
         )
         gestor_uo.groups.add(self.grupo_gestor)
 
@@ -1895,8 +1977,12 @@ class AdminUsaResourceDaAPITest(_Base):
         uo = criar_uo(codigo=codigo_uo(2, 97, 97), nome="UO Z", sigla="UOZ")
         ua = criar_ua(unidade_orcamentaria=uo, codigo=codigo_ua(2, 97, 97, 1), nome="UA Z", sigla="UAZ")
         gestor_uo = Usuario.objects.create_user(
-            username="gestor_uo_admin3", email="guoa3@t.com", **auth_kwargs("x"),
-            nome="G", is_staff=True, unidade_orcamentaria=uo,
+            username="gestor_uo_admin3",
+            email="guoa3@t.com",
+            **auth_kwargs("x"),
+            nome="G",
+            is_staff=True,
+            unidade_orcamentaria=uo,
         )
         gestor_uo.groups.add(self.grupo_gestor)
         req = _request_with_messages(self.factory, gestor_uo)
@@ -1936,9 +2022,7 @@ class AdminUsaResourceDaAPITest(_Base):
         padrão (UA do usuário), sem gravar na UA indevida.
         """
         outra_uo = criar_uo(codigo=codigo_uo(2, 96, 96), nome="UO Fora", sigla="UOF")
-        ua_fora = criar_ua(
-            unidade_orcamentaria=outra_uo, codigo=codigo_ua(2, 96, 96, 1), nome="UA Fora", sigla="UAF"
-        )
+        ua_fora = criar_ua(unidade_orcamentaria=outra_uo, codigo=codigo_ua(2, 96, 96, 1), nome="UA Fora", sigla="UAF")
         # Gestor com UA direta (self.gestor): escopo é só a própria UA.
         req = _request_with_messages(self.factory, self.gestor)
 
@@ -1952,6 +2036,7 @@ class AdminUsaResourceDaAPITest(_Base):
 # ===========================================================================
 # 40. Regressão Admin: duplicado normalizado com conciliação em aberto
 # ===========================================================================
+
 
 class ImportacaoDuplicadaComConciliacaoAbertaTest(_Base):
     """Duplicado após normalização não pode estourar IntegrityError no Admin.
@@ -1998,8 +2083,4 @@ class ImportacaoDuplicadaComConciliacaoAbertaTest(_Base):
 
         self.assertEqual(BemPatrimonial.objects.count(), bens_antes)
         self.assertEqual(ItemConciliacao.objects.count(), itens_antes)
-        self.assertFalse(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial="001.053858887-9"
-            ).exists()
-        )
+        self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.053858887-9").exists())

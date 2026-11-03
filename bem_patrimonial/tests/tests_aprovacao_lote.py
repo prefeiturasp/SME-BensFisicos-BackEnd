@@ -164,9 +164,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         self.assertTrue(any("permissão" in msg.lower() for msg in msgs))
 
     def test_nao_aprova_bens_ja_aprovados(self):
-        queryset = BemPatrimonial.objects.filter(
-            pk__in=[self.bem1.pk, self.bem_aprovado.pk]
-        )
+        queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem_aprovado.pk])
         request = self._create_request_with_messages(self.gestor)
 
         aprovar_bens(self.admin, request, queryset)
@@ -179,16 +177,10 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
 
         msgs = [str(m) for m in messages.get_messages(request)]
         self.assertTrue(any("1 bem(ns) aprovado(s)" in msg for msg in msgs))
-        self.assertTrue(
-            any(
-                "não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs
-            )
-        )
+        self.assertTrue(any("não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs))
 
     def test_nao_reprova_bens_ja_aprovados(self):
-        queryset = BemPatrimonial.objects.filter(
-            pk__in=[self.bem1.pk, self.bem_aprovado.pk]
-        )
+        queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem_aprovado.pk])
         request = self._create_request_with_messages(self.gestor)
 
         reprovar_bens(self.admin, request, queryset)
@@ -201,11 +193,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
 
         msgs = [str(m) for m in messages.get_messages(request)]
         self.assertTrue(any("1 bem(ns) reprovado(s)" in msg for msg in msgs))
-        self.assertTrue(
-            any(
-                "não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs
-            )
-        )
+        self.assertTrue(any("não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs))
 
     def test_mensagem_quando_nenhum_bem_aguardando_aprovacao(self):
         queryset = BemPatrimonial.objects.filter(pk=self.bem_aprovado.pk)
@@ -214,12 +202,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         aprovar_bens(self.admin, request, queryset)
 
         msgs = [str(m) for m in messages.get_messages(request)]
-        self.assertTrue(
-            any(
-                "Nenhum bem selecionado está com status 'Aguardando aprovação'" in msg
-                for msg in msgs
-            )
-        )
+        self.assertTrue(any("Nenhum bem selecionado está com status 'Aguardando aprovação'" in msg for msg in msgs))
 
     def test_actions_nao_disponiveis_para_operador(self):
         request = self._create_request_with_messages(self.operador)
@@ -252,9 +235,7 @@ class FormularioStatusTestCase(BaseAprovacaoTestCase):
             status=AGUARDANDO_APROVACAO,
         )
 
-        request = self.factory.get(
-            f"/admin/bem_patrimonial/bempatrimonial/{bem.pk}/change/"
-        )
+        request = self.factory.get(f"/admin/bem_patrimonial/bempatrimonial/{bem.pk}/change/")
         request.user = self.gestor
 
         form_class = self.admin.get_form(request, obj=bem)

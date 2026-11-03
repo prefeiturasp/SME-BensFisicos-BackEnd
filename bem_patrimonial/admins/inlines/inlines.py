@@ -43,8 +43,7 @@ def _validate_bem_para_movimentacao(bem):
         )
     if bem.status == BLOQUEADO:
         raise ValidationError(
-            f"O bem '{bem.nome}' está bloqueado para movimentação. "
-            f"Aguarde a resolução da movimentação pendente."
+            f"O bem '{bem.nome}' está bloqueado para movimentação. " f"Aguarde a resolução da movimentação pendente."
         )
     if getattr(bem, "bloqueado_conciliacao", False):
         from inventario import constants as inv_constants
@@ -109,9 +108,7 @@ def _obter_ua_origem_item_transferencia(item):
     )
 
     if historico and historico.valor_antigo:
-        return _normalizar_valor_historico_unidade_administrativa(
-            historico.valor_antigo
-        )
+        return _normalizar_valor_historico_unidade_administrativa(historico.valor_antigo)
 
     unidade_administrativa = getattr(item.bem, "unidade_administrativa", None)
     return str(unidade_administrativa) if unidade_administrativa else "-"
@@ -217,9 +214,13 @@ class TransferenciaBensItemInline(admin.TabularInline):
     template = "admin/edit_inline/transferencia_bens_tabular.html"
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
-            "bem",
-            "bem__unidade_administrativa",
+        return (
+            super()
+            .get_queryset(request)
+            .select_related(
+                "bem",
+                "bem__unidade_administrativa",
+            )
         )
 
     def get_fields(self, request, obj=None):

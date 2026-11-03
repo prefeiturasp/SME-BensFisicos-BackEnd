@@ -12,11 +12,7 @@ from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConcilia
 
 def _get_ano_referencia_conciliacao(conciliacao):
     if conciliacao.tipo == constants.CONCILIACAO_EVENTUAL:
-        return (
-            conciliacao.periodo_final.year
-            if conciliacao.periodo_final
-            else timezone.localdate().year
-        )
+        return conciliacao.periodo_final.year if conciliacao.periodo_final else timezone.localdate().year
     return conciliacao._get_ano_referencia()
 
 
@@ -82,9 +78,7 @@ def _confirmar_baixas_fisicas_pos_conciliacao(conciliacao, usuario):
         OcorrenciaConciliacao.objects.bulk_create(ocorrencias, batch_size=500)
 
     if itens_para_atualizar:
-        ItemConciliacao.objects.bulk_update(
-            itens_para_atualizar, ["situacao"], batch_size=500
-        )
+        ItemConciliacao.objects.bulk_update(itens_para_atualizar, ["situacao"], batch_size=500)
 
     return len(ocorrencias)
 
@@ -163,9 +157,7 @@ def criar_itens_conciliacao(conciliacao):
     ultima_divergencia_sq = ultima_ocorrencia_base.values("divergencia")[:1]
     ultima_observacao_sq = ultima_ocorrencia_base.values("observacao")[:1]
 
-    qs_bens = BemPatrimonial.objects.filter(
-        unidade_administrativa=conciliacao.unidade_administrativa
-    ).annotate(
+    qs_bens = BemPatrimonial.objects.filter(unidade_administrativa=conciliacao.unidade_administrativa).annotate(
         ultima_situacao_conciliacao=Subquery(ultima_situacao_sq),
         ultima_divergencia_conciliacao=Subquery(ultima_divergencia_sq),
         ultima_observacao_conciliacao=Subquery(ultima_observacao_sq),
@@ -196,11 +188,7 @@ def criar_itens_conciliacao(conciliacao):
         if ultima_situacao in situacoes_problematicas:
             situacao = ultima_situacao
 
-            divergencia = (
-                bem.ultima_divergencia_conciliacao
-                if ultima_situacao == constants.DIVERGENTE
-                else ""
-            )
+            divergencia = bem.ultima_divergencia_conciliacao if ultima_situacao == constants.DIVERGENTE else ""
             observacao = bem.ultima_observacao_conciliacao or ""
         else:
             situacao = constants.ENCONTRADO_SEM_DIVERGENCIA

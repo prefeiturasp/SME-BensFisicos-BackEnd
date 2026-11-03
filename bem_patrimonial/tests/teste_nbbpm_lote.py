@@ -147,9 +147,7 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
         data_ano_atual = timezone.localdate()
         data_ano_anterior = data_ano_atual.replace(year=data_ano_atual.year - 1)
 
-        nbbpm_antigo = criar_nbbpm(
-            [self.baixa], self.usuario, data_autorizacao=data_ano_anterior
-        )
+        nbbpm_antigo = criar_nbbpm([self.baixa], self.usuario, data_autorizacao=data_ano_anterior)
         nbbpm_antigo.numero = gerar_numero_nbbpm_lote(nbbpm_antigo)
         nbbpm_antigo.save(update_fields=["numero"])
 
@@ -159,9 +157,7 @@ class GerarNumeroNbbpmLoteTestCase(BaseSetup):
 
         numero_novo = gerar_numero_nbbpm_lote(nbbpm_novo)
 
-        self.assertEqual(
-            numero_novo, f"001.0000001/{data_ano_atual.year}"
-        )
+        self.assertEqual(numero_novo, f"001.0000001/{data_ano_atual.year}")
 
     def test_usa_codigo_da_unidade_administrativa_das_baixas_vinculadas(self):
         uo2 = criar_uo(codigo="287", nome="UO Dois", sigla="UOD")
@@ -214,9 +210,7 @@ class ObterBensNbbpmLoteTestCase(BaseSetup):
         bens = obter_bens_nbbpm_lote(nbbpm)
 
         self.assertEqual(len(bens), 2)
-        self.assertCountEqual(
-            [b.id for b in bens], [self.bem.id, self.bem2.id]
-        )
+        self.assertCountEqual([b.id for b in bens], [self.bem.id, self.bem2.id])
 
 
 # ============================================================================
@@ -271,9 +265,7 @@ class CriarInformacoesGeraisTestCase(BaseSetup):
         self.assertIn("RESPONSAVEL TESTE", textos[5])
 
     def test_destinacao_final_na_mesma_linha_quando_ausente(self):
-        nbbpm = criar_nbbpm(
-            [self.baixa], self.usuario, numero_processo_destinacao_final=""
-        )
+        nbbpm = criar_nbbpm([self.baixa], self.usuario, numero_processo_destinacao_final="")
 
         [tabela] = _criar_informacoes_gerais(nbbpm)
         textos = self._textos_da_tabela(tabela)
@@ -349,11 +341,14 @@ class CriarTabelaBensTestCase(BaseSetup):
         [tabela] = _criar_tabela_bens(nbbpm)
         textos = self._textos_da_tabela(tabela)
 
-        self.assertEqual([(linha[0], linha[1], linha[3]) for linha in textos[2:-1]], [
-            ("000.000000001-0", "000.000000002-0", "2"),
-            ("000.000000004-4", "000.000000005-5", "2"),
-            ("000.000000008-8", "", "1"),
-        ])
+        self.assertEqual(
+            [(linha[0], linha[1], linha[3]) for linha in textos[2:-1]],
+            [
+                ("000.000000001-0", "000.000000002-0", "2"),
+                ("000.000000004-4", "000.000000005-5", "2"),
+                ("000.000000008-8", "", "1"),
+            ],
+        )
         self.assertIn("5", textos[-1][3])
         self.assertIn("5.000,00", textos[-1][5])
 
@@ -444,9 +439,7 @@ class GerarPdfNbbpmLoteTestCase(BaseSetup):
         self.assertGreater(len(conteudo), 0)
 
     def test_gera_pdf_valido_sem_bens_vinculados(self):
-        baixa_sem_itens = criar_baixa(
-            self.ua, self.usuario, numero_processo_baixa="PROC-SEM-ITENS"
-        )
+        baixa_sem_itens = criar_baixa(self.ua, self.usuario, numero_processo_baixa="PROC-SEM-ITENS")
         nbbpm = criar_nbbpm([baixa_sem_itens], self.usuario)
         nbbpm.numero = gerar_numero_nbbpm_lote(nbbpm)
         nbbpm.save(update_fields=["numero"])
@@ -523,7 +516,7 @@ class HttpResponseNbbpmLoteTestCase(BaseSetup):
 def extrair_textos_por_pagina(pdf_bytes):
     """Extrai texto de cada página sem dependência externa."""
     paginas = []
-    for match in re.finditer(br"stream(.*?)endstream", pdf_bytes, re.S):
+    for match in re.finditer(rb"stream(.*?)endstream", pdf_bytes, re.S):
         bruto = match.group(1).strip()
         if bruto.endswith(b"~>"):
             bruto = bruto[:-2].strip()

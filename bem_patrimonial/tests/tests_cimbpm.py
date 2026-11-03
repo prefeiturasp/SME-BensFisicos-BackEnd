@@ -36,9 +36,7 @@ class CIMBPMTestBase(TestCase):
 
     def setUp(self):
         self.grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
-        self.grupo_operador, _ = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )
+        self.grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
 
         self.ua_origem = criar_ua(
             codigo=codigo_ua(1, 16, 10, 379),
@@ -138,9 +136,7 @@ class TestFuncoesAuxiliares(TestCase):
         )
         self.assertEqual(obter_nome_usuario(u1), "Nome Completo")
 
-        u2 = Usuario.objects.create_user(
-            username="user2", nome="", unidade_administrativa=ua
-        )
+        u2 = Usuario.objects.create_user(username="user2", nome="", unidade_administrativa=ua)
         self.assertEqual(obter_nome_usuario(u2), "user2")
 
         u3 = Usuario.objects.create_user(username="user3", unidade_administrativa=ua)
@@ -250,12 +246,8 @@ class TestAgrupamentoBensDocumento(CIMBPMTestBase):
 
     def test_caracteristicas_e_prefixos_diferentes_nao_formam_intervalo(self):
         primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
-        outro_valor = self.criar_bem(
-            numero_patrimonial="001.000000011-2", valor_unitario=Decimal("100.00")
-        )
-        outro_prefixo = self.criar_bem(
-            numero_patrimonial="002.000000012-3", valor_unitario=Decimal("100.00")
-        )
+        outro_valor = self.criar_bem(numero_patrimonial="001.000000011-2", valor_unitario=Decimal("100.00"))
+        outro_prefixo = self.criar_bem(numero_patrimonial="002.000000012-3", valor_unitario=Decimal("100.00"))
 
         grupos = agrupar_bens_documento([primeiro, outro_valor, outro_prefixo])
 
@@ -272,9 +264,7 @@ class TestAgrupamentoBensDocumento(CIMBPMTestBase):
 
     def test_descricao_diferente_nao_e_agrupada(self):
         primeiro = self.criar_bem(numero_patrimonial="001.000000010-1")
-        outro_bem = self.criar_bem(
-            numero_patrimonial="001.000000011-2", descricao="Outro tipo de armário"
-        )
+        outro_bem = self.criar_bem(numero_patrimonial="001.000000011-2", descricao="Outro tipo de armário")
 
         self.assertEqual(agrupar_bens_documento([primeiro, outro_bem]), [[primeiro], [outro_bem]])
 
@@ -355,9 +345,7 @@ class TestGeracaoNumeroCIMBPM(CIMBPMTestBase):
         bem1 = self.criar_bem(numero_patrimonial="001.000000001-1")
         bem2 = self.criar_bem(numero_patrimonial="001.000000002-2")
 
-        data_2024 = datetime(
-            2024, 12, 31, 23, 59, 59, tzinfo=timezone.get_current_timezone()
-        )
+        data_2024 = datetime(2024, 12, 31, 23, 59, 59, tzinfo=timezone.get_current_timezone())
         with patch("django.utils.timezone.now", return_value=data_2024):
             mov_2024 = MovimentacaoBemPatrimonial.objects.create(
                 bem_patrimonial=bem1,
@@ -370,9 +358,7 @@ class TestGeracaoNumeroCIMBPM(CIMBPMTestBase):
 
         self.assertEqual(mov_2024.numero_cimbpm, "379.408.0000001.2024")
 
-        data_2025 = datetime(
-            2025, 1, 1, 0, 0, 0, tzinfo=timezone.get_current_timezone()
-        )
+        data_2025 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.get_current_timezone())
         with patch("django.utils.timezone.now", return_value=data_2025):
             mov_2025 = MovimentacaoBemPatrimonial.objects.create(
                 bem_patrimonial=bem2,
@@ -432,9 +418,7 @@ class TestSegurancaDownload(CIMBPMTestBase):
         self.movimentacao.refresh_from_db()
 
         self.client = Client()
-        self.url = reverse(
-            "download_documento_cimbpm", kwargs={"pk": self.movimentacao.pk}
-        )
+        self.url = reverse("download_documento_cimbpm", kwargs={"pk": self.movimentacao.pk})
 
     def test_usuario_nao_autenticado_redirecionado(self):
         response = self.client.get(self.url)
@@ -493,9 +477,7 @@ class TestConteudoDownload(CIMBPMTestBase):
             status=constants.ENVIADA,
         )
         self.movimentacao.refresh_from_db()
-        self.url = reverse(
-            "download_documento_cimbpm", kwargs={"pk": self.movimentacao.pk}
-        )
+        self.url = reverse("download_documento_cimbpm", kwargs={"pk": self.movimentacao.pk})
 
     def test_conteudo_pdf_valido(self):
         self.client.login(username="gestor", **auth_kwargs("senha123"))
@@ -571,9 +553,7 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
             status=constants.ENVIADA,
         )
 
-        with patch(
-            "bem_patrimonial.cimbpm.Image", side_effect=Exception("Logo não encontrado")
-        ):
+        with patch("bem_patrimonial.cimbpm.Image", side_effect=Exception("Logo não encontrado")):
             try:
                 buffer = gerar_pdf_cimbpm(mov, usuario_gerador=self.operador)
                 self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
@@ -584,8 +564,7 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
         ua_longa = criar_ua(
             codigo=codigo_ua(1, 16, 10, 999),
             sigla="LONGA",
-            nome="Unidade com Nome Extremamente Longo Para Testar Quebra de Linha no PDF "
-            * 3,
+            nome="Unidade com Nome Extremamente Longo Para Testar Quebra de Linha no PDF " * 3,
             status=UnidadeAdministrativa.ATIVA,
             uo=self.ua_origem.unidade_orcamentaria,
         )

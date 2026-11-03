@@ -100,9 +100,7 @@ def _fmt_date(d):
 
 
 def _carregar_logo(styles):
-    static_root = settings.STATIC_ROOT or (
-        settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None
-    )
+    static_root = settings.STATIC_ROOT or (settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None)
 
     if static_root:
         logo_path = os.path.join(static_root, "img", "prefeitura_default_logo.png")
@@ -139,9 +137,7 @@ def _criar_info_geracao(usuario_gerador=None, data_geracao=None):
     elements = []
     styles = getSampleStyleSheet()
 
-    info_style = criar_estilo_base(
-        "InfoGeracao", styles, alignment=TA_LEFT, textColor=colors.grey
-    )
+    info_style = criar_estilo_base("InfoGeracao", styles, alignment=TA_LEFT, textColor=colors.grey)
 
     tz_sp = ZoneInfo("America/Sao_Paulo")
 
@@ -179,9 +175,7 @@ def _criar_cabecalho_e_registro_conciliacao(conciliacao, data_emissao):
         spaceAfter=1,
         leading=8,
     )
-    desc_style = criar_estilo_base(
-        "CabecalhoDesc", styles, fontSize=6, alignment=TA_CENTER, leading=7
-    )
+    desc_style = criar_estilo_base("CabecalhoDesc", styles, fontSize=6, alignment=TA_CENTER, leading=7)
 
     label_style = criar_estilo_base(
         "RegistroLabel",
@@ -220,9 +214,7 @@ def _criar_cabecalho_e_registro_conciliacao(conciliacao, data_emissao):
         ]
     ]
 
-    header_table = Table(
-        header_data, colWidths=[2.5 * cm, 8.6 * cm], rowHeights=[2.1 * cm]
-    )
+    header_table = Table(header_data, colWidths=[2.5 * cm, 8.6 * cm], rowHeights=[2.1 * cm])
     header_table.setStyle(
         TableStyle(
             [
@@ -284,9 +276,7 @@ def _criar_cabecalho_e_registro_conciliacao(conciliacao, data_emissao):
         )
     )
 
-    main_table = Table(
-        [[header_table, registro_table]], colWidths=[11.1 * cm, 6.9 * cm]
-    )
+    main_table = Table([[header_table, registro_table]], colWidths=[11.1 * cm, 6.9 * cm])
     main_table.setStyle(
         TableStyle(
             [
@@ -318,9 +308,7 @@ def _criar_rodape_conciliacao(conciliacao, usuario_gerador=None):
     elements = []
     styles = getSampleStyleSheet()
 
-    label_style = criar_estilo_base(
-        "RodapeLabel", styles, fontName="Helvetica-Bold", alignment=TA_CENTER
-    )
+    label_style = criar_estilo_base("RodapeLabel", styles, fontName="Helvetica-Bold", alignment=TA_CENTER)
     value_style = criar_estilo_base("RodapeValue", styles, alignment=TA_CENTER)
 
     criado_por = conciliacao.criado_por
@@ -410,9 +398,7 @@ class NumberedCanvas(canvas.Canvas):
         self.drawRightString(x, y, f"{page_num}/{page_count}")
 
 
-def _desenhar_rodape_em_pagina(
-    canvas, doc, conciliacao, usuario_gerador=None, data_geracao=None
-):
+def _desenhar_rodape_em_pagina(canvas, doc, conciliacao, usuario_gerador=None, data_geracao=None):
     y_base = 1.5 * cm
 
     rodape_elements = _criar_rodape_conciliacao(conciliacao, usuario_gerador)
@@ -436,9 +422,7 @@ def _criar_informacoes_gerais_conciliacao(conciliacao):
     elements = []
     styles = getSampleStyleSheet()
 
-    label_style = criar_estilo_base(
-        "InfoLabel", styles, fontName="Helvetica-Bold", alignment=TA_LEFT
-    )
+    label_style = criar_estilo_base("InfoLabel", styles, fontName="Helvetica-Bold", alignment=TA_LEFT)
     value_style = criar_estilo_base("InfoValue", styles, alignment=TA_LEFT)
 
     ua = conciliacao.unidade_administrativa
@@ -456,16 +440,12 @@ def _criar_informacoes_gerais_conciliacao(conciliacao):
         ],
         [
             Paragraph("<b>NOME</b>", label_style),
-            Paragraph(
-                "<b>UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA</b>", label_style
-            ),
+            Paragraph("<b>UNIDADE ORÇAMENTÁRIA / UNIDADE ADMINISTRATIVA</b>", label_style),
             Paragraph("<b>CÓDIGO</b>", label_style),
         ],
         [
             Paragraph((ua.sigla or "-").upper(), value_style),
-            Paragraph(
-                f"{ua.unidade_orcamentaria.nome} / {ua.nome }".upper(), value_style
-            ),
+            Paragraph(f"{ua.unidade_orcamentaria.nome} / {ua.nome }".upper(), value_style),
             Paragraph((ua.codigo or "-"), value_style),
         ],
     ]
@@ -555,18 +535,10 @@ def _estilos_blocos_itens(styles):
     )
     totalizador_label = _estilo_totalizador(styles, "TotalizadorLabel", 7, TA_LEFT)
     totalizador_valor = _estilo_totalizador(styles, "TotalizadorValor", 7, TA_CENTER)
-    totalizador_valor_direita = _estilo_totalizador(
-        styles, "TotalizadorValorDireita", 7, TA_RIGHT
-    )
-    totalizador_geral_label = _estilo_totalizador(
-        styles, "TotalizadorGeralLabel", 8, TA_LEFT
-    )
-    totalizador_geral_valor = _estilo_totalizador(
-        styles, "TotalizadorGeralValor", 8, TA_CENTER
-    )
-    totalizador_geral_valor_direita = _estilo_totalizador(
-        styles, "TotalizadorGeralValorDireita", 8, TA_RIGHT
-    )
+    totalizador_valor_direita = _estilo_totalizador(styles, "TotalizadorValorDireita", 7, TA_RIGHT)
+    totalizador_geral_label = _estilo_totalizador(styles, "TotalizadorGeralLabel", 8, TA_LEFT)
+    totalizador_geral_valor = _estilo_totalizador(styles, "TotalizadorGeralValor", 8, TA_CENTER)
+    totalizador_geral_valor_direita = _estilo_totalizador(styles, "TotalizadorGeralValorDireita", 8, TA_RIGHT)
     return {
         "txt": txt,
         "txt_center": txt_center,
@@ -609,9 +581,7 @@ def _linhas_tabela_item(item, estilos):
     ocorrencia_badge = estilos["ocorrencia_badge"]
     bem = item.bem
     num = (getattr(bem, "numero_patrimonial", None) or "-").strip()
-    val = formatar_moeda_brasileira(
-        getattr(bem, "valor_unitario", None) or Decimal("0.00")
-    )
+    val = formatar_moeda_brasileira(getattr(bem, "valor_unitario", None) or Decimal("0.00"))
     descricao = (getattr(bem, "descricao", None) or "-").strip()
     marca = (getattr(bem, "marca", None) or "-").strip()
     modelo = (getattr(bem, "modelo", None) or "-").strip()
@@ -654,9 +624,7 @@ def _linhas_tabela_item(item, estilos):
         )
         rows.append(
             [
-                Paragraph(
-                    "<b>ITEM COM OCORRÊNCIA NESTA CONCILIAÇÃO</b>", ocorrencia_badge
-                ),
+                Paragraph("<b>ITEM COM OCORRÊNCIA NESTA CONCILIAÇÃO</b>", ocorrencia_badge),
                 Paragraph(f"<b>Registrado por:</b> {registrado_por}", txt),
                 Paragraph(f"<b>Registrado em:</b> {registrado_em}", txt),
             ]
@@ -700,10 +668,7 @@ def _plural_quantidade(quantidade):
 
 def _somar_valores(itens):
     """Soma o valor unitário dos bens dos itens, tratando ausência como 0."""
-    return sum(
-        getattr(item.bem, "valor_unitario", None) or Decimal("0.00")
-        for item in itens
-    )
+    return sum(getattr(item.bem, "valor_unitario", None) or Decimal("0.00") for item in itens)
 
 
 def _titulo_categoria(titulo, quantidade, nota, estilos):
@@ -725,12 +690,7 @@ def _titulo_categoria(titulo, quantidade, nota, estilos):
         ],
         colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm],
     )
-    box.setStyle(
-        TableStyle(
-            _comandos_tabela_base("MIDDLE")
-            + [("BACKGROUND", (0, 0), (-1, -1), PDFConfig.COR_HEADER)]
-        )
-    )
+    box.setStyle(TableStyle(_comandos_tabela_base("MIDDLE") + [("BACKGROUND", (0, 0), (-1, -1), PDFConfig.COR_HEADER)]))
     return box
 
 
@@ -753,10 +713,7 @@ def _tabela_totalizador(estilos, label, quantidade, valor, destaque=False):
         colWidths=[10.0 * cm, 4.0 * cm, 4.0 * cm],
     )
     box.setStyle(
-        TableStyle(
-            _comandos_tabela_base("MIDDLE", com_grade=True)
-            + [("BACKGROUND", (0, 0), (-1, -1), fundo)]
-        )
+        TableStyle(_comandos_tabela_base("MIDDLE", com_grade=True) + [("BACKGROUND", (0, 0), (-1, -1), fundo)])
     )
     return box
 
@@ -872,9 +829,7 @@ def gerar_pdf_conciliacao(conciliacao, usuario_gerador=None, data_geracao=None):
     def on_page(canvas, doc_):
         canvas.saveState()
         _desenhar_cabecalho_em_pagina(canvas, doc_, conciliacao, data_emissao)
-        _desenhar_rodape_em_pagina(
-            canvas, doc_, conciliacao, usuario_gerador, data_geracao
-        )
+        _desenhar_rodape_em_pagina(canvas, doc_, conciliacao, usuario_gerador, data_geracao)
         canvas.restoreState()
 
     template = PageTemplate(id="todas_paginas", frames=[frame], onPage=on_page)

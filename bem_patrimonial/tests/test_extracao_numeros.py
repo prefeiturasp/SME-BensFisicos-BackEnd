@@ -171,17 +171,13 @@ class ExtracaoNumerosTest(TestCase):
 
     # --- _extract ---
     def test_extract_nome_comeca_com_letra_acha_no_fim_nome(self):
-        _, cls, _, fonte, _, _, aplicar = _extract(
-            "ARMÁRIO METÁLICO 001.050761830-0", ""
-        )
+        _, cls, _, fonte, _, _, aplicar = _extract("ARMÁRIO METÁLICO 001.050761830-0", "")
         self.assertEqual(cls, "PADRAO_ATUAL")
         self.assertEqual(fonte, "nome_fim")
         self.assertTrue(aplicar)
 
     def test_extract_nome_comeca_com_letra_acha_na_descricao(self):
-        _, _, nome_sug, fonte, _, _, aplicar = _extract(
-            "Só letras", "Texto 002.111222333-4"
-        )
+        _, _, nome_sug, fonte, _, _, aplicar = _extract("Só letras", "Texto 002.111222333-4")
         self.assertEqual(fonte, "descricao_fim")
         self.assertEqual(nome_sug, "Só letras")
         self.assertTrue(aplicar)
@@ -220,9 +216,7 @@ class ExtracaoNumerosTest(TestCase):
         )
         request = self.factory.get("/admin/")
         request.user = self.gestor
-        resp = simular_extracao_numero(
-            self.model_admin, request, BemPatrimonial.objects.none()
-        )
+        resp = simular_extracao_numero(self.model_admin, request, BemPatrimonial.objects.none())
         self.assertEqual(resp["Content-Type"], "text/csv; charset=utf-8")
         content = resp.content.decode("utf-8")
         reader = csv.reader(StringIO(content), delimiter=";")
@@ -234,9 +228,7 @@ class ExtracaoNumerosTest(TestCase):
     # --- aplicar_extracao_numero ---
     def test_aplicar_extracao_sem_permissao_retorna_none(self):
         request = _request_with_messages(self.factory, self.operador)
-        resp = aplicar_extracao_numero(
-            self.model_admin, request, BemPatrimonial.objects.all()
-        )
+        resp = aplicar_extracao_numero(self.model_admin, request, BemPatrimonial.objects.all())
         self.assertIsNone(resp)
 
     def test_aplicar_extracao_sem_confirm_mostra_preview(self):
@@ -266,9 +258,7 @@ class ExtracaoNumerosTest(TestCase):
             numero_patrimonial="001.000000000-0",
             sem_numeracao=False,
         )
-        BemPatrimonial.objects.filter(pk=bem_dup.pk).update(
-            numero_patrimonial=None, sem_numeracao=True
-        )
+        BemPatrimonial.objects.filter(pk=bem_dup.pk).update(numero_patrimonial=None, sem_numeracao=True)
         bem_dup.refresh_from_db()
         request = _request_with_messages(self.factory, self.gestor)
         # Mock _extract: retorna num_dup para que existentes já contenha e item fique duplicado
@@ -285,9 +275,7 @@ class ExtracaoNumerosTest(TestCase):
             "bem_patrimonial.admins.actions.extracao_numeros._extract",
             return_value=retorno_extract,
         ):
-            resp = aplicar_extracao_numero(
-                self.model_admin, request, BemPatrimonial.objects.filter(pk=bem_dup.pk)
-            )
+            resp = aplicar_extracao_numero(self.model_admin, request, BemPatrimonial.objects.filter(pk=bem_dup.pk))
         self.assertEqual(resp.status_code, 200)
         preview = resp.context_data["preview"]
         self.assertGreater(len(preview), 0)
@@ -297,12 +285,8 @@ class ExtracaoNumerosTest(TestCase):
         )
 
     def test_aplicar_extracao_confirm_sem_checkboxes_aviso(self):
-        request = _request_with_messages(
-            self.factory, self.gestor, post_data={"confirm": "yes"}
-        )
-        resp = aplicar_extracao_numero(
-            self.model_admin, request, BemPatrimonial.objects.none()
-        )
+        request = _request_with_messages(self.factory, self.gestor, post_data={"confirm": "yes"})
+        resp = aplicar_extracao_numero(self.model_admin, request, BemPatrimonial.objects.none())
         self.assertIsNone(resp)
 
     def test_aplicar_extracao_sem_numero_marca_sem_numeracao(self):
@@ -320,9 +304,7 @@ class ExtracaoNumerosTest(TestCase):
                 helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
             },
         )
-        aplicar_extracao_numero(
-            self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk)
-        )
+        aplicar_extracao_numero(self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk))
         bem.refresh_from_db()
         self.assertTrue(bem.sem_numeracao)
 
@@ -340,12 +322,8 @@ class ExtracaoNumerosTest(TestCase):
                 helpers.ACTION_CHECKBOX_NAME: [str(bem.pk)],
             },
         )
-        with patch.object(
-            BemPatrimonial, "full_clean", side_effect=ValidationError("erro")
-        ):
-            aplicar_extracao_numero(
-                self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk)
-            )
+        with patch.object(BemPatrimonial, "full_clean", side_effect=ValidationError("erro")):
+            aplicar_extracao_numero(self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk))
         msgs = [str(m) for m in request._messages]
         self.assertTrue(any("Erros:" in m for m in msgs))
 
@@ -364,8 +342,6 @@ class ExtracaoNumerosTest(TestCase):
             },
         )
         with patch.object(BemPatrimonial, "save", side_effect=RuntimeError("erro")):
-            aplicar_extracao_numero(
-                self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk)
-            )
+            aplicar_extracao_numero(self.model_admin, request, BemPatrimonial.objects.filter(pk=bem.pk))
         msgs = [str(m) for m in request._messages]
         self.assertTrue(any("Erros:" in m for m in msgs))

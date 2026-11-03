@@ -53,10 +53,7 @@ class ParametroConciliacaoAnual(models.Model):
         ordering = ["-ano_referencia", "-periodo_inicial"]
 
     def __str__(self):
-        return (
-            f"{self.ano_referencia} | "
-            f"{self.periodo_inicial:%d/%m/%Y} → {self.periodo_final:%d/%m/%Y}"
-        )
+        return f"{self.ano_referencia} | " f"{self.periodo_inicial:%d/%m/%Y} → {self.periodo_final:%d/%m/%Y}"
 
     def clean(self):
         super().clean()
@@ -65,11 +62,7 @@ class ParametroConciliacaoAnual(models.Model):
             raise ValidationError("Período inicial e período final são obrigatórios.")
 
         if self.periodo_inicial > self.periodo_final:
-            raise ValidationError(
-                {
-                    "periodo_final": "O período final deve ser maior ou igual ao período inicial."
-                }
-            )
+            raise ValidationError({"periodo_final": "O período final deve ser maior ou igual ao período inicial."})
 
         conflito = ParametroConciliacaoAnual.objects.filter(
             unidade_orcamentaria=self.unidade_orcamentaria,
@@ -77,14 +70,11 @@ class ParametroConciliacaoAnual(models.Model):
         ).exclude(pk=self.pk)
 
         conflito = conflito.filter(
-            Q(periodo_inicial__lte=self.periodo_final)
-            & Q(periodo_final__gte=self.periodo_inicial)
+            Q(periodo_inicial__lte=self.periodo_final) & Q(periodo_final__gte=self.periodo_inicial)
         )
 
         if conflito.exists():
-            raise ValidationError(
-                "Já existe um período cadastrado que se sobrepõe a este intervalo."
-            )
+            raise ValidationError("Já existe um período cadastrado que se sobrepõe a este intervalo.")
 
         if self.ativo:
             ja_ativo = ParametroConciliacaoAnual.objects.filter(
@@ -257,9 +247,7 @@ class ConciliacaoUA(models.Model):
 
         uo_id = getattr(self.unidade_administrativa, "unidade_orcamentaria_id", None)
         if not uo_id:
-            raise ValidationError(
-                {"unidade_administrativa": "UA sem Unidade Orçamentária vinculada."}
-            )
+            raise ValidationError({"unidade_administrativa": "UA sem Unidade Orçamentária vinculada."})
         parametro = ParametroConciliacaoAnual.objects.filter(
             unidade_orcamentaria_id=uo_id,
             ano_referencia=ano_referencia,
@@ -286,15 +274,9 @@ class ConciliacaoUA(models.Model):
             raise ValidationError({"tipo": "Campo obrigatório."})
 
         if self.tipo == constants.CONCILIACAO_EVENTUAL and not self.periodo_final:
-            raise ValidationError(
-                {"periodo_final": "Campo obrigatório para conciliação eventual."}
-            )
+            raise ValidationError({"periodo_final": "Campo obrigatório para conciliação eventual."})
 
-        if (
-            self.tipo == constants.CONCILIACAO_EVENTUAL
-            and self.periodo_final
-            and not self.pk
-        ):
+        if self.tipo == constants.CONCILIACAO_EVENTUAL and self.periodo_final and not self.pk:
             hoje = timezone.localdate()
             if self.periodo_final >= hoje:
                 data_maxima = hoje - timezone.timedelta(days=1)
@@ -320,9 +302,7 @@ class ConciliacaoUA(models.Model):
 
         if not self.numero_conciliacao:
             if not self.unidade_administrativa_id:
-                raise ValidationError(
-                    {"unidade_administrativa": "Unidade Administrativa é obrigatória."}
-                )
+                raise ValidationError({"unidade_administrativa": "Unidade Administrativa é obrigatória."})
 
             codigo = self.unidade_administrativa.codigo.replace(".", "")[-4:]
             ano = self._get_ano_referencia()
@@ -413,14 +393,10 @@ class ItemConciliacao(models.Model):
         super().clean()
 
         if self.situacao == constants.DIVERGENTE and not self.divergencia:
-            raise ValidationError(
-                "Campo divergência é obrigatório quando situação é Divergente"
-            )
+            raise ValidationError("Campo divergência é obrigatório quando situação é Divergente")
 
         if self.situacao != constants.DIVERGENTE and self.divergencia:
-            raise ValidationError(
-                "Preencha divergência apenas quando a situação for Divergente."
-            )
+            raise ValidationError("Preencha divergência apenas quando a situação for Divergente.")
 
     @property
     def tem_ocorrencia(self):
@@ -428,9 +404,7 @@ class ItemConciliacao(models.Model):
 
     @property
     def pode_marcar_como_encontrado(self):
-        return (
-            not self.ocorrencias.exists() and self.situacao == constants.NAO_ENCONTRADO
-        )
+        return not self.ocorrencias.exists() and self.situacao == constants.NAO_ENCONTRADO
 
     @property
     def pode_resolver_situacao(self):

@@ -40,9 +40,7 @@ class BemPatrimonialImportForm(ImportForm):
         super().__init__(*args, **kwargs)
 
         if _usuario_precisa_selecionar_ua(self._user):
-            self.fields["unidade_administrativa"].queryset = (
-                uas_acessiveis_para_importacao(self._user)
-            )
+            self.fields["unidade_administrativa"].queryset = uas_acessiveis_para_importacao(self._user)
             self.fields["unidade_administrativa"].required = True
         else:
             # Usuário logado numa UA: destino é a própria UA; o campo não se aplica.
@@ -55,6 +53,4 @@ class BemPatrimonialConfirmImportForm(ConfirmImportForm):
     num campo oculto, para que ela persista até a gravação efetiva dos bens.
     """
 
-    unidade_administrativa = forms.IntegerField(
-        required=False, widget=forms.HiddenInput()
-    )
+    unidade_administrativa = forms.IntegerField(required=False, widget=forms.HiddenInput())

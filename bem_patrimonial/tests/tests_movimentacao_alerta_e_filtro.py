@@ -30,9 +30,7 @@ from usuario.models import Usuario
 class AlertaMovimentacoesPendentesTagTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.ua_origem = criar_ua(
-            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 100), sigla="UA-O"
-        )
+        self.ua_origem = criar_ua(nome="UA Origem", codigo=codigo_ua(0, 0, 0, 100), sigla="UA-O")
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
@@ -72,9 +70,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
         self.assertIsNone(resultado["pendencias"])
 
     def test_tag_superuser_sem_ua(self):
-        usuario = Usuario.objects.create_user(
-            username="super", **auth_kwargs("test123"), is_superuser=True
-        )
+        usuario = Usuario.objects.create_user(username="super", **auth_kwargs("test123"), is_superuser=True)
         request = self.factory.get("/")
         request.user = usuario
         resultado = alerta_movimentacoes_pendentes({"request": request})
@@ -121,10 +117,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
         resultado = alerta_movimentacoes_pendentes({"request": request}, css_class="x")
         self.assertIsNotNone(resultado["pendencias"])
         self.assertEqual(resultado["pendencias"]["total"], 1)
-        expected_url = (
-            reverse("admin:bem_patrimonial_movimentacaobempatrimonial_changelist")
-            + "?atrasada=1"
-        )
+        expected_url = reverse("admin:bem_patrimonial_movimentacaobempatrimonial_changelist") + "?atrasada=1"
         self.assertEqual(resultado["pendencias"]["url"], expected_url)
         self.assertEqual(resultado["css_class"], "x")
 
@@ -132,9 +125,7 @@ class AlertaMovimentacoesPendentesTagTestCase(TestCase):
 class MovimentacaoAtrasadaFilterTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.ua_origem = criar_ua(
-            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 101), sigla="UA-O"
-        )
+        self.ua_origem = criar_ua(nome="UA Origem", codigo=codigo_ua(0, 0, 0, 101), sigla="UA-O")
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
@@ -166,9 +157,7 @@ class MovimentacaoAtrasadaFilterTestCase(TestCase):
         mov_recente = self._cria_movimentacao(dias_atraso=2)
 
         request = self.factory.get("/admin", {"atrasada": "1"})
-        filtro = MovimentacaoAtrasadaFilter(
-            request, {"atrasada": "1"}, MovimentacaoBemPatrimonial, self.model_admin
-        )
+        filtro = MovimentacaoAtrasadaFilter(request, {"atrasada": "1"}, MovimentacaoBemPatrimonial, self.model_admin)
         qs = filtro.queryset(request, MovimentacaoBemPatrimonial.objects.all())
 
         self.assertIn(mov_atrasada, qs)
@@ -180,9 +169,7 @@ class MovimentacaoAtrasadaFilterTestCase(TestCase):
         mov_atrasada.save(update_fields=["status"])
 
         request = self.factory.get("/admin", {"atrasada": "1"})
-        filtro = MovimentacaoAtrasadaFilter(
-            request, {"atrasada": "1"}, MovimentacaoBemPatrimonial, self.model_admin
-        )
+        filtro = MovimentacaoAtrasadaFilter(request, {"atrasada": "1"}, MovimentacaoBemPatrimonial, self.model_admin)
         qs = filtro.queryset(request, MovimentacaoBemPatrimonial.objects.all())
 
         self.assertNotIn(mov_atrasada, qs)
@@ -190,9 +177,7 @@ class MovimentacaoAtrasadaFilterTestCase(TestCase):
     def test_filter_sem_parametro(self):
         self._cria_movimentacao(dias_atraso=8)
         request = self.factory.get("/admin")
-        filtro = MovimentacaoAtrasadaFilter(
-            request, {}, MovimentacaoBemPatrimonial, self.model_admin
-        )
+        filtro = MovimentacaoAtrasadaFilter(request, {}, MovimentacaoBemPatrimonial, self.model_admin)
         qs = filtro.queryset(request, MovimentacaoBemPatrimonial.objects.all())
         self.assertEqual(qs.count(), 1)
 
@@ -200,6 +185,7 @@ class MovimentacaoAtrasadaFilterTestCase(TestCase):
 # ---------------------------------------------------------------------------
 # Helpers compartilhados pelos testes do filtro de intervalo
 # ---------------------------------------------------------------------------
+
 
 class IntervaloFilterBaseTestCase(TestCase):
     """
@@ -209,9 +195,7 @@ class IntervaloFilterBaseTestCase(TestCase):
 
     def setUp(self):
         self.factory = RequestFactory()
-        self.ua_origem = criar_ua(
-            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 102), sigla="UA-O"
-        )
+        self.ua_origem = criar_ua(nome="UA Origem", codigo=codigo_ua(0, 0, 0, 102), sigla="UA-O")
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
@@ -266,9 +250,7 @@ class IntervaloFilterBaseTestCase(TestCase):
         if np_ate:
             params["np_ate"] = np_ate
         request = self.factory.get("/admin", params)
-        return IntervaloNpDeFilter(
-            request, params, MovimentacaoBemPatrimonial, self.model_admin
-        ), request
+        return IntervaloNpDeFilter(request, params, MovimentacaoBemPatrimonial, self.model_admin), request
 
     def _qs(self):
         return MovimentacaoBemPatrimonial.objects.all()
@@ -277,6 +259,7 @@ class IntervaloFilterBaseTestCase(TestCase):
 # ---------------------------------------------------------------------------
 # Testes de IntervaloNpDeFilter
 # ---------------------------------------------------------------------------
+
 
 class IntervaloNpDeFiltroQuerysetTestCase(IntervaloFilterBaseTestCase):
 
@@ -386,6 +369,7 @@ class IntervaloNpDeFiltroMetadataTestCase(IntervaloFilterBaseTestCase):
 
             def get_query_string(self, *a, **kw):
                 return ""
+
         choices = list(filtro.choices(FakeChangelist()))
         self.assertEqual(len(choices), 1)
 
@@ -409,14 +393,13 @@ class IntervaloNpDeFiltroMetadataTestCase(IntervaloFilterBaseTestCase):
 # Testes de IntervaloNpAteFilter (filtro fantasma)
 # ---------------------------------------------------------------------------
 
+
 class IntervaloNpAteFiltroTestCase(IntervaloFilterBaseTestCase):
 
     def _filtro_ate(self, np_ate=""):
         params = {"np_ate": np_ate} if np_ate else {}
         request = self.factory.get("/admin", params)
-        return IntervaloNpAteFilter(
-            request, params, MovimentacaoBemPatrimonial, self.model_admin
-        ), request
+        return IntervaloNpAteFilter(request, params, MovimentacaoBemPatrimonial, self.model_admin), request
 
     def test_has_output_retorna_false(self):
         filtro, _ = self._filtro_ate()

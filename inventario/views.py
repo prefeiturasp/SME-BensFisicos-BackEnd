@@ -8,9 +8,7 @@ from inventario.relatorio_conciliacao_pdf import gerar_pdf_conciliacao
 
 
 def _operador_pode_exportar(user, conciliacao):
-    if not getattr(user, "is_operador_inventario", False) or getattr(
-        user, "is_gestor_patrimonio", False
-    ):
+    if not getattr(user, "is_operador_inventario", False) or getattr(user, "is_gestor_patrimonio", False):
         return True
     ua_user_id = getattr(user, "unidade_administrativa_id", None)
     if not ua_user_id or conciliacao.unidade_administrativa_id != ua_user_id:
@@ -27,16 +25,12 @@ def download_conciliacao_pdf(request, pk):
     user = request.user
 
     try:
-        conciliacao = ConciliacaoUA.objects.select_related(
-            "unidade_administrativa"
-        ).get(pk=pk)
+        conciliacao = ConciliacaoUA.objects.select_related("unidade_administrativa").get(pk=pk)
     except ConciliacaoUA.DoesNotExist:
         raise Http404("Conciliação não encontrada.")
 
     if not _operador_pode_exportar(user, conciliacao):
-        raise PermissionDenied(
-            "Operador só pode exportar conciliações da própria Unidade Administrativa."
-        )
+        raise PermissionDenied("Operador só pode exportar conciliações da própria Unidade Administrativa.")
 
     pdf_buffer = gerar_pdf_conciliacao(conciliacao, usuario_gerador=request.user)
 
@@ -48,9 +42,7 @@ def download_conciliacao_pdf(request, pk):
         ano = conciliacao.ano_vigencia
 
     ua_codigo = ""
-    if conciliacao.unidade_administrativa and hasattr(
-        conciliacao.unidade_administrativa, "codigo"
-    ):
+    if conciliacao.unidade_administrativa and hasattr(conciliacao.unidade_administrativa, "codigo"):
         ua_codigo = str(conciliacao.unidade_administrativa.codigo)
 
     partes = ["CONCILIACAO", str(numero)]

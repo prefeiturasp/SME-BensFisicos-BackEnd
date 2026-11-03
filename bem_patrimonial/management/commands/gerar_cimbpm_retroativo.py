@@ -47,9 +47,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"{erros} erros"))
 
     def _limpar_numeros(self):
-        total = MovimentacaoBemPatrimonial.objects.filter(
-            numero_cimbpm__isnull=False
-        ).count()
+        total = MovimentacaoBemPatrimonial.objects.filter(numero_cimbpm__isnull=False).count()
 
         MovimentacaoBemPatrimonial.objects.filter(numero_cimbpm__isnull=False).update(
             numero_cimbpm=None, documento_cimbpm=""

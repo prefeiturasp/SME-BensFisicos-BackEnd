@@ -47,9 +47,7 @@ def _obter_unidades_para_conciliacao(usuario):
         ua_usuario = getattr(usuario, "unidade_administrativa", None)
         if ua_usuario:
             return [ua_usuario]
-        return list(
-            UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
-        )
+        return list(UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA))
     ua = getattr(usuario, "unidade_administrativa", None)
     if not ua:
         return None
