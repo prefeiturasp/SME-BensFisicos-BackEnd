@@ -134,6 +134,7 @@ celerybeat.pid
 
 # Environments
 .env
+!.env.example
 .venv
 env/
 venv/
@@ -175,9 +176,4 @@ cython_debug/
 # End of https://www.toptal.com/developers/gitignore/api/django
 
 .DS_Store
-.github
-.gitignore
 .vscode/launch.json
-docker-compose-dev.yml
-docker-compose-ok.yml
-requirements.dev.txt
