@@ -35,4 +35,4 @@ make seed-base              # massa de demonstração (opcional)
 
 - Não há versionamento `/api/v1/` (mantido sem versionar, sem quebrar o frontend).
 - Sem endpoint de verificação de saúde na API. Só o banco tem healthcheck no Compose.
-- `Makefile` tem só os 3 alvos acima. Alvos padrão (`test`, `lint`, `docs`) ainda não existem.
+- `Makefile` com alvos de qualidade (`test`, `lint`, `typecheck`, `coverage`, `schema`, `docs`); ver `make help`. As ferramentas (`pytest`, `black`, `ruff`, `mypy`, `sphinx`) entram no item `requirements/`.
