@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import Any, ClassVar
 
 import django_filters
 from django.contrib.contenttypes.models import ContentType
@@ -498,8 +499,8 @@ class ItemConciliacaoFilter(django_filters.FilterSet):
 
 
 class AuditHistoryConciliacaoMixin:
-    audit_model = None
-    historico_grupo_serializer_class = None
+    audit_model: ClassVar[Any] = None
+    historico_grupo_serializer_class: ClassVar[Any] = None
 
     def _get_audit_content_type(self):
         return ContentType.objects.get_for_model(self.audit_model)

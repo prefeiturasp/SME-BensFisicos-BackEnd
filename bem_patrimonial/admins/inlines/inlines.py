@@ -238,6 +238,7 @@ class TransferenciaBensItemInline(admin.TabularInline):
             return self.extra
         return 0
 
+    @admin.display(description="UA de origem | Bem patrimonial")
     def bem_detalhado(self, obj):
         numero_patrimonial = obj.bem.numero_patrimonial or "SEM-NUMERO"
         nome = obj.bem.nome or "Sem nome"
@@ -249,8 +250,6 @@ class TransferenciaBensItemInline(admin.TabularInline):
             numero_patrimonial,
             nome,
         )
-
-    bem_detalhado.short_description = "UA de origem | Bem patrimonial"
 
     def has_add_permission(self, request, obj=None):
 

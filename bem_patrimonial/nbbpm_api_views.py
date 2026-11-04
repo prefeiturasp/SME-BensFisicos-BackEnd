@@ -29,7 +29,7 @@ class NBBPMFilter(django_filters.FilterSet):
 
     class Meta:
         model = NBBPM
-        fields = []
+        fields: list[str] = []
 
 
 class NBBPMViewSet(

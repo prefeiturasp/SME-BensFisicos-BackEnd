@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import List
 
 import django_filters
 from django.contrib.contenttypes.models import ContentType
@@ -103,7 +104,7 @@ class BaixaFisicaFilter(FilterSet):
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
-        fields = []
+        fields: list[str] = []
 
     def filter_status(self, queryset, name, value):
         """
@@ -776,7 +777,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         queryset = queryset.prefetch_related("nbbpms_lote", "itens__bem")
         return queryset
 
-    def _parse_ids(self, ids_param: str) -> list:
+    def _parse_ids(self, ids_param: str) -> List[int]:
         """Converte string de IDs separados por vírgula em lista de ints."""
         ids = []
         for id_str in ids_param.split(","):

@@ -77,13 +77,15 @@ def _formatar_data_criacao(baixa: BaixaFisicaBemPatrimonial) -> str:
 
             tz = ZoneInfo(PDFConfig.TZ_PADRAO)
             if timezone.is_aware(dt):
-                dt = dt.astimezone(tz).date()
+                data = dt.astimezone(tz).date()
             else:
-                dt = dt.date()
+                data = dt.date()
         except Exception:
-            dt = dt.date()
+            data = dt.date()
+    else:
+        data = dt
 
-    return dt.strftime(DATE_FMT_BR)
+    return data.strftime(DATE_FMT_BR)
 
 
 # ===========================================================================

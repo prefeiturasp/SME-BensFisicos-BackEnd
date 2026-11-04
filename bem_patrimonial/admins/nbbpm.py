@@ -110,19 +110,18 @@ class NBBPMAdmin(admin.ModelAdmin):
             fieldsets = ((None, {"fields": ("numero", "data_criacao")}),)
         return fieldsets
 
+    @admin.display(description="Quantidade de Baixas")
     def total_baixas(self, obj):
         return obj.baixas.count()
 
-    total_baixas.short_description = "Quantidade de Baixas"
-
+    @admin.display(description="Unidade Orçamentária")
     def unidade_orcamentaria_display(self, obj):
         uo = obj.unidade_orcamentaria
         if uo:
             return f"{uo.sigla or ''} - {uo.nome or ''} ({uo.codigo or ''})".strip()
         return "-"
 
-    unidade_orcamentaria_display.short_description = "Unidade Orçamentária"
-
+    @admin.display(description="PDF")
     def pdf_link_list(self, obj):
         url = reverse("admin:nbbpm_pdf", args=[obj.pk])
         return format_html(
@@ -131,8 +130,7 @@ class NBBPMAdmin(admin.ModelAdmin):
             url,
         )
 
-    pdf_link_list.short_description = "PDF"
-
+    @admin.display(description="")
     def baixas_detail(self, obj):
         baixas = (
             obj.baixas.select_related(
@@ -179,8 +177,7 @@ class NBBPMAdmin(admin.ModelAdmin):
         )
         return format_html(html)
 
-    baixas_detail.short_description = ""
-
+    @admin.display(description="")
     def bens_detail(self, obj):
         from bem_patrimonial.nbbpm_lote import obter_bens_nbbpm_lote
 
@@ -217,8 +214,6 @@ class NBBPMAdmin(admin.ModelAdmin):
             + "</tbody></table>"
         )
         return format_html(html)
-
-    bens_detail.short_description = ""
 
     def get_urls(self):
         urls = super().get_urls()

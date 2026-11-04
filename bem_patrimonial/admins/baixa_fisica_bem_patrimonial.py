@@ -498,6 +498,7 @@ class BaixaFisicaResource(resources.ModelResource):
 class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admin.ModelAdmin):
     resource_class = BaixaFisicaResource
 
+    @admin.display(description="NBBPM", ordering="numero_nbbpm")
     def numero_nbbpm_display(self, obj):
         try:
             nbbpm = obj.nbbpms_lote.first()
@@ -511,17 +512,13 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             return legado
         return "-"
 
-    numero_nbbpm_display.short_description = "NBBPM"
-    numero_nbbpm_display.admin_order_field = "numero_nbbpm"
-
+    @admin.display(description="Status", ordering="status")
     def status_display(self, obj):
         if obj.status == constants.AGUARDANDO_ENVIO:
             return "Em elaboração"
         return obj.get_status_display()
 
-    status_display.short_description = "Status"
-    status_display.admin_order_field = "status"
-
+    @admin.display(description="Laudo")
     def laudo_link(self, obj):
         if obj.status != constants.ACEITA:
             return "-"
@@ -532,12 +529,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             url,
         )
 
-    laudo_link.short_description = "Laudo"
-
+    @admin.display(description="NBBPM (link)")
     def nbbpm_link(self, obj):
         return self.numero_nbbpm_display(obj)
-
-    nbbpm_link.short_description = "NBBPM (link)"
 
     list_display = (
         "id",
@@ -585,13 +579,11 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         queryset, _ = super().get_search_results(request, queryset, search_term)
         return queryset.distinct(), True
 
+    @admin.display(description="Data da aprovação", ordering="data_aprovacao")
     def data_aprovacao_formatada(self, obj):
         if obj.data_aprovacao:
             return date_format(obj.data_aprovacao, "d \\d\\e F \\d\\e Y")
         return "-"
-
-    data_aprovacao_formatada.short_description = "Data da aprovação"
-    data_aprovacao_formatada.admin_order_field = "data_aprovacao"
 
     inlines = [BaixaFisicaBensItemInline]
     autocomplete_fields = ("unidade_administrativa_origem",)
@@ -1013,7 +1005,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             level=messages.SUCCESS,
         )
 
-    acao_enviar_baixa.short_description = "Solicitar Baixa Física selecionadas"
+    acao_enviar_baixa.short_description = "Solicitar Baixa Física selecionadas"  # type: ignore[attr-defined]
 
     def acao_aprovar_baixa(self, request, queryset):
         if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
@@ -1113,7 +1105,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             )
         return HttpResponseRedirect(request.get_full_path())
 
-    acao_aprovar_baixa.short_description = "Aprovar Baixa Física selecionadas"
+    acao_aprovar_baixa.short_description = "Aprovar Baixa Física selecionadas"  # type: ignore[attr-defined]
 
     def acao_cancelar_baixa(self, request, queryset):
         if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
@@ -1183,7 +1175,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
                 level=messages.SUCCESS,
             )
 
-    acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"
+    acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"  # type: ignore[attr-defined]
 
     def acao_solicitar_correcao(self, request, queryset):
         if not self._pode_solicitar_correcao(request, queryset):
@@ -1311,7 +1303,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         )
         return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/solicitar_correcao.html", context)
 
-    acao_solicitar_correcao.short_description = "Solicitar correção (voltar para Em elaboração)"
+    acao_solicitar_correcao.short_description = "Solicitar correção (voltar para Em elaboração)"  # type: ignore[attr-defined]
 
     def gerar_nbbpm_action(self, request, queryset):
         if not self._validar_perm_gerar_nbbpm(request):
@@ -1484,7 +1476,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         )
         return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/gerar_nbbpm.html", context)
 
-    gerar_nbbpm_action.short_description = "Gerar NBBPM para Baixas aprovadas selecionadas"
+    gerar_nbbpm_action.short_description = "Gerar NBBPM para Baixas aprovadas selecionadas"  # type: ignore[attr-defined]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "unidade_administrativa_origem":

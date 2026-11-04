@@ -63,7 +63,7 @@ def obter_proximo_sequencial_por_ano(ano: int) -> int:
     max_nbbpm = _max_sequencial_nbbpm_por_ano(ano)
     max_baixa = _max_sequencial_baixa_legado_por_ano(ano)
     maior = max(max_nbbpm, max_baixa)
-    return maior + 1
+    return int(maior) + 1
 
 
 def _extrair_ano_nbbpm(nbbpm):
@@ -130,7 +130,7 @@ def obter_processo_unico_baixas(baixas) -> str:
     processos = processos_normalizados_de_baixas(baixas)
     if len(processos) > 1:
         raise ValidationError(constants.NBBPM_PROCESSO_DIVERGENTE)
-    return next(iter(processos)) if processos else ""
+    return str(next(iter(processos))) if processos else ""
 
 
 def validar_processo_payload_baixas(baixas, numero_processo_baixa) -> str:

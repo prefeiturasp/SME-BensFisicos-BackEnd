@@ -140,6 +140,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
         obj.unidade_administrativa_destino = form.cleaned_data["unidade_administrativa_destino"]
         super().save_model(request, obj, form, change)
 
+    @admin.display(description="Documento NTBPM")
     def get_documento_ntbpm_link(self, obj):
         if obj and obj.numero_ntbpm:
             url_protegida = reverse("download_documento_ntbpm", kwargs={"pk": obj.pk})
@@ -148,8 +149,6 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
                 url_protegida,
             )
         return "Número NTBPM não gerado"
-
-    get_documento_ntbpm_link.short_description = "Documento NTBPM"
 
     def _get_changeform_extra_context(self, object_id=None, extra_context=None):
         context = dict(extra_context or {})
@@ -169,6 +168,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
 
         return context
 
+    @admin.display(description="Bens transferidos")
     def get_bens_transferidos_links(self, obj):
         itens = list(
             obj.itens.select_related("bem", "bem__unidade_administrativa").order_by(
@@ -196,8 +196,6 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
                 ),
             ),
         )
-
-    get_bens_transferidos_links.short_description = "Bens transferidos"
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         if object_id is not None and request.method == "POST":

@@ -74,7 +74,7 @@ def set_refresh_token_cookie(response, refresh_token):
 )
 class CustomTokenObtainPairView(TokenObtainPairView):
 
-    serializer_class = CustomTokenObtainPairSerializer
+    serializer_class = CustomTokenObtainPairSerializer  # type: ignore[assignment]
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)

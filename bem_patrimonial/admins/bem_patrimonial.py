@@ -259,7 +259,7 @@ class BemPatrimonialResource(resources.ModelResource):
     # Helpers internos
     # ------------------------------------------------------------------
 
-    def _normalizar_valor(self, value):
+    def _normalizar_valor(self, value) -> str:
         if value is None:
             return ""
         return str(value).strip()
@@ -348,7 +348,7 @@ class BemPatrimonialResource(resources.ModelResource):
         """
         mapa = getattr(self, "_numeros_linha_originais", None)
         if mapa and 1 <= idx_atual <= len(mapa):
-            return mapa[idx_atual - 1]
+            return int(mapa[idx_atual - 1])
         return idx_atual
 
     def _registrar_erro(self, linha: int, numero_patrimonial: str, campo: str, mensagem: str):
@@ -1341,12 +1341,11 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
 
         return response
 
+    @admin.display(description="Última alteração", ordering="audit_last_at")
     def alterado_em_ultimo(self, obj):
         return getattr(obj, "audit_last_at", None)
 
-    alterado_em_ultimo.short_description = "Última alteração"
-    alterado_em_ultimo.admin_order_field = "audit_last_at"
-
+    @admin.display(description="Alterado por")
     def alterado_por_ultimo(self, obj):
         user_id = getattr(obj, "audit_last_by_id", None)
         if not user_id:
@@ -1362,8 +1361,6 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         if obj is None:
             return []
         return super().get_inline_instances(request, obj)
-
-    alterado_por_ultimo.short_description = "Alterado por"
 
     @admin.display(description="Foto")
     def thumb(self, obj):

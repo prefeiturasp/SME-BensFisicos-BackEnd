@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any, ClassVar
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -86,11 +87,11 @@ UO_ID_PATH_PARAM = OpenApiParameter(
 
 
 class AuditHistoryExportMixin:
-    audit_model = None
-    historico_grupo_serializer_class = None
-    export_query_serializer_class = None
-    export_resource_class = None
-    export_pdf_format_class = None
+    audit_model: ClassVar[Any] = None
+    historico_grupo_serializer_class: ClassVar[Any] = None
+    export_query_serializer_class: ClassVar[Any] = None
+    export_resource_class: ClassVar[Any] = None
+    export_pdf_format_class: ClassVar[Any] = None
     export_filename_prefix = ""
 
     def _get_audit_content_type(self):

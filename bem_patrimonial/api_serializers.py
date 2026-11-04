@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -9,6 +9,7 @@ from rest_framework import serializers
 
 from dados_comuns.escopo import filtrar_queryset_por_escopo, filtrar_ua_origem_por_escopo
 from dados_comuns.models import UnidadeAdministrativa
+from usuario.models import Usuario
 
 from . import constants
 from .models import NBBPM, BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, BemPatrimonial
@@ -37,7 +38,7 @@ def _resolver_numero_nbbpm(obj) -> str:
     """Retorna número da NBBPM consolidada (M2M) com fallback no legado Baixa.numero_nbbpm."""
     nbbpm = _resolver_nbbpm_obj(obj)
     if nbbpm and getattr(nbbpm, "numero", None):
-        return nbbpm.numero
+        return str(nbbpm.numero)
     return obj.numero_nbbpm or ""
 
 
@@ -69,7 +70,7 @@ class UserSimpleSerializer(serializers.ModelSerializer):
         fields = ["id", "username", "nome_completo", "email", "rf"]
         read_only_fields = fields
 
-    def get_nome_completo(self, obj: User) -> str:
+    def get_nome_completo(self, obj: Usuario) -> str:
         return obj.get_full_name() or obj.username
 
 
@@ -248,7 +249,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
             return None
         try:
             path = reverse(viewname, kwargs={"pk": pk})
-            return request.build_absolute_uri(path)
+            return str(request.build_absolute_uri(path))
         except Exception:
             return None
 
@@ -257,7 +258,7 @@ class BaixaFisicaBemPatrimonialDetailSerializer(serializers.ModelSerializer):
         if not request or not request.user or not request.user.is_authenticated:
             return False
         user = request.user
-        return user.is_gestor_patrimonio or user.is_superuser
+        return bool(user.is_gestor_patrimonio or user.is_superuser)
 
     def get_url_solicitar(self, obj: BaixaFisicaBemPatrimonial):
         if obj.status == constants.AGUARDANDO_ENVIO:
@@ -554,7 +555,7 @@ class BaixaFisicaBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
         bem = item_data.get("bem")
         if isinstance(bem, int):
             return BemPatrimonial.objects.get(pk=bem)
-        return bem
+        return cast(BemPatrimonial, bem)
 
     def _processar_itens(self, instance, itens_data, itens_atuais) -> set:
         itens_enviados_ids = set()

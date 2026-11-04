@@ -122,10 +122,11 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
     ordering = ("unidade_administrativa__codigo",)
     filter_horizontal = ("unidades_administrativas",)
 
-    list_filter = UserAdmin.list_filter + (
+    list_filter = [
+        *UserAdmin.list_filter,
         ("unidade_administrativa__sigla", DropdownFilter),
         ("date_joined", DateRangeFilter),
-    )
+    ]
 
     fieldsets = (
         ("Acesso", {"fields": ("username", "password")}),

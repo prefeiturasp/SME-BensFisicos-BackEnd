@@ -36,7 +36,7 @@ class BaseUnidadePDFFormat(Format):
 
     REPORT_TITLE = ""
     EMPTY_MESSAGE = ""
-    TABLE_COL_WIDTHS = []
+    TABLE_COL_WIDTHS: list[float] = []
 
     def get_report_title(self):
         return self.REPORT_TITLE

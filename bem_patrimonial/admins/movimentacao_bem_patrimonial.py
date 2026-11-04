@@ -248,7 +248,7 @@ def aprovar_solicitacao(modeladmin, request, queryset):
         )
 
 
-aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
+aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"  # type: ignore[attr-defined]
 
 
 def _nao_pode_rejeitar(mov, request):
@@ -301,7 +301,7 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
         )
 
 
-rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
+rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"  # type: ignore[attr-defined]
 
 
 def _nao_pode_cancelar(mov, request):
@@ -363,7 +363,7 @@ def cancelar_solicitacao(modeladmin, request, queryset):
         )
 
 
-cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"
+cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"  # type: ignore[attr-defined]
 
 
 class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
@@ -617,6 +617,7 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         for bem in form.cleaned_data["bens_lote_resolvidos"]:
             MovimentacaoBensItem.objects.create(movimentacao=form.instance, bem=bem)
 
+    @admin.display(description="Documento CIMBPM")
     def get_documento_cimbpm_link(self, obj):
         if obj and obj.numero_cimbpm:
             from django.urls import reverse
@@ -630,14 +631,11 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
             )
         return "Número CIMBPM não gerado"
 
-    get_documento_cimbpm_link.short_description = "Documento CIMBPM"
-
+    @admin.display(description="Unidade orçamentária de destino")
     def get_unidade_orcamentaria_destino(self, obj):
         if not obj or not obj.unidade_administrativa_destino_id:
             return "-"
         return obj.unidade_administrativa_destino.unidade_orcamentaria
-
-    get_unidade_orcamentaria_destino.short_description = "Unidade orçamentária de destino"
 
     def response_action(self, request, queryset):
 

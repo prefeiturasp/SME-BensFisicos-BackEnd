@@ -304,18 +304,15 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         finally:
             self._current_changelist_full_path = None
 
+    @admin.display(description="Número Patrimonial", ordering="bem__numero_patrimonial")
     def numero_patrimonial_bem(self, obj):
         return getattr(obj.bem, "numero_patrimonial", "-")
 
-    numero_patrimonial_bem.short_description = "Número Patrimonial"
-    numero_patrimonial_bem.admin_order_field = "bem__numero_patrimonial"
-
+    @admin.display(description="Nome do Bem", ordering="bem__nome")
     def nome_bem(self, obj):
         return getattr(obj.bem, "nome", "-")
 
-    nome_bem.short_description = "Nome do Bem"
-    nome_bem.admin_order_field = "bem__nome"
-
+    @admin.display(description="Situação", ordering="situacao")
     def situacao_display(self, obj):
         cores = {
             constants.ENCONTRADO_SEM_DIVERGENCIA: ("#28a745", "white"),
@@ -337,9 +334,7 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
             obj.get_situacao_display(),
         )
 
-    situacao_display.short_description = "Situação"
-    situacao_display.admin_order_field = "situacao"
-
+    @admin.display(description="Observação/Divergência")
     def observacao_resumida(self, obj):
         if obj.observacao:
             return obj.observacao
@@ -347,8 +342,7 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
             return f"[Divergência] {obj.divergencia}"
         return "-"
 
-    observacao_resumida.short_description = "Observação/Divergência"
-
+    @admin.display(description="Ocorrência")
     def acoes_lista(self, obj):
         if not obj.conciliacao.esta_aberto:
             return format_html('<span style="color: gray;">Conciliação fechada</span>')
@@ -402,8 +396,6 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
             )
             + "</div>"
         )
-
-    acoes_lista.short_description = "Ocorrência"
 
 
 @admin.register(ConciliacaoUA)
@@ -583,6 +575,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
                 f"Conciliação criada com sucesso! {obj.itens.count()} itens foram adicionados automaticamente.",
             )
 
+    @admin.display(description="Status", ordering="status")
     def status_display(self, obj):
         cores = {
             constants.CONCILIACAO_EM_ABERTO: "#28a745",
@@ -596,17 +589,13 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             obj.get_status_display(),
         )
 
-    status_display.short_description = "Status"
-    status_display.admin_order_field = "status"
-
+    @admin.display(description="Período", ordering="periodo_final")
     def periodo_display(self, obj):
         if not obj.periodo_final:
             return "-"
         return format_html("<strong>Até {}</strong>", obj.periodo_final.strftime("%d/%m/%Y"))
 
-    periodo_display.short_description = "Período"
-    periodo_display.admin_order_field = "periodo_final"
-
+    @admin.display(description="Itens")
     def total_itens(self, obj):
         if not obj.pk:
             return "-"
@@ -628,17 +617,13 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             detalhes or "—",
         )
 
-    total_itens.short_description = "Itens"
-
+    @admin.display(description="Ação")
     def acao_visualizar(self, obj):
         url = reverse(URL_NAME_CONCILIACAOUA_CHANGE, args=[obj.pk])
         return format_html(
             '<a class="button" href="{}" ' 'style="padding: 4px 12px; font-size: 12px; color: white;">Visualizar</a>',
             url,
         )
-
-    acao_visualizar.short_description = "Ação"
-    acao_visualizar.allow_tags = True
 
     def get_urls(self):
         urls = super().get_urls()
@@ -742,7 +727,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         }
 
     def finalizar_conciliacao_view(self, request, pk: int):
-        obj = self.get_object(request, pk)
+        obj = self.get_object(request, str(pk))
         if not obj:
             messages.error(request, "Conciliação não encontrada.")
             return redirect(URL_NAME_CONCILIACAOUA_CHANGELIST)
