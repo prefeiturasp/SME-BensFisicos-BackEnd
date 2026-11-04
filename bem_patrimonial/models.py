@@ -943,7 +943,8 @@ class BaixaFisicaBemPatrimonial(models.Model):
             # Órfão Laudado (sem outra baixa): barra igual API para não entrar em Em elaboração/Solicitada.
             if bem.status == constants.LAUDADO_PARA_BAIXA:
                 raise ValidationError(
-                    f"O bem '{bem}' possui status '{bem.get_status_display()}' e não pode ser incluído em uma baixa física."
+                    f"O bem '{bem}' possui status '{bem.get_status_display()}' "
+                    "e não pode ser incluído em uma baixa física."
                 )
 
     def clean(self):

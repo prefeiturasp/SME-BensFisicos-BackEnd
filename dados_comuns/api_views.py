@@ -279,7 +279,9 @@ class AuditHistoryExportMixin:
     destroy=extend_schema(
         tags=["Unidades Orçamentárias"],
         summary="Excluir unidade orçamentária",
-        description="A exclusão é permitida apenas para superusuário e bloqueada quando existirem vínculos ativos no sistema.",
+        description=(
+            "A exclusão é permitida apenas para superusuário e bloqueada quando existirem vínculos ativos no sistema."
+        ),
         parameters=[UO_ID_PATH_PARAM],
         responses={
             204: OpenApiResponse(description="Unidade orçamentária excluída com sucesso."),
@@ -340,9 +342,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
         if vinculos:
             raise DRFValidationError(
                 {
-                    "detail": "Não foi possível excluir esta Unidade Orçamentária porque existem vínculos ativos no sistema: {}.".format(
-                        ", ".join(vinculos)
-                    )
+                    "detail": (
+                        "Não foi possível excluir esta Unidade Orçamentária porque existem "
+                        "vínculos ativos no sistema: {}."
+                    ).format(", ".join(vinculos))
                 }
             )
 
@@ -373,7 +376,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
             except ProtectedError:
                 raise DRFValidationError(
                     {
-                        "detail": "Não foi possível excluir esta Unidade Orçamentária porque existem vínculos ativos no sistema."
+                        "detail": (
+                            "Não foi possível excluir esta Unidade Orçamentária porque existem "
+                            "vínculos ativos no sistema."
+                        )
                     }
                 )
 
@@ -443,7 +449,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
                 name="ordering",
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
-                description="Ordenação por: id, codigo, sigla, nome, status, created_at, updated_at, unidade_orcamentaria__codigo. Use '-' para descendente.",
+                description=(
+                    "Ordenação por: id, codigo, sigla, nome, status, created_at, updated_at, "
+                    "unidade_orcamentaria__codigo. Use '-' para descendente."
+                ),
             ),
             OpenApiParameter(
                 name="status",
@@ -484,7 +493,11 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
     create=extend_schema(
         tags=["Unidades Administrativas"],
         summary="Criar unidade administrativa",
-        description="Cria unidade administrativa. O campo 'codigo' deve receber apenas o sufixo numérico com 3 ou 4 dígitos (ex.: 002 ou 1002). O backend compõe o código final com o prefixo da unidade orçamentária (ex.: 01.16.10.002).",
+        description=(
+            "Cria unidade administrativa. O campo 'codigo' deve receber apenas o sufixo numérico com 3 ou 4 dígitos "
+            "(ex.: 002 ou 1002). O backend compõe o código final com o prefixo da unidade orçamentária "
+            "(ex.: 01.16.10.002)."
+        ),
         responses={
             201: OpenApiResponse(description="Unidade administrativa criada com sucesso."),
             400: OpenApiResponse(description="Dados inválidos."),
@@ -519,7 +532,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
     destroy=extend_schema(
         tags=["Unidades Administrativas"],
         summary="Excluir unidade administrativa",
-        description="Somente superusuário ou gestor de patrimônio podem excluir. A exclusão pode falhar caso existam vínculos protegidos no banco (ex.: bens patrimoniais associados).",
+        description=(
+            "Somente superusuário ou gestor de patrimônio podem excluir. A exclusão pode falhar caso existam "
+            "vínculos protegidos no banco (ex.: bens patrimoniais associados)."
+        ),
         parameters=[UA_ID_PATH_PARAM],
         responses={
             204: OpenApiResponse(description="Unidade administrativa excluída com sucesso."),
@@ -748,7 +764,10 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
             except ProtectedError:
                 raise DRFValidationError(
                     {
-                        "detail": "Não foi possível excluir esta Unidade Administrativa porque existem vínculos ativos no sistema."
+                        "detail": (
+                            "Não foi possível excluir esta Unidade Administrativa porque existem "
+                            "vínculos ativos no sistema."
+                        )
                     }
                 )
 

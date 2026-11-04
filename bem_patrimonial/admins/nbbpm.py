@@ -126,7 +126,8 @@ class NBBPMAdmin(admin.ModelAdmin):
     def pdf_link_list(self, obj):
         url = reverse("admin:nbbpm_pdf", args=[obj.pk])
         return format_html(
-            '<a class="button" href="{}" target="_blank" style="background:#198754; border-color:#198754; color:#fff !important; padding:4px 10px; text-decoration:none;">PDF</a>',
+            '<a class="button" href="{}" target="_blank" style="background:#198754; border-color:#198754; '
+            'color:#fff !important; padding:4px 10px; text-decoration:none;">PDF</a>',
             url,
         )
 
@@ -211,7 +212,8 @@ class NBBPMAdmin(admin.ModelAdmin):
             "<th style='padding:4px; border:1px solid #ddd;'>Modelo</th>"
             "</tr></thead><tbody>"
             + "".join(rows)
-            + f"<tr style='font-weight:bold; background:#f5f5f5;'><td colspan='2'>TOTAL GERAL</td><td>{total_valor:.2f}</td><td colspan='2'>{len(bens)} bem(ns)</td></tr>"
+            + "<tr style='font-weight:bold; background:#f5f5f5;'><td colspan='2'>TOTAL GERAL</td>"
+            + f"<td>{total_valor:.2f}</td><td colspan='2'>{len(bens)} bem(ns)</td></tr>"
             + "</tbody></table>"
         )
         return format_html(html)

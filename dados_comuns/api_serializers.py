@@ -92,7 +92,10 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
         read_only_fields = ["id", "created_at", "updated_at"]
         extra_kwargs = {
             "codigo": {
-                "help_text": "Informe o sufixo numérico com 3 ou 4 dígitos (ex.: 002 ou 1002). O sistema compõe automaticamente o código completo com o prefixo da Unidade Orçamentária."
+                "help_text": (
+                    "Informe o sufixo numérico com 3 ou 4 dígitos (ex.: 002 ou 1002). O sistema compõe "
+                    "automaticamente o código completo com o prefixo da Unidade Orçamentária."
+                )
             }
         }
 

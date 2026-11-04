@@ -132,7 +132,8 @@ Aprova a baixa física, autorizando a baixa definitiva dos bens.
 
 ### Parâmetros obrigatórios
 
-- **numero_processo_baixa** (string) → Número do processo no formato obrigatório `XXXX.XXXX/XXXXXXX-X` (ex: `6016.2025/0117371-7`). O número é salvo na baixa e propagado para todos os bens vinculados.
+- **numero_processo_baixa** (string) → Número do processo no formato obrigatório `XXXX.XXXX/XXXXXXX-X`
+  (ex: `6016.2025/0117371-7`). O número é salvo na baixa e propagado para todos os bens vinculados.
 
 ### Comportamento
 
@@ -176,7 +177,8 @@ Corrige o número do processo de uma Baixa Física aprovada, sem reiniciar o pro
 2. Valida permissões do usuário (apenas Gestor de Patrimônio)
 3. Valida **numero_processo_baixa** no mesmo padrão do aceite
 4. Bloqueia quando já existe Nota (NBBPM consolidada ou número legado)
-5. Em transação única atualiza **numero_processo_baixa** na baixa e propaga o novo número para todos os bens vinculados (`numero_processo` e `localizacao` como `Baixa Física - <processo>`), sem alterar vínculo ou status
+5. Em transação única atualiza **numero_processo_baixa** na baixa e propaga o novo número para todos os bens
+   vinculados (`numero_processo` e `localizacao` como `Baixa Física - <processo>`), sem alterar vínculo ou status
 6. Não cria nova solicitação e não altera status da baixa ou dos bens
 
 ### Restrições
@@ -351,7 +353,8 @@ O cabeçalho aceita variações de caixa e acentuação
   "total_linhas": 42,
   "erros_por_linha": [
     "Linha 5 | Número Patrimonial: 001.000000001-0 | Erro: Número patrimonial já cadastrado no sistema.",
-    "Linha 12 | Número Patrimonial: 001.000000002-0 | Erro: Número patrimonial duplicado no arquivo. Primeira ocorrência na linha 3."
+    "Linha 12 | Número Patrimonial: 001.000000002-0 | Erro: Número patrimonial duplicado no arquivo. Primeira "
+    "ocorrência na linha 3."
   ]
 }
 ```
@@ -371,7 +374,8 @@ O cabeçalho aceita variações de caixa e acentuação
 
 ```json
 {
-  "detail": "Não é possível importar bens: seu usuário não possui uma Unidade Administrativa vinculada. Entre em contato com o gestor de patrimônio."
+  "detail": "Não é possível importar bens: seu usuário não possui uma Unidade Administrativa vinculada. Entre em "
+    "contato com o gestor de patrimônio."
 }
 ```
 
@@ -433,7 +437,8 @@ e identificar que um ou mais itens precisam de ajuste antes da aprovação.
 ### Comportamento
 
  1. Valida que o status atual da baixa é **Solicitada**
- 2. Valida que o usuário é Gestor de Patrimônio, superuser **ou o solicitante (criado_por)** — permite withdraw pelo operador
+ 2. Valida que o usuário é Gestor de Patrimônio, superuser **ou o solicitante (criado_por)** — permite withdraw
+    pelo operador
  3. Altera o status da baixa para **Em elaboração**
 4. Registra o motivo no histórico da baixa
 5. Notifica o solicitante original por e-mail (melhor esforço,

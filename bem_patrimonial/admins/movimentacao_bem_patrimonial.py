@@ -170,7 +170,8 @@ def _check_cancelamento_entre_uos(mov, request):
     messages.add_message(
         request,
         messages.ERROR,
-        f"Movimentação #{mov.pk}: Apenas gestores da UO de origem ou destino podem cancelar esta movimentação entre UOs.",
+        f"Movimentação #{mov.pk}: Apenas gestores da UO de origem ou destino podem cancelar "
+        "esta movimentação entre UOs.",
     )
     return True
 

@@ -138,7 +138,10 @@ class BaixaFisicaBemPatrimonialChangeForm(forms.ModelForm):
                 "placeholder": constants.PROCESSO_BAIXA_EXEMPLO,
             }
         ),
-        help_text=f"Editável só quando Aceita e sem Nota gerada. Formato: XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})",
+        help_text=(
+            f"Editável só quando Aceita e sem Nota gerada. Formato: XXXX.XXXX/XXXXXXX-X "
+            f"(ex: {constants.PROCESSO_BAIXA_EXEMPLO})"
+        ),
         validators=[
             RegexValidator(
                 regex=constants.PROCESSO_BAIXA_REGEX,
@@ -257,11 +260,13 @@ class BaixaFisicaBensItemInlineForm(forms.ModelForm):
                 return
             if bem.status in (bem_constants.LAUDADO_PARA_BAIXA, bem_constants.BAIXA_FISICA):
                 raise ValidationError(
-                    f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
+                    f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' "
+                    "não pode ser incluído em Baixa Física."
                 )
             return
         raise ValidationError(
-            f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
+            f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' "
+            "não pode ser incluído em Baixa Física."
         )
 
     def _obter_baixa_atual_id(self):
@@ -522,7 +527,8 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             return "-"
         url = reverse("admin:baixafisica_laudo", args=[obj.pk])
         return format_html(
-            '<a href="{}" target="_blank" style="background:#198754; border-color:#198754; color:#fff !important; padding:3px 8px; border-radius:3px; text-decoration:none; font-size:11px;">Laudo</a>',
+            '<a href="{}" target="_blank" style="background:#198754; border-color:#198754; color:#fff !important; '
+            'padding:3px 8px; border-radius:3px; text-decoration:none; font-size:11px;">Laudo</a>',
             url,
         )
 
@@ -1101,7 +1107,8 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         if aprovadas:
             self.message_user(
                 request,
-                f"{aprovadas} Baixa(s) Física(s) aprovada(s) com sucesso. Processo {numero} propagado para a baixa e para os bens. Selecione as aprovadas e use 'Gerar NBBPM' para emitir a nota.",
+                f"{aprovadas} Baixa(s) Física(s) aprovada(s) com sucesso. Processo {numero} propagado para a baixa e "
+                "para os bens. Selecione as aprovadas e use 'Gerar NBBPM' para emitir a nota.",
                 level=messages.SUCCESS,
             )
         return HttpResponseRedirect(request.get_full_path())
@@ -1246,7 +1253,8 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         count = self._executar_correcao(request, solicitadas, motivo)
         self.message_user(
             request,
-            f"{count} Baixa(s) retornada(s) para 'Em elaboração' para correção. Os bens permanecem em 'Aguardando aprovação' para reedição.",
+            f"{count} Baixa(s) retornada(s) para 'Em elaboração' para correção. Os bens permanecem em "
+            "'Aguardando aprovação' para reedição.",
             level=messages.SUCCESS,
         )
         return HttpResponseRedirect(request.get_full_path())
@@ -1515,7 +1523,8 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         from django.http import HttpResponse
 
         return HttpResponse(
-            "Rota desativada. Use o módulo NBBPM em /admin/bem_patrimonial/nbbpm/ para visualizar e baixar o PDF consolidado (layout lote).",
+            "Rota desativada. Use o módulo NBBPM em /admin/bem_patrimonial/nbbpm/ para visualizar e baixar o PDF "
+            "consolidado (layout lote).",
             status=410,
             content_type="text/plain",
         )

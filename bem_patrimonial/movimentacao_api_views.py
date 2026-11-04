@@ -512,7 +512,8 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             destino_uo_id = mov.unidade_administrativa_destino.unidade_orcamentaria_id
             if not self._usuario_e_gestor_da_uo(user, destino_uo_id):
                 raise PermissionDenied(
-                    f"Movimentação #{mov.pk}: apenas gestores da UO de destino podem {acao} esta movimentação entre UOs."
+                    f"Movimentação #{mov.pk}: apenas gestores da UO de destino podem {acao} "
+                    "esta movimentação entre UOs."
                 )
 
     def _validar_acao_na_mesma_uo(self, mov, user, acao):
@@ -544,7 +545,8 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         destino_uo_id = mov.unidade_administrativa_destino.unidade_orcamentaria_id
         if usuario_uo_id not in (origem_uo_id, destino_uo_id):
             raise PermissionDenied(
-                f"Movimentação #{mov.pk}: apenas gestores da UO de origem ou destino podem cancelar esta movimentação entre UOs."
+                f"Movimentação #{mov.pk}: apenas gestores da UO de origem ou destino podem cancelar "
+                "esta movimentação entre UOs."
             )
 
     def _validar_cancelamento_em_uos_diferentes(self, mov, user):

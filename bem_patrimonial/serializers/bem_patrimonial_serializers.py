@@ -391,7 +391,9 @@ class BemPatrimonialDetailSerializer(_BemPatrimonialBaseMixin, serializers.Model
             if "numero_patrimonial" in str(e).lower():
                 raise serializers.ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": (
+                            "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        )
                     }
                 )
             raise
@@ -409,7 +411,9 @@ class BemPatrimonialDetailSerializer(_BemPatrimonialBaseMixin, serializers.Model
             if "numero_patrimonial" in str(e).lower():
                 raise serializers.ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": (
+                            "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        )
                     }
                 )
             raise

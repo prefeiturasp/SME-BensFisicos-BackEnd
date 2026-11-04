@@ -356,7 +356,9 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         if "numero_processo_baixa" in (self.initial_data or {}):
             raise serializers.ValidationError(
                 {
-                    "numero_processo_baixa": "Este campo não pode ser enviado na criação. Será definido no aceite pelo gestor."
+                    "numero_processo_baixa": (
+                        "Este campo não pode ser enviado na criação. Será definido no aceite pelo gestor."
+                    )
                 }
             )
         ua_origem = attrs.get("unidade_administrativa_origem")
@@ -612,7 +614,9 @@ class BaixaFisicaAprovarSerializer(serializers.Serializer):
         required=True,
         allow_blank=False,
         max_length=64,
-        help_text=f"Número do processo obrigatório no formato XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})",
+        help_text=(
+            f"Número do processo obrigatório no formato XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})"
+        ),
     )
 
     def validate_numero_processo_baixa(self, value: str) -> str:
