@@ -10,8 +10,11 @@ WORKDIR /code
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     && groupadd --system app \
     && useradd --system --gid app --create-home app \
+    && mkdir -p /tmp/.pre-commit-cache \
+    && chmod 777 /tmp/.pre-commit-cache \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements /code/requirements
