@@ -85,9 +85,11 @@ docs-clean:
 	rm -rf docs/_build docs/_cov
 
 precommit: ensure-env
-	$(RUN_WEB_NODEPS) sh -c 'export HOME=/tmp && git config --global --add safe.directory /code && python -m pre_commit run --files $$(find bem_patrimonial usuario inventario dados_comuns config docs scripts -type f) .env.example .gitignore .pre-commit-config.yaml Dockerfile Dockerfile.dev docker-compose-dev.yml pyproject.toml README.md CHANGELOG.md Makefile manage.py'
+	$(RUN_WEB_NODEPS) sh -c 'export HOME=/tmp PRE_COMMIT_HOME=/tmp/.pre-commit-cache && git config --global --add safe.directory /code && python -m pre_commit run --files $$(find bem_patrimonial usuario inventario dados_comuns config docs -type f) .env.example .gitignore .pre-commit-config.yaml Dockerfile Dockerfile.dev docker-compose-dev.yml pyproject.toml README.md CHANGELOG.md Makefile manage.py'
+	@echo "precommit ok: black e ruff verdes"
 
 quality: lint typecheck test docs
+	@echo "quality ok: lint, typecheck, test e docs verdes"
 
 clean-local:
 	rm -rf .venv .pytest_cache .mypy_cache .ruff_cache htmlcov docs/_build docs/_cov bens_fisicos_backend.egg-info .coverage db.sqlite3
