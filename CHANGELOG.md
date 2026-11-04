@@ -6,7 +6,7 @@ Histórico anterior completo em [GitHub Releases](https://github.com/prefeituras
 - Padronização da estrutura: `.env.example` como modelo único. `requirements/` por ambiente. `docs/` mínima com Sphinx. `pyproject`, `pre-commit`, `Makefile` com alvos de qualidade e `sonar-project.properties`.
 - Configurações com `settings/prod` incremental. Compose dev sem o serviço `db-init` e com verificação de saúde no `web`. Verificação de saúde pública em `/api/health/`. Documentação OpenAPI com grupos padronizados.
 - Código conformado: `lint` e `typecheck` zerados. Suíte com 1522 testes após renomear `teste_nbbpm_lote.py` para `test_nbbpm_lote.py`. `init-db` exige as variáveis `SUPER_USER_*`.
-- Remoções da etapa: pasta `scripts` mais `db_init.sql` desatualizado. `env.sample` como duplicata do `.env.example`. Arquivo único `requirements.txt` com os `Dockerfiles` apontando direto para `requirements/`.
+- Remoções da etapa: pasta `scripts` e `db_init.sql` desatualizado removidos. `env.sample` como duplicata do `.env.example`. Arquivo único `requirements.txt` com os `Dockerfiles` apontando direto para `requirements/`.
 
 ## 2.7.0 - 2026-11-03
 - Baixa física: edição do número do processo (#265), propagação da correção para bens vinculados (#267), rastreabilidade da alteração (#269), histórico com NBBPM vinculada (#272), bloqueio de baixa aberta e atualização de solicitante (#275).

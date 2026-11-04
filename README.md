@@ -28,7 +28,7 @@ O provisionamento de grupos/permissões é feito por comando de gestão.
 - Fluxo de baixa física de bens.
 - Transferência de bens entre unidades e secretarias.
 - Importação de bens e conciliação de inventário por unidade administrativa.
-- API REST para bens e autenticação, com documentação OpenAPI.
+- API REST com documentação OpenAPI.
 
 ## Stack
 
@@ -109,11 +109,11 @@ Veja todos com `make help`. Os principais:
 - `make coverage` - relatório de cobertura
 - `make schema` - gera o OpenAPI em `docs/_build/schema.yml`
 - `make docs` - gera a documentação Sphinx em `docs/_build/html`
-- `make quality` - roda lint mais typecheck mais teste mais docs
+- `make quality` - executa lint, typecheck, testes e docs em sequência
 - `make migrate` - aplica migrations no banco local
 - `make shell` - shell Django no container
 
-Exemplos com outro compose ou app específico usam `docker compose -f docker-compose-dev.yml run --rm web ...`.
+Para outros casos use `docker compose -f docker-compose-dev.yml run --rm web ...`.
 
 ## Google Analytics no Django Admin
 
