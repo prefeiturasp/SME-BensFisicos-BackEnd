@@ -960,7 +960,7 @@ class ItemConciliacaoViewSet(
         self._get_conciliacao()
         item = self.get_object()
         situacoes = self._get_situacoes_disponiveis_para_item(item)
-        return Response([{"value": v, "label": l} for v, l in situacoes])
+        return Response([{"value": v, "label": label} for v, label in situacoes])
 
     def _get_situacoes_disponiveis_para_item(self, item):
         situacoes = list(constants.SITUACOES_ITEM_CONCILIACAO)

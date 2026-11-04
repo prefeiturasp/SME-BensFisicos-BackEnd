@@ -284,24 +284,24 @@ do usuário serão incluídas.
 IMPORTAR_BENS_DOC = dedent(
     """
 Importa bens patrimoniais em lote a partir de uma planilha.
- 
+
 O arquivo deve ser enviado como `multipart/form-data` no campo `arquivo`.
- 
+
 ### Formatos aceitos
- 
+
 - **XLSX** (recomendado)
 - **XLS**
 - **CSV** (UTF-8 ou Latin-1)
- 
+
 Tamanho máximo: **10 MB**.
- 
+
 ---
- 
+
 ### Colunas esperadas na planilha
- 
+
 O cabeçalho aceita variações de caixa e acentuação
 (ex: `Número Patrimonial`, `NUMERO PATRIMONIAL`, `numero_patrimonial`).
- 
+
 | Coluna | Observações |
 |---|---|
 | `numero_patrimonial` | Vazio = bem sem numeração |
@@ -312,11 +312,11 @@ O cabeçalho aceita variações de caixa e acentuação
 | `valor_unitario` | Formato: `0,00` ou `0.000,00` |
 | `numero_processo` | |
 | `localizacao` | |
- 
+
 ---
- 
+
 ### Regras de negócio
- 
+
 - A **Unidade Administrativa** e a **Unidade Orçamentária** dos bens importados
   são sempre as do usuário autenticado. Qualquer coluna UA na planilha é ignorada.
 - O usuário deve ter uma UA ativa vinculada ao perfil. Caso contrário,
@@ -325,13 +325,13 @@ O cabeçalho aceita variações de caixa e acentuação
 - Linhas com `numero_patrimonial` duplicado (dentro do arquivo ou já no banco)
   são **ignoradas individualmente** — as demais linhas são salvas normalmente.
 - `sem_numeracao` e `numero_formato_antigo` são inferidos automaticamente.
- 
+
 ---
- 
+
 ### Retornos HTTP
- 
+
 #### `201 Created` — todos os bens importados sem erros
- 
+
 ```json
 {
   "detail": "42 bem(ns) importado(s) com sucesso.",
@@ -340,9 +340,9 @@ O cabeçalho aceita variações de caixa e acentuação
   "total_linhas": 42
 }
 ```
- 
+
 #### `207 Multi-Status` — importação parcial (alguns importados, alguns com erro)
- 
+
 ```json
 {
   "detail": "38 bem(ns) importado(s) com sucesso. 4 linha(s) com erro foram ignoradas.",
@@ -355,9 +355,9 @@ O cabeçalho aceita variações de caixa e acentuação
   ]
 }
 ```
- 
+
 #### `400 Bad Request` — arquivo ausente, formato inválido ou tamanho excedido
- 
+
 ```json
 {
   "detail": "Arquivo inválido.",
@@ -366,17 +366,17 @@ O cabeçalho aceita variações de caixa e acentuação
   }
 }
 ```
- 
+
 #### `403 Forbidden` — usuário sem UA vinculada ou UA inativa
- 
+
 ```json
 {
   "detail": "Não é possível importar bens: seu usuário não possui uma Unidade Administrativa vinculada. Entre em contato com o gestor de patrimônio."
 }
 ```
- 
+
 #### `422 Unprocessable Entity` — planilha vazia, ilegível ou todas as linhas com erro
- 
+
 ```json
 {
   "detail": "Nenhum bem foi importado. Todas as linhas contêm erros. Corrija o arquivo e tente novamente.",
@@ -386,24 +386,24 @@ O cabeçalho aceita variações de caixa e acentuação
   "erros_por_linha": ["Linha 1 | Número Patrimonial: 001.000000001-0 | Erro: ..."]
 }
 ```
- 
+
 #### `500 Internal Server Error` — erro inesperado durante o processamento
- 
+
 ```json
 {
   "detail": "Erro inesperado durante a importação.",
   "erro": "descrição técnica do erro"
 }
 ```
- 
+
 ---
- 
+
 ### Observações
- 
+
 - Mesmo com erros parciais (`207`), os bens válidos **já foram persistidos**.
   Não há rollback das linhas bem-sucedidas.
 - A rota não suporta dry-run via API. Use o Admin Django para pré-visualizar.
- 
+
 Somente usuários com permissão de criação de bens patrimoniais podem usar este endpoint.
 """
 )
@@ -412,24 +412,24 @@ Somente usuários com permissão de criação de bens patrimoniais podem usar es
 SOLICITAR_CORRECAO_DOC = dedent(
     """
 Solicita correção de uma baixa física, devolvendo-a ao solicitante original.
- 
+
 ### Quando usar
- 
+
 O Gestor utiliza este endpoint ao revisar uma baixa com status **Solicitada**
 e identificar que um ou mais itens precisam de ajuste antes da aprovação.
- 
+
 ### Diferença em relação a `recusar`
- 
+
 - **`recusar`**: encerra definitivamente o processo (status → Recusada).
 - **`solicitar-correcao`**: devolve a baixa para edição (status →
   Em elaboração), permitindo que o solicitante ajuste os itens e
   reenvie para nova análise.
- 
+
 ### Parâmetros obrigatórios
- 
+
 - **motivo** → texto livre com as orientações sobre o que precisa ser
   corrigido (obrigatório, não pode ser vazio)
- 
+
 ### Comportamento
 
  1. Valida que o status atual da baixa é **Solicitada**
@@ -438,12 +438,12 @@ e identificar que um ou mais itens precisam de ajuste antes da aprovação.
 4. Registra o motivo no histórico da baixa
 5. Notifica o solicitante original por e-mail (melhor esforço,
    falhas de envio não impedem a operação)
- 
+
 ### Retorno
- 
+
 Retorna o objeto **BaixaFisicaBemPatrimonialDetailSerializer** atualizado,
 já refletindo o novo status.
- 
+
 **Importante:** este endpoint só pode ser chamado a partir do status
 Solicitada. Para baixas em outros status, a API retorna erro de validação.
 """
