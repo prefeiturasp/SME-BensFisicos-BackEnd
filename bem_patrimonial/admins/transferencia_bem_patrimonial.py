@@ -4,13 +4,13 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
-from bem_patrimonial.models import TransferenciaBemPatrimonial
 from bem_patrimonial.admins.forms.transferencia_bem_patrimonial_form import (
     TransferenciaBemPatrimonialForm,
 )
 from bem_patrimonial.admins.inlines.inlines import TransferenciaBensItemInline
-from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
+from bem_patrimonial.models import TransferenciaBemPatrimonial
 from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
+from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
 
 
 class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
@@ -56,9 +56,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
         "itens__bem__numero_patrimonial",
         "itens__bem__nome",
     )
-    search_help_text = (
-        "Pesquise por número do processo, UO de origem/destino e número patrimonial ou nome do bem."
-    )
+    search_help_text = "Pesquise por número do processo, UO de origem/destino e número patrimonial ou nome do bem."
     readonly_fields = (
         "numero_ntbpm",
         "get_documento_ntbpm_link",
@@ -139,11 +137,10 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
     def save_model(self, request, obj, form, change):
         if obj.pk is None:
             obj.criado_por = request.user
-        obj.unidade_administrativa_destino = form.cleaned_data[
-            "unidade_administrativa_destino"
-        ]
+        obj.unidade_administrativa_destino = form.cleaned_data["unidade_administrativa_destino"]
         super().save_model(request, obj, form, change)
 
+    @admin.display(description="Documento NTBPM")
     def get_documento_ntbpm_link(self, obj):
         if obj and obj.numero_ntbpm:
             url_protegida = reverse("download_documento_ntbpm", kwargs={"pk": obj.pk})
@@ -152,8 +149,6 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
                 url_protegida,
             )
         return "Número NTBPM não gerado"
-
-    get_documento_ntbpm_link.short_description = "Documento NTBPM"
 
     def _get_changeform_extra_context(self, object_id=None, extra_context=None):
         context = dict(extra_context or {})
@@ -173,6 +168,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
 
         return context
 
+    @admin.display(description="Bens transferidos")
     def get_bens_transferidos_links(self, obj):
         itens = list(
             obj.itens.select_related("bem", "bem__unidade_administrativa").order_by(
@@ -201,13 +197,9 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
             ),
         )
 
-    get_bens_transferidos_links.short_description = "Bens transferidos"
-
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         if object_id is not None and request.method == "POST":
-            raise PermissionDenied(
-                "Transferencias existentes estao disponiveis apenas para visualizacao."
-            )
+            raise PermissionDenied("Transferencias existentes estao disponiveis apenas para visualizacao.")
 
         with transaction.atomic():
             return super().changeform_view(
@@ -225,9 +217,7 @@ class TransferenciaBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmi
             transferencia.efetivar_transferencia(request.user)
 
     def get_inline_formsets(self, request, formsets, inline_instances, obj=None):
-        inline_formsets = super().get_inline_formsets(
-            request, formsets, inline_instances, obj
-        )
+        inline_formsets = super().get_inline_formsets(request, formsets, inline_instances, obj)
 
         if obj is not None:
             for formset in inline_formsets:

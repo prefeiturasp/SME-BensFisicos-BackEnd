@@ -1,9 +1,9 @@
-from django.db import models
 from django.contrib.auth.models import AbstractUser
-from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
+from django.db import models
 
-from dados_comuns.models import UnidadeOrcamentaria, UnidadeAdministrativa
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
@@ -50,16 +50,13 @@ class Usuario(AbstractUser):
 
         if self.unidade_administrativa and not self.unidade_orcamentaria:
             raise ValidationError(
-                {
-                    "unidade_orcamentaria": "Informe a Unidade Orçamentária antes de definir a Unidade Administrativa."
-                }
+                {"unidade_orcamentaria": "Informe a Unidade Orçamentária antes de definir a Unidade Administrativa."}
             )
 
         if (
             self.unidade_orcamentaria
             and self.unidade_administrativa
-            and self.unidade_administrativa.unidade_orcamentaria_id
-            != self.unidade_orcamentaria_id
+            and self.unidade_administrativa.unidade_orcamentaria_id != self.unidade_orcamentaria_id
         ):
             raise ValidationError(
                 {
@@ -78,9 +75,7 @@ class Usuario(AbstractUser):
     @property
     def uas_permitidas(self):
         if self.is_superuser:
-            return UnidadeAdministrativa.objects.filter(
-                status=UnidadeAdministrativa.ATIVA
-            )
+            return UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
         if self.is_gestor_patrimonio:
             uo_id = self.unidade_orcamentaria_id
             if uo_id:

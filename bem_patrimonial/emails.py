@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.utils import timezone
+
 from config.utils import email_utils
 from usuario.models import Usuario
 
@@ -8,9 +9,7 @@ URL_BAIXA_FISICA_CHANGE = "{}/bem_patrimonial/baixafisicabempatrimonial/{}/chang
 
 
 def envia_email_cadastro_nao_aprovado(status):
-    object_url = "{}/bem_patrimonial/bempatrimonial/{}/change/".format(
-        settings.ADMIN_URL, status.bem_patrimonial.id
-    )
+    object_url = "{}/bem_patrimonial/bempatrimonial/{}/change/".format(settings.ADMIN_URL, status.bem_patrimonial.id)
     subject = "[Bens Físicos] Cadastro não aprovado"
     email_context = {
         "subject": subject,
@@ -37,11 +36,7 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
 
     ua_destino = movimentacao.unidade_administrativa_destino
 
-    ua_info = (
-        f"{ua_destino.codigo} – {ua_destino.nome}"
-        if ua_destino.codigo
-        else ua_destino.nome
-    )
+    ua_info = f"{ua_destino.codigo} – {ua_destino.nome}" if ua_destino.codigo else ua_destino.nome
 
     itens = movimentacao.itens.select_related("bem").all()
 
@@ -52,20 +47,12 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
         if not bem:
             continue
 
-        identificador = (
-            f"{bem.numero_patrimonial} – {bem.nome}"
-            if bem.numero_patrimonial
-            else bem.nome
-        )
+        identificador = f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
         bens_info.append(identificador)
 
     if not bens_info and movimentacao.bem_patrimonial:
         bem = movimentacao.bem_patrimonial
-        identificador = (
-            f"{bem.numero_patrimonial} – {bem.nome}"
-            if bem.numero_patrimonial
-            else bem.nome
-        )
+        identificador = f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
         bens_info.append(identificador)
 
     if not bens_info:
@@ -104,9 +91,7 @@ def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(
-        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
-    )
+    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
 
 
 def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
@@ -120,14 +105,10 @@ def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
             bem_patrimonial.__str__(), settings.ADMIN_URL
         ),
     }
-    email_utils.send_email_ctrl(
-        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
-    )
+    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
 
 
-def envia_email_solicitacao_movimentacao_cancelada(
-    bem_patrimonial, cancelado_por, emails=[]
-):
+def envia_email_solicitacao_movimentacao_cancelada(bem_patrimonial, cancelado_por, emails=[]):
     subject = "[Bens físicos] Sua solicitação de movimentação foi cancelada."
     email_context = {
         "subject": subject,
@@ -140,9 +121,7 @@ def envia_email_solicitacao_movimentacao_cancelada(
             settings.ADMIN_URL,
         ),
     }
-    email_utils.send_email_ctrl(
-        subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails
-    )
+    email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
 
 
 def _bens_info_de_movimentacao(mov, max_bens_por_mov):
@@ -155,19 +134,11 @@ def _bens_info_de_movimentacao(mov, max_bens_por_mov):
         bem = item.bem
         if not bem:
             continue
-        identificador = (
-            f"{bem.numero_patrimonial} – {bem.nome}"
-            if bem.numero_patrimonial
-            else bem.nome
-        )
+        identificador = f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
         bens_info.append(identificador)
     if not bens_info and mov.bem_patrimonial:
         bem = mov.bem_patrimonial
-        identificador = (
-            f"{bem.numero_patrimonial} – {bem.nome}"
-            if bem.numero_patrimonial
-            else bem.nome
-        )
+        identificador = f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
         bens_info.append(identificador)
     return bens_info, total_itens
 
@@ -210,9 +181,7 @@ def envia_email_movimentacoes_pendentes_aceite(
         )
 
     total_urgentes = sum(1 for m in movimentacoes_info if m["urgente"])
-    pendentes_url = (
-        f"{settings.ADMIN_URL}/bem_patrimonial/movimentacaobempatrimonial/?atrasada=1"
-    )
+    pendentes_url = f"{settings.ADMIN_URL}/bem_patrimonial/movimentacaobempatrimonial/?atrasada=1"
     subject = "[Bens Físicos] Movimentações pendentes de aceite"
     dict_params = {
         "subject": subject,
@@ -248,11 +217,7 @@ def _formata_lista_bens_baixa(baixa_fisica):
         if not bem:
             continue
 
-        identificador = (
-            f"{bem.numero_patrimonial} – {bem.nome}"
-            if bem.numero_patrimonial
-            else bem.nome
-        )
+        identificador = f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
         bens_info.append(identificador)
 
     if not bens_info:
@@ -350,9 +315,7 @@ def envia_email_baixa_fisica_correcao_solicitada(baixa_fisica, usuario_solicitan
     object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     solicitante_nome = (
-        usuario_solicitante.nome or usuario_solicitante.username
-        if usuario_solicitante
-        else "gestor responsável"
+        usuario_solicitante.nome or usuario_solicitante.username if usuario_solicitante else "gestor responsável"
     )
 
     lista_bens_formatada = _formata_lista_bens_baixa(baixa_fisica) or ""
@@ -388,9 +351,7 @@ def envia_email_baixa_fisica_cancelada(baixa_fisica, usuario_cancelador):
     object_url = URL_BAIXA_FISICA_CHANGE.format(settings.ADMIN_URL, baixa_fisica.id)
 
     cancelador_nome = (
-        usuario_cancelador.nome or usuario_cancelador.username
-        if usuario_cancelador
-        else "gestor responsável"
+        usuario_cancelador.nome or usuario_cancelador.username if usuario_cancelador else "gestor responsável"
     )
 
     lista_bens_formatada = _formata_lista_bens_baixa(baixa_fisica) or ""

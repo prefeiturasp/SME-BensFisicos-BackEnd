@@ -1,17 +1,16 @@
-from rest_framework import viewsets, status, filters, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend
 import django_filters
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import filters, mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
+from bem_patrimonial.api_serializers import NBBPMDetailSerializer, NBBPMGerarLoteSerializer, NBBPMSerializer
 from bem_patrimonial.models import NBBPM
-from bem_patrimonial.api_serializers import NBBPMSerializer, NBBPMDetailSerializer, NBBPMGerarLoteSerializer
 from bem_patrimonial.nbbpm_lote import http_response_nbbpm_lote
 from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
 from dados_comuns.escopo import resolver_ids_escopo
-
-from drf_spectacular.utils import extend_schema, OpenApiResponse
 
 
 class IsGestorPatrimonioOrSuperUser(IsAuthenticated):
@@ -30,7 +29,7 @@ class NBBPMFilter(django_filters.FilterSet):
 
     class Meta:
         model = NBBPM
-        fields = []
+        fields: list[str] = []
 
 
 class NBBPMViewSet(
@@ -57,9 +56,13 @@ class NBBPMViewSet(
     ordering = ["-data_criacao"]
 
     def get_queryset(self):
-        qs = NBBPM.objects.all().select_related("criado_por").prefetch_related(
-            "baixas__unidade_administrativa_origem__unidade_orcamentaria",
-            "baixas__itens__bem",
+        qs = (
+            NBBPM.objects.all()
+            .select_related("criado_por")
+            .prefetch_related(
+                "baixas__unidade_administrativa_origem__unidade_orcamentaria",
+                "baixas__itens__bem",
+            )
         )
 
         user = self.request.user
@@ -69,9 +72,7 @@ class NBBPMViewSet(
             return qs.filter(baixas__unidade_administrativa_origem_id=ua_id).distinct()
 
         if is_gestor and uo_id:
-            return qs.filter(
-                baixas__unidade_administrativa_origem__unidade_orcamentaria_id=uo_id
-            ).distinct()
+            return qs.filter(baixas__unidade_administrativa_origem__unidade_orcamentaria_id=uo_id).distinct()
 
         return qs.none()
 

@@ -1,4 +1,4 @@
-from dados_comuns.models import UnidadeOrcamentaria, UnidadeAdministrativa
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 
 
 def criar_uo(codigo="200", nome="UO Teste", sigla="UO", **kwargs):

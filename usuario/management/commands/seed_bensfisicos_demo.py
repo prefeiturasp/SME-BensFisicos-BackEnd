@@ -1,10 +1,11 @@
 from decimal import Decimal
-from django.core.management.base import BaseCommand, CommandError
+
 from django.apps import apps
-from django.db import transaction, models
-from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand, CommandError
+from django.db import models, transaction
 from django.db.models.signals import post_save
+from django.utils import timezone
 
 
 def get_model(label: str):
@@ -36,6 +37,7 @@ def _get_receiver_func():
         from bem_patrimonial.models import (
             cria_registro_unidade_administrativa_bem_patrimonial as receiver_func,
         )  # noqa: F401
+
         return receiver_func
     except Exception:
         return None
@@ -122,11 +124,7 @@ def _fill_bem_campos_simples(bem_model, bem_kwargs, idx_ua, i, seq, today, now):
         put_if_field(field_name, value, default_only=True)
 
     status_field = next(
-        (
-            name
-            for name in ("status_atual", "situacao", "situacao_atual", "status")
-            if has_field(bem_model, name)
-        ),
+        (name for name in ("status_atual", "situacao", "situacao_atual", "status") if has_field(bem_model, name)),
         None,
     )
     if status_field and status_field not in bem_kwargs:
@@ -218,8 +216,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("✔ Criadas 2 UnidadesAdministrativas"))
 
         fk_bem_ua = first_fk_to(bem_model, ua_model) or (
-            has_field(bem_model, "unidade_administrativa")
-            and "unidade_administrativa"
+            has_field(bem_model, "unidade_administrativa") and "unidade_administrativa"
         )
         fk_through_bem = first_fk_to(through_model, bem_model) if through_model else None
         fk_through_ua = first_fk_to(through_model, ua_model) if through_model else None

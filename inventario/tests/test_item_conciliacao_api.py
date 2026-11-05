@@ -37,18 +37,10 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.bem_ua1_a = self._criar_bem(
-            self.ua1, numero_patrimonial="001.000000001-1"
-        )
-        self.bem_ua1_b = self._criar_bem(
-            self.ua1, numero_patrimonial="001.000000002-2"
-        )
-        self.bem_ua2 = self._criar_bem(
-            self.ua2, numero_patrimonial="001.000000003-3"
-        )
-        self.bem_fora = self._criar_bem(
-            self.ua_fora, numero_patrimonial="001.000000004-4"
-        )
+        self.bem_ua1_a = self._criar_bem(self.ua1, numero_patrimonial="001.000000001-1")
+        self.bem_ua1_b = self._criar_bem(self.ua1, numero_patrimonial="001.000000002-2")
+        self.bem_ua2 = self._criar_bem(self.ua2, numero_patrimonial="001.000000003-3")
+        self.bem_fora = self._criar_bem(self.ua_fora, numero_patrimonial="001.000000004-4")
 
         self.item_a = ItemConciliacao.objects.create(
             conciliacao=self.conciliacao_ua1,
@@ -80,17 +72,13 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
             situacao=constants.ENCONTRADO_SEM_DIVERGENCIA,
         )
 
-        self.list_url = reverse(
-            "itens-conciliacao-list", args=[self.conciliacao_ua1.id]
-        )
+        self.list_url = reverse("itens-conciliacao-list", args=[self.conciliacao_ua1.id])
 
     def _list_url(self, conciliacao_id):
         return reverse("itens-conciliacao-list", args=[conciliacao_id])
 
     def _detail_url(self, conciliacao_id, item_id):
-        return reverse(
-            "itens-conciliacao-detail", args=[conciliacao_id, item_id]
-        )
+        return reverse("itens-conciliacao-detail", args=[conciliacao_id, item_id])
 
     def _registrar_url(self, conciliacao_id, item_id):
         return reverse(
@@ -153,17 +141,13 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_filtro_por_situacao(self):
         self._auth(self.operador)
-        response = self.client.get(
-            self.list_url, {"situacao": constants.DIVERGENTE}
-        )
+        response = self.client.get(self.list_url, {"situacao": constants.DIVERGENTE})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
         self.assertEqual(ids, {self.item_b.id})
 
     def test_filtro_por_multiplas_situacoes(self):
-        bem_nao_encontrado = self._criar_bem(
-            self.ua1, numero_patrimonial="001.000000005-5"
-        )
+        bem_nao_encontrado = self._criar_bem(self.ua1, numero_patrimonial="001.000000005-5")
         item_nao_encontrado = ItemConciliacao.objects.create(
             conciliacao=self.conciliacao_ua1,
             bem=bem_nao_encontrado,
@@ -176,9 +160,7 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
-        self.assertEqual(
-            ids, {self.item_b.id, item_nao_encontrado.id}
-        )
+        self.assertEqual(ids, {self.item_b.id, item_nao_encontrado.id})
 
     def test_filtro_por_situacao_invalida_retorna_400(self):
         self._auth(self.operador)
@@ -199,9 +181,7 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
         ids_esperados = set(
-            ItemConciliacao.objects.filter(
-                conciliacao=self.conciliacao_ua1
-            ).values_list("id", flat=True)
+            ItemConciliacao.objects.filter(conciliacao=self.conciliacao_ua1).values_list("id", flat=True)
         )
         self.assertEqual(ids, ids_esperados)
 
@@ -221,9 +201,7 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_busca_por_numero_patrimonial(self):
         self._auth(self.operador)
-        response = self.client.get(
-            self.list_url, {"search": "000000001-1"}
-        )
+        response = self.client.get(self.list_url, {"search": "000000001-1"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data["results"]}
         self.assertEqual(ids, {self.item_a.id})
@@ -232,9 +210,7 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
         self._auth(self.operador)
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(
-            set(response.data["results"][0].keys()), self.LIST_FIELDS
-        )
+        self.assertEqual(set(response.data["results"][0].keys()), self.LIST_FIELDS)
 
     def test_listagem_inclui_bem_com_bloqueado_e_localizacao(self):
         self._auth(self.operador)
@@ -247,30 +223,22 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_retrieve_retorna_detalhe_completo(self):
         self._auth(self.operador)
-        response = self.client.get(
-            self._detail_url(self.conciliacao_ua1.id, self.item_b.id)
-        )
+        response = self.client.get(self._detail_url(self.conciliacao_ua1.id, self.item_b.id))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.item_b.id)
-        self.assertTrue(
-            self.DETAIL_EXTRA_FIELDS.issubset(set(response.data.keys()))
-        )
+        self.assertTrue(self.DETAIL_EXTRA_FIELDS.issubset(set(response.data.keys())))
         self.assertEqual(len(response.data["ocorrencias"]), 1)
         self.assertTrue(response.data["tem_ocorrencia"])
         self.assertTrue(response.data["conciliacao_esta_aberto"])
 
     def test_retrieve_fora_do_escopo_retorna_404(self):
         self._auth(self.operador)
-        response = self.client.get(
-            self._detail_url(self.conciliacao_ua2.id, self.item_ua2.id)
-        )
+        response = self.client.get(self._detail_url(self.conciliacao_ua2.id, self.item_ua2.id))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_retrieve_item_nao_pertence_a_conciliacao_retorna_404(self):
         self._auth(self.operador)
-        response = self.client.get(
-            self._detail_url(self.conciliacao_ua1.id, self.item_ua2.id)
-        )
+        response = self.client.get(self._detail_url(self.conciliacao_ua1.id, self.item_ua2.id))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_post_put_delete_nao_permitidos(self):
@@ -288,9 +256,7 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_registrar_ocorrencia_nao_encontrado(self):
         self._auth(self.operador)
-        url = self._registrar_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url = self._registrar_url(self.conciliacao_ua1.id, self.item_a.id)
         response = self.client.post(
             url,
             {
@@ -306,9 +272,7 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_registrar_ocorrencia_divergente_sem_divergencia_retorna_400(self):
         self._auth(self.operador)
-        url = self._registrar_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url = self._registrar_url(self.conciliacao_ua1.id, self.item_a.id)
         response = self.client.post(
             url,
             {"situacao": constants.DIVERGENTE, "divergencia": ""},
@@ -318,48 +282,31 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
         self.assertIn("divergencia", response.data)
 
     def test_registrar_ocorrencia_em_baixa_fisica_retorna_400(self):
-        ItemConciliacao.objects.filter(pk=self.item_a.pk).update(
-            situacao=constants.BAIXA_FISICA
-        )
+        ItemConciliacao.objects.filter(pk=self.item_a.pk).update(situacao=constants.BAIXA_FISICA)
         self.item_a.refresh_from_db()
         self._auth(self.operador)
-        url = self._registrar_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
-        response = self.client.post(
-            url, {"situacao": constants.NAO_ENCONTRADO}, format="json"
-        )
+        url = self._registrar_url(self.conciliacao_ua1.id, self.item_a.id)
+        response = self.client.post(url, {"situacao": constants.NAO_ENCONTRADO}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_registrar_ocorrencia_baixa_fisica_rejeitado(self):
         self._auth(self.operador)
-        url = self._registrar_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
-        response = self.client.post(
-            url, {"situacao": constants.BAIXA_FISICA}, format="json"
-        )
+        url = self._registrar_url(self.conciliacao_ua1.id, self.item_a.id)
+        response = self.client.post(url, {"situacao": constants.BAIXA_FISICA}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_registrar_ocorrencia_conciliacao_fechada_retorna_400(self):
         from inventario.models import ConciliacaoUA
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.operador)
-        url = self._registrar_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
-        response = self.client.post(
-            url, {"situacao": constants.NAO_ENCONTRADO}, format="json"
-        )
+        url = self._registrar_url(self.conciliacao_ua1.id, self.item_a.id)
+        response = self.client.post(url, {"situacao": constants.NAO_ENCONTRADO}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_registrar_ocorrencia_edita_ocorrencia_existente(self):
         self._auth(self.operador)
-        url = self._registrar_url(
-            self.conciliacao_ua1.id, self.item_b.id
-        )
+        url = self._registrar_url(self.conciliacao_ua1.id, self.item_b.id)
         response = self.client.post(
             url,
             {
@@ -375,19 +322,13 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_registrar_ocorrencia_fora_do_escopo_retorna_404(self):
         self._auth(self.operador)
-        url = self._registrar_url(
-            self.conciliacao_ua2.id, self.item_ua2.id
-        )
-        response = self.client.post(
-            url, {"situacao": constants.NAO_ENCONTRADO}, format="json"
-        )
+        url = self._registrar_url(self.conciliacao_ua2.id, self.item_ua2.id)
+        response = self.client.post(url, {"situacao": constants.NAO_ENCONTRADO}, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_excluir_ocorrencia(self):
         self._auth(self.operador)
-        url = self._excluir_url(
-            self.conciliacao_ua1.id, self.item_b.id
-        )
+        url = self._excluir_url(self.conciliacao_ua1.id, self.item_b.id)
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.item_b.refresh_from_db()
@@ -396,37 +337,28 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_excluir_ocorrencia_sem_ocorrencia_retorna_400(self):
         self._auth(self.operador)
-        url = self._excluir_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url = self._excluir_url(self.conciliacao_ua1.id, self.item_a.id)
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_excluir_ocorrencia_conciliacao_fechada_retorna_400(self):
         from inventario.models import ConciliacaoUA
-        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+
+        ConciliacaoUA.objects.filter(pk=self.conciliacao_ua1.pk).update(status=constants.CONCILIACAO_FECHADO)
         self._auth(self.operador)
-        url = self._excluir_url(
-            self.conciliacao_ua1.id, self.item_b.id
-        )
+        url = self._excluir_url(self.conciliacao_ua1.id, self.item_b.id)
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_excluir_ocorrencia_fora_do_escopo_retorna_404(self):
         self._auth(self.operador)
-        url = self._excluir_url(
-            self.conciliacao_ua2.id, self.item_ua2.id
-        )
+        url = self._excluir_url(self.conciliacao_ua2.id, self.item_ua2.id)
         response = self.client.post(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_situacoes_disponiveis_item_sem_ocorrencia(self):
         self._auth(self.operador)
-        url = self._situacoes_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url = self._situacoes_url(self.conciliacao_ua1.id, self.item_a.id)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         values = {s["value"] for s in response.data}
@@ -436,14 +368,10 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
         self.assertIn(constants.NAO_ENCONTRADO, values)
 
     def test_situacoes_disponiveis_item_nao_encontrado(self):
-        ItemConciliacao.objects.filter(pk=self.item_a.pk).update(
-            situacao=constants.NAO_ENCONTRADO
-        )
+        ItemConciliacao.objects.filter(pk=self.item_a.pk).update(situacao=constants.NAO_ENCONTRADO)
         self.item_a.refresh_from_db()
         self._auth(self.operador)
-        url = self._situacoes_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url = self._situacoes_url(self.conciliacao_ua1.id, self.item_a.id)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         values = {s["value"] for s in response.data}
@@ -451,33 +379,23 @@ class ItemConciliacaoAPITestCase(ConciliacaoAPIBaseTestCase):
 
     def test_historico_do_item_apos_registrar_ocorrencia(self):
         self._auth(self.operador)
-        url_registrar = self._registrar_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url_registrar = self._registrar_url(self.conciliacao_ua1.id, self.item_a.id)
         self.client.post(
             url_registrar,
             {"situacao": constants.NAO_ENCONTRADO, "observacao": "Perdido"},
             format="json",
         )
 
-        url_historico = self._historico_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url_historico = self._historico_url(self.conciliacao_ua1.id, self.item_a.id)
         response = self.client.get(url_historico)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsInstance(response.data, list)
-        campos = {
-            acao["campo"]
-            for grupo in response.data
-            for acao in grupo["acoes"]
-        }
+        campos = {acao["campo"] for grupo in response.data for acao in grupo["acoes"]}
         self.assertIn("situacao", campos)
 
     def test_historico_item_vazio(self):
         self._auth(self.operador)
-        url = self._historico_url(
-            self.conciliacao_ua1.id, self.item_a.id
-        )
+        url = self._historico_url(self.conciliacao_ua1.id, self.item_a.id)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])

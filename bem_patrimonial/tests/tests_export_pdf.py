@@ -1,17 +1,18 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from decimal import Decimal
 import re
-from django.test import TestCase, RequestFactory
+from decimal import Decimal
+
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
+from django.test import RequestFactory, TestCase
 
-from bem_patrimonial.models import BemPatrimonial
-from bem_patrimonial.formats import PDFFormat
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
-from bem_patrimonial.constants import APROVADO, NAO_APROVADO, AGUARDANDO_APROVACAO
+from bem_patrimonial.constants import AGUARDANDO_APROVACAO, APROVADO, NAO_APROVADO
+from bem_patrimonial.formats import PDFFormat
+from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
@@ -182,15 +183,9 @@ class PDFExportDataTestCase(TestCase):
 
     def test_export_with_different_status(self):
 
-        self.test_data.create_bem_patrimonial(
-            self.usuario, status=APROVADO, nome="Aprovado"
-        )
-        self.test_data.create_bem_patrimonial(
-            self.usuario, status=NAO_APROVADO, nome="Rejeitado"
-        )
-        self.test_data.create_bem_patrimonial(
-            self.usuario, status=AGUARDANDO_APROVACAO, nome="Aguardando"
-        )
+        self.test_data.create_bem_patrimonial(self.usuario, status=APROVADO, nome="Aprovado")
+        self.test_data.create_bem_patrimonial(self.usuario, status=NAO_APROVADO, nome="Rejeitado")
+        self.test_data.create_bem_patrimonial(self.usuario, status=AGUARDANDO_APROVACAO, nome="Aguardando")
 
         pdf_format = PDFFormat()
         pdf_format._export_request = self.factory.get("/admin/")
@@ -239,19 +234,11 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         self.admin = BemPatrimonialAdmin(BemPatrimonial, self.site)
         self.factory = RequestFactory()
 
-        self.unidade1 = self.test_data.create_unidade_administrativa(
-            codigo=100, nome="DRE A"
-        )
-        self.unidade2 = self.test_data.create_unidade_administrativa(
-            codigo=202, nome="DRE B"
-        )
+        self.unidade1 = self.test_data.create_unidade_administrativa(codigo=100, nome="DRE A")
+        self.unidade2 = self.test_data.create_unidade_administrativa(codigo=202, nome="DRE B")
 
-        self.gestor = self.test_data.create_usuario(
-            "gestor", self.unidade1, GRUPO_GESTOR_PATRIMONIO
-        )
-        self.operador = self.test_data.create_usuario(
-            "operador", self.unidade1, GRUPO_OPERADOR_INVENTARIO
-        )
+        self.gestor = self.test_data.create_usuario("gestor", self.unidade1, GRUPO_GESTOR_PATRIMONIO)
+        self.operador = self.test_data.create_usuario("operador", self.unidade1, GRUPO_OPERADOR_INVENTARIO)
 
     def test_get_export_formats_includes_pdf(self):
         formats = self.admin.get_export_formats()
@@ -297,17 +284,13 @@ class BemPatrimonialAdminExportTestCase(TestCase):
         self.assertEqual(queryset.count(), 2)
 
     def test_get_export_queryset_operador_sees_only_own_unit(self):
-        bem_unidade1 = self.test_data.create_bem_patrimonial(
-            self.gestor, nome="Bem Unidade 1", status=APROVADO
-        )
+        bem_unidade1 = self.test_data.create_bem_patrimonial(self.gestor, nome="Bem Unidade 1", status=APROVADO)
         # garante vínculo na unidade1
         bem_unidade1.unidade_administrativa = self.unidade1
         bem_unidade1.save()
 
         usuario_unidade2 = self.test_data.create_usuario("user2", self.unidade2)
-        bem_unidade2 = self.test_data.create_bem_patrimonial(
-            usuario_unidade2, nome="Bem Unidade 2", status=APROVADO
-        )
+        bem_unidade2 = self.test_data.create_bem_patrimonial(usuario_unidade2, nome="Bem Unidade 2", status=APROVADO)
         # garante vínculo na unidade2
         bem_unidade2.unidade_administrativa = self.unidade2
         bem_unidade2.save()
@@ -354,9 +337,7 @@ class PDFContentTestCase(TestCase):
 
     def test_pdf_handles_none_values(self):
 
-        bem = self.test_data.create_bem_patrimonial(
-            self.usuario, numero_patrimonial=None, localizacao=None
-        )
+        bem = self.test_data.create_bem_patrimonial(self.usuario, numero_patrimonial=None, localizacao=None)
 
         pdf_format = PDFFormat()
         pdf_format._export_request = self.factory.get("/admin/")

@@ -1,5 +1,5 @@
-from contextlib import contextmanager
 import threading
+from contextlib import contextmanager
 
 _local = threading.local()
 

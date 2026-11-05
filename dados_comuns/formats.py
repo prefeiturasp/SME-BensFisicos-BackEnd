@@ -1,21 +1,22 @@
 import os
 from io import BytesIO
+
 from django.conf import settings
 from django.utils import timezone
 from django.utils.timezone import localtime
 from import_export.formats.base_formats import Format
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
 from reportlab.platypus import (
+    Image,
+    Paragraph,
     SimpleDocTemplate,
+    Spacer,
     Table,
     TableStyle,
-    Paragraph,
-    Spacer,
-    Image,
 )
 
 from bem_patrimonial.pdf_utils import obter_rf_usuario
@@ -35,7 +36,7 @@ class BaseUnidadePDFFormat(Format):
 
     REPORT_TITLE = ""
     EMPTY_MESSAGE = ""
-    TABLE_COL_WIDTHS = []
+    TABLE_COL_WIDTHS: list[float] = []
 
     def get_report_title(self):
         return self.REPORT_TITLE
@@ -66,11 +67,7 @@ class BaseUnidadePDFFormat(Format):
             topMargin=0.9 * cm,
             bottomMargin=0.9 * cm,
             title=self.get_report_title(),
-            author=(
-                obter_rf_usuario(request.user)
-                if request
-                else "Sistema Bens Físicos"
-            ),
+            author=(obter_rf_usuario(request.user) if request else "Sistema Bens Físicos"),
         )
 
         elements = self._criar_cabecalho() + self._criar_tabela_unidades(unidades)
@@ -86,9 +83,7 @@ class BaseUnidadePDFFormat(Format):
         return pdf_bytes
 
     def _carregar_logo(self, filename, fallback_text, styles):
-        static_root = settings.STATIC_ROOT or (
-            settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None
-        )
+        static_root = settings.STATIC_ROOT or (settings.STATICFILES_DIRS[0] if settings.STATICFILES_DIRS else None)
         if static_root:
             logo_path = os.path.join(static_root, "img", filename)
             if os.path.exists(logo_path):
@@ -241,9 +236,7 @@ class BaseUnidadePDFFormat(Format):
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.grey)
         canvas.drawString(0.5 * cm, 0.5 * cm, footer_text)
-        canvas.drawCentredString(
-            A4[0] / 2, 0.5 * cm, f"Página {canvas.getPageNumber()}"
-        )
+        canvas.drawCentredString(A4[0] / 2, 0.5 * cm, f"Página {canvas.getPageNumber()}")
         canvas.restoreState()
 
     def is_binary(self):
@@ -268,9 +261,7 @@ class BaseUnidadePDFFormat(Format):
 class UnidadeAdministrativaPDFFormat(BaseUnidadePDFFormat):
 
     REPORT_TITLE = "Relatório de Unidades Administrativas"
-    EMPTY_MESSAGE = (
-        "<i>Nenhuma unidade administrativa encontrada com os filtros aplicados.</i>"
-    )
+    EMPTY_MESSAGE = "<i>Nenhuma unidade administrativa encontrada com os filtros aplicados.</i>"
     TABLE_COL_WIDTHS = [2 * cm, 5.5 * cm, 10 * cm, 2 * cm]
 
     def get_status_text(self, unidade):
@@ -280,9 +271,7 @@ class UnidadeAdministrativaPDFFormat(BaseUnidadePDFFormat):
 class UnidadeOrcamentariaPDFFormat(BaseUnidadePDFFormat):
 
     REPORT_TITLE = "Relatório de Unidades Orçamentárias"
-    EMPTY_MESSAGE = (
-        "<i>Nenhuma unidade orçamentária encontrada com os filtros aplicados.</i>"
-    )
+    EMPTY_MESSAGE = "<i>Nenhuma unidade orçamentária encontrada com os filtros aplicados.</i>"
     TABLE_FONT_SIZE = 6
     TABLE_COL_WIDTHS = [1.9 * cm, 3.3 * cm, 3.9 * cm, 1.9 * cm, 2.9 * cm, 4.0 * cm, 2.1 * cm]
 

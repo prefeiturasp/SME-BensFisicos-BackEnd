@@ -3,7 +3,6 @@ from django.templatetags.static import static
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
-
 AJUDAS_MOVIMENTACAO = {
     "faixa": (
         "Encontre bens da UA de origem pelo intervalo de números patrimoniais informado. "
@@ -54,44 +53,59 @@ class MovimentacaoLoteWidget(Widget):
             value,
         )
         return format_html(
-            '<div class="movimentacao-lote" data-edit-icon="{edit_icon}" data-remove-icon="{remove_icon}" data-resolver-url="{resolver}" data-buscar-url="{buscar}" data-pesquisar-url="{pesquisar}">'
+            '<div class="movimentacao-lote" data-edit-icon="{edit_icon}" data-remove-icon="{remove_icon}"'
+            ' data-resolver-url="{resolver}" data-buscar-url="{buscar}" data-pesquisar-url="{pesquisar}">'
             '<div class="movimentacao-lote__modos" role="radiogroup" aria-label="Modo de seleção de bens">'
             '<label><input type="radio" name="{id}-modo" value="manual" checked> Seleção manual</label>'
             '<label><input type="radio" name="{id}-modo" value="todos"> Todos os bens da UA</label></div>'
             '<div class="movimentacao-lote__abas" role="tablist" aria-label="Tipo de busca manual">'
             '<button type="button" role="tab" data-modo="geral" aria-selected="true">Busca geral</button>'
             '<button type="button" role="tab" data-modo="faixa" aria-selected="false">Busca por faixa</button>'
-            '<button type="button" role="tab" data-modo="visualizar" aria-selected="false">Visualizar todos</button></div>'
-            '<p class="movimentacao-lote__visualizar" hidden>Confira os bens da UA de origem e marque os que deseja movimentar. Bens impedidos e itens de faixas selecionadas permanecem bloqueados.</p>'
+            '<button type="button" role="tab" data-modo="visualizar" aria-selected="false">Visualizar todos</button>'
+            "</div>"
+            '<p class="movimentacao-lote__visualizar" hidden>'
+            "Confira os bens da UA de origem e marque os que deseja movimentar."
+            " Bens impedidos e itens de faixas selecionadas permanecem bloqueados."
+            "</p>"
             '<div class="movimentacao-lote__criterio movimentacao-lote__criterio--geral">'
             '<label for="{id}-termo">Buscar por nome, descrição, ID ou número patrimonial</label>'
             '<input id="{id}-termo" class="movimentacao-lote__termo" type="text"></div>'
             '<div class="movimentacao-lote__criterio movimentacao-lote__criterio--faixa" hidden>'
             '<div class="movimentacao-lote__ajuda-faixa">'
-            '<span>Como buscar por faixa <span class="movimentacao-lote__ajuda" role="img" tabindex="0" aria-label="{ajuda_faixa}">?</span></span>'
-            '<span>Exemplos de faixa <span class="movimentacao-lote__ajuda" role="img" tabindex="0" aria-label="{ajuda_sequencia}">?</span></span></div>'
+            "<span>Como buscar por faixa "
+            '<span class="movimentacao-lote__ajuda" role="img" tabindex="0" aria-label="{ajuda_faixa}">?</span></span>'
+            "<span>Exemplos de faixa "
+            '<span class="movimentacao-lote__ajuda" role="img" tabindex="0"'
+            ' aria-label="{ajuda_sequencia}">?</span></span></div>'
             '<div><div class="movimentacao-lote__rotulo"><label for="{id}-busca-de">Número Patrimonial - De</label>'
             '<span class="movimentacao-lote__ajuda" role="img" tabindex="0" aria-label="{ajuda_de}">?</span></div>'
-            '<input id="{id}-busca-de" type="text" inputmode="numeric" maxlength="15" placeholder="000.000000000-0"></div>'
+            '<input id="{id}-busca-de" type="text" inputmode="numeric" maxlength="15"'
+            ' placeholder="000.000000000-0"></div>'
             '<div><div class="movimentacao-lote__rotulo"><label for="{id}-busca-ate">Número Patrimonial - Até</label>'
             '<span class="movimentacao-lote__ajuda" role="img" tabindex="0" aria-label="{ajuda_ate}">?</span></div>'
-            '<input id="{id}-busca-ate" type="text" inputmode="numeric" maxlength="15" placeholder="000.000000000-0"></div></div>'
+            '<input id="{id}-busca-ate" type="text" inputmode="numeric" maxlength="15"'
+            ' placeholder="000.000000000-0"></div></div>'
             '<ul class="movimentacao-lote__opcoes" hidden></ul>'
             '<div class="movimentacao-lote__acoes">'
             '<button type="button" class="button movimentacao-lote__pesquisar">Buscar</button>'
             '<button type="button" class="button movimentacao-lote__importar" hidden>Importar Faixa</button>'
-            '<span class="movimentacao-lote__ajuda movimentacao-lote__ajuda-importar" role="img" tabindex="0" aria-label="{ajuda_importar}" hidden>?</span></div>'
+            '<span class="movimentacao-lote__ajuda movimentacao-lote__ajuda-importar" role="img" tabindex="0"'
+            ' aria-label="{ajuda_importar}" hidden>?</span></div>'
             '<p class="movimentacao-lote__vazio" aria-live="polite"></p>'
             '<h3 class="movimentacao-lote__resultados-titulo" hidden>Resultados da Busca (0)</h3>'
             '<div class="movimentacao-lote__tabelas"><table class="movimentacao-lote__resultados">'
-            '<thead><tr><th class="movimentacao-lote__coluna-selecao"><input type="checkbox" class="movimentacao-lote__selecionar-resultados" aria-label="Selecionar todos os resultados"></th>'
-            '<th>ID</th><th>Número Patrimonial</th><th>Nome</th><th>Descrição</th><th>Localização</th>'
-            '<th>Situação <span class="movimentacao-lote__ajuda" role="img" tabindex="0" aria-label="{ajuda_regras}">?</span></th></tr></thead><tbody></tbody></table></div>'
+            '<thead><tr><th class="movimentacao-lote__coluna-selecao">'
+            '<input type="checkbox" class="movimentacao-lote__selecionar-resultados"'
+            ' aria-label="Selecionar todos os resultados"></th>'
+            "<th>ID</th><th>Número Patrimonial</th><th>Nome</th><th>Descrição</th><th>Localização</th>"
+            '<th>Situação <span class="movimentacao-lote__ajuda" role="img" tabindex="0"'
+            ' aria-label="{ajuda_regras}">?</span></th></tr></thead><tbody></tbody></table></div>'
             '<button type="button" class="button movimentacao-lote__mais" hidden>Carregar mais</button>'
             '<h3 class="movimentacao-lote__selecionados-titulo">Selecionados (0)</h3>'
             '<div class="movimentacao-lote__tabelas"><table class="movimentacao-lote__selecionados">'
-            '<thead><tr><th>Número Patrimonial</th><th>Quantidade</th><th>Nome do Bem</th><th>Ação</th></tr></thead>'
-            '<tbody><tr class="movimentacao-lote__sem-selecao"><td colspan="4">Nenhum bem selecionado.</td></tr></tbody></table></div>'
+            "<thead><tr><th>Número Patrimonial</th><th>Quantidade</th><th>Nome do Bem</th><th>Ação</th></tr></thead>"
+            '<tbody><tr class="movimentacao-lote__sem-selecao">'
+            '<td colspan="4">Nenhum bem selecionado.</td></tr></tbody></table></div>'
             '<p class="movimentacao-lote__erro" role="alert"></p>{hidden}</div>',
             resolver=resolver_url,
             buscar=buscar_url,

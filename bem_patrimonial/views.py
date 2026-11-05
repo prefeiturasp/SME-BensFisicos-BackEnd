@@ -1,52 +1,46 @@
 # bem_patrimonial/views.py
 
+import os
 from collections import defaultdict
 
-from django.utils import timezone
+import django_filters
+import tablib
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import models, transaction
+from django.db.models import OuterRef, Subquery
+from django.db.models.functions import Cast
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.http import require_GET
-from django.db.models import OuterRef, Subquery
-from django.db import models, transaction
-
-import os
-
-import tablib
-
-from rest_framework import viewsets, status as http_status
-from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError as DRFValidationError
-
-import django_filters
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet
-from django.contrib.contenttypes.models import ContentType
-from django.db.models.functions import Cast
+from drf_spectacular.utils import extend_schema, extend_schema_view
+from rest_framework import status as http_status
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
 
 from bem_patrimonial import constants
-from bem_patrimonial.resources_api import BemPatrimonialAPIResource
-from bem_patrimonial.serializers.bem_patrimonial_serializers import (
-    BemPatrimonialListSerializer,
-    BemPatrimonialDetailSerializer,
-    BemPatrimonialMultiCreateSerializer,
-    ImportacaoBemPatrimonialSerializer,
-)
-from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
-
-from dados_comuns.permissions import BemPatrimonialPermission
-
 from bem_patrimonial.models import (
     BaixaFisicaBensItem,
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     TransferenciaBemPatrimonial,
 )
-from dados_comuns.models import HistoricoGeral
+from bem_patrimonial.resources_api import BemPatrimonialAPIResource
+from bem_patrimonial.serializers.bem_patrimonial_serializers import (
+    BemPatrimonialDetailSerializer,
+    BemPatrimonialListSerializer,
+    BemPatrimonialMultiCreateSerializer,
+    ImportacaoBemPatrimonialSerializer,
+)
+from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
 from dados_comuns.context import audit_as
 from dados_comuns.escopo import (
     filtrar_queryset_bem_por_escopo_com_transferencia,
@@ -55,6 +49,8 @@ from dados_comuns.escopo import (
     uas_acessiveis_para_importacao,
     validar_bem_no_escopo_com_transferencia,
 )
+from dados_comuns.models import HistoricoGeral
+from dados_comuns.permissions import BemPatrimonialPermission
 
 # Mapeamento extensão → formato tablib
 _EXTENSAO_PARA_FORMATO = {
@@ -190,6 +186,19 @@ class BemPatrimonialFilter(FilterSet):
         ]
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Bens Patrimoniais"]),
+    create=extend_schema(tags=["Bens Patrimoniais"]),
+    retrieve=extend_schema(tags=["Bens Patrimoniais"]),
+    update=extend_schema(tags=["Bens Patrimoniais"]),
+    partial_update=extend_schema(tags=["Bens Patrimoniais"]),
+    destroy=extend_schema(tags=["Bens Patrimoniais"]),
+    create_multi=extend_schema(tags=["Bens Patrimoniais"]),
+    aprovar_bens=extend_schema(tags=["Bens Patrimoniais"]),
+    reprovar_bens=extend_schema(tags=["Bens Patrimoniais"]),
+    importar=extend_schema(tags=["Bens Patrimoniais"]),
+    historico=extend_schema(tags=["Bens Patrimoniais"]),
+)
 class BemPatrimonialViewSet(viewsets.ModelViewSet):
     permission_classes = [BemPatrimonialPermission]
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
@@ -255,9 +264,13 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         )
         qs = qs.annotate(baixa_data=Subquery(baixa_data_sq))
 
-        bens_baixados = str(
-            self.request.query_params.get("bens_baixados", "")
-        ).strip().lower() in {"1", "true", "on", "yes", "sim"}
+        bens_baixados = str(self.request.query_params.get("bens_baixados", "")).strip().lower() in {
+            "1",
+            "true",
+            "on",
+            "yes",
+            "sim",
+        }
         if action == "list":
             if bens_baixados:
                 qs = qs.filter(status=constants.BAIXA_FISICA)
@@ -265,9 +278,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                 constants.BAIXA_FISICA,
                 constants.TRANSFERIDO,
             }:
-                qs = qs.exclude(
-                    status__in=[constants.BAIXA_FISICA, constants.TRANSFERIDO]
-                )
+                qs = qs.exclude(status__in=[constants.BAIXA_FISICA, constants.TRANSFERIDO])
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
         pk_as_char = Cast(OuterRef("pk"), output_field=models.CharField())
@@ -293,10 +304,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             or getattr(self.request.user, "is_superuser", False)
         )
 
-        if (
-            not pode_visualizar_fora_escopo
-            and not validar_bem_no_escopo_com_transferencia(self.request.user, obj)
-        ):
+        if not pode_visualizar_fora_escopo and not validar_bem_no_escopo_com_transferencia(self.request.user, obj):
             from rest_framework.exceptions import NotFound
 
             raise NotFound()
@@ -319,10 +327,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             instance.delete()
 
     def _validar_gestor(self, request):
-        if not (
-            getattr(request.user, "is_gestor_patrimonio", False)
-            or getattr(request.user, "is_superuser", False)
-        ):
+        if not (getattr(request.user, "is_gestor_patrimonio", False) or getattr(request.user, "is_superuser", False)):
             raise PermissionDenied(
                 "Você não tem permissão para executar esta ação. Restrito ao grupo GESTOR_PATRIMONIO."
             )
@@ -357,9 +362,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                     sem = item.get("sem_numeracao", False)
                     bem = BemPatrimonial(
                         **base,
-                        numero_patrimonial=(
-                            None if sem else (item.get("numero_patrimonial") or None)
-                        ),
+                        numero_patrimonial=(None if sem else (item.get("numero_patrimonial") or None)),
                         numero_formato_antigo=item.get("numero_formato_antigo", False),
                         sem_numeracao=sem,
                         localizacao=item.get("localizacao", ""),
@@ -384,9 +387,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         ids = request.data.get("ids")
         if not isinstance(ids, list) or not ids:
-            raise DRFValidationError(
-                {"ids": 'Envie uma lista de IDs. Ex.: {"ids": [1,2,3]}.'}
-            )
+            raise DRFValidationError({"ids": 'Envie uma lista de IDs. Ex.: {"ids": [1,2,3]}.'})
 
         qs_base = self._get_queryset_escopo(request).filter(id__in=ids)
 
@@ -408,9 +409,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             with audit_as(request.user):
                 ids_aguardando = list(bens_aguardando.values_list("id", flat=True))
 
-                BemPatrimonial.objects.filter(id__in=ids_aguardando).update(
-                    status=constants.APROVADO
-                )
+                BemPatrimonial.objects.filter(id__in=ids_aguardando).update(status=constants.APROVADO)
 
         return Response(
             {
@@ -427,9 +426,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         ids = request.data.get("ids")
         if not isinstance(ids, list) or not ids:
-            raise DRFValidationError(
-                {"ids": 'Envie uma lista de IDs. Ex.: {"ids": [1,2,3]}.'}
-            )
+            raise DRFValidationError({"ids": 'Envie uma lista de IDs. Ex.: {"ids": [1,2,3]}.'})
 
         qs_base = self._get_queryset_escopo(request).filter(id__in=ids)
 
@@ -449,9 +446,9 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             with audit_as(request.user):
-                BemPatrimonial.objects.filter(
-                    id__in=bens_aguardando.values_list("id", flat=True)
-                ).update(status=constants.NAO_APROVADO)
+                BemPatrimonial.objects.filter(id__in=bens_aguardando.values_list("id", flat=True)).update(
+                    status=constants.NAO_APROVADO
+                )
 
         return Response(
             {
@@ -516,13 +513,9 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
 
         # UA efetivamente usada para os bens (explícita, quando informada; senão
         # a do usuário). Usada aqui para checar conciliação na UA correta.
-        ua_destino = ua_explicita or getattr(
-            request.user, "unidade_administrativa", None
-        )
+        ua_destino = ua_explicita or getattr(request.user, "unidade_administrativa", None)
 
-        bloqueio_conciliacao = self._bloquear_importacao_se_conciliacao_em_aberto(
-            ua_destino
-        )
+        bloqueio_conciliacao = self._bloquear_importacao_se_conciliacao_em_aberto(ua_destino)
         if bloqueio_conciliacao is not None:
             return bloqueio_conciliacao
 
@@ -590,8 +583,8 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         ler/processar a planilha, para não persistir nada quando a importação
         for bloqueada.
         """
-        from inventario.models import ConciliacaoUA
         from inventario import constants as inv_constants
+        from inventario.models import ConciliacaoUA
 
         if ua_destino is None:
             return None
@@ -664,9 +657,9 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         exceção original), então lemos de forma defensiva. Também consideramos
         row_errors() como fallback, cobrindo erros ocorridos por linha.
         """
-        return self._primeiro_erro_em(
-            getattr(result, "base_errors", None)
-        ) or self._primeiro_erro_em(self._erros_por_linha_do_result(result))
+        return self._primeiro_erro_em(getattr(result, "base_errors", None)) or self._primeiro_erro_em(
+            self._erros_por_linha_do_result(result)
+        )
 
     def _tratar_erro_validacao_importacao(
         self, exc: DjangoValidationError, resource: "BemPatrimonialAPIResource"
@@ -676,11 +669,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         permissão — usuário sem UA ou UA inativa) ou 422 (erro de validação
         da planilha: cabeçalho, duplicidade, campos inválidos).
         """
-        mensagem = (
-            exc.message
-            if hasattr(exc, "message") and isinstance(exc.message, str)
-            else "; ".join(exc.messages)
-        )
+        mensagem = exc.message if hasattr(exc, "message") and isinstance(exc.message, str) else "; ".join(exc.messages)
 
         eh_erro_permissao = "Unidade Administrativa" in mensagem or "inativa" in mensagem
         if eh_erro_permissao:
@@ -739,25 +728,16 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         # Valida que a UA informada é uma das UAs em que o usuário pode
         # importar — a MESMA regra que popula o seletor no frontend
         # (get_opcoes_escopo), cobrindo superuser, gestor e operador.
-        ua = (
-            uas_acessiveis_para_importacao(request.user)
-            .filter(id=ua_id)
-            .first()
-        )
+        ua = uas_acessiveis_para_importacao(request.user).filter(id=ua_id).first()
         if ua is None:
             return None, Response(
-                {
-                    "detail": "A Unidade Administrativa selecionada não está "
-                    "disponível para o seu usuário."
-                },
+                {"detail": "A Unidade Administrativa selecionada não está disponível para o seu usuário."},
                 status=http_status.HTTP_403_FORBIDDEN,
             )
 
         return ua, None
 
-    def _montar_resposta_importacao(
-        self, result, resource: BemPatrimonialAPIResource, request
-    ) -> Response:
+    def _montar_resposta_importacao(self, result, resource: BemPatrimonialAPIResource, request) -> Response:
         """
         Constrói o payload de resposta para o caso de sucesso (201).
 
@@ -774,29 +754,17 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         """
         totais = result.totals
         criados = totais.get("new", 0)
-        total_linhas = (
-            totais.get("new", 0)
-            + totais.get("skip", 0)
-            + totais.get("invalid", 0)
-            + totais.get("error", 0)
-        )
+        total_linhas = totais.get("new", 0) + totais.get("skip", 0) + totais.get("invalid", 0) + totais.get("error", 0)
 
         user = getattr(request, "user", None)
         aprovacao_automatica = bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_superuser", False)
+            getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)
         )
 
         if aprovacao_automatica:
-            detail = (
-                f"{criados} bem(ns) importado(s) e disponível(is) "
-                "na listagem da Unidade Administrativa."
-            )
+            detail = f"{criados} bem(ns) importado(s) e disponível(is) " "na listagem da Unidade Administrativa."
         else:
-            detail = (
-                f"{criados} bem(ns) importado(s) com sucesso e "
-                "aguardando aprovação do Gestor de Patrimônio."
-            )
+            detail = f"{criados} bem(ns) importado(s) com sucesso e " "aguardando aprovação do Gestor de Patrimônio."
 
         return Response(
             {
@@ -814,6 +782,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         bem = self.get_object()
 
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BemPatrimonial)
@@ -840,9 +809,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                 {
                     "alterado_em": data,
                     "alterado_por": usuario_id,
-                    "alterado_por_nome": (
-                        itens[0].alterado_por.nome if itens[0].alterado_por else None
-                    ),
+                    "alterado_por_nome": (itens[0].alterado_por.nome if itens[0].alterado_por else None),
                     "acoes": [
                         {
                             "campo": i.campo,
@@ -855,9 +822,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
                 }
             )
 
-        resposta_ordenada = sorted(
-            resposta, key=lambda x: x["alterado_em"], reverse=True
-        )
+        resposta_ordenada = sorted(resposta, key=lambda x: x["alterado_em"], reverse=True)
 
         serializer = HistoricoGrupoSerializer(resposta_ordenada, many=True)
         return Response(serializer.data)

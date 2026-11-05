@@ -1,33 +1,34 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib import messages
 from unittest.mock import patch
-from django.contrib.auth.models import Group
 
+from django.contrib import messages
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory, TestCase
+
+from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
+    MovimentacaoBemPatrimonialAdmin,
+    aprovar_solicitacao,
+    cancelar_solicitacao,
+    rejeitar_solicitacao,
+)
+from bem_patrimonial.constants import (
+    ACEITA,
+    APROVADO,
+    BLOQUEADO,
+    CANCELADA,
+    ENVIADA,
+)
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.constants import (
-    APROVADO,
-    BLOQUEADO,
-    ENVIADA,
-    ACEITA,
-    CANCELADA,
-)
-from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
-    MovimentacaoBemPatrimonialAdmin,
-    aprovar_solicitacao,
-    rejeitar_solicitacao,
-    cancelar_solicitacao,
-)
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 
 # Reutiliza setup existente (assumindo versão já atualizada p/ novo model)
 from bem_patrimonial.tests.tests_movimentacao_bloqueio import SetupMovimentacaoData
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO
+from usuario.models import Usuario
 
 
 class CancelamentoMovimentacaoTestCase(TestCase):
@@ -172,9 +173,7 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _create_request_with_messages(self, user):
         request = self.factory.post("/admin/")
@@ -184,9 +183,7 @@ class AdminActionCancelamentoTestCase(TestCase):
         setattr(request, "_messages", messages_storage)
         return request
 
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
-    )
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada")
     def test_action_cancelar_envia_email(self, mock_email):
         request = self._create_request_with_messages(self.gestor)
         queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
@@ -229,9 +226,7 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         storage = messages.get_messages(request)
         mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("já foi cancelada anteriormente" in msg for msg in mensagens)
-        )
+        self.assertTrue(any("já foi cancelada anteriormente" in msg for msg in mensagens))
 
     def test_action_cancelar_ja_aprovada_exibe_warning(self):
         self.movimentacao.aprovar_solicitacao(self.operador_destino)
@@ -247,9 +242,7 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         storage = messages.get_messages(request)
         mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("já foi aprovada e não pode ser cancelada" in msg for msg in mensagens)
-        )
+        self.assertTrue(any("já foi aprovada e não pode ser cancelada" in msg for msg in mensagens))
 
     def test_action_cancelar_ja_rejeitada_exibe_warning(self):
         self.movimentacao.rejeitar_solicitacao(self.operador_destino)
@@ -265,13 +258,9 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         storage = messages.get_messages(request)
         mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("já foi rejeitada e não pode ser cancelada" in msg for msg in mensagens)
-        )
+        self.assertTrue(any("já foi rejeitada e não pode ser cancelada" in msg for msg in mensagens))
 
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_aceita"
-    )
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_aceita")
     def test_action_aprovar_cancelada_exibe_erro(self, mock_email):
         self.movimentacao.cancelar_solicitacao(self.gestor)
         self.movimentacao.refresh_from_db()
@@ -283,14 +272,10 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         storage = messages.get_messages(request)
         mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("foi cancelada e não pode ser aprovada" in msg for msg in mensagens)
-        )
+        self.assertTrue(any("foi cancelada e não pode ser aprovada" in msg for msg in mensagens))
         mock_email.assert_not_called()
 
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_rejeitada"
-    )
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_rejeitada")
     def test_action_rejeitar_cancelada_exibe_erro(self, mock_email):
         self.movimentacao.cancelar_solicitacao(self.gestor)
         self.movimentacao.refresh_from_db()
@@ -302,9 +287,7 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         storage = messages.get_messages(request)
         mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("foi cancelada e não pode ser rejeitada" in msg for msg in mensagens)
-        )
+        self.assertTrue(any("foi cancelada e não pode ser rejeitada" in msg for msg in mensagens))
         mock_email.assert_not_called()
 
     def test_action_cancelamento_visivel_para_todos(self):
@@ -317,9 +300,7 @@ class AdminActionCancelamentoTestCase(TestCase):
         self.assertIn("cancelar_solicitacao", actions_operador)
 
     def test_operador_nao_cancela_movimentacao_de_outro(self):
-        bem2 = SetupMovimentacaoData().create_bem_patrimonial(
-            self.operador_destino, self.ua_origem
-        )
+        bem2 = SetupMovimentacaoData().create_bem_patrimonial(self.operador_destino, self.ua_origem)
         movimentacao2 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=bem2,
             unidade_administrativa_origem=self.ua_origem,
@@ -341,13 +322,9 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         self.assertEqual(movimentacao2.status, ENVIADA)
 
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
-    )
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada")
     def test_action_cancelar_multiplas_movimentacoes(self, mock_email):
-        bem2 = SetupMovimentacaoData().create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        bem2 = SetupMovimentacaoData().create_bem_patrimonial(self.operador_origem, self.ua_origem)
         movimentacao2 = MovimentacaoBemPatrimonial.objects.create(
             bem_patrimonial=bem2,
             unidade_administrativa_origem=self.ua_origem,
@@ -360,9 +337,7 @@ class AdminActionCancelamentoTestCase(TestCase):
         )
 
         request = self._create_request_with_messages(self.gestor)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(
-            pk__in=[self.movimentacao.pk, movimentacao2.pk]
-        )
+        queryset = MovimentacaoBemPatrimonial.objects.filter(pk__in=[self.movimentacao.pk, movimentacao2.pk])
 
         cancelar_solicitacao(self.admin, request, queryset)
 
@@ -454,9 +429,7 @@ class EmailCancelamentoTestCase(TestCase):
             envia_email_solicitacao_movimentacao_cancelada,
         )
 
-        envia_email_solicitacao_movimentacao_cancelada(
-            self.bem, self.gestor, self.operador_origem.email
-        )
+        envia_email_solicitacao_movimentacao_cancelada(self.bem, self.gestor, self.operador_origem.email)
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -482,9 +455,7 @@ class EmailCancelamentoTestCase(TestCase):
         )
         gestor_sem_nome.groups.add(grupo_gestor)
 
-        envia_email_solicitacao_movimentacao_cancelada(
-            self.bem, gestor_sem_nome, self.operador_origem.email
-        )
+        envia_email_solicitacao_movimentacao_cancelada(self.bem, gestor_sem_nome, self.operador_origem.email)
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]

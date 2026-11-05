@@ -1,36 +1,36 @@
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
+from unittest.mock import patch
+
 from django.contrib.admin.models import LogEntry
+from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
-from unittest.mock import patch
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from import_export.formats.base_formats import XLSX
 
-from bem_patrimonial.models import (
-    BemPatrimonial,
-    BaixaFisicaBemPatrimonial,
-    BaixaFisicaBensItem,
-)
-from bem_patrimonial.constants import (
-    APROVADO,
-    BAIXA_FISICA,
-    BAIXA_FISICA_AGUARDANDO_APROVACAO,
-    LAUDADO_PARA_BAIXA,
-    AGUARDANDO_ENVIO,
-    ENVIADA,
-    ACEITA,
-    SOLICITADA,
-    RECUSADA,
-)
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
     BaixaFisicaBensItemInlineFormSet,
 )
+from bem_patrimonial.constants import (
+    ACEITA,
+    AGUARDANDO_ENVIO,
+    APROVADO,
+    BAIXA_FISICA,
+    BAIXA_FISICA_AGUARDANDO_APROVACAO,
+    ENVIADA,
+    LAUDADO_PARA_BAIXA,
+    RECUSADA,
+    SOLICITADA,
+)
+from bem_patrimonial.models import (
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+)
 
 # reaproveita helpers usados nos testes de movimentação
 from bem_patrimonial.tests.tests_movimentacao_bloqueio import SetupMovimentacaoData
-
 
 # ---------------------------------------------------------------------------
 # Helpers genéricos
@@ -141,9 +141,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
 
         with self.assertRaises(ValidationError) as ctx:
             baixa.clean()
-        self.assertIn(
-            "não pertence à Unidade Administrativa selecionada", str(ctx.exception)
-        )
+        self.assertIn("não pertence à Unidade Administrativa selecionada", str(ctx.exception))
 
     def test_clean_impede_bem_ja_baixado(self):
         self.bem.status = BAIXA_FISICA
@@ -179,9 +177,7 @@ class BaixaFisicaModelCleanTestCase(TestCase):
 
         with self.assertRaises(ValidationError) as ctx:
             baixa2.clean()
-        self.assertIn(
-            "já está em processo de Baixa Física em outro pedido", str(ctx.exception)
-        )
+        self.assertIn("já está em processo de Baixa Física em outro pedido", str(ctx.exception))
 
     def test_clean_nao_bloqueia_bem_na_mesma_baixa(self):
         # mesmo bem, mesma baixa – deve passar
@@ -272,9 +268,7 @@ class BaixaFisicaItensFormSetTestCase(TestCase):
             "bem_patrimonial.admins.baixa_fisica_bem_patrimonial.BaseInlineFormSet.clean",
             lambda self: None,
         ):
-            fs = BaixaFisicaBensItemInlineFormSet.__new__(
-                BaixaFisicaBensItemInlineFormSet
-            )
+            fs = BaixaFisicaBensItemInlineFormSet.__new__(BaixaFisicaBensItemInlineFormSet)
 
             # Caso 1: todos deletados ou sem bem -> deve lançar ValidationError
             fs.forms = [
@@ -336,9 +330,7 @@ class BaixaFisicaAdminSaveRelatedTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = BaixaFisicaBemPatrimonialAdmin(
-            BaixaFisicaBemPatrimonial, self.site
-        )
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, self.site)
 
     def test_save_related_ao_remover_item_reseta_status_bem(self):
         request = self.factory.post("/admin/")
@@ -418,9 +410,7 @@ class BaixaFisicaAdminActionsTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = BaixaFisicaBemPatrimonialAdmin(
-            BaixaFisicaBemPatrimonial, self.site
-        )
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, self.site)
 
     def _request(self, user):
         request = self.factory.post("/admin/")
@@ -546,9 +536,7 @@ class BaixaFisicaAdminQuerysetPermissionsTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = BaixaFisicaBemPatrimonialAdmin(
-            BaixaFisicaBemPatrimonial, self.site
-        )
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, self.site)
 
     def test_get_queryset_filtra_por_unidade_do_usuario(self):
         request = self.factory.get("/admin/")
@@ -583,13 +571,7 @@ class BaixaFisicaAdminQuerysetPermissionsTestCase(TestCase):
         self.admin.changelist_view(request)
 
         msgs = [str(m) for m in storage]
-        self.assertTrue(
-            any(
-                "Como operador você deve estár vinculado a uma unidade administrativa"
-                in m
-                for m in msgs
-            )
-        )
+        self.assertTrue(any("Como operador você deve estár vinculado a uma unidade administrativa" in m for m in msgs))
 
 
 class BaixaFisicaAdminExportTestCase(TestCase):
@@ -604,12 +586,8 @@ class BaixaFisicaAdminExportTestCase(TestCase):
         ) = setup.create_usuarios(self.ua_origem, self.ua_destino)
 
         # bens
-        self.bem1 = setup.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
-        self.bem2 = setup.create_bem_patrimonial(
-            self.operador_destino, self.ua_destino
-        )
+        self.bem1 = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
+        self.bem2 = setup.create_bem_patrimonial(self.operador_destino, self.ua_destino)
 
         self.bem1.status = APROVADO
         self.bem2.status = APROVADO
@@ -641,9 +619,7 @@ class BaixaFisicaAdminExportTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = BaixaFisicaBemPatrimonialAdmin(
-            BaixaFisicaBemPatrimonial, self.site
-        )
+        self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, self.site)
 
     # ---------------------------------------------------------
     # ✅ TESTE: apenas XLSX disponível
@@ -697,9 +673,7 @@ class BaixaFisicaUnicidadeSolicitanteModelTestCase(TestCase):
     def setUp(self):
         setup = SetupMovimentacaoData()
         self.ua_origem, _ = setup.create_unidades_administrativas()
-        (self.operador_origem, _, self.gestor) = setup.create_usuarios(
-            self.ua_origem, self.ua_origem
-        )
+        (self.operador_origem, _, self.gestor) = setup.create_usuarios(self.ua_origem, self.ua_origem)
         self.bem = setup.create_bem_patrimonial(self.operador_origem, self.ua_origem)
         self.bem.status = APROVADO
         self.bem.save()

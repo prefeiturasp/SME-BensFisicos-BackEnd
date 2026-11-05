@@ -1,13 +1,13 @@
 from datetime import date
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
-from django.test import TestCase
-from django.test import RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.messages.storage.fallback import FallbackStorage
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from django.test import RequestFactory, TestCase
+
 from dados_comuns.admin import UnidadeAdministrativaAdmin, UnidadeOrcamentariaAdmin
 from dados_comuns.formats import UnidadeOrcamentariaPDFFormat
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from dados_comuns.utils import (
     PREFIXO_CODIGO_UO_SME,
@@ -105,9 +105,7 @@ class UnidadeAdministrativaOrderingTestCase(TestCase):
         self.assertEqual(unidades_codigo_050[2].sigla, "DRE-CS")
 
     def test_model_meta_ordering(self):
-        self.assertEqual(
-            UnidadeAdministrativa._meta.ordering, ["codigo", "sigla", "nome"]
-        )
+        self.assertEqual(UnidadeAdministrativa._meta.ordering, ["codigo", "sigla", "nome"])
 
     def test_str_representation(self):
         unidade = UnidadeAdministrativa.objects.first()
@@ -148,6 +146,7 @@ class UnidadeAdministrativaAdminTestCase(TestCase):
 
     def test_admin_queryset_ordering(self):
         from django.test import RequestFactory
+
         from usuario.models import Usuario
 
         factory = RequestFactory()

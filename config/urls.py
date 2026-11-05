@@ -1,31 +1,32 @@
-from django.contrib import admin
-from django.urls import include, path
 from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.views.decorators.http import require_GET
-from usuario.views import (
-    AdminLoginView,
-    LoginPasswordChangeView,
-    LoginPasswordChangeDoneView,
-    PasswordRecoveryRequestView,
-    PasswordRecoveryDoneView,
-    PasswordRecoveryConfirmView,
-    PasswordRecoveryCompleteView,
-    SelecionarUAView,
-)
-from bem_patrimonial.views import download_documento_cimbpm, download_documento_ntbpm
 from django.shortcuts import redirect
-from django.urls import reverse
-from django.conf.urls.static import static
+from django.urls import include, path, reverse
+from django.views.decorators.http import require_GET
 from drf_spectacular.views import (
     SpectacularAPIView,
-    SpectacularSwaggerView,
     SpectacularRedocView,
+    SpectacularSwaggerView,
 )
-from usuario import api_urls as auth_api_urls
+
+from bem_patrimonial.views import download_documento_cimbpm, download_documento_ntbpm
 from dados_comuns import api_urls as dados_comuns_api_urls
+from dados_comuns.api_views import HealthCheckView
 from inventario import api_urls as inventario_api_urls
+from usuario import api_urls as auth_api_urls
+from usuario.views import (
+    AdminLoginView,
+    LoginPasswordChangeDoneView,
+    LoginPasswordChangeView,
+    PasswordRecoveryCompleteView,
+    PasswordRecoveryConfirmView,
+    PasswordRecoveryDoneView,
+    PasswordRecoveryRequestView,
+    SelecionarUAView,
+)
 
 admin.site.site_title = settings.ADMIN_SITE_TITLE
 admin.site.site_header = settings.ADMIN_SITE_HEADER
@@ -41,9 +42,7 @@ def redirect_admin_password(request, user_id: int):
     return redirect(url)
 
 
-redirect_admin_password = login_required(
-    require_GET(redirect_admin_password), login_url="admin_login"
-)
+redirect_admin_password = login_required(require_GET(redirect_admin_password), login_url="admin_login")
 
 
 urlpatterns = [
@@ -71,6 +70,8 @@ urlpatterns = [
         name="swagger-ui",
     ),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    # Verificação de saúde pública (sem autenticação, sem versionamento)
+    path("api/health/", HealthCheckView.as_view(), name="health"),
     # Download protegido de documentos CIMBPM
     path(
         "documento-cimbpm/<int:pk>/download/",

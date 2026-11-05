@@ -1,55 +1,57 @@
-from rest_framework import viewsets, status, filters, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django_filters.rest_framework import DjangoFilterBackend, FilterSet
-from django.http import HttpResponse
-from django.db import transaction
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
-from openpyxl.utils import get_column_letter
 from datetime import datetime
-from drf_spectacular.utils import extend_schema, OpenApiResponse
-import django_filters
+from typing import List
 
-from dados_comuns.models import HistoricoGeral
+import django_filters
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.http import HttpResponse
+from django_filters.rest_framework import DjangoFilterBackend, FilterSet
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from rest_framework import filters, mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
-from .models import BaixaFisicaBemPatrimonial
-from .api_serializers import (
-    BaixaFisicaBemPatrimonialListSerializer,
-    BaixaFisicaBemPatrimonialDetailSerializer,
-    BaixaFisicaBemPatrimonialCreateSerializer,
-    BaixaFisicaBemPatrimonialUpdateSerializer,
-    BaixaFisicaEnviarSolicitacaoSerializer,
-    BaixaFisicaAprovarSerializer,
-    BaixaFisicaCancelarSerializer,
-    BaixaFisicaCorrigirProcessoSerializer,
-    BaixaFisicaSolicitarCorrecaoSerializer,
-)
+from dados_comuns.context import set_user
+from dados_comuns.escopo import filtrar_queryset_por_escopo
+from dados_comuns.models import HistoricoGeral
+
+from . import constants
 from .api_docs import (
-    LIST_BAIXAS_FISICAS_DOC,
-    CREATE_BAIXAS_FISICAS_DOC,
-    RETRIEVE_BAIXAS_FISICAS_DOC,
-    UPDATE_BAIXAS_FISICAS_DOC,
-    ENVIAR_SOLICITACAO_DOC,
     APROVAR_BAIXA_FISICA_DOC,
     CANCELAR_BAIXA_FISICA_DOC,
     CORRIGIR_PROCESSO_DOC,
-    SOLICITAR_CORRECAO_DOC,
+    CREATE_BAIXAS_FISICAS_DOC,
+    ENVIAR_SOLICITACAO_DOC,
     EXPORTAR_EXCEL_DOC,
+    LIST_BAIXAS_FISICAS_DOC,
+    RETRIEVE_BAIXAS_FISICAS_DOC,
+    SOLICITAR_CORRECAO_DOC,
+    UPDATE_BAIXAS_FISICAS_DOC,
+)
+from .api_serializers import (
+    BaixaFisicaAprovarSerializer,
+    BaixaFisicaBemPatrimonialCreateSerializer,
+    BaixaFisicaBemPatrimonialDetailSerializer,
+    BaixaFisicaBemPatrimonialListSerializer,
+    BaixaFisicaBemPatrimonialUpdateSerializer,
+    BaixaFisicaCancelarSerializer,
+    BaixaFisicaCorrigirProcessoSerializer,
+    BaixaFisicaEnviarSolicitacaoSerializer,
+    BaixaFisicaSolicitarCorrecaoSerializer,
 )
 from .emails import (
-    envia_email_baixa_fisica_solicitada,
     envia_email_baixa_fisica_aprovada,
     envia_email_baixa_fisica_cancelada,
     envia_email_baixa_fisica_correcao_solicitada,
+    envia_email_baixa_fisica_solicitada,
 )
 from .laudo_avaliacao import http_response_laudo_avaliacao
-from . import constants
-from dados_comuns.escopo import filtrar_queryset_por_escopo
-from dados_comuns.context import set_user
+from .models import BaixaFisicaBemPatrimonial
 
 
 class IsGestorPatrimonioOrOperadorInventario(IsAuthenticated):
@@ -62,11 +64,7 @@ class IsGestorPatrimonioOrOperadorInventario(IsAuthenticated):
         if not super().has_permission(request, view):
             return False
         user = request.user
-        return (
-            user.is_gestor_patrimonio or
-            user.is_operador_inventario or
-            user.is_superuser
-        )
+        return user.is_gestor_patrimonio or user.is_operador_inventario or user.is_superuser
 
 
 class BaixaFisicaFilter(FilterSet):
@@ -80,35 +78,33 @@ class BaixaFisicaFilter(FilterSet):
     - data_criacao__gte  / data_criacao__lte:  range de data de criação/solicitação
     """
 
-    status = django_filters.CharFilter(method='filter_status')
+    status = django_filters.CharFilter(method="filter_status")
 
-    unidade_administrativa_origem = django_filters.NumberFilter(
-        field_name='unidade_administrativa_origem__id'
-    )
+    unidade_administrativa_origem = django_filters.NumberFilter(field_name="unidade_administrativa_origem__id")
 
     # Filtros de data de aprovação
     data_aprovacao__gte = django_filters.DateFilter(
-        field_name='data_aprovacao',
-        lookup_expr='date__gte',
+        field_name="data_aprovacao",
+        lookup_expr="date__gte",
     )
     data_aprovacao__lte = django_filters.DateFilter(
-        field_name='data_aprovacao',
-        lookup_expr='date__lte',
+        field_name="data_aprovacao",
+        lookup_expr="date__lte",
     )
 
     # Filtros de data de criação (= data de solicitação)
     data_criacao__gte = django_filters.DateFilter(
-        field_name='data_criacao',
-        lookup_expr='date__gte',
+        field_name="data_criacao",
+        lookup_expr="date__gte",
     )
     data_criacao__lte = django_filters.DateFilter(
-        field_name='data_criacao',
-        lookup_expr='date__lte',
+        field_name="data_criacao",
+        lookup_expr="date__lte",
     )
 
     class Meta:
         model = BaixaFisicaBemPatrimonial
-        fields = []
+        fields: list[str] = []
 
     def filter_status(self, queryset, name, value):
         """
@@ -117,7 +113,7 @@ class BaixaFisicaFilter(FilterSet):
         """
         if not value:
             return queryset
-        values = [v.strip() for v in value.split(',') if v.strip()]
+        values = [v.strip() for v in value.split(",") if v.strip()]
         if len(values) == 1:
             return queryset.filter(status=values[0])
         return queryset.filter(status__in=values)
@@ -165,58 +161,54 @@ class BaixaFisicaBemPatrimonialViewSet(
     )
 
     ordering_fields = [
-        'id',
-        'data_criacao',
-        'data_aprovacao',
-        'status',
-        'unidade_administrativa_origem__sigla',
-        'numero_processo_baixa',
+        "id",
+        "data_criacao",
+        "data_aprovacao",
+        "status",
+        "unidade_administrativa_origem__sigla",
+        "numero_processo_baixa",
     ]
-    ordering = ['-data_criacao']
+    ordering = ["-data_criacao"]
 
     def get_queryset(self):
         queryset = BaixaFisicaBemPatrimonial.objects.all()
         user = self.request.user
         queryset = filtrar_queryset_por_escopo(
-            usuario=user,
-            queryset=queryset,
-            campo_ua='unidade_administrativa_origem'
+            usuario=user, queryset=queryset, campo_ua="unidade_administrativa_origem"
         )
         queryset = queryset.select_related(
-            'unidade_administrativa_origem',
-            'unidade_administrativa_origem__unidade_orcamentaria',
-            'criado_por',
-            'aprovado_por'
-        ).prefetch_related('itens__bem', 'nbbpms_lote')
+            "unidade_administrativa_origem",
+            "unidade_administrativa_origem__unidade_orcamentaria",
+            "criado_por",
+            "aprovado_por",
+        ).prefetch_related("itens__bem", "nbbpms_lote")
         return queryset.distinct()
 
     def get_serializer_class(self):
-        if self.action == 'list':
+        if self.action == "list":
             return BaixaFisicaBemPatrimonialListSerializer
-        elif self.action == 'retrieve':
+        elif self.action == "retrieve":
             return BaixaFisicaBemPatrimonialDetailSerializer
-        elif self.action == 'create':
+        elif self.action == "create":
             return BaixaFisicaBemPatrimonialCreateSerializer
-        elif self.action in ['update', 'partial_update']:
+        elif self.action in ["update", "partial_update"]:
             return BaixaFisicaBemPatrimonialUpdateSerializer
-        elif self.action == 'enviar_solicitacao':
+        elif self.action == "enviar_solicitacao":
             return BaixaFisicaEnviarSolicitacaoSerializer
-        elif self.action == 'aprovar':
+        elif self.action == "aprovar":
             return BaixaFisicaAprovarSerializer
-        elif self.action == 'recusar':
+        elif self.action == "recusar":
             return BaixaFisicaCancelarSerializer
-        elif self.action == 'corrigir_processo':
+        elif self.action == "corrigir_processo":
             return BaixaFisicaCorrigirProcessoSerializer
-        elif self.action == 'solicitar_correcao':
+        elif self.action == "solicitar_correcao":
             return BaixaFisicaSolicitarCorrecaoSerializer
         return BaixaFisicaBemPatrimonialDetailSerializer
 
     def _detail_response(self, baixa, request, http_status=status.HTTP_200_OK):
         """Retorna resposta com o serializer de detalhe completo."""
         return Response(
-            BaixaFisicaBemPatrimonialDetailSerializer(
-                baixa, context={'request': request}
-            ).data,
+            BaixaFisicaBemPatrimonialDetailSerializer(baixa, context={"request": request}).data,
             status=http_status,
         )
 
@@ -245,18 +237,20 @@ class BaixaFisicaBemPatrimonialViewSet(
         `registros` é uma lista de dicts com chaves: campo, valor_antigo, valor_novo, justificativa (opcional).
         """
         ct = self._get_content_type()
-        HistoricoGeral.objects.bulk_create([
-            HistoricoGeral(
-                content_type=ct,
-                object_id=str(baixa.pk),
-                campo=r["campo"],
-                valor_antigo=str(r.get("valor_antigo") or ""),
-                valor_novo=str(r.get("valor_novo") or ""),
-                alterado_por=usuario,
-                justificativa=r.get("justificativa", ""),
-            )
-            for r in registros
-        ])
+        HistoricoGeral.objects.bulk_create(
+            [
+                HistoricoGeral(
+                    content_type=ct,
+                    object_id=str(baixa.pk),
+                    campo=r["campo"],
+                    valor_antigo=str(r.get("valor_antigo") or ""),
+                    valor_novo=str(r.get("valor_novo") or ""),
+                    alterado_por=usuario,
+                    justificativa=r.get("justificativa", ""),
+                )
+                for r in registros
+            ]
+        )
 
     def _registrar_alteracoes_itens(self, baixa, itens_antes, itens_depois, usuario):
         """
@@ -272,20 +266,24 @@ class BaixaFisicaBemPatrimonialViewSet(
         registros = []
 
         for bem_id in adicionados:
-            registros.append({
-                "campo": "itens",
-                "valor_antigo": "",
-                "valor_novo": str(itens_depois[bem_id]),
-                "justificativa": "Bem adicionado à baixa",
-            })
+            registros.append(
+                {
+                    "campo": "itens",
+                    "valor_antigo": "",
+                    "valor_novo": str(itens_depois[bem_id]),
+                    "justificativa": "Bem adicionado à baixa",
+                }
+            )
 
         for bem_id in removidos:
-            registros.append({
-                "campo": "itens",
-                "valor_antigo": str(itens_antes[bem_id]),
-                "valor_novo": "",
-                "justificativa": "Bem removido da baixa",
-            })
+            registros.append(
+                {
+                    "campo": "itens",
+                    "valor_antigo": str(itens_antes[bem_id]),
+                    "valor_novo": "",
+                    "justificativa": "Bem removido da baixa",
+                }
+            )
 
         if registros:
             self._registrar_historico_bulk(baixa, registros, usuario)
@@ -336,16 +334,18 @@ class BaixaFisicaBemPatrimonialViewSet(
             )
         ]
         # Registra cada bem incluído na criação
-        for item in baixa.itens.select_related('bem'):
-            registros.append(HistoricoGeral(
-                content_type=ct,
-                object_id=str(baixa.pk),
-                campo="itens",
-                valor_antigo="",
-                valor_novo=str(item.bem),
-                alterado_por=request.user,
-                justificativa="Bem incluído na criação da baixa",
-            ))
+        for item in baixa.itens.select_related("bem"):
+            registros.append(
+                HistoricoGeral(
+                    content_type=ct,
+                    object_id=str(baixa.pk),
+                    campo="itens",
+                    valor_antigo="",
+                    valor_novo=str(item.bem),
+                    alterado_por=request.user,
+                    justificativa="Bem incluído na criação da baixa",
+                )
+            )
         HistoricoGeral.objects.bulk_create(registros)
 
         return self._detail_response(baixa, request, http_status=status.HTTP_201_CREATED)
@@ -382,14 +382,11 @@ class BaixaFisicaBemPatrimonialViewSet(
     )
     def update(self, request, *args, **kwargs):
         set_user(request.user)
-        partial = kwargs.pop('partial', False)
+        partial = kwargs.pop("partial", False)
         instance = self.get_object()
 
         # Captura estado dos itens ANTES da atualização
-        itens_antes = {
-            item.bem_id: str(item.bem)
-            for item in instance.itens.select_related('bem')
-        }
+        itens_antes = {item.bem_id: str(item.bem) for item in instance.itens.select_related("bem")}
 
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
@@ -397,10 +394,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         baixa = self.get_queryset().get(pk=instance.pk)
 
         # Captura estado dos itens DEPOIS e registra diferenças
-        itens_depois = {
-            item.bem_id: str(item.bem)
-            for item in baixa.itens.select_related('bem')
-        }
+        itens_depois = {item.bem_id: str(item.bem) for item in baixa.itens.select_related("bem")}
         self._registrar_alteracoes_itens(baixa, itens_antes, itens_depois, request.user)
 
         return self._detail_response(baixa, request)
@@ -415,7 +409,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         },
     )
     def partial_update(self, request, *args, **kwargs):
-        kwargs['partial'] = True
+        kwargs["partial"] = True
         return self.update(request, *args, **kwargs)
 
     # =========================================================
@@ -425,10 +419,7 @@ class BaixaFisicaBemPatrimonialViewSet(
     @extend_schema(
         tags=["Baixas Físicas"],
         summary="Histórico de alterações",
-        description=(
-            "Retorna o histórico de alterações da baixa física, "
-            "seguindo o padrão dos demais módulos da API."
-        ),
+        description=("Retorna o histórico de alterações da baixa física, seguindo o padrão dos demais módulos da API."),
         request=None,
         responses={
             200: OpenApiResponse(description="Lista de registros do histórico"),
@@ -442,8 +433,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
 
         registros = (
-            HistoricoGeral.objects
-            .filter(content_type=ct, object_id=str(instance.pk))
+            HistoricoGeral.objects.filter(content_type=ct, object_id=str(instance.pk))
             .select_related("alterado_por")
             .order_by("-id")
         )
@@ -455,9 +445,7 @@ class BaixaFisicaBemPatrimonialViewSet(
                 "valor_antigo": r.valor_antigo,
                 "valor_novo": r.valor_novo,
                 "justificativa": r.justificativa,
-                "alterado_por": (
-                    r.alterado_por.username if r.alterado_por else None
-                ),
+                "alterado_por": (r.alterado_por.username if r.alterado_por else None),
                 "data_alteracao": r.alterado_em if hasattr(r, "alterado_em") else None,
             }
             for r in registros
@@ -480,13 +468,11 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['post'], url_path='solicitar')
+    @action(detail=True, methods=["post"], url_path="solicitar")
     def enviar_solicitacao(self, request, pk=None):
         baixa = self.get_object()
 
-        serializer = self.get_serializer(
-            data={}, context={'baixa': baixa, 'request': request}
-        )
+        serializer = self.get_serializer(data={}, context={"baixa": baixa, "request": request})
         serializer.is_valid(raise_exception=True)
 
         status_anterior = baixa.get_status_display()
@@ -537,13 +523,11 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=["post"])
     def aprovar(self, request, pk=None):
         baixa = self.get_object()
 
-        serializer = self.get_serializer(
-            data=request.data, context={'baixa': baixa, 'request': request}
-        )
+        serializer = self.get_serializer(data=request.data, context={"baixa": baixa, "request": request})
         serializer.is_valid(raise_exception=True)
 
         if baixa.nbbpms_lote.exists() or (baixa.numero_nbbpm or "").strip():
@@ -593,23 +577,21 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['post'], url_path='recusar')
+    @action(detail=True, methods=["post"], url_path="recusar")
     def recusar(self, request, pk=None):
         baixa = self.get_object()
 
-        serializer = self.get_serializer(
-            data=request.data, context={'baixa': baixa, 'request': request}
-        )
+        serializer = self.get_serializer(data=request.data, context={"baixa": baixa, "request": request})
         serializer.is_valid(raise_exception=True)
 
         status_anterior = baixa.get_status_display()
-        motivo = serializer.validated_data.get('motivo', '')
+        motivo = serializer.validated_data.get("motivo", "")
 
         with transaction.atomic():
             set_user(request.user)
             self._restaurar_bens_da_baixa(baixa)
             baixa.status = constants.RECUSADA
-            baixa.save(update_fields=['status'])
+            baixa.save(update_fields=["status"])
 
         self._registrar_historico(
             baixa=baixa,
@@ -643,13 +625,11 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['post'], url_path='corrigir-processo')
+    @action(detail=True, methods=["post"], url_path="corrigir-processo")
     def corrigir_processo(self, request, pk=None):
         baixa = self.get_object()
 
-        serializer = self.get_serializer(
-            data=request.data, context={'baixa': baixa, 'request': request}
-        )
+        serializer = self.get_serializer(data=request.data, context={"baixa": baixa, "request": request})
         serializer.is_valid(raise_exception=True)
 
         novo_numero = serializer.validated_data["numero_processo_baixa"]
@@ -698,22 +678,20 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['post'], url_path='solicitar-correcao')
+    @action(detail=True, methods=["post"], url_path="solicitar-correcao")
     def solicitar_correcao(self, request, pk=None):
         baixa = self.get_object()
 
-        serializer = self.get_serializer(
-            data=request.data, context={'baixa': baixa, 'request': request}
-        )
+        serializer = self.get_serializer(data=request.data, context={"baixa": baixa, "request": request})
         serializer.is_valid(raise_exception=True)
 
         status_anterior = baixa.get_status_display()
-        motivo = serializer.validated_data['motivo']
+        motivo = serializer.validated_data["motivo"]
 
         with transaction.atomic():
             set_user(request.user)
             baixa.status = constants.AGUARDANDO_ENVIO
-            baixa.save(update_fields=['status'])
+            baixa.save(update_fields=["status"])
 
         self._registrar_historico(
             baixa=baixa,
@@ -733,11 +711,11 @@ class BaixaFisicaBemPatrimonialViewSet(
 
     def _restaurar_bens_da_baixa(self, baixa: BaixaFisicaBemPatrimonial) -> None:
         """Restaura o status dos bens ao cancelar uma baixa."""
-        for item in baixa.itens.select_related('bem'):
+        for item in baixa.itens.select_related("bem"):
             bem = item.bem
             if bem.status == constants.BAIXA_FISICA_AGUARDANDO_APROVACAO:
                 bem.status = constants.APROVADO
-                bem.save(update_fields=['status'])
+                bem.save(update_fields=["status"])
 
     # =========================================================
     # GERAR LAUDO DE AVALIAÇÃO
@@ -757,13 +735,13 @@ class BaixaFisicaBemPatrimonialViewSet(
             404: OpenApiResponse(description="Baixa física não encontrada"),
         },
     )
-    @action(detail=True, methods=['get'], url_path='gerar-laudo')
+    @action(detail=True, methods=["get"], url_path="gerar-laudo")
     def gerar_laudo(self, request, pk=None):
         baixa = self.get_object()
 
         if baixa.status != constants.ACEITA:
             return Response(
-                {'detail': 'O Laudo de Avaliação só pode ser gerado para baixas aceitas.'},
+                {"detail": "O Laudo de Avaliação só pode ser gerado para baixas aceitas."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -780,7 +758,7 @@ class BaixaFisicaBemPatrimonialViewSet(
         request=None,
         responses={200: OpenApiResponse(description="Arquivo Excel")},
     )
-    @action(detail=False, methods=['get'], url_path='exportar-excel')
+    @action(detail=False, methods=["get"], url_path="exportar-excel")
     def exportar_excel(self, request):
         queryset = self._get_queryset_para_exportacao(request)
         wb = self._construir_workbook(queryset)
@@ -789,18 +767,18 @@ class BaixaFisicaBemPatrimonialViewSet(
     def _get_queryset_para_exportacao(self, request):
         """Aplica filtros e restrição por IDs ao queryset de exportação."""
         queryset = self.filter_queryset(self.get_queryset())
-        ids_param = request.query_params.get('ids')
+        ids_param = request.query_params.get("ids")
         if ids_param:
             ids_list = self._parse_ids(ids_param)
             if ids_list:
                 queryset = queryset.filter(id__in=ids_list)
-        queryset = queryset.prefetch_related('nbbpms_lote', 'itens__bem')
+        queryset = queryset.prefetch_related("nbbpms_lote", "itens__bem")
         return queryset
 
-    def _parse_ids(self, ids_param: str) -> list:
+    def _parse_ids(self, ids_param: str) -> List[int]:
         """Converte string de IDs separados por vírgula em lista de ints."""
         ids = []
-        for id_str in ids_param.split(','):
+        for id_str in ids_param.split(","):
             try:
                 ids.append(int(id_str.strip()))
             except (ValueError, TypeError):
@@ -819,13 +797,18 @@ class BaixaFisicaBemPatrimonialViewSet(
 
     def _escrever_cabecalho(self, ws) -> None:
         headers = [
-            'Unidade Administrativa', 'Número Patrimonial', 'Nome do Bem',
-            'Status', 'NBBPM', 'Usuário que solicitou a Baixa',
-            'Gestor que aprovou a solicitação', 'Data da Aprovação',
+            "Unidade Administrativa",
+            "Número Patrimonial",
+            "Nome do Bem",
+            "Status",
+            "NBBPM",
+            "Usuário que solicitou a Baixa",
+            "Gestor que aprovou a solicitação",
+            "Data da Aprovação",
         ]
         header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF", size=11)
-        header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
         for col_num, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col_num)
@@ -846,36 +829,32 @@ class BaixaFisicaBemPatrimonialViewSet(
                     self._escrever_linha(ws, row_num, baixa, bem=item.bem)
                     row_num += 1
 
-        cell_alignment = Alignment(vertical='center', wrap_text=True)
+        cell_alignment = Alignment(vertical="center", wrap_text=True)
         for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
             for cell in row:
                 cell.alignment = cell_alignment
 
     def _escrever_linha(self, ws, row_num: int, baixa, bem) -> None:
-        data_aprovacao = (
-            baixa.data_aprovacao.strftime('%d/%m/%Y %H:%M')
-            if baixa.data_aprovacao else '-'
-        )
+        data_aprovacao = baixa.data_aprovacao.strftime("%d/%m/%Y %H:%M") if baixa.data_aprovacao else "-"
         ws.cell(row=row_num, column=1).value = (
-            str(baixa.unidade_administrativa_origem)
-            if baixa.unidade_administrativa_origem else '-'
+            str(baixa.unidade_administrativa_origem) if baixa.unidade_administrativa_origem else "-"
         )
-        ws.cell(row=row_num, column=2).value = bem.numero_patrimonial if bem else '-'
-        ws.cell(row=row_num, column=3).value = bem.nome if bem else '-'
+        ws.cell(row=row_num, column=2).value = bem.numero_patrimonial if bem else "-"
+        ws.cell(row=row_num, column=3).value = bem.nome if bem else "-"
         ws.cell(row=row_num, column=4).value = baixa.get_status_display()
         nbbpm = None
         try:
-            if hasattr(baixa, '_prefetched_objects_cache') and 'nbbpms_lote' in baixa._prefetched_objects_cache:
-                lotes = baixa._prefetched_objects_cache['nbbpms_lote']
+            if hasattr(baixa, "_prefetched_objects_cache") and "nbbpms_lote" in baixa._prefetched_objects_cache:
+                lotes = baixa._prefetched_objects_cache["nbbpms_lote"]
                 nbbpm = lotes[0] if lotes else None
             else:
                 nbbpm = baixa.nbbpms_lote.first()
         except Exception:
             nbbpm = None
-        numero_nbbpm = nbbpm.numero if nbbpm and nbbpm.numero else (baixa.numero_nbbpm or '-')
+        numero_nbbpm = nbbpm.numero if nbbpm and nbbpm.numero else (baixa.numero_nbbpm or "-")
         ws.cell(row=row_num, column=5).value = numero_nbbpm
-        ws.cell(row=row_num, column=6).value = str(baixa.criado_por) if baixa.criado_por else '-'
-        ws.cell(row=row_num, column=7).value = str(baixa.aprovado_por) if baixa.aprovado_por else '-'
+        ws.cell(row=row_num, column=6).value = str(baixa.criado_por) if baixa.criado_por else "-"
+        ws.cell(row=row_num, column=7).value = str(baixa.aprovado_por) if baixa.aprovado_por else "-"
         ws.cell(row=row_num, column=8).value = data_aprovacao
 
     def _ajustar_colunas(self, ws) -> None:
@@ -883,10 +862,8 @@ class BaixaFisicaBemPatrimonialViewSet(
             ws.column_dimensions[get_column_letter(i)].width = width
 
     def _montar_resposta_excel(self, wb: Workbook) -> HttpResponse:
-        response = HttpResponse(
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
+        response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         filename = f'baixas_fisicas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         wb.save(response)
         return response

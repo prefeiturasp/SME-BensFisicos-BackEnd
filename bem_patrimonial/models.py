@@ -1,30 +1,29 @@
-from datetime import datetime
 import re
-from django.db.models import Q
-from django.dispatch import receiver
-from django.db.models.signals import post_save, pre_save
+from datetime import datetime
+
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
-from django.db import models
-from django.db import transaction
+from django.db import models, transaction
+from django.db.models import Q
 from django.db.models.functions import Substr
+from django.db.models.signals import post_save, pre_save
+from django.dispatch import receiver
 from django.utils import timezone
-from django.contrib.contenttypes.models import ContentType
-from dados_comuns.models import HistoricoGeral
+
+from bem_patrimonial import constants
+from bem_patrimonial.emails import (
+    envia_email_cadastro_nao_aprovado,
+    envia_email_nova_solicitacao_movimentacao,
+)
 from dados_comuns.context import get_user
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.utils import (
     CODIGO_UA_PONTO_CENTRAL,
     dict_changes,
     unidade_orcamentaria_eh_externa,
 )
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.models import Usuario
-from bem_patrimonial.emails import (
-    envia_email_nova_solicitacao_movimentacao,
-    envia_email_cadastro_nao_aprovado,
-)
-from bem_patrimonial import constants
-
 
 NPAT_NUM_REGEX = r"^\d{3}\.\d{9}-\d$"
 NPAT_AUTO_REGEX = r"^SEM-NUMERO-\d+$"
@@ -101,15 +100,11 @@ class BemPatrimonial(BaseModel):
         blank=True,
         default="",
     )
-    valor_unitario = models.DecimalField(
-        "Valor unitário", max_digits=16, decimal_places=2, blank=False, null=False
-    )
+    valor_unitario = models.DecimalField("Valor unitário", max_digits=16, decimal_places=2, blank=False, null=False)
     marca = models.CharField("Marca", max_length=255, null=False, blank=False)
     modelo = models.CharField("Modelo", max_length=255, null=False, blank=False)
 
-    localizacao = models.CharField(
-        "Localização", max_length=255, null=True, blank=True, default=""  # NOSONAR
-    )
+    localizacao = models.CharField("Localização", max_length=255, null=True, blank=True, default="")  # NOSONAR
     numero_patrimonial = models.CharField(
         "Número Patrimonial",
         max_length=20,
@@ -158,9 +153,7 @@ class BemPatrimonial(BaseModel):
         blank=True,
     )
     criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
-    atualizado_em = models.DateTimeField(
-        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
-    )
+    atualizado_em = models.DateTimeField(VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True)
     AUDIT_TRACK_FIELDS = (
         "numero_patrimonial",
         "numero_formato_antigo",
@@ -177,21 +170,15 @@ class BemPatrimonial(BaseModel):
         "unidade_administrativa",
         "status",
         "bloqueado_conciliacao",
-        "observacao"
+        "observacao",
     )
     AUDIT_IGNORE_FIELDS = ("id", "criado_em", "atualizado_em", "criado_por")
 
     def __str__(self):
-        label_autocomplete_transferencia = getattr(
-            self, "autocomplete_label_transferencia", None
-        )
+        label_autocomplete_transferencia = getattr(self, "autocomplete_label_transferencia", None)
         if label_autocomplete_transferencia:
             return label_autocomplete_transferencia
-        return (
-            f"{self.numero_patrimonial} - {self.nome}"
-            if self.numero_patrimonial
-            else self.nome
-        )
+        return f"{self.numero_patrimonial} - {self.nome}" if self.numero_patrimonial else self.nome
 
     class Meta:
         verbose_name = "bem patrimonial"
@@ -208,36 +195,25 @@ class BemPatrimonial(BaseModel):
         if not self.numero_patrimonial:
             return
 
-        if BemPatrimonial.objects.filter(
-            numero_patrimonial=self.numero_patrimonial,
-            excluido=False
-        ).exclude(pk=self.pk).exists():
-            raise ValidationError({
-                'numero_patrimonial': 'Número Patrimonial já cadastrado'
-            })
+        if (
+            BemPatrimonial.objects.filter(numero_patrimonial=self.numero_patrimonial, excluido=False)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError({"numero_patrimonial": "Número Patrimonial já cadastrado"})
 
     def _clean_valida_formato_antigo_ou_sem_numeracao(self):
         if not self.pk and self.numero_formato_antigo and self.sem_numeracao:
-            raise ValidationError(
-                "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
-            )
+            raise ValidationError("Selecione 'Formato antigo' OU 'Sem numeração' — não ambos.")
 
     def _clean_valida_numero_obrigatorio(self):
-        if not self.sem_numeracao and not (
-            self.numero_patrimonial and str(self.numero_patrimonial).strip()
-        ):
-            raise ValidationError(
-                {
-                    "numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."
-                }
-            )
+        if not self.sem_numeracao and not (self.numero_patrimonial and str(self.numero_patrimonial).strip()):
+            raise ValidationError({"numero_patrimonial": "Informe o Número Patrimonial ou marque 'Sem numeração'."})
 
     def _clean_valida_formato_novo(self):
         if (not self.numero_formato_antigo) and (not self.sem_numeracao):
             if not re.fullmatch(NPAT_NUM_REGEX, self.numero_patrimonial or ""):
-                raise ValidationError(
-                    {"numero_patrimonial": "Número Patrimonial incompleto"}
-                )
+                raise ValidationError({"numero_patrimonial": "Número Patrimonial incompleto"})
 
     def clean(self):
         self._clean_valida_formato_antigo_ou_sem_numeracao()
@@ -257,11 +233,7 @@ class BemPatrimonial(BaseModel):
         base_id = self.pk
         while True:
             numero_formatado = f"SEM-NUMERO-{base_id}"
-            if (
-                not type(self)
-                .objects.filter(numero_patrimonial=numero_formatado)
-                .exists()
-            ):
+            if not type(self).objects.filter(numero_patrimonial=numero_formatado).exists():
                 break
             base_id += 1
         self.numero_patrimonial = numero_formatado
@@ -292,7 +264,7 @@ class BemPatrimonial(BaseModel):
                     valor_antigo=old,
                     valor_novo=new,
                     alterado_por=user,
-                    justificativa=justificativa
+                    justificativa=justificativa,
                 )
                 for field, (old, new) in changes.items()
             ]
@@ -314,17 +286,15 @@ class BemPatrimonial(BaseModel):
 
     @property
     def tem_movimentacao_pendente(self):
-        return self.movimentacaobempatrimonial_set.filter(
-            status=constants.ENVIADA
-        ).exists()
+        return self.movimentacaobempatrimonial_set.filter(status=constants.ENVIADA).exists()
 
     def set_unidade_administrative(self, unidade):
         self.unidade_administrativa = unidade
         self.save()
 
     def _on_soft_delete(self):
-        from inventario.models import ItemConciliacao
         from inventario import constants as inv_constants
+        from inventario.models import ItemConciliacao
 
         ItemConciliacao.objects.filter(
             bem_id=self.pk,
@@ -360,9 +330,7 @@ class StatusBemPatrimonial(models.Model):
         null=True,
         blank=True,
     )
-    atualizado_em = models.DateTimeField(
-        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
-    )
+    atualizado_em = models.DateTimeField(VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True)
 
     def save(self, *args, **kwargs):
         self.atualizado_em = datetime.now()
@@ -486,9 +454,7 @@ class MovimentacaoBemPatrimonial(models.Model):
         blank=True,
     )
     criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
-    atualizado_em = models.DateTimeField(
-        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
-    )
+    atualizado_em = models.DateTimeField(VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True)
     numero_cimbpm = models.CharField(
         "Número CIMBPM",
         max_length=30,
@@ -657,9 +623,7 @@ class TransferenciaBemPatrimonial(models.Model):
         blank=False,
     )
     criado_em = models.DateTimeField(VERBOSE_CRIADO_EM, auto_now_add=True)
-    atualizado_em = models.DateTimeField(
-        VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True
-    )
+    atualizado_em = models.DateTimeField(VERBOSE_ATUALIZADO_EM, auto_now=True, blank=True)
 
     class Meta:
         verbose_name = "transferência de bem patrimonial"
@@ -671,45 +635,23 @@ class TransferenciaBemPatrimonial(models.Model):
     def _validar_destino(self):
         if not unidade_orcamentaria_eh_externa(self.unidade_orcamentaria_destino):
             raise ValidationError(
-                {
-                    "unidade_orcamentaria_destino": (
-                        "A Unidade Orçamentária de destino deve ser externa à SME."
-                    )
-                }
+                {"unidade_orcamentaria_destino": ("A Unidade Orçamentária de destino deve ser externa à SME.")}
             )
 
-        if (
-            self.unidade_administrativa_destino.unidade_orcamentaria_id
-            != self.unidade_orcamentaria_destino_id
-        ):
+        if self.unidade_administrativa_destino.unidade_orcamentaria_id != self.unidade_orcamentaria_destino_id:
             raise ValidationError(
-                {
-                    "unidade_administrativa_destino": (
-                        "A Unidade Administrativa de destino não pertence à UO informada."
-                    )
-                }
+                {"unidade_administrativa_destino": ("A Unidade Administrativa de destino não pertence à UO informada.")}
             )
 
         codigo_destino = (self.unidade_administrativa_destino.codigo or "").strip()
-        if not (
-            codigo_destino == CODIGO_UA_PONTO_CENTRAL
-            or codigo_destino.endswith(f".{CODIGO_UA_PONTO_CENTRAL}")
-        ):
+        if not (codigo_destino == CODIGO_UA_PONTO_CENTRAL or codigo_destino.endswith(f".{CODIGO_UA_PONTO_CENTRAL}")):
             raise ValidationError(
-                {
-                    "unidade_administrativa_destino": (
-                        "A transferência deve usar a UA 001 da UO de destino."
-                    )
-                }
+                {"unidade_administrativa_destino": ("A transferência deve usar a UA 001 da UO de destino.")}
             )
 
         if not self.unidade_administrativa_destino.is_ativa:
             raise ValidationError(
-                {
-                    "unidade_administrativa_destino": (
-                        "A Unidade Administrativa de destino está inativa."
-                    )
-                }
+                {"unidade_administrativa_destino": ("A Unidade Administrativa de destino está inativa.")}
             )
 
     def _obter_itens_para_efetivar(self):
@@ -718,15 +660,9 @@ class TransferenciaBemPatrimonial(models.Model):
         if not itens:
             raise ValidationError("Não é possível efetivar transferência sem bens.")
 
-        bens_por_id = BemPatrimonial.objects.select_for_update().in_bulk(
-            [item.bem_id for item in itens]
-        )
+        bens_por_id = BemPatrimonial.objects.select_for_update().in_bulk([item.bem_id for item in itens])
         uas_por_id = UnidadeAdministrativa.objects.in_bulk(
-            {
-                bem.unidade_administrativa_id
-                for bem in bens_por_id.values()
-                if bem.unidade_administrativa_id
-            }
+            {bem.unidade_administrativa_id for bem in bens_por_id.values() if bem.unidade_administrativa_id}
         )
 
         for item in itens:
@@ -740,19 +676,14 @@ class TransferenciaBemPatrimonial(models.Model):
         for item in itens:
             bem = item.bem
             if bem.status != constants.APROVADO:
-                raise ValidationError(
-                    f"O bem '{bem.nome}' precisa estar com status 'Aprovado' para ser transferido."
-                )
+                raise ValidationError(f"O bem '{bem.nome}' precisa estar com status 'Aprovado' para ser transferido.")
 
             unidade_administrativa = bem.unidade_administrativa
             if (
                 not unidade_administrativa
-                or unidade_administrativa.unidade_orcamentaria_id
-                != self.unidade_orcamentaria_origem_id
+                or unidade_administrativa.unidade_orcamentaria_id != self.unidade_orcamentaria_origem_id
             ):
-                raise ValidationError(
-                    f"O bem '{bem.nome}' não pertence à UO de origem da transferência."
-                )
+                raise ValidationError(f"O bem '{bem.nome}' não pertence à UO de origem da transferência.")
 
     @transaction.atomic
     def efetivar_transferencia(self, usuario):
@@ -869,11 +800,7 @@ def bempatrimonial_guardar_estado_anterior(sender, instance, **kwargs):
         instance._old_ua_id = None
         return
 
-    old = (
-        BemPatrimonial.all_objects.filter(pk=instance.pk)
-        .only("unidade_administrativa_id")
-        .first()
-    )
+    old = BemPatrimonial.all_objects.filter(pk=instance.pk).only("unidade_administrativa_id").first()
 
     instance._old_ua_id = getattr(old, "unidade_administrativa_id", None)
 
@@ -967,8 +894,12 @@ class BaixaFisicaBemPatrimonial(models.Model):
     )
 
     numero_nbbpm = models.CharField(
-        max_length=32, blank=True, default="", db_index=True, editable=False,
-        help_text="Campo legado desativado para escrita; consultar NBBPM via M2M."
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        editable=False,
+        help_text="Campo legado desativado para escrita; consultar NBBPM via M2M.",
     )
 
     class Meta:
@@ -982,45 +913,38 @@ class BaixaFisicaBemPatrimonial(models.Model):
         # data_baixa agora é opcional; valida apenas se informada
         if not self.data_baixa:
             return
-        data_baixa = (
-            self.data_baixa.date()
-            if hasattr(self.data_baixa, "date")
-            else self.data_baixa
-        )
+        data_baixa = self.data_baixa.date() if hasattr(self.data_baixa, "date") else self.data_baixa
         if data_baixa > timezone.localdate():
-            raise ValidationError(
-                {
-                    "data_baixa": "A data da Baixa Física não pode ser maior que a data atual."
-                }
-            )
+            raise ValidationError({"data_baixa": "A data da Baixa Física não pode ser maior que a data atual."})
 
     def _clean_valida_itens_baixa(self, itens):
         for item in itens:
             bem = item.bem
             if bem.unidade_administrativa_id != self.unidade_administrativa_origem_id:
-                raise ValidationError(
-                    f"O bem '{bem}' não pertence à Unidade Administrativa selecionada."
-                )
+                raise ValidationError(f"O bem '{bem}' não pertence à Unidade Administrativa selecionada.")
             if bem.status in (constants.BAIXA_FISICA, constants.LAUDADO_PARA_BAIXA):
                 # Laudado vinculado a outra Aceita cai no check abaixo
                 # com mensagem de "outro pedido". Aqui cobre Baixa Física definitiva.
                 if bem.status == constants.BAIXA_FISICA:
                     raise ValidationError(f"O bem '{bem}' já foi baixado.")
-            if BaixaFisicaBensItem.objects.filter(
-                bem=bem,
-                baixa__status__in=[
-                    constants.AGUARDANDO_ENVIO,
-                    constants.SOLICITADA,
-                    constants.ACEITA,
-                ],
-            ).exclude(baixa=self).exists():
-                raise ValidationError(
-                    f"O bem '{bem}' já está em processo de Baixa Física em outro pedido."
+            if (
+                BaixaFisicaBensItem.objects.filter(
+                    bem=bem,
+                    baixa__status__in=[
+                        constants.AGUARDANDO_ENVIO,
+                        constants.SOLICITADA,
+                        constants.ACEITA,
+                    ],
                 )
+                .exclude(baixa=self)
+                .exists()
+            ):
+                raise ValidationError(f"O bem '{bem}' já está em processo de Baixa Física em outro pedido.")
             # Órfão Laudado (sem outra baixa): barra igual API para não entrar em Em elaboração/Solicitada.
             if bem.status == constants.LAUDADO_PARA_BAIXA:
                 raise ValidationError(
-                    f"O bem '{bem}' possui status '{bem.get_status_display()}' e não pode ser incluído em uma baixa física."
+                    f"O bem '{bem}' possui status '{bem.get_status_display()}' "
+                    "e não pode ser incluído em uma baixa física."
                 )
 
     def clean(self):
@@ -1100,22 +1024,16 @@ class BaixaFisicaBemPatrimonial(models.Model):
         - validação cruzada central: barra reuso se já tem NBBPM (nova tabela ou legado)
         """
         if self.status != constants.SOLICITADA:
-            raise ValidationError(
-                "Só é possível aprovar baixas com status 'Solicitada'."
-            )
+            raise ValidationError("Só é possível aprovar baixas com status 'Solicitada'.")
 
         if self.nbbpms_lote.exists() or (self.numero_nbbpm or "").strip():
             raise ValidationError("Esta baixa já possui NBBPM gerada.")
 
         processo = (numero_processo_baixa or self.numero_processo_baixa or "").strip()
         if not processo:
-            raise ValidationError(
-                {"numero_processo_baixa": "Número do processo é obrigatório."}
-            )
+            raise ValidationError({"numero_processo_baixa": "Número do processo é obrigatório."})
         if not re.fullmatch(constants.PROCESSO_BAIXA_REGEX, processo):
-            raise ValidationError(
-                {"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE}
-            )
+            raise ValidationError({"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE})
 
         self.numero_processo_baixa = processo
         self.status = constants.ACEITA
@@ -1168,22 +1086,14 @@ class BaixaFisicaBemPatrimonial(models.Model):
         com número anterior, número novo, responsável e data/hora automática.
         """
         if self.status != constants.ACEITA:
-            raise ValidationError(
-                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
-            )
+            raise ValidationError("Só é possível corrigir o número do processo de baixas com status 'Aceita'.")
         if self.possui_nota_gerada:
-            raise ValidationError(
-                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
-            )
+            raise ValidationError("Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado.")
         processo = (novo_numero or "").strip()
         if not processo:
-            raise ValidationError(
-                {"numero_processo_baixa": "Número do processo é obrigatório."}
-            )
+            raise ValidationError({"numero_processo_baixa": "Número do processo é obrigatório."})
         if not re.fullmatch(constants.PROCESSO_BAIXA_REGEX, processo):
-            raise ValidationError(
-                {"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE}
-            )
+            raise ValidationError({"numero_processo_baixa": constants.PROCESSO_BAIXA_MESSAGE})
         numero_antigo = self.numero_processo_baixa or ""
         if processo == (numero_antigo or "").strip():
             return
@@ -1233,6 +1143,7 @@ class BaixaFisicaBensItem(models.Model):
 # ============================================================================
 # NBBPM CONSOLIDADA — geração em lote
 # ============================================================================
+
 
 class NBBPM(models.Model):
     """NBBPM consolidada a partir de Baixas ACEITA da mesma UO (prefixo fixo 001)."""
@@ -1336,6 +1247,4 @@ class NBBPM(models.Model):
         if self.pk and self.baixas.exists():
             status_invalidos = self.baixas.exclude(status=constants.ACEITA)
             if status_invalidos.exists():
-                raise ValidationError(
-                    "A NBBPM só pode ser gerada para Baixas Físicas com status Aprovado."
-                )
+                raise ValidationError("A NBBPM só pode ser gerada para Baixas Físicas com status Aprovado.")

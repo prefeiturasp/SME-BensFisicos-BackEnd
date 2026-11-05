@@ -1,15 +1,17 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
-from django.test import TestCase, RequestFactory
+from unittest.mock import Mock
+
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
-from unittest.mock import Mock
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from django.test import RequestFactory, TestCase
+
 from dados_comuns.admin import UnidadeAdministrativaAdmin
 from dados_comuns.formats import UnidadeAdministrativaPDFFormat, UnidadeOrcamentariaPDFFormat
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.resources import UnidadeAdministrativaResource, UnidadeOrcamentariaResource
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class ExportacaoUnidadeAdministrativaTestCase(TestCase):

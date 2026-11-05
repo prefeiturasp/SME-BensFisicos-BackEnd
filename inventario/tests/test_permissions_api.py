@@ -34,31 +34,22 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
         perm = ConciliacaoUAPermission()
 
         user_sem_auth = self._user(authenticated=False)
-        self.assertFalse(
-            perm.has_permission(self._request(user_sem_auth), self._view("list"))
-        )
+        self.assertFalse(perm.has_permission(self._request(user_sem_auth), self._view("list")))
 
         user_super = self._user(superuser=True)
         for action in ("list", "retrieve", "create", "historico", "exportar", "finalizar"):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_permission(self._request(user_super), self._view(action))
-                )
+                self.assertTrue(perm.has_permission(self._request(user_super), self._view(action)))
 
         user_gestor = self._user(gestor=True)
         for action in ("list", "retrieve", "create", "historico", "exportar", "finalizar"):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_permission(self._request(user_gestor), self._view(action))
-                )
+                self.assertTrue(perm.has_permission(self._request(user_gestor), self._view(action)))
 
         user_operador = self._user(operador=True)
-        for action in ("list", "retrieve", "create", "historico",
-                       "exportar", "finalizar"):
+        for action in ("list", "retrieve", "create", "historico", "exportar", "finalizar"):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_permission(self._request(user_operador), self._view(action))
-                )
+                self.assertTrue(perm.has_permission(self._request(user_operador), self._view(action)))
 
     def test_conciliacao_bloqueia_update_e_delete(self):
         perm = ConciliacaoUAPermission()
@@ -66,9 +57,7 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
 
         for action in ("update", "partial_update", "destroy"):
             with self.subTest(action=action):
-                self.assertFalse(
-                    perm.has_permission(self._request(user_gestor), self._view(action))
-                )
+                self.assertFalse(perm.has_permission(self._request(user_gestor), self._view(action)))
 
     def test_conciliacao_has_object_permission_bloqueia_update_e_delete(self):
         perm = ConciliacaoUAPermission()
@@ -78,35 +67,21 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
 
         for action in ("update", "partial_update", "destroy"):
             with self.subTest(action=action):
-                self.assertFalse(
-                    perm.has_object_permission(
-                        self._request(user_gestor), self._view(action), obj
-                    )
-                )
+                self.assertFalse(perm.has_object_permission(self._request(user_gestor), self._view(action), obj))
 
         for action in ("retrieve", "historico", "exportar", "finalizar"):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_object_permission(
-                        self._request(user_gestor), self._view(action), obj
-                    )
-                )
+                self.assertTrue(perm.has_object_permission(self._request(user_gestor), self._view(action), obj))
 
         for action in ("retrieve", "historico", "exportar", "finalizar"):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_object_permission(
-                        self._request(user_operador), self._view(action), obj
-                    )
-                )
+                self.assertTrue(perm.has_object_permission(self._request(user_operador), self._view(action), obj))
 
     def test_item_has_permission_cobre_ramos_principais(self):
         perm = ItemConciliacaoPermission()
 
         user_sem_auth = self._user(authenticated=False)
-        self.assertFalse(
-            perm.has_permission(self._request(user_sem_auth), self._view("list"))
-        )
+        self.assertFalse(perm.has_permission(self._request(user_sem_auth), self._view("list")))
 
         user_super = self._user(superuser=True)
         for action in (
@@ -118,9 +93,7 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
             "situacoes_disponiveis",
         ):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_permission(self._request(user_super), self._view(action))
-                )
+                self.assertTrue(perm.has_permission(self._request(user_super), self._view(action)))
 
         user_gestor = self._user(gestor=True)
         for action in (
@@ -132,9 +105,7 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
             "situacoes_disponiveis",
         ):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_permission(self._request(user_gestor), self._view(action))
-                )
+                self.assertTrue(perm.has_permission(self._request(user_gestor), self._view(action)))
 
         user_operador = self._user(operador=True)
         for action in (
@@ -146,9 +117,7 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
             "situacoes_disponiveis",
         ):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_permission(self._request(user_operador), self._view(action))
-                )
+                self.assertTrue(perm.has_permission(self._request(user_operador), self._view(action)))
 
     def test_item_bloqueia_create_update_delete(self):
         perm = ItemConciliacaoPermission()
@@ -156,9 +125,7 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
 
         for action in ("create", "update", "partial_update", "destroy"):
             with self.subTest(action=action):
-                self.assertFalse(
-                    perm.has_permission(self._request(user_gestor), self._view(action))
-                )
+                self.assertFalse(perm.has_permission(self._request(user_gestor), self._view(action)))
 
     def test_item_has_object_permission_bloqueia_create_update_delete(self):
         perm = ItemConciliacaoPermission()
@@ -167,11 +134,7 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
 
         for action in ("create", "update", "partial_update", "destroy"):
             with self.subTest(action=action):
-                self.assertFalse(
-                    perm.has_object_permission(
-                        self._request(user_gestor), self._view(action), obj
-                    )
-                )
+                self.assertFalse(perm.has_object_permission(self._request(user_gestor), self._view(action), obj))
 
         for action in (
             "retrieve",
@@ -181,8 +144,4 @@ class PermissionsInventarioAPITestCase(SimpleTestCase):
             "situacoes_disponiveis",
         ):
             with self.subTest(action=action):
-                self.assertTrue(
-                    perm.has_object_permission(
-                        self._request(user_gestor), self._view(action), obj
-                    )
-                )
+                self.assertTrue(perm.has_object_permission(self._request(user_gestor), self._view(action), obj))

@@ -45,9 +45,7 @@ class ConciliacaoAdminBaseTest(TestCase):
         )
         cls.superuser.unidade_orcamentaria = cls.uo
         cls.superuser.must_change_password = False
-        cls.superuser.save(
-            update_fields=["unidade_orcamentaria", "must_change_password"]
-        )
+        cls.superuser.save(update_fields=["unidade_orcamentaria", "must_change_password"])
         cls.superuser.groups.add(cls.grupo_gestor)
 
         cls.criador = user_model.objects.create_user(
@@ -157,9 +155,7 @@ class ConciliacaoUAAdminFormTest(ConciliacaoAdminBaseTest):
         self.assertTrue(form.is_valid())
 
     def test_form_eventual_com_periodo_final_futuro_invalido(self):
-        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(status=constants.CONCILIACAO_FECHADO)
         request = self.factory.get("/admin/")
         request.user = self.superuser
         form = ConciliacaoUAAdminForm(
@@ -174,9 +170,7 @@ class ConciliacaoUAAdminFormTest(ConciliacaoAdminBaseTest):
         self.assertIn("periodo_final", form.errors)
 
     def test_form_eventual_com_periodo_final_passado_valido(self):
-        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(status=constants.CONCILIACAO_FECHADO)
         request = self.factory.get("/admin/")
         request.user = self.superuser
         form = ConciliacaoUAAdminForm(
@@ -190,9 +184,7 @@ class ConciliacaoUAAdminFormTest(ConciliacaoAdminBaseTest):
         self.assertTrue(form.is_valid())
 
     def test_form_eventual_sem_periodo_final_invalido(self):
-        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(
-            status=constants.CONCILIACAO_FECHADO
-        )
+        ConciliacaoUA.objects.filter(pk=self.outra_conciliacao.pk).update(status=constants.CONCILIACAO_FECHADO)
         request = self.factory.get("/admin/")
         request.user = self.superuser
         form = ConciliacaoUAAdminForm(
@@ -279,12 +271,13 @@ class ItemConciliacaoChangeListViewTest(ConciliacaoAdminBaseTest):
 
     def test_acoes_lista_preserva_url_exata_da_listagem_no_next(self):
         self.item_admin._current_changelist_full_path = (
-            "/admin/inventario/itemconciliacao/"
-            "?conciliacao__id__exact=24&q=Realista&o=1"
+            "/admin/inventario/itemconciliacao/" "?conciliacao__id__exact=24&q=Realista&o=1"
         )
         html = self.item_admin.acoes_lista(self.item_com_ocorrencia)
 
-        self.assertIn("next=%2Fadmin%2Finventario%2Fitemconciliacao%2F%3Fconciliacao__id__exact%3D24%26q%3DRealista%26o%3D1", html)
+        self.assertIn(
+            "next=%2Fadmin%2Finventario%2Fitemconciliacao%2F%3Fconciliacao__id__exact%3D24%26q%3DRealista%26o%3D1", html
+        )
 
     def test_changelist_renderiza_acoes_com_next_da_url_exata(self):
         url = reverse("admin:inventario_itemconciliacao_changelist")
@@ -299,7 +292,7 @@ class ItemConciliacaoChangeListViewTest(ConciliacaoAdminBaseTest):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-preserve-list-context="true"')
-        self.assertContains(response, 'window.location.pathname + window.location.search')
+        self.assertContains(response, "window.location.pathname + window.location.search")
 
     def test_changelist_nao_expoe_contexto_de_conciliacao_fora_do_escopo(self):
         self.client.force_login(self.criador)

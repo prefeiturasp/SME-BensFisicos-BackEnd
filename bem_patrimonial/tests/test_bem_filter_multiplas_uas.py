@@ -47,7 +47,7 @@ class BemPatrimonialFilterMultiplasUAsTest(SimpleTestCase):
     def test_sem_parametro_nao_filtra_por_ua(self):
         sql = _sql({})
         self.assertNotIn(
-            "unidade_administrativa_id\" in (",
+            'unidade_administrativa_id" in (',
             sql.replace("`", '"'),
         )
 

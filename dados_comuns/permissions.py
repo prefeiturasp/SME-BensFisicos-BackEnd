@@ -1,8 +1,7 @@
-from rest_framework.permissions import BasePermission
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import BasePermission
 
-from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
-from dados_comuns.escopo import filtrar_queryset_transferencia_por_escopo
+from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo, filtrar_queryset_transferencia_por_escopo
 
 
 class BemPatrimonialPermission(BasePermission):
@@ -18,10 +17,7 @@ class BemPatrimonialPermission(BasePermission):
             return False
         if getattr(user, "is_superuser", False):
             return True
-        return bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_operador_inventario", False)
-        )
+        return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_operador_inventario", False))
 
     def has_permission(self, request, view):
         if not self._pode_acessar_modulo(request.user):
@@ -38,8 +34,7 @@ class BemPatrimonialPermission(BasePermission):
 
         if getattr(view, "action", None) == "destroy":
             return bool(
-                getattr(request.user, "is_gestor_patrimonio", False)
-                or getattr(request.user, "is_superuser", False)
+                getattr(request.user, "is_gestor_patrimonio", False) or getattr(request.user, "is_superuser", False)
             )
 
         return True
@@ -60,10 +55,7 @@ class BemPatrimonialPermission(BasePermission):
             return False
 
         if getattr(view, "action", None) == "destroy":
-            return bool(
-                getattr(user, "is_gestor_patrimonio", False)
-                or getattr(user, "is_superuser", False)
-            )
+            return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False))
 
         return True
 
@@ -80,10 +72,7 @@ class MovimentacaoBemPatrimonialPermission(BasePermission):
             return False
         if getattr(user, "is_superuser", False):
             return True
-        return bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_operador_inventario", False)
-        )
+        return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_operador_inventario", False))
 
     def has_permission(self, request, view):
         return self._pode_acessar_modulo(request.user)
@@ -139,16 +128,10 @@ class UnidadeAdministrativaPermission(BasePermission):
             return False
         if getattr(user, "is_superuser", False):
             return True
-        return bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_operador_inventario", False)
-        )
+        return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_operador_inventario", False))
 
     def _pode_gerenciar(self, user):
-        return bool(
-            getattr(user, "is_superuser", False)
-            or getattr(user, "is_gestor_patrimonio", False)
-        )
+        return bool(getattr(user, "is_superuser", False) or getattr(user, "is_gestor_patrimonio", False))
 
     def has_permission(self, request, view):
         if not self._pode_acessar_modulo(request.user):
@@ -191,11 +174,7 @@ class UnidadeOrcamentariaPermission(BasePermission):
     """
 
     def _pode_acessar_modulo(self, user):
-        return bool(
-            user
-            and user.is_authenticated
-            and getattr(user, "is_superuser", False)
-        )
+        return bool(user and user.is_authenticated and getattr(user, "is_superuser", False))
 
     def has_permission(self, request, view):
         return self._pode_acessar_modulo(request.user)
@@ -215,10 +194,7 @@ class UsuarioPermission(BasePermission):
     message = "Operador não acessa gerenciamento de usuários."
 
     def _pode_gerenciar(self, user):
-        return bool(
-            getattr(user, "is_superuser", False)
-            or getattr(user, "is_gestor_patrimonio", False)
-        )
+        return bool(getattr(user, "is_superuser", False) or getattr(user, "is_gestor_patrimonio", False))
 
     def has_permission(self, request, view):
 

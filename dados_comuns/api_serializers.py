@@ -31,15 +31,9 @@ class UnidadeOrcamentariaDetailSerializer(UnidadeOrcamentariaListSerializer):
     class Meta(UnidadeOrcamentariaListSerializer.Meta):
         read_only_fields = ["id", "ativa_display"]
         extra_kwargs = {
-            "codigo": {
-                "help_text": "Código da Unidade Orçamentária no padrão do projeto (ex.: 01.16.10)."
-            },
-            "codigo_orgao": {
-                "help_text": "Código do Órgão no padrão NN.NN."
-            },
-            "sigla_orgao": {
-                "help_text": "Sigla do Órgão vinculada à Unidade Orçamentária."
-            }
+            "codigo": {"help_text": "Código da Unidade Orçamentária no padrão do projeto (ex.: 01.16.10)."},
+            "codigo_orgao": {"help_text": "Código do Órgão no padrão NN.NN."},
+            "sigla_orgao": {"help_text": "Sigla do Órgão vinculada à Unidade Orçamentária."},
         }
 
 
@@ -67,15 +61,9 @@ class UnidadeOrcamentariaExportQuerySerializer(serializers.Serializer):
 
 
 class UnidadeAdministrativaListSerializer(serializers.ModelSerializer):
-    unidade_orcamentaria_codigo = serializers.CharField(
-        source="unidade_orcamentaria.codigo", read_only=True
-    )
-    unidade_orcamentaria_nome = serializers.CharField(
-        source="unidade_orcamentaria.nome", read_only=True
-    )
-    unidade_orcamentaria_sigla = serializers.CharField(
-        source="unidade_orcamentaria.sigla", read_only=True
-    )
+    unidade_orcamentaria_codigo = serializers.CharField(source="unidade_orcamentaria.codigo", read_only=True)
+    unidade_orcamentaria_nome = serializers.CharField(source="unidade_orcamentaria.nome", read_only=True)
+    unidade_orcamentaria_sigla = serializers.CharField(source="unidade_orcamentaria.sigla", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
@@ -104,7 +92,10 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
         read_only_fields = ["id", "created_at", "updated_at"]
         extra_kwargs = {
             "codigo": {
-                "help_text": "Informe o sufixo numérico com 3 ou 4 dígitos (ex.: 002 ou 1002). O sistema compõe automaticamente o código completo com o prefixo da Unidade Orçamentária."
+                "help_text": (
+                    "Informe o sufixo numérico com 3 ou 4 dígitos (ex.: 002 ou 1002). O sistema compõe "
+                    "automaticamente o código completo com o prefixo da Unidade Orçamentária."
+                )
             }
         }
 
@@ -128,9 +119,7 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
             queryset = queryset.exclude(pk=self.instance.pk)
 
         if queryset.exists():
-            raise serializers.ValidationError(
-                {"codigo": "Já existe uma unidade administrativa com este código."}
-            )
+            raise serializers.ValidationError({"codigo": "Já existe uma unidade administrativa com este código."})
 
     def validate(self, attrs):
         uo = attrs.get("unidade_orcamentaria")
@@ -150,9 +139,7 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
                 )
                 if not sufixo:
                     raise serializers.ValidationError(
-                        {
-                            "codigo": "Ao alterar a Unidade Orçamentária, informe o código com 3 ou 4 dígitos numéricos."
-                        }
+                        {"codigo": "Ao alterar a Unidade Orçamentária, informe o código com 3 ou 4 dígitos numéricos."}
                     )
                 attrs["codigo"] = f"{uo.codigo}.{sufixo}"
                 self._validar_codigo_unico(attrs["codigo"])
@@ -160,17 +147,13 @@ class UnidadeAdministrativaDetailSerializer(UnidadeAdministrativaListSerializer)
 
         if codigo_informado is None:
             raise serializers.ValidationError(
-                {
-                    "codigo": "Informe o código da unidade administrativa com 3 ou 4 dígitos numéricos."
-                }
+                {"codigo": "Informe o código da unidade administrativa com 3 ou 4 dígitos numéricos."}
             )
 
         sufixo = self._extrair_sufixo_codigo(str(codigo_informado), uo.codigo)
         if not sufixo:
             raise serializers.ValidationError(
-                {
-                    "codigo": "Código inválido. Informe 3 ou 4 dígitos numéricos (ex.: 002 ou 1002)."
-                }
+                {"codigo": "Código inválido. Informe 3 ou 4 dígitos numéricos (ex.: 002 ou 1002)."}
             )
 
         attrs["codigo"] = f"{uo.codigo}.{sufixo}"

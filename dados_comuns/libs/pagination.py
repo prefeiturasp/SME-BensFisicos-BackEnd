@@ -1,5 +1,5 @@
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.exceptions import NotFound
+from rest_framework.pagination import PageNumberPagination
 
 
 class SafePagination(PageNumberPagination):
