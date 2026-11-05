@@ -67,7 +67,7 @@ test: ensure-env
 	$(RUN_WEB) python -m pytest $(PYTEST_ARGS)
 
 coverage: ensure-env
-	$(RUN_WEB) sh -c 'rm -rf docs/_cov && COVERAGE_FILE=/tmp/.coverage python -m coverage erase && COVERAGE_FILE=/tmp/.coverage python -m coverage run --source=bem_patrimonial,usuario,inventario,dados_comuns -m pytest $(PYTEST_ARGS) && COVERAGE_FILE=/tmp/.coverage python -m coverage report -m && COVERAGE_FILE=/tmp/.coverage python -m coverage html -d docs/_cov'
+	$(RUN_WEB) sh -c 'rm -rf docs/_cov && COVERAGE_FILE=/tmp/.coverage python -m coverage erase && COVERAGE_FILE=/tmp/.coverage python -m coverage run --source=. -m pytest $(PYTEST_ARGS) && COVERAGE_FILE=/tmp/.coverage python -m coverage report -m && COVERAGE_FILE=/tmp/.coverage python -m coverage html -d docs/_cov && COVERAGE_FILE=/tmp/.coverage python -m coverage xml -o coverage.xml'
 
 lint: ensure-env
 	$(RUN_WEB_NODEPS) sh -c 'RUFF_CACHE_DIR=/tmp/.ruff_cache python -m black --check bem_patrimonial usuario inventario dados_comuns config manage.py && RUFF_CACHE_DIR=/tmp/.ruff_cache python -m ruff check bem_patrimonial usuario inventario dados_comuns config manage.py'

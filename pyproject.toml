@@ -83,7 +83,9 @@ python_functions = ["test_*"]
 testpaths = ["bem_patrimonial", "usuario", "inventario", "dados_comuns"]
 
 [tool.coverage.run]
-source = ["bem_patrimonial", "usuario", "inventario", "dados_comuns"]
+# Fonte única na raiz do repo para os caminhos saírem completos no relatório.
+# Com um pacote por fonte, os caminhos saem sem a pasta do app e o Sonar não resolve.
+source = ["."]
 omit = [
     "*/migrations/*",
     "*/tests/*",
