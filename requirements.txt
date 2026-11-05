@@ -1,0 +1,2 @@
+# Compatibilidade: a pipeline de produção instala o requirements.txt da raiz.
+-r requirements/production.txt
