@@ -7,9 +7,9 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from dados_comuns.models import HistoricoGeral
 from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_uo
-from dados_comuns.models import HistoricoGeral
 from inventario.models import ParametroConciliacaoAnual
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -125,10 +125,7 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
 
     def _assert_bad_request(self, response):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertTrue(
-            "non_field_errors" in response.data
-            or "periodo_final" in response.data
-        )
+        self.assertTrue("non_field_errors" in response.data or "periodo_final" in response.data)
 
     def _assert_forbidden(self, response):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -341,9 +338,7 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
 
     def test_historico_vazio_e_criacao_e_alteracao_auditadas(self):
         self._auth(self.gestor)
-        historico_url = reverse(
-            "parametros-conciliacao-anual-historico", args=[self.parametro1.id]
-        )
+        historico_url = reverse("parametros-conciliacao-anual-historico", args=[self.parametro1.id])
         self.assertEqual(self.client.get(historico_url).data, [])
 
         response = self.client.post(
@@ -364,9 +359,7 @@ class ParametroConciliacaoAnualAPITestCase(APITestCase):
         self.assertEqual(criado.data[0]["acoes"][0]["valor_novo"], "criado")
         self.assertEqual(criado.data[0]["alterado_por_nome"], self.gestor.nome)
 
-        alterado = self.client.patch(
-            self._detail_url(parametro_id), {"periodo_final": "2027-04-30"}, format="json"
-        )
+        alterado = self.client.patch(self._detail_url(parametro_id), {"periodo_final": "2027-04-30"}, format="json")
         self.assertEqual(alterado.status_code, status.HTTP_200_OK)
         historico = self.client.get(url).data
         self.assertEqual(historico[0]["acoes"][0]["campo"], "periodo_final")

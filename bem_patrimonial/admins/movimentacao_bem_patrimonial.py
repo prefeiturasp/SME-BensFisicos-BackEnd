@@ -1,38 +1,35 @@
 import json
 
-from django.contrib import admin
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponseNotAllowed, JsonResponse
 from django.templatetags.static import static
 from django.urls import path
 from rest_framework.exceptions import ValidationError as DRFValidationError
+
+from bem_patrimonial import constants
 from bem_patrimonial.admins.actions.movimentacoe_duplicadas import (
     verificar_movimentacoes_duplicadas,
+)
+from bem_patrimonial.admins.filters.movimentacao_filters import (
+    IntervaloNpAteFilter,
+    IntervaloNpDeFilter,
+    MovimentacaoAtrasadaFilter,
 )
 from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
     MovimentacaoBemPatrimonialForm,
 )
-from bem_patrimonial.admins.filters.movimentacao_filters import (
-    MovimentacaoAtrasadaFilter,
-    IntervaloNpDeFilter,
-    IntervaloNpAteFilter,
+from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
+from bem_patrimonial.emails import (
+    envia_email_solicitacao_movimentacao_aceita,
+    envia_email_solicitacao_movimentacao_cancelada,
+    envia_email_solicitacao_movimentacao_rejeitada,
 )
-
 from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.emails import (
-    envia_email_solicitacao_movimentacao_aceita,
-    envia_email_solicitacao_movimentacao_rejeitada,
-    envia_email_solicitacao_movimentacao_cancelada,
-)
-from bem_patrimonial import constants
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
-
-from bem_patrimonial.admins.inlines.inlines import MovimentacaoBensItemInline
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
     BuscaBensMovimentacaoSerializer,
@@ -43,7 +40,7 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
     queryset_bens_movimentaveis,
     validar_ua_origem_movimentacao,
 )
-
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_queryset_movimentacao_por_escopo,
 )
@@ -60,20 +57,13 @@ def _obter_uo_id_do_usuario(usuario):
 
 
 def _movimentacao_entre_uos_diferentes(mov):
-    origem_uo_id = getattr(
-        mov.unidade_administrativa_origem, "unidade_orcamentaria_id", None
-    )
-    destino_uo_id = getattr(
-        mov.unidade_administrativa_destino, "unidade_orcamentaria_id", None
-    )
+    origem_uo_id = getattr(mov.unidade_administrativa_origem, "unidade_orcamentaria_id", None)
+    destino_uo_id = getattr(mov.unidade_administrativa_destino, "unidade_orcamentaria_id", None)
     return bool(origem_uo_id and destino_uo_id and origem_uo_id != destino_uo_id)
 
 
 def _usuario_e_gestor_da_uo(usuario, uo_id):
-    return bool(
-        getattr(usuario, "is_gestor_patrimonio", False)
-        and _obter_uo_id_do_usuario(usuario) == uo_id
-    )
+    return bool(getattr(usuario, "is_gestor_patrimonio", False) and _obter_uo_id_do_usuario(usuario) == uo_id)
 
 
 def _bens_da_movimentacao(mov):
@@ -112,8 +102,7 @@ def _check_operador_destino_mesma_uo(mov, request, acao):
         messages.add_message(
             request,
             messages.ERROR,
-            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino "
-            f"podem {acao} esta movimentação.",
+            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino podem {acao} esta movimentação.",
         )
         return True
     if mov.solicitado_por_id == request.user.pk:
@@ -181,7 +170,8 @@ def _check_cancelamento_entre_uos(mov, request):
     messages.add_message(
         request,
         messages.ERROR,
-        f"Movimentação #{mov.pk}: Apenas gestores da UO de origem ou destino podem cancelar esta movimentação entre UOs.",
+        f"Movimentação #{mov.pk}: Apenas gestores da UO de origem ou destino podem cancelar "
+        "esta movimentação entre UOs.",
     )
     return True
 
@@ -247,9 +237,7 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 bem.status = constants.APROVADO
                 bem.save()
                 if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_aceita(
-                        bem, mov.solicitado_por.email
-                    )
+                    envia_email_solicitacao_movimentacao_aceita(bem, mov.solicitado_por.email)
             mov.status = constants.ACEITA
             mov.aprovado_por = request.user
             mov.save()
@@ -260,7 +248,7 @@ def aprovar_solicitacao(modeladmin, request, queryset):
         )
 
 
-aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"
+aprovar_solicitacao.short_description = "Aprovar movimentação selecionada"  # type: ignore[attr-defined]
 
 
 def _nao_pode_rejeitar(mov, request):
@@ -305,9 +293,7 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                 bem.status = constants.APROVADO
                 bem.save()
                 if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_rejeitada(
-                        bem, mov.solicitado_por.email
-                    )
+                    envia_email_solicitacao_movimentacao_rejeitada(bem, mov.solicitado_por.email)
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -315,7 +301,7 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
         )
 
 
-rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"
+rejeitar_solicitacao.short_description = "Rejeitar movimentação selecionada"  # type: ignore[attr-defined]
 
 
 def _nao_pode_cancelar(mov, request):
@@ -369,9 +355,7 @@ def cancelar_solicitacao(modeladmin, request, queryset):
                 bem.status = constants.APROVADO
                 bem.save()
                 if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_cancelada(
-                        bem, request.user, mov.solicitado_por.email
-                    )
+                    envia_email_solicitacao_movimentacao_cancelada(bem, request.user, mov.solicitado_por.email)
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -379,7 +363,7 @@ def cancelar_solicitacao(modeladmin, request, queryset):
         )
 
 
-cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"
+cancelar_solicitacao.short_description = "Cancelar movimentação selecionada"  # type: ignore[attr-defined]
 
 
 class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
@@ -448,9 +432,7 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         "Unidade Orçamentária."
     )
 
-    autocomplete_fields = (
-        "unidade_administrativa_origem",
-    )
+    autocomplete_fields = ("unidade_administrativa_origem",)
 
     readonly_fields = (
         "solicitado_por",
@@ -577,17 +559,19 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         try:
             ua_origem = validar_ua_origem_movimentacao(
                 request.user,
-                UnidadeAdministrativa.objects.filter(
-                    pk=request.GET.get("unidade_administrativa_origem")
-                ).first(),
+                UnidadeAdministrativa.objects.filter(pk=request.GET.get("unidade_administrativa_origem")).first(),
             )
         except DRFValidationError as error:
             return JsonResponse({"detail": str(error)}, status=400)
 
         consulta = request.GET.get("q", "").strip()
-        bens = queryset_bens_movimentaveis(ua_origem).filter(
-            numero_patrimonial__icontains=consulta,
-        ).order_by("numero_patrimonial")[:50]
+        bens = (
+            queryset_bens_movimentaveis(ua_origem)
+            .filter(
+                numero_patrimonial__icontains=consulta,
+            )
+            .order_by("numero_patrimonial")[:50]
+        )
         itens = BemPatrimonialSimpleSerializer(bens, many=True).data
         return JsonResponse({"itens": itens})
 
@@ -596,13 +580,9 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
             raise PermissionDenied
         if request.method != "GET":
             return HttpResponseNotAllowed(["GET"])
-        serializer = BuscaBensMovimentacaoSerializer(
-            data=request.GET, context={"request": request}
-        )
+        serializer = BuscaBensMovimentacaoSerializer(data=request.GET, context={"request": request})
         if not serializer.is_valid():
-            return JsonResponse(
-                {"detail": obter_mensagem_erro_validacao(serializer.errors)}, status=400
-            )
+            return JsonResponse({"detail": obter_mensagem_erro_validacao(serializer.errors)}, status=400)
         return JsonResponse(buscar_bens_para_movimentacao(serializer.validated_data))
 
     def get_queryset(self, request):
@@ -637,10 +617,11 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         for bem in form.cleaned_data["bens_lote_resolvidos"]:
             MovimentacaoBensItem.objects.create(movimentacao=form.instance, bem=bem)
 
+    @admin.display(description="Documento CIMBPM")
     def get_documento_cimbpm_link(self, obj):
         if obj and obj.numero_cimbpm:
-            from django.utils.html import format_html
             from django.urls import reverse
+            from django.utils.html import format_html
 
             url_protegida = reverse("download_documento_cimbpm", kwargs={"pk": obj.pk})
 
@@ -650,16 +631,11 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
             )
         return "Número CIMBPM não gerado"
 
-    get_documento_cimbpm_link.short_description = "Documento CIMBPM"
-
+    @admin.display(description="Unidade orçamentária de destino")
     def get_unidade_orcamentaria_destino(self, obj):
         if not obj or not obj.unidade_administrativa_destino_id:
             return "-"
         return obj.unidade_administrativa_destino.unidade_orcamentaria
-
-    get_unidade_orcamentaria_destino.short_description = (
-        "Unidade orçamentária de destino"
-    )
 
     def response_action(self, request, queryset):
 
@@ -673,9 +649,7 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
         return super().response_action(request, queryset)
 
     def get_inline_formsets(self, request, formsets, inline_instances, obj=None):
-        inline_formsets = super().get_inline_formsets(
-            request, formsets, inline_instances, obj
-        )
+        inline_formsets = super().get_inline_formsets(request, formsets, inline_instances, obj)
 
         if obj is not None:
             for formset in inline_formsets:

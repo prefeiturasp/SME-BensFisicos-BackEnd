@@ -1,18 +1,16 @@
 from django.db import transaction
 
-from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
-from inventario import constants as inv_constants
 from bem_patrimonial import constants as bem_constants
 from dados_comuns.context import get_user
+from inventario import constants as inv_constants
+from inventario.models import ConciliacaoUA, ItemConciliacao, OcorrenciaConciliacao
 
 
 def _conciliacoes_em_aberto(ua_id):
     if not ua_id:
         return ConciliacaoUA.objects.none()
 
-    return ConciliacaoUA.objects.filter(
-        unidade_administrativa_id=ua_id, status=inv_constants.CONCILIACAO_EM_ABERTO
-    )
+    return ConciliacaoUA.objects.filter(unidade_administrativa_id=ua_id, status=inv_constants.CONCILIACAO_EM_ABERTO)
 
 
 def _status_pendente_acao(bem):
@@ -42,9 +40,7 @@ def remover_bem_de_conciliacoes_em_aberto(bem_id, ua_id):
     if not ua_id:
         return
 
-    ItemConciliacao.objects.filter(
-        bem_id=bem_id, conciliacao__in=_conciliacoes_em_aberto(ua_id)
-    ).delete()
+    ItemConciliacao.objects.filter(bem_id=bem_id, conciliacao__in=_conciliacoes_em_aberto(ua_id)).delete()
 
 
 @transaction.atomic

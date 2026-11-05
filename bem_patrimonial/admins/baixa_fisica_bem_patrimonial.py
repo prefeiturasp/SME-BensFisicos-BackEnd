@@ -1,43 +1,42 @@
 from django import forms
-from django.urls import path, reverse
 from django.contrib import admin, messages
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
-from django.forms.models import BaseInlineFormSet
 from django.core.exceptions import ValidationError
-from django.forms import DateInput
+from django.core.validators import RegexValidator
 from django.db import models
-from django.utils import timezone
+from django.forms import DateInput
+from django.forms.models import BaseInlineFormSet
+from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
-from django.http import HttpResponseRedirect
+from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.html import format_html
-from rangefilter.filters import DateRangeFilter
-from import_export import resources, fields
-from import_export.widgets import DateWidget
+from django.utils.safestring import mark_safe
+from import_export import fields, resources
 from import_export.admin import ExportMixin
 from import_export.formats.base_formats import XLSX
+from import_export.widgets import DateWidget
+from rangefilter.filters import DateRangeFilter
 
+from bem_patrimonial import constants
+from bem_patrimonial.emails import (
+    envia_email_baixa_fisica_aprovada,
+    envia_email_baixa_fisica_cancelada,
+    envia_email_baixa_fisica_solicitada,
+)
 from bem_patrimonial.models import (
     BaixaFisicaBemPatrimonial,
     BaixaFisicaBensItem,
 )
-from bem_patrimonial.emails import (
-    envia_email_baixa_fisica_solicitada,
-    envia_email_baixa_fisica_aprovada,
-    envia_email_baixa_fisica_cancelada,
-)
-from bem_patrimonial import constants
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_queryset_por_escopo,
     filtrar_ua_origem_por_escopo,
     usuario_e_super_admin,
 )
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.models import UnidadeAdministrativa
-from django.core.validators import RegexValidator
-from django.utils.safestring import mark_safe
-
 
 NUMERO_PROCESSO_OBRIGATORIO = "Número do processo é obrigatório."
 
@@ -46,9 +45,7 @@ def _texto_baixas_abertas_com_links(existentes):
     links = []
     for b in existentes:
         try:
-            url = reverse(
-                "admin:bem_patrimonial_baixafisicabempatrimonial_change", args=[b.pk]
-            )
+            url = reverse("admin:bem_patrimonial_baixafisicabempatrimonial_change", args=[b.pk])
         except Exception:
             url = f"/admin/bem_patrimonial/baixafisicabempatrimonial/{b.pk}/change/"
         links.append(f'<a href="{url}">Baixa #{b.pk}</a>')
@@ -96,7 +93,9 @@ class SolicitarCorrecaoAdminForm(forms.Form):
     motivo = forms.CharField(
         label="Orientações para correção",
         required=True,
-        widget=forms.Textarea(attrs={"rows": 4, "class": "vLargeTextField", "placeholder": "Descreva o que precisa ser corrigido..."}),
+        widget=forms.Textarea(
+            attrs={"rows": 4, "class": "vLargeTextField", "placeholder": "Descreva o que precisa ser corrigido..."}
+        ),
         help_text="O motivo será registrado no histórico e a baixa voltará para 'Em elaboração' para edição.",
     )
 
@@ -139,7 +138,10 @@ class BaixaFisicaBemPatrimonialChangeForm(forms.ModelForm):
                 "placeholder": constants.PROCESSO_BAIXA_EXEMPLO,
             }
         ),
-        help_text=f"Editável só quando Aceita e sem Nota gerada. Formato: XXXX.XXXX/XXXXXXX-X (ex: {constants.PROCESSO_BAIXA_EXEMPLO})",
+        help_text=(
+            f"Editável só quando Aceita e sem Nota gerada. Formato: XXXX.XXXX/XXXXXXX-X "
+            f"(ex: {constants.PROCESSO_BAIXA_EXEMPLO})"
+        ),
         validators=[
             RegexValidator(
                 regex=constants.PROCESSO_BAIXA_REGEX,
@@ -190,13 +192,9 @@ class BaixaFisicaBemPatrimonialChangeForm(forms.ModelForm):
 
     def _validar_correcao_processo(self, original, valor):
         if original.status != constants.ACEITA:
-            raise ValidationError(
-                "Só é possível corrigir o número do processo de baixas com status 'Aceita'."
-            )
+            raise ValidationError("Só é possível corrigir o número do processo de baixas com status 'Aceita'.")
         if self._tem_nota_vinculada(original):
-            raise ValidationError(
-                "Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado."
-            )
+            raise ValidationError("Esta baixa já possui Nota (NBBPM) gerada e não pode ter o número alterado.")
         if not valor:
             raise ValidationError(NUMERO_PROCESSO_OBRIGATORIO)
 
@@ -240,31 +238,35 @@ class BaixaFisicaBensItemInlineForm(forms.ModelForm):
             bem_constants.BAIXA_FISICA,
         ):
             baixa_atual = self._obter_baixa_atual_id()
-            existe_outra = ItemModel.objects.filter(
-                bem=bem,
-                baixa__status__in=[
-                    bem_constants.AGUARDANDO_ENVIO,
-                    bem_constants.SOLICITADA,
-                    bem_constants.ACEITA,
-                ],
-            ).exclude(baixa_id=baixa_atual).exists()
+            existe_outra = (
+                ItemModel.objects.filter(
+                    bem=bem,
+                    baixa__status__in=[
+                        bem_constants.AGUARDANDO_ENVIO,
+                        bem_constants.SOLICITADA,
+                        bem_constants.ACEITA,
+                    ],
+                )
+                .exclude(baixa_id=baixa_atual)
+                .exists()
+            )
             if existe_outra:
                 raise ValidationError(
                     f"Bem {bem.numero_patrimonial or bem.nome} já está em outra Baixa Física pendente/aprovada."
                 )
             # Permite manter vínculo (edição Em elaboração ou Aceita).
-            mesma_baixa = ItemModel.objects.filter(
-                bem=bem, baixa_id=baixa_atual
-            ).exists() if baixa_atual else False
+            mesma_baixa = ItemModel.objects.filter(bem=bem, baixa_id=baixa_atual).exists() if baixa_atual else False
             if mesma_baixa:
                 return
             if bem.status in (bem_constants.LAUDADO_PARA_BAIXA, bem_constants.BAIXA_FISICA):
                 raise ValidationError(
-                    f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
+                    f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' "
+                    "não pode ser incluído em Baixa Física."
                 )
             return
         raise ValidationError(
-            f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' não pode ser incluído em Baixa Física."
+            f"Bem {bem.numero_patrimonial or bem.nome} com status '{bem.get_status_display()}' "
+            "não pode ser incluído em Baixa Física."
         )
 
     def _obter_baixa_atual_id(self):
@@ -308,9 +310,7 @@ class BaixaFisicaBensItemInlineFormSet(BaseInlineFormSet):
             total_validos += 1
 
         if total_validos == 0:
-            raise ValidationError(
-                "Informe ao menos um bem para realizar a Baixa Física."
-            )
+            raise ValidationError("Informe ao menos um bem para realizar a Baixa Física.")
 
 
 class BaixaFisicaBensItemInline(admin.TabularInline):
@@ -327,10 +327,8 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
             return True
         if obj.status != constants.ACEITA:
             return False
-        user = getattr(request, 'user', None)
-        is_gestor = bool(
-            getattr(user, 'is_gestor_patrimonio', False) or getattr(user, 'is_superuser', False)
-        )
+        user = getattr(request, "user", None)
+        is_gestor = bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False))
         if not is_gestor:
             return False
         try:
@@ -338,16 +336,15 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
                 return False
         except Exception:
             pass
-        if (getattr(obj, 'numero_nbbpm', '') or '').strip():
+        if (getattr(obj, "numero_nbbpm", "") or "").strip():
             return False
         # Escopo: mesma regra da API. Superuser libera, demais precisam estar no escopo da UA.
         try:
-            if getattr(user, 'is_superuser', False):
+            if getattr(user, "is_superuser", False):
                 return True
             from dados_comuns.escopo import validar_objeto_no_escopo
-            if not validar_objeto_no_escopo(
-                user, obj, campo_ua='unidade_administrativa_origem'
-            ):
+
+            if not validar_objeto_no_escopo(user, obj, campo_ua="unidade_administrativa_origem"):
                 return False
         except Exception:
             return False
@@ -389,9 +386,7 @@ class BaixaFisicaBensItemInline(admin.TabularInline):
         if obj.status == constants.ACEITA and not self._baixa_permite_edicao_itens(request, obj):
             return
         ids_atuais = list(obj.itens.values_list("bem_id", flat=True))
-        qs = BemPatrimonial.objects.filter(
-            models.Q(status=constants.APROVADO) | models.Q(pk__in=ids_atuais)
-        )
+        qs = BemPatrimonial.objects.filter(models.Q(status=constants.APROVADO) | models.Q(pk__in=ids_atuais))
         if obj.unidade_administrativa_origem_id:
             qs = qs.filter(unidade_administrativa_id=obj.unidade_administrativa_origem_id)
         bem_field.queryset = qs
@@ -435,13 +430,9 @@ class BaixaFisicaResource(resources.ModelResource):
         column_name="Unidade Administrativa",
     )
 
-    numero_patrimonial = fields.Field(
-        column_name="Número Patrimonial"
-    )
+    numero_patrimonial = fields.Field(column_name="Número Patrimonial")
 
-    nome_bem = fields.Field(
-        column_name="Nome do Bem"
-    )
+    nome_bem = fields.Field(column_name="Nome do Bem")
 
     status = fields.Field(
         attribute="status",
@@ -484,20 +475,16 @@ class BaixaFisicaResource(resources.ModelResource):
 
     def dehydrate_numero_patrimonial(self, obj):
         itens = obj.itens.all()
-        return ", ".join(
-            item.bem.numero_patrimonial for item in itens if item.bem
-        )
+        return ", ".join(item.bem.numero_patrimonial for item in itens if item.bem)
 
     def dehydrate_nome_bem(self, obj):
         itens = obj.itens.all()
-        return ", ".join(
-            item.bem.nome for item in itens if item.bem
-        )
+        return ", ".join(item.bem.nome for item in itens if item.bem)
 
     def dehydrate_nbbpm(self, obj):
         try:
-            if hasattr(obj, '_prefetched_objects_cache') and 'nbbpms_lote' in obj._prefetched_objects_cache:
-                lotes = obj._prefetched_objects_cache['nbbpms_lote']
+            if hasattr(obj, "_prefetched_objects_cache") and "nbbpms_lote" in obj._prefetched_objects_cache:
+                lotes = obj._prefetched_objects_cache["nbbpms_lote"]
                 nbbpm = lotes[0] if lotes else None
             else:
                 nbbpm = obj.nbbpms_lote.first()
@@ -511,6 +498,7 @@ class BaixaFisicaResource(resources.ModelResource):
 class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admin.ModelAdmin):
     resource_class = BaixaFisicaResource
 
+    @admin.display(description="NBBPM", ordering="numero_nbbpm")
     def numero_nbbpm_display(self, obj):
         try:
             nbbpm = obj.nbbpms_lote.first()
@@ -523,29 +511,27 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         if legado:
             return legado
         return "-"
-    numero_nbbpm_display.short_description = "NBBPM"
-    numero_nbbpm_display.admin_order_field = "numero_nbbpm"
 
+    @admin.display(description="Status", ordering="status")
     def status_display(self, obj):
         if obj.status == constants.AGUARDANDO_ENVIO:
             return "Em elaboração"
         return obj.get_status_display()
-    status_display.short_description = "Status"
-    status_display.admin_order_field = "status"
 
+    @admin.display(description="Laudo")
     def laudo_link(self, obj):
         if obj.status != constants.ACEITA:
             return "-"
         url = reverse("admin:baixafisica_laudo", args=[obj.pk])
         return format_html(
-            '<a href="{}" target="_blank" style="background:#198754; border-color:#198754; color:#fff !important; padding:3px 8px; border-radius:3px; text-decoration:none; font-size:11px;">Laudo</a>',
+            '<a href="{}" target="_blank" style="background:#198754; border-color:#198754; color:#fff !important; '
+            'padding:3px 8px; border-radius:3px; text-decoration:none; font-size:11px;">Laudo</a>',
             url,
         )
-    laudo_link.short_description = "Laudo"
 
+    @admin.display(description="NBBPM (link)")
     def nbbpm_link(self, obj):
         return self.numero_nbbpm_display(obj)
-    nbbpm_link.short_description = "NBBPM (link)"
 
     list_display = (
         "id",
@@ -590,18 +576,14 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         return qs.prefetch_related("itens__bem", "nbbpms_lote").order_by("-id")
 
     def get_search_results(self, request, queryset, search_term):
-        queryset, _ = super().get_search_results(
-            request, queryset, search_term
-        )
+        queryset, _ = super().get_search_results(request, queryset, search_term)
         return queryset.distinct(), True
 
+    @admin.display(description="Data da aprovação", ordering="data_aprovacao")
     def data_aprovacao_formatada(self, obj):
         if obj.data_aprovacao:
             return date_format(obj.data_aprovacao, "d \\d\\e F \\d\\e Y")
         return "-"
-
-    data_aprovacao_formatada.short_description = "Data da aprovação"
-    data_aprovacao_formatada.admin_order_field = "data_aprovacao"
 
     inlines = [BaixaFisicaBensItemInline]
     autocomplete_fields = ("unidade_administrativa_origem",)
@@ -630,9 +612,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         if obj is None:
             return False
         user = request.user
-        is_gestor = bool(
-            getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)
-        )
+        is_gestor = bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False))
         if not is_gestor:
             return False
         if obj.status != constants.ACEITA:
@@ -651,7 +631,12 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             return base_audit
         if self._pode_editar_processo(request, obj):
             return base_audit + ("unidade_administrativa_origem", "data_baixa", "numero_nbbpm_display")
-        return base_audit + ("unidade_administrativa_origem", "numero_processo_baixa", "data_baixa", "numero_nbbpm_display")
+        return base_audit + (
+            "unidade_administrativa_origem",
+            "numero_processo_baixa",
+            "data_baixa",
+            "numero_nbbpm_display",
+        )
 
     def get_fieldsets(self, request, obj=None):
         if obj is None:
@@ -687,9 +672,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
 
     def _motivo_bloqueio_correcao(self, request, original, novo):
         user = request.user
-        is_gestor = bool(
-            getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False)
-        )
+        is_gestor = bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False))
         if not is_gestor:
             return "Apenas Gestor de Patrimônio pode corrigir o número do processo."
         if original.status != constants.ACEITA:
@@ -705,9 +688,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         return None
 
     def _registrar_e_propagar_correcao(self, request, obj, antigo, novo):
-        self.log_change(
-            request, obj, f"Número do processo corrigido de {antigo} para {novo}."
-        )
+        self.log_change(request, obj, f"Número do processo corrigido de {antigo} para {novo}.")
         texto_localizacao = f"Baixa Física - {novo}"
         for item in obj.itens.select_related("bem"):
             bem = item.bem
@@ -715,8 +696,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             bem.localizacao = texto_localizacao
             bem.save(update_fields=["numero_processo", "localizacao"])
         try:
-            from dados_comuns.models import HistoricoGeral
             from django.contrib.contenttypes.models import ContentType
+
+            from dados_comuns.models import HistoricoGeral
 
             ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
             HistoricoGeral.objects.create(
@@ -745,7 +727,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
                 super().save_model(request, obj, form, change)
                 return
             novo = (obj.numero_processo_baixa or "").strip()
-            antigo = (original.numero_processo_baixa or "")
+            antigo = original.numero_processo_baixa or ""
             correcao_permitida = False
             if novo != antigo:
                 motivo = self._motivo_bloqueio_correcao(request, original, novo)
@@ -816,7 +798,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             alvo = status_alvo or constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
             if bem.status != alvo:
                 if alvo == constants.LAUDADO_PARA_BAIXA and baixa is not None:
-                    processo = (getattr(baixa, 'numero_processo_baixa', '') or '').strip()
+                    processo = (getattr(baixa, "numero_processo_baixa", "") or "").strip()
                     bem.status = alvo
                     if processo:
                         bem.numero_processo = processo
@@ -850,14 +832,18 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
                 # Aceita legada com Baixa Física também restaura para Aprovado.
                 if not (esperado == constants.LAUDADO_PARA_BAIXA and old_bem.status == constants.BAIXA_FISICA):
                     return
-            ainda_vinculado = BaixaFisicaBensItem.objects.filter(
-                bem=old_bem,
-                baixa__status__in=[
-                    constants.AGUARDANDO_ENVIO,
-                    constants.SOLICITADA,
-                    constants.ACEITA,
-                ],
-            ).exclude(baixa=baixa).exists()
+            ainda_vinculado = (
+                BaixaFisicaBensItem.objects.filter(
+                    bem=old_bem,
+                    baixa__status__in=[
+                        constants.AGUARDANDO_ENVIO,
+                        constants.SOLICITADA,
+                        constants.ACEITA,
+                    ],
+                )
+                .exclude(baixa=baixa)
+                .exists()
+            )
             if ainda_vinculado:
                 return
             old_bem.status = constants.APROVADO
@@ -873,7 +859,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             alvo = status_alvo or constants.BAIXA_FISICA_AGUARDANDO_APROVACAO
             if new_bem and new_bem.status != alvo:
                 if alvo == constants.LAUDADO_PARA_BAIXA and baixa is not None:
-                    processo = (getattr(baixa, 'numero_processo_baixa', '') or '').strip()
+                    processo = (getattr(baixa, "numero_processo_baixa", "") or "").strip()
                     new_bem.status = alvo
                     if processo:
                         new_bem.numero_processo = processo
@@ -891,11 +877,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         user = request.user
         if not user.is_authenticated:
             return False
-        return (
-            user.is_gestor_patrimonio
-            or user.is_operador_inventario
-            or user.is_superuser
-        )
+        return user.is_gestor_patrimonio or user.is_operador_inventario or user.is_superuser
 
     def has_add_permission(self, request):
         return self.has_view_permission(request)
@@ -912,7 +894,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         qs = (
             super()
             .get_queryset(request)
-            .select_related("unidade_administrativa_origem", "unidade_administrativa_origem__unidade_orcamentaria", "criado_por")
+            .select_related(
+                "unidade_administrativa_origem", "unidade_administrativa_origem__unidade_orcamentaria", "criado_por"
+            )
             .prefetch_related("nbbpms_lote")
         )
         return filtrar_queryset_por_escopo(
@@ -960,9 +944,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         baixas_invalidas = queryset.exclude(status=constants.AGUARDANDO_ENVIO)
 
         if baixas_invalidas.exists():
-            lista_invalidas = ", ".join(
-                f"#{b.pk} (status={b.get_status_display()})" for b in baixas_invalidas
-            )
+            lista_invalidas = ", ".join(f"#{b.pk} (status={b.get_status_display()})" for b in baixas_invalidas)
             self.message_user(
                 request,
                 (
@@ -998,8 +980,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
                     f"Solicitante atualizado de {solicitante_anterior_nome} para {baixa.criado_por}.",
                 )
                 try:
-                    from dados_comuns.models import HistoricoGeral
                     from django.contrib.contenttypes.models import ContentType
+
+                    from dados_comuns.models import HistoricoGeral
 
                     ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
                     HistoricoGeral.objects.create(
@@ -1022,7 +1005,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             level=messages.SUCCESS,
         )
 
-    acao_enviar_baixa.short_description = "Solicitar Baixa Física selecionadas"
+    acao_enviar_baixa.short_description = "Solicitar Baixa Física selecionadas"  # type: ignore[attr-defined]
 
     def acao_aprovar_baixa(self, request, queryset):
         if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
@@ -1038,8 +1021,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
 
         if baixas_nao_solicitadas.exists():
             lista_nao_aprovaveis = ", ".join(
-                f"#{b.pk} (status={b.get_status_display()})"
-                for b in baixas_nao_solicitadas
+                f"#{b.pk} (status={b.get_status_display()})" for b in baixas_nao_solicitadas
             )
             self.message_user(
                 request,
@@ -1079,9 +1061,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             action_checkbox_name=ACTION_CHECKBOX_NAME,
             media=self.media,
         )
-        return TemplateResponse(
-            request, "admin/bem_patrimonial/baixa_fisica/aprovar_baixa.html", context
-        )
+        return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/aprovar_baixa.html", context)
 
     def _processar_aprovar_baixa_post(self, request, baixas):
         form = AprovarBaixaAdminForm(request.POST)
@@ -1119,12 +1099,13 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         if aprovadas:
             self.message_user(
                 request,
-                f"{aprovadas} Baixa(s) Física(s) aprovada(s) com sucesso. Processo {numero} propagado para a baixa e para os bens. Selecione as aprovadas e use 'Gerar NBBPM' para emitir a nota.",
+                f"{aprovadas} Baixa(s) Física(s) aprovada(s) com sucesso. Processo {numero} propagado para a baixa e "
+                "para os bens. Selecione as aprovadas e use 'Gerar NBBPM' para emitir a nota.",
                 level=messages.SUCCESS,
             )
         return HttpResponseRedirect(request.get_full_path())
 
-    acao_aprovar_baixa.short_description = "Aprovar Baixa Física selecionadas"
+    acao_aprovar_baixa.short_description = "Aprovar Baixa Física selecionadas"  # type: ignore[attr-defined]
 
     def acao_cancelar_baixa(self, request, queryset):
         if not (request.user.is_gestor_patrimonio or request.user.is_superuser):
@@ -1138,22 +1119,14 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         baixas_aceitas = queryset.filter(status=constants.ACEITA)
 
         if baixas_aceitas.exists():
-            lista_aceitas = ", ".join(
-                f"#{b.pk} (proc. {b.numero_processo_baixa})" for b in baixas_aceitas
-            )
+            lista_aceitas = ", ".join(f"#{b.pk} (proc. {b.numero_processo_baixa})" for b in baixas_aceitas)
             self.message_user(
                 request,
-                (
-                    "As seguintes Baixas Físicas já estão aprovadas e "
-                    "não podem ser recusadas: "
-                    f"{lista_aceitas}"
-                ),
+                (f"As seguintes Baixas Físicas já estão aprovadas e não podem ser recusadas: {lista_aceitas}"),
                 level=messages.ERROR,
             )
 
-        baixas_recusaveis = queryset.filter(
-            status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA]
-        )
+        baixas_recusaveis = queryset.filter(status__in=[constants.AGUARDANDO_ENVIO, constants.SOLICITADA])
 
         if not baixas_recusaveis.exists():
             self.message_user(
@@ -1167,8 +1140,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             return
 
         lista_recusaveis = ", ".join(
-            f"#{b.pk} (proc. {b.numero_processo_baixa}, status={b.get_status_display()})"
-            for b in baixas_recusaveis
+            f"#{b.pk} (proc. {b.numero_processo_baixa}, status={b.get_status_display()})" for b in baixas_recusaveis
         )
         self.message_user(
             request,
@@ -1203,7 +1175,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
                 level=messages.SUCCESS,
             )
 
-    acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"
+    acao_cancelar_baixa.short_description = "Recusar Baixa Física selecionadas"  # type: ignore[attr-defined]
 
     def acao_solicitar_correcao(self, request, queryset):
         if not self._pode_solicitar_correcao(request, queryset):
@@ -1225,7 +1197,11 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             return True
         nao_criadas = [b for b in queryset if b.criado_por_id != user.pk]
         if nao_criadas:
-            self.message_user(request, "Apenas Gestor de Patrimônio ou o solicitante da baixa pode solicitar correção.", level=messages.ERROR)
+            self.message_user(
+                request,
+                "Apenas Gestor de Patrimônio ou o solicitante da baixa pode solicitar correção.",
+                level=messages.ERROR,
+            )
             return False
         return True
 
@@ -1234,7 +1210,11 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         nao_solicitadas = queryset.exclude(status=constants.SOLICITADA)
         if nao_solicitadas.exists():
             lista = ", ".join(f"#{b.pk} ({b.get_status_display()})" for b in nao_solicitadas[:10])
-            self.message_user(request, f"Solicitar correção só é permitido para Baixas com status 'Solicitada'. Não elegíveis: {lista}", level=messages.ERROR)
+            self.message_user(
+                request,
+                f"Solicitar correção só é permitido para Baixas com status 'Solicitada'. Não elegíveis: {lista}",
+                level=messages.ERROR,
+            )
             return None
         if not solicitadas.exists():
             self.message_user(request, "Nenhuma Baixa selecionada com status 'Solicitada'.", level=messages.WARNING)
@@ -1251,7 +1231,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         )
         fora_escopo = [b for b in solicitadas if b.id not in escopo_ids]
         if fora_escopo:
-            self.message_user(request, "Uma ou mais Baixas selecionadas não pertencem ao seu escopo.", level=messages.ERROR)
+            self.message_user(
+                request, "Uma ou mais Baixas selecionadas não pertencem ao seu escopo.", level=messages.ERROR
+            )
             return False
         return True
 
@@ -1261,7 +1243,12 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             return self._render_correcao(request, solicitadas, form)
         motivo = form.cleaned_data["motivo"]
         count = self._executar_correcao(request, solicitadas, motivo)
-        self.message_user(request, f"{count} Baixa(s) retornada(s) para 'Em elaboração' para correção. Os bens permanecem em 'Aguardando aprovação' para reedição.", level=messages.SUCCESS)
+        self.message_user(
+            request,
+            f"{count} Baixa(s) retornada(s) para 'Em elaboração' para correção. Os bens permanecem em "
+            "'Aguardando aprovação' para reedição.",
+            level=messages.SUCCESS,
+        )
         return HttpResponseRedirect(request.get_full_path())
 
     def _executar_correcao(self, request, solicitadas, motivo):
@@ -1277,8 +1264,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
 
     def _registrar_historico_correcao(self, request, baixa, motivo):
         try:
-            from dados_comuns.models import HistoricoGeral
             from django.contrib.contenttypes.models import ContentType
+
+            from dados_comuns.models import HistoricoGeral
 
             ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
             HistoricoGeral.objects.create(
@@ -1305,7 +1293,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         context = dict(
             self.admin_site.each_context(request),
             title="Solicitar correção da Baixa",
-            baixas=solicitadas.select_related("unidade_administrativa_origem", "unidade_administrativa_origem__unidade_orcamentaria", "criado_por").prefetch_related("itens__bem"),
+            baixas=solicitadas.select_related(
+                "unidade_administrativa_origem", "unidade_administrativa_origem__unidade_orcamentaria", "criado_por"
+            ).prefetch_related("itens__bem"),
             form=form,
             opts=self.model._meta,
             action_checkbox_name=ACTION_CHECKBOX_NAME,
@@ -1313,7 +1303,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         )
         return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/solicitar_correcao.html", context)
 
-    acao_solicitar_correcao.short_description = "Solicitar correção (voltar para Em elaboração)"
+    acao_solicitar_correcao.short_description = "Solicitar correção (voltar para Em elaboração)"  # type: ignore[attr-defined]
 
     def gerar_nbbpm_action(self, request, queryset):
         if not self._validar_perm_gerar_nbbpm(request):
@@ -1349,30 +1339,40 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         if not nao_aprovadas.exists():
             return True
         lista = ", ".join(f"#{b.pk} ({b.get_status_display()})" for b in nao_aprovadas[:10])
-        self.message_user(request, f"A NBBPM só pode ser gerada para Baixas com status Aprovado. Selecionadas não aprovadas: {lista}", level=messages.ERROR)
+        self.message_user(
+            request,
+            f"A NBBPM só pode ser gerada para Baixas com status Aprovado. Selecionadas não aprovadas: {lista}",
+            level=messages.ERROR,
+        )
         return False
 
     def _validar_baixas_sem_nbbpm(self, request, queryset):
-        ja_com_nbbpm = [b for b in queryset.select_related("unidade_administrativa_origem") if b.nbbpms_lote.exists() or (b.numero_nbbpm or "").strip()]
+        ja_com_nbbpm = [
+            b
+            for b in queryset.select_related("unidade_administrativa_origem")
+            if b.nbbpms_lote.exists() or (b.numero_nbbpm or "").strip()
+        ]
         if not ja_com_nbbpm:
             return True
         lista = ", ".join(str(b.pk) for b in ja_com_nbbpm[:10])
-        self.message_user(request, f"As Baixas {lista} já possuem NBBPM e não podem ser reutilizadas.", level=messages.ERROR)
+        self.message_user(
+            request, f"As Baixas {lista} já possuem NBBPM e não podem ser reutilizadas.", level=messages.ERROR
+        )
         return False
 
     def _validar_uo_unica(self, request, queryset):
         uos = set(queryset.values_list("unidade_administrativa_origem__unidade_orcamentaria_id", flat=True))
         if len(uos) <= 1 and None not in uos:
             return True
-        self.message_user(request, "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.", level=messages.ERROR)
+        self.message_user(
+            request, "Todas as Baixas selecionadas devem pertencer à mesma Unidade Orçamentária.", level=messages.ERROR
+        )
         return False
 
     def _validar_processo_unico(self, request, queryset):
         from bem_patrimonial.services.nbbpm_numero import processos_normalizados_de_baixas
 
-        processos = processos_normalizados_de_baixas(
-            queryset.values_list("numero_processo_baixa", flat=True)
-        )
+        processos = processos_normalizados_de_baixas(queryset.values_list("numero_processo_baixa", flat=True))
         if len(processos) > 1:
             self.message_user(request, constants.NBBPM_PROCESSO_DIVERGENTE, level=messages.ERROR)
             return False
@@ -1391,7 +1391,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         fora_escopo = [b for b in queryset if b.id not in escopo_ids]
         if not fora_escopo:
             return True
-        self.message_user(request, "Uma ou mais Baixas selecionadas não pertencem ao seu escopo de acesso.", level=messages.ERROR)
+        self.message_user(
+            request, "Uma ou mais Baixas selecionadas não pertencem ao seu escopo de acesso.", level=messages.ERROR
+        )
         return False
 
     def _handle_gerar_nbbpm_form(self, request, queryset):
@@ -1433,10 +1435,16 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             )
             for baixa in baixas:
                 self.log_change(request, baixa, f"NBBPM {nbbpm.numero} gerada e vinculada à baixa.")
-            self.message_user(request, f"NBBPM {nbbpm.numero} gerada com sucesso com {len(baixas)} baixa(s).", level=messages.SUCCESS)
+            self.message_user(
+                request, f"NBBPM {nbbpm.numero} gerada com sucesso com {len(baixas)} baixa(s).", level=messages.SUCCESS
+            )
             return HttpResponseRedirect(reverse("admin:bem_patrimonial_nbbpm_change", args=[nbbpm.pk]))
         except ValidationError as exc:
-            self.message_user(request, f"Erro de validação: {exc.messages[0] if hasattr(exc, 'messages') else str(exc)}", level=messages.ERROR)
+            self.message_user(
+                request,
+                f"Erro de validação: {exc.messages[0] if hasattr(exc, 'messages') else str(exc)}",
+                level=messages.ERROR,
+            )
         except Exception as exc2:
             self.message_user(request, f"Erro ao gerar NBBPM: {exc2}", level=messages.ERROR)
         return self._render_gerar_nbbpm(request, queryset, form)
@@ -1444,9 +1452,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
     def _render_gerar_nbbpm(self, request, queryset, form=None):
         from bem_patrimonial.services.nbbpm_numero import processos_normalizados_de_baixas
 
-        processos = processos_normalizados_de_baixas(
-            queryset.values_list("numero_processo_baixa", flat=True)
-        )
+        processos = processos_normalizados_de_baixas(queryset.values_list("numero_processo_baixa", flat=True))
         processo_unico = next(iter(processos)) if len(processos) == 1 else ""
         if form is None:
             initial = {
@@ -1459,7 +1465,9 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         context = dict(
             self.admin_site.each_context(request),
             title="Gerar NBBPM consolidada",
-            baixas=queryset.select_related("unidade_administrativa_origem", "unidade_administrativa_origem__unidade_orcamentaria", "criado_por").prefetch_related("itens__bem"),
+            baixas=queryset.select_related(
+                "unidade_administrativa_origem", "unidade_administrativa_origem__unidade_orcamentaria", "criado_por"
+            ).prefetch_related("itens__bem"),
             form=form,
             opts=self.model._meta,
             action_checkbox_name=ACTION_CHECKBOX_NAME,
@@ -1468,7 +1476,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         )
         return TemplateResponse(request, "admin/bem_patrimonial/baixa_fisica/gerar_nbbpm.html", context)
 
-    gerar_nbbpm_action.short_description = "Gerar NBBPM para Baixas aprovadas selecionadas"
+    gerar_nbbpm_action.short_description = "Gerar NBBPM para Baixas aprovadas selecionadas"  # type: ignore[attr-defined]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "unidade_administrativa_origem":
@@ -1507,7 +1515,8 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
         from django.http import HttpResponse
 
         return HttpResponse(
-            "Rota desativada. Use o módulo NBBPM em /admin/bem_patrimonial/nbbpm/ para visualizar e baixar o PDF consolidado (layout lote).",
+            "Rota desativada. Use o módulo NBBPM em /admin/bem_patrimonial/nbbpm/ para visualizar e baixar o PDF "
+            "consolidado (layout lote).",
             status=410,
             content_type="text/plain",
         )

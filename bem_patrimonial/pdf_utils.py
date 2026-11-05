@@ -1,17 +1,15 @@
 import os
 import re
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.utils import timezone
-
 from reportlab.lib import colors
-from reportlab.lib.units import cm
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
 from reportlab.platypus import Image, Paragraph, Spacer
-
-from zoneinfo import ZoneInfo
 
 
 class PDFConfigBase:
@@ -88,9 +86,7 @@ def criar_estilo_base(nome, parent_styles, config_cls=PDFConfigBase, **kwargs):
 
 def carregar_logo(styles, config_cls=PDFConfigBase, width_cm=2.0, height_cm=1.3):
     static_root = settings.STATIC_ROOT or (
-        settings.STATICFILES_DIRS[0]
-        if getattr(settings, "STATICFILES_DIRS", None)
-        else None
+        settings.STATICFILES_DIRS[0] if getattr(settings, "STATICFILES_DIRS", None) else None
     )
 
     if static_root:
@@ -126,9 +122,7 @@ def formatar_datahora_geracao(data_geracao=None, config_cls=PDFConfigBase):
     return data_ref.astimezone(tz).strftime("%d/%m/%Y às %H:%M")
 
 
-def criar_info_geracao_paragraph(
-    *, usuario, data_geracao=None, config_cls=PDFConfigBase
-):
+def criar_info_geracao_paragraph(*, usuario, data_geracao=None, config_cls=PDFConfigBase):
     styles = getSampleStyleSheet()
     info_style = criar_estilo_base(
         "InfoGeracao",

@@ -1,6 +1,5 @@
 from django.db import models
 
-
 PREFIXO_CODIGO_UO_SME = "01.16.10"
 CODIGO_UA_PONTO_CENTRAL = "001"
 NOME_UA_PONTO_CENTRAL = "Ponto Central"
@@ -37,7 +36,7 @@ def dict_changes(original, updated, fields, only=None, ignore=None):
 
 
 def unidade_orcamentaria_eh_externa(unidade_orcamentaria):
-    codigo = ((getattr(unidade_orcamentaria, "codigo", None) or "").strip())
+    codigo = (getattr(unidade_orcamentaria, "codigo", None) or "").strip()
     return bool(codigo) and not codigo.startswith(PREFIXO_CODIGO_UO_SME)
 
 
@@ -52,9 +51,7 @@ def garantir_ua_ponto_central_externa(unidade_orcamentaria):
 
     from dados_comuns.models import UnidadeAdministrativa
 
-    codigo_esperado = (
-        f"{unidade_orcamentaria.codigo.strip()}.{CODIGO_UA_PONTO_CENTRAL}"
-    )
+    codigo_esperado = f"{unidade_orcamentaria.codigo.strip()}.{CODIGO_UA_PONTO_CENTRAL}"
     ua = (
         UnidadeAdministrativa.objects.filter(
             unidade_orcamentaria=unidade_orcamentaria,

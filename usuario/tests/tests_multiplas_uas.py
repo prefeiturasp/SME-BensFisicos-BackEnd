@@ -1,20 +1,20 @@
-from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from unittest.mock import patch
 
-from django.contrib.auth.models import Group
-from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.test import RequestFactory, TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.constants import APROVADO
 from dados_comuns.libs.unidade_administrativa import uas_do_usuario
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import PASSWORD1_KEY, PASSWORD2_KEY, auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.admin import CustomUserModelAdmin
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
@@ -30,13 +30,9 @@ class OperadorMultiplasUAsAPITestCase(APITestCase):
         self.ua3 = criar_ua(uo=self.uo, codigo="UA-003", sigla="UA3", nome="UA 3")
 
         self.uo2 = criar_uo(codigo="UO-002", nome="UO Outra")
-        self.ua_outra = criar_ua(
-            uo=self.uo2, codigo="UA-099", sigla="UAX", nome="UA Outra UO"
-        )
+        self.ua_outra = criar_ua(uo=self.uo2, codigo="UA-099", sigla="UAX", nome="UA Outra UO")
 
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.operador = Usuario.objects.create_user(
             username="operador_multi",
@@ -123,13 +119,9 @@ class AdminValidacaoM2MTestCase(TestCase):
         self.ua2 = criar_ua(uo=self.uo, codigo="UA-002", sigla="UA2", nome="UA 2")
 
         self.uo2 = criar_uo(codigo="UO-002", nome="UO Outra")
-        self.ua_outra = criar_ua(
-            uo=self.uo2, codigo="UA-099", sigla="UAX", nome="UA Outra UO"
-        )
+        self.ua_outra = criar_ua(uo=self.uo2, codigo="UA-099", sigla="UAX", nome="UA Outra UO")
 
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
 
         self.superuser = Usuario.objects.create_superuser(
@@ -211,9 +203,7 @@ class UasDOUsuarioTestCase(TestCase):
         self.ua2 = criar_ua(uo=self.uo, codigo="UA-002", sigla="UA2", nome="UA 2")
         self.ua3 = criar_ua(uo=self.uo, codigo="UA-003", sigla="UA3", nome="UA 3")
 
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.operador = Usuario.objects.create_user(
             username="operador_uas",
@@ -243,12 +233,8 @@ class EmailMovimentacaoM2MTestCase(TestCase):
 
     def setUp(self):
         self.uo = criar_uo(codigo="UO-001", nome="UO Teste")
-        self.ua_origem = criar_ua(
-            uo=self.uo, codigo="UA-001", sigla="UA1", nome="UA Origem"
-        )
-        self.ua_destino = criar_ua(
-            uo=self.uo, codigo="UA-002", sigla="UA2", nome="UA Destino"
-        )
+        self.ua_origem = criar_ua(uo=self.uo, codigo="UA-001", sigla="UA1", nome="UA Origem")
+        self.ua_destino = criar_ua(uo=self.uo, codigo="UA-002", sigla="UA2", nome="UA Destino")
 
         grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
@@ -270,9 +256,7 @@ class EmailMovimentacaoM2MTestCase(TestCase):
             unidade_orcamentaria=self.uo,
         )
         self.operador_multi.groups.add(grupo_operador)
-        self.operador_multi.unidades_administrativas.add(
-            self.ua_origem, self.ua_destino
-        )
+        self.operador_multi.unidades_administrativas.add(self.ua_origem, self.ua_destino)
 
         self.bem = BemPatrimonial.objects.create(
             nome="Cadeira",
@@ -310,9 +294,7 @@ class UasPermitidasPropertyTestCase(TestCase):
         self.ua1 = criar_ua(uo=self.uo, codigo="UA-001", sigla="UA1", nome="UA 1")
         self.ua2 = criar_ua(uo=self.uo, codigo="UA-002", sigla="UA2", nome="UA 2")
 
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
 
     def test_operador_retorna_m2m(self):
@@ -346,7 +328,5 @@ class UasPermitidasPropertyTestCase(TestCase):
             **auth_kwargs("t"),
             email="su@t.com",
         )
-        total_ativas = UnidadeAdministrativa.objects.filter(
-            status=UnidadeAdministrativa.ATIVA
-        ).count()
+        total_ativas = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA).count()
         self.assertEqual(su.uas_permitidas.count(), total_ativas)

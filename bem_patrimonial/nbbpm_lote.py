@@ -3,35 +3,36 @@ from io import BytesIO
 
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
-
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.units import cm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
     PageTemplate,
-    Spacer,
     Paragraph,
+    Spacer,
     Table,
     TableStyle,
 )
 
-from bem_patrimonial.models import NBBPM
-from bem_patrimonial.pdf_utils import (
-    PDFConfigBase as PDFConfig,
-    criar_estilo_base,
-    formatar_moeda_brasileira,
-    formatar_data,
-)
 from bem_patrimonial.documentos_pdf_utils import (
     agrupar_bens_documento,
     criar_cabecalho_registro_documento,
     criar_tabela_rodape_responsaveis,
     desenhar_rodape_padrao,
     desenhar_tabela_no_canvas,
+)
+from bem_patrimonial.models import NBBPM
+from bem_patrimonial.pdf_utils import (
+    PDFConfigBase as PDFConfig,
+)
+from bem_patrimonial.pdf_utils import (
+    criar_estilo_base,
+    formatar_data,
+    formatar_moeda_brasileira,
 )
 
 DATE_FMT_BR = "%d/%m/%Y"
@@ -127,9 +128,7 @@ def _desenhar_cabecalho_em_pagina(canvas, doc, nbbpm):
         desenhar_tabela_no_canvas(canvas, doc, cabecalho[0], A4[1] - 1.0 * cm)
 
 
-def _desenhar_rodape_em_pagina(
-    canvas, doc, nbbpm, usuario_gerador=None, data_geracao=None, total_paginas=None
-):
+def _desenhar_rodape_em_pagina(canvas, doc, nbbpm, usuario_gerador=None, data_geracao=None, total_paginas=None):
     usuario = usuario_gerador or nbbpm.criado_por
     tabela_rodape = None
     if total_paginas is None or doc.page == total_paginas:
@@ -161,11 +160,17 @@ def _criar_informacoes_gerais(nbbpm):
     styles = getSampleStyleSheet()
 
     label_style = criar_estilo_base(
-        "NBBPMLoteLabel", styles, config_cls=PDFConfig,
-        fontName="Helvetica-Bold", alignment=TA_LEFT,
+        "NBBPMLoteLabel",
+        styles,
+        config_cls=PDFConfig,
+        fontName="Helvetica-Bold",
+        alignment=TA_LEFT,
     )
     value_style = criar_estilo_base(
-        "NBBPMLoteValue", styles, config_cls=PDFConfig, alignment=TA_LEFT,
+        "NBBPMLoteValue",
+        styles,
+        config_cls=PDFConfig,
+        alignment=TA_LEFT,
     )
 
     ua = nbbpm.unidade_administrativa_origem
@@ -244,30 +249,44 @@ def _criar_tabela_bens(nbbpm):
     styles = getSampleStyleSheet()
 
     header_style = criar_estilo_base(
-        "NBBPMLoteHeader", styles, config_cls=PDFConfig,
-        fontName="Helvetica-Bold", alignment=TA_CENTER,
+        "NBBPMLoteHeader",
+        styles,
+        config_cls=PDFConfig,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
     )
     cell_center = criar_estilo_base(
-        "NBBPMLoteCellCenter", styles, config_cls=PDFConfig,
-        alignment=TA_CENTER, leading=8, wordWrap="CJK",
+        "NBBPMLoteCellCenter",
+        styles,
+        config_cls=PDFConfig,
+        alignment=TA_CENTER,
+        leading=8,
+        wordWrap="CJK",
     )
     cell_left = criar_estilo_base(
-        "NBBPMLoteCellLeft", styles, config_cls=PDFConfig,
-        alignment=TA_LEFT, leading=8, wordWrap="CJK",
+        "NBBPMLoteCellLeft",
+        styles,
+        config_cls=PDFConfig,
+        alignment=TA_LEFT,
+        leading=8,
+        wordWrap="CJK",
     )
 
     col_widths = [2.5 * cm, 2.5 * cm, 6.2 * cm, 2.0 * cm, 2.4 * cm, 2.4 * cm]
 
     header_row_1 = [
-        Paragraph("<b>NÚMERO DA CHAPA DE IDENTIFICAÇÃO</b>", header_style), "",
+        Paragraph("<b>NÚMERO DA CHAPA DE IDENTIFICAÇÃO</b>", header_style),
+        "",
         Paragraph("<b>DISCRIMINAÇÃO</b>", header_style),
         Paragraph("<b>QUANTIDADE</b>", header_style),
-        Paragraph("<b>VALOR</b>", header_style), "",
+        Paragraph("<b>VALOR</b>", header_style),
+        "",
     ]
     header_row_2 = [
         Paragraph("<b>DE</b>", header_style),
         Paragraph("<b>ATÉ</b>", header_style),
-        "", "",
+        "",
+        "",
         Paragraph("<b>UNITÁRIO</b>", header_style),
         Paragraph("<b>TOTAL</b>", header_style),
     ]

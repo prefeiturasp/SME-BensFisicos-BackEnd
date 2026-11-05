@@ -1,26 +1,13 @@
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
-
-from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
+from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from dados_comuns.tests.factories import criar_ua, criar_uo
-
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from bem_patrimonial import constants
-from bem_patrimonial.models import (
-    BaixaFisicaBemPatrimonial,
-    BemPatrimonial,
-    BaixaFisicaBensItem,
-    NBBPM,
-)
-
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
     BaixaFisicaBensItemInline,
@@ -28,6 +15,16 @@ from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBensItemInlineFormSet,
     BaixaFisicaResource,
 )
+from bem_patrimonial.models import (
+    NBBPM,
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+)
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class BaixaFisicaAdminTestCase(TestCase):
@@ -41,9 +38,7 @@ class BaixaFisicaAdminTestCase(TestCase):
             sigla="UAT",
         )
 
-        self.grupo_gestor = Group.objects.get_or_create(
-            name=GRUPO_GESTOR_PATRIMONIO
-        )[0]
+        self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
 
         self.user = Usuario.objects.create_user(
             username="gestor_baixa",
@@ -141,19 +136,45 @@ def _criar_uo_cov(codigo=None):
 
 
 def _criar_usuario_cov(username, uo, ua, grupos=None, is_superuser=False):
-    user = Usuario.objects.create_user(username=username, email=f"{username}@t.com", **auth_kwargs("x"), unidade_administrativa=ua, unidade_orcamentaria=uo, is_superuser=is_superuser, is_staff=True)
-    for g in (grupos or []):
+    user = Usuario.objects.create_user(
+        username=username,
+        email=f"{username}@t.com",
+        **auth_kwargs("x"),
+        unidade_administrativa=ua,
+        unidade_orcamentaria=uo,
+        is_superuser=is_superuser,
+        is_staff=True,
+    )
+    for g in grupos or []:
         grp, _ = Group.objects.get_or_create(name=g)
         user.groups.add(grp)
     return user
 
 
 def _criar_bem_cov(ua, user, **kw):
-    return BemPatrimonial.objects.create(nome=kw.pop("nome", "N"), descricao=kw.pop("descricao", "D"), valor_unitario=kw.pop("valor_unitario", Decimal("100")), marca=kw.pop("marca", "M"), modelo=kw.pop("modelo", "Md"), numero_patrimonial=kw.pop("numero_patrimonial", "000.000000001-0"), unidade_administrativa=ua, criado_por=user, status=kw.pop("status", constants.APROVADO), **kw)
+    return BemPatrimonial.objects.create(
+        nome=kw.pop("nome", "N"),
+        descricao=kw.pop("descricao", "D"),
+        valor_unitario=kw.pop("valor_unitario", Decimal("100")),
+        marca=kw.pop("marca", "M"),
+        modelo=kw.pop("modelo", "Md"),
+        numero_patrimonial=kw.pop("numero_patrimonial", "000.000000001-0"),
+        unidade_administrativa=ua,
+        criado_por=user,
+        status=kw.pop("status", constants.APROVADO),
+        **kw,
+    )
 
 
 def _criar_baixa_cov(ua, user, status=constants.ACEITA, **kw):
-    return BaixaFisicaBemPatrimonial.objects.create(unidade_administrativa_origem=ua, numero_processo_baixa=kw.pop("numero_processo_baixa", "PROC"), status=status, criado_por=user, data_baixa=kw.pop("data_baixa", timezone.localdate()), **kw)
+    return BaixaFisicaBemPatrimonial.objects.create(
+        unidade_administrativa_origem=ua,
+        numero_processo_baixa=kw.pop("numero_processo_baixa", "PROC"),
+        status=status,
+        criado_por=user,
+        data_baixa=kw.pop("data_baixa", timezone.localdate()),
+        **kw,
+    )
 
 
 class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
@@ -166,12 +187,20 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         self.admin = BaixaFisicaBemPatrimonialAdmin(BaixaFisicaBemPatrimonial, AdminSite())
         self.factory = RequestFactory()
         self.bem_aprov = _criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO)
-        self.bem_bloq = _criar_bem_cov(self.ua, self.gestor, status=constants.BLOQUEADO, numero_patrimonial="000.000000002-0")
-        self.bem_aguard = _criar_bem_cov(self.ua, self.gestor, status=constants.BAIXA_FISICA_AGUARDANDO_APROVACAO, numero_patrimonial="000.000000003-0")
+        self.bem_bloq = _criar_bem_cov(
+            self.ua, self.gestor, status=constants.BLOQUEADO, numero_patrimonial="000.000000002-0"
+        )
+        self.bem_aguard = _criar_bem_cov(
+            self.ua,
+            self.gestor,
+            status=constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
+            numero_patrimonial="000.000000003-0",
+        )
 
     def _req_messages(self, req):
         from django.contrib.messages.storage.fallback import FallbackStorage
         from django.contrib.sessions.backends.db import SessionStore
+
         req.session = SessionStore()
         req.session.create()
         req._messages = FallbackStorage(req)
@@ -194,7 +223,9 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         BaixaFisicaBensItem.objects.create(baixa=baixa2, bem=self.bem_aguard)
         with self.assertRaises(ValidationError):
             form2.clean_bem()
-        bem_outra = _criar_bem_cov(self.ua2, self.gestor, status=constants.APROVADO, numero_patrimonial="000.000000004-0")
+        bem_outra = _criar_bem_cov(
+            self.ua2, self.gestor, status=constants.APROVADO, numero_patrimonial="000.000000004-0"
+        )
         item3 = BaixaFisicaBensItem(baixa=baixa, bem=bem_outra)
         form3 = BaixaFisicaBensItemInlineForm(instance=item3)
         form3.cleaned_data = {"bem": bem_outra}
@@ -203,7 +234,14 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
             form3.clean_bem()
         # FormSet clean com formset real via inline
         from django.forms.models import inlineformset_factory
-        formset = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
+
+        formset = inlineformset_factory(
+            BaixaFisicaBemPatrimonial,
+            BaixaFisicaBensItem,
+            form=BaixaFisicaBensItemInlineForm,
+            formset=BaixaFisicaBensItemInlineFormSet,
+            extra=0,
+        )
         fs2 = formset(instance=baixa, prefix="itens")
         fs2.forms = []
         with self.assertRaises(ValidationError):
@@ -234,7 +272,13 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         self.assertIn("000.000000001-0", res.dehydrate_numero_patrimonial(baixa))
         self.assertIn("N", res.dehydrate_nome_bem(baixa))
         # nbbpms_lote
-        nbbpm = NBBPM.objects.create(numero="001.0000999/2026", numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000999/2026",
+            numero_processo_baixa="P",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         nbbpm.baixas.set([baixa])
         baixa_pref = BaixaFisicaBemPatrimonial.objects.prefetch_related("nbbpms_lote", "itens__bem").get(pk=baixa.pk)
         self.assertEqual(res.dehydrate_nbbpm(baixa_pref), "001.0000999/2026")
@@ -265,7 +309,15 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         self.assertFalse(self.admin.has_view_permission(req_anon))
         # changelist_view com operador sem UA
         from usuario.models import Usuario as U
-        oper_sem_ua = U.objects.create_user(username="oper_sem", email="a@t.com", **auth_kwargs("x"), unidade_administrativa=None, unidade_orcamentaria=self.uo, is_staff=True)
+
+        oper_sem_ua = U.objects.create_user(
+            username="oper_sem",
+            email="a@t.com",
+            **auth_kwargs("x"),
+            unidade_administrativa=None,
+            unidade_orcamentaria=self.uo,
+            is_staff=True,
+        )
         g, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
         oper_sem_ua.groups.add(g)
         req2 = self.factory.get("/admin/bem_patrimonial/baixafisicabempatrimonial/")
@@ -285,7 +337,12 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.AGUARDANDO_ENVIO, numero_processo_baixa="A1")
         b2 = _criar_baixa_cov(self.ua, self.gestor, status=constants.SOLICITADA, numero_processo_baixa="A2")
         for b in [b1, b2]:
-            BaixaFisicaBensItem.objects.create(baixa=b, bem=_criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO, numero_patrimonial=f"000.00000000{80+b.pk}-0"))
+            BaixaFisicaBensItem.objects.create(
+                baixa=b,
+                bem=_criar_bem_cov(
+                    self.ua, self.gestor, status=constants.APROVADO, numero_patrimonial=f"000.00000000{80+b.pk}-0"
+                ),
+            )
         req = self.factory.post("/", {"action": "acao_enviar_baixa", "_selected_action": [b1.pk, b2.pk]})
         req.user = self.gestor
         self._req_messages(req)
@@ -303,9 +360,7 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         )
         req_aprovar.user = self.gestor
         self._req_messages(req_aprovar)
-        self.admin.acao_aprovar_baixa(
-            req_aprovar, BaixaFisicaBemPatrimonial.objects.filter(pk=b2.pk)
-        )
+        self.admin.acao_aprovar_baixa(req_aprovar, BaixaFisicaBemPatrimonial.objects.filter(pk=b2.pk))
         b2.refresh_from_db()
         self.assertEqual(b2.status, constants.ACEITA)
         self.assertEqual(b2.numero_processo_baixa, "6016.2025/0117371-7")
@@ -314,7 +369,10 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         self._req_messages(req)
         self.admin.acao_solicitar_correcao(req, BaixaFisicaBemPatrimonial.objects.filter(pk=b2.pk))
         b4 = _criar_baixa_cov(self.ua, self.gestor, status=constants.SOLICITADA)
-        BaixaFisicaBensItem.objects.create(baixa=b4, bem=_criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO, numero_patrimonial="000.000000099-0"))
+        BaixaFisicaBensItem.objects.create(
+            baixa=b4,
+            bem=_criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO, numero_patrimonial="000.000000099-0"),
+        )
         req2 = self.factory.post("/", {"apply_correcao": "1", "motivo": "ajuste", "_selected_action": [b4.pk]})
         req2.user = self.gestor
         self._req_messages(req2)
@@ -322,18 +380,32 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         b4.refresh_from_db()
         self.assertEqual(b4.status, constants.AGUARDANDO_ENVIO)
         b5 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA)
-        BaixaFisicaBensItem.objects.create(baixa=b5, bem=_criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO, numero_patrimonial="000.000000098-0"))
+        BaixaFisicaBensItem.objects.create(
+            baixa=b5,
+            bem=_criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO, numero_patrimonial="000.000000098-0"),
+        )
         req3 = self.factory.get("/")
         req3.user = self.gestor
         resp = self.admin.gerar_nbbpm_action(req3, BaixaFisicaBemPatrimonial.objects.filter(pk=b5.pk))
         self.assertEqual(resp.status_code, 200)
-        req4 = self.factory.post("/", {"apply": "1", "numero_processo_baixa": "PROC", "data_autorizacao": str(timezone.localdate()), "responsavel": "G", "_selected_action": [b5.pk]})
+        req4 = self.factory.post(
+            "/",
+            {
+                "apply": "1",
+                "numero_processo_baixa": "PROC",
+                "data_autorizacao": str(timezone.localdate()),
+                "responsavel": "G",
+                "_selected_action": [b5.pk],
+            },
+        )
         req4.user = self.gestor
         self._req_messages(req4)
         resp2 = self.admin.gerar_nbbpm_action(req4, BaixaFisicaBemPatrimonial.objects.filter(pk=b5.pk))
         self.assertEqual(resp2.status_code, 302)
         # outros branches: permissão negada, vazio, não aprovadas, já com NBBPM, UO diferente, fora escopo, form inválido
-        req5 = self.factory.post("/", {"apply": "1", "numero_processo_baixa": "", "data_autorizacao": "", "responsavel": ""})
+        req5 = self.factory.post(
+            "/", {"apply": "1", "numero_processo_baixa": "", "data_autorizacao": "", "responsavel": ""}
+        )
         req5.user = self.operador
         self._req_messages(req5)
         self.assertIsNone(self.admin.gerar_nbbpm_action(req5, BaixaFisicaBemPatrimonial.objects.filter(pk=b5.pk)))
@@ -353,7 +425,15 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         b8 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA)
         b9 = _criar_baixa_cov(ua2, self.gestor, status=constants.ACEITA)
         for b in [b8, b9]:
-            BaixaFisicaBensItem.objects.create(baixa=b, bem=_criar_bem_cov(b.unidade_administrativa_origem, self.gestor, status=constants.APROVADO, numero_patrimonial=f"000.00000000{90+b.pk}-0"))
+            BaixaFisicaBensItem.objects.create(
+                baixa=b,
+                bem=_criar_bem_cov(
+                    b.unidade_administrativa_origem,
+                    self.gestor,
+                    status=constants.APROVADO,
+                    numero_patrimonial=f"000.00000000{90+b.pk}-0",
+                ),
+            )
         self._req_messages(req5)
         self.admin.gerar_nbbpm_action(req5, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b8.pk, b9.pk]))
         # get_readonly/fieldsets/formfield/urls/baixar - criação agora tem só UA e data (processo só no aceite)
@@ -367,6 +447,7 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         self.assertEqual(self.admin.baixar_nbbpm(req, b5.pk).status_code, 410)
         # baixar_laudo
         from django.core.exceptions import PermissionDenied
+
         b5.status = constants.AGUARDANDO_ENVIO
         b5.save(update_fields=["status"])
         resp = self.admin.baixar_laudo(req, b5.pk)
@@ -378,7 +459,13 @@ class TestBaixaFisicaAdminCoberturaCompleta(TestCase):
         with self.assertRaises(PermissionDenied):
             self.admin.baixar_laudo(req, b_out.pk)
         # save_model
-        nova = BaixaFisicaBemPatrimonial(unidade_administrativa_origem=self.ua, numero_processo_baixa="NEW", status=constants.AGUARDANDO_ENVIO, criado_por=self.gestor, data_baixa=timezone.localdate())
+        nova = BaixaFisicaBemPatrimonial(
+            unidade_administrativa_origem=self.ua,
+            numero_processo_baixa="NEW",
+            status=constants.AGUARDANDO_ENVIO,
+            criado_por=self.gestor,
+            data_baixa=timezone.localdate(),
+        )
         self.admin.save_model(req, nova, None, False)
         self.assertEqual(nova.criado_por, self.gestor)
 
@@ -393,7 +480,11 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         self.factory = RequestFactory()
 
     def test_inline_form_e_resource_cobertura(self):
-        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import BaixaFisicaBensItemInlineForm, BaixaFisicaResource
+        from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
+            BaixaFisicaBensItemInlineForm,
+            BaixaFisicaResource,
+        )
+
         # testa _obter_baixa_atual_id com parent_baixa
         baixa = _criar_baixa_cov(self.ua, self.gestor, status=constants.AGUARDANDO_ENVIO)
         bem = _criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO)
@@ -417,7 +508,13 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         baixa3._prefetched_objects_cache["nbbpms_lote"] = []
         self.assertEqual(res.dehydrate_nbbpm(baixa3), "-")
         # com nbbpm
-        nbbpm = NBBPM.objects.create(numero="001.0000998/2026", numero_processo_baixa="P", data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor)
+        nbbpm = NBBPM.objects.create(
+            numero="001.0000998/2026",
+            numero_processo_baixa="P",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
+        )
         nbbpm.baixas.set([baixa2])
         self.assertEqual(res.dehydrate_nbbpm(baixa2), "001.0000998/2026")
         # dehydrate com baixa sem itens e com item bem None (cobre branches 352-362)
@@ -468,7 +565,9 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         self.assertIn("unidade_administrativa_origem", self.admin.get_readonly_fields(req, baixa))
         self.assertEqual(self.admin.get_fieldsets(req, None)[0][0], "Realizar Baixa Física do Bem Patrimonial")
         # formfield
-        field = self.admin.formfield_for_dbfield(BaixaFisicaBemPatrimonial._meta.get_field("numero_processo_baixa"), req)
+        field = self.admin.formfield_for_dbfield(
+            BaixaFisicaBemPatrimonial._meta.get_field("numero_processo_baixa"), req
+        )
         self.assertIsNotNone(field)
 
     def test_inline_cobertura_extra(self):
@@ -484,6 +583,7 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         self.assertEqual(inline.get_readonly_fields(req_oper, baixa), ("bem",))
         # cobre BaixaFisicaResource com item sem bem
         from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import BaixaFisicaResource
+
         res = BaixaFisicaResource()
         baixa2 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA)
         # cria item com bem None simulado
@@ -497,12 +597,24 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
     def test_save_related_changed_bem_cobertura(self):
         # cobre _atualizar_bens_trocados, _restaurar_bem_antigo, _garantir_bem_novo
         baixa = _criar_baixa_cov(self.ua, self.gestor, status=constants.AGUARDANDO_ENVIO)
-        bem_old = _criar_bem_cov(self.ua, self.gestor, status=constants.BAIXA_FISICA_AGUARDANDO_APROVACAO, numero_patrimonial="000.000000070-0")
+        bem_old = _criar_bem_cov(
+            self.ua,
+            self.gestor,
+            status=constants.BAIXA_FISICA_AGUARDANDO_APROVACAO,
+            numero_patrimonial="000.000000070-0",
+        )
         bem_new = _criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO, numero_patrimonial="000.000000071-0")
         item = BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem_old)
         # simula form com changed_data
         from django.forms.models import inlineformset_factory
-        formset_cls = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
+
+        formset_cls = inlineformset_factory(
+            BaixaFisicaBemPatrimonial,
+            BaixaFisicaBensItem,
+            form=BaixaFisicaBensItemInlineForm,
+            formset=BaixaFisicaBensItemInlineFormSet,
+            extra=0,
+        )
         formset = formset_cls(instance=baixa, prefix="itens")
         # cria um form mock com changed_data
         mock_form = MagicMock()
@@ -546,7 +658,14 @@ class TestBaixaFisicaAdminCoberturaExtra(TestCase):
         item1 = BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem1)
         # simula formset com deleted e new
         from django.forms.models import inlineformset_factory
-        formset_cls = inlineformset_factory(BaixaFisicaBemPatrimonial, BaixaFisicaBensItem, form=BaixaFisicaBensItemInlineForm, formset=BaixaFisicaBensItemInlineFormSet, extra=0)
+
+        formset_cls = inlineformset_factory(
+            BaixaFisicaBemPatrimonial,
+            BaixaFisicaBensItem,
+            form=BaixaFisicaBensItemInlineForm,
+            formset=BaixaFisicaBensItemInlineFormSet,
+            extra=0,
+        )
         # deleted
         formset = formset_cls(instance=baixa, prefix="itens")
         formset.deleted_objects = [item1]
@@ -597,9 +716,7 @@ class TestAprovacaoAdminNaoGeraNBBPMEssencial(TestCase):
         req.session.create()
         req._messages = FallbackStorage(req)
         # primeiro chama sem processo para renderizar form
-        resp = self.admin.acao_aprovar_baixa(
-            req, BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk)
-        )
+        resp = self.admin.acao_aprovar_baixa(req, BaixaFisicaBemPatrimonial.objects.filter(pk=baixa.pk))
         self.assertEqual(resp.status_code, 200)
         # agora envia com processo válido
         req2 = self.factory.post(
@@ -643,13 +760,15 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         return [str(m.message) for m in req._messages]
 
     def test_bloqueia_quando_processos_divergentes(self):
-        b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7")
-        b2 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0999999-9")
+        b1 = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7"
+        )
+        b2 = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0999999-9"
+        )
         req = self._req_messages(self.factory.get("/"))
         req.user = self.gestor
-        resp = self.admin.gerar_nbbpm_action(
-            req, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b1.pk, b2.pk])
-        )
+        resp = self.admin.gerar_nbbpm_action(req, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b1.pk, b2.pk]))
         self.assertIsNone(resp)
         self.assertIn(constants.NBBPM_PROCESSO_DIVERGENTE, self._mensagens(req))
 
@@ -659,9 +778,7 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         b2 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa=processo)
         req = self._req_messages(self.factory.get("/"))
         req.user = self.gestor
-        resp = self.admin.gerar_nbbpm_action(
-            req, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b1.pk, b2.pk])
-        )
+        resp = self.admin.gerar_nbbpm_action(req, BaixaFisicaBemPatrimonial.objects.filter(pk__in=[b1.pk, b2.pk]))
         self.assertEqual(resp.status_code, 200)
         form = resp.context_data["form"]
         self.assertEqual(form.initial["numero_processo_baixa"], processo)
@@ -683,7 +800,9 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
         self.assertEqual(NBBPM.objects.count(), 0)
 
     def test_post_bloqueia_quando_payload_diverge_das_baixas(self):
-        b1 = _criar_baixa_cov(self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7")
+        b1 = _criar_baixa_cov(
+            self.ua, self.gestor, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7"
+        )
         req = self._req_messages(
             self.factory.post(
                 "/",
@@ -697,9 +816,7 @@ class TestGerarNBBPMProcessoUnicoAdmin(TestCase):
             )
         )
         req.user = self.gestor
-        resp = self.admin.gerar_nbbpm_action(
-            req, BaixaFisicaBemPatrimonial.objects.filter(pk=b1.pk)
-        )
+        resp = self.admin.gerar_nbbpm_action(req, BaixaFisicaBemPatrimonial.objects.filter(pk=b1.pk))
         self.assertEqual(resp.status_code, 200)
         self.assertIn(constants.NBBPM_PROCESSO_PAYLOAD_DIVERGENTE, self._mensagens(req))
         self.assertEqual(NBBPM.objects.count(), 0)
@@ -729,7 +846,9 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_exibe_valor_atual_no_fieldset(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         req = self._req(self.gestor)
@@ -740,7 +859,9 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_detalhe_exibe_nbbpm_igual_listagem_com_link(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         req = self._req(self.gestor)
@@ -749,8 +870,11 @@ class TestCorrigirProcessoAdmin(TestCase):
         self.assertIn("numero_nbbpm_display", self.admin.get_readonly_fields(req, baixa))
         self.assertEqual(self.admin.numero_nbbpm_display(baixa), "-")
         nbbpm = NBBPM.objects.create(
-            numero="001.0000100/2026", numero_processo_baixa="6016.2025/0117371-7",
-            data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor,
+            numero="001.0000100/2026",
+            numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
         )
         nbbpm.baixas.set([baixa])
         display = self.admin.numero_nbbpm_display(baixa)
@@ -759,7 +883,9 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_permitir_editar_antes_da_nota(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         req = self._req(self.gestor)
@@ -770,12 +896,17 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_bloquear_apos_nota_m2m(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         nbbpm = NBBPM.objects.create(
-            numero="001.0000099/2026", numero_processo_baixa="6016.2025/0117371-7",
-            data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor,
+            numero="001.0000099/2026",
+            numero_processo_baixa="6016.2025/0117371-7",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
         )
         nbbpm.baixas.set([baixa])
         req = self._req(self.gestor)
@@ -784,8 +915,11 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_bloquear_apos_nota_legado(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
-            numero_processo_baixa="6016.2025/0117371-7", numero_nbbpm="001.0000001/2026",
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
+            numero_processo_baixa="6016.2025/0117371-7",
+            numero_nbbpm="001.0000001/2026",
         )
         req = self._req(self.gestor)
         readonly = self.admin.get_readonly_fields(req, baixa)
@@ -793,7 +927,9 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_bloquear_quando_nao_aceita_e_quando_operador(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.SOLICITADA,
+            self.ua,
+            self.gestor,
+            status=constants.SOLICITADA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         self.assertIn("numero_processo_baixa", self.admin.get_readonly_fields(self._req(self.gestor), baixa))
@@ -807,7 +943,9 @@ class TestCorrigirProcessoAdmin(TestCase):
         )
 
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         bem = _criar_bem_cov(self.ua, self.gestor, status=constants.APROVADO)
@@ -844,7 +982,9 @@ class TestCorrigirProcessoAdmin(TestCase):
         )
 
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         bem = _criar_bem_cov(self.ua, self.gestor, status=constants.BAIXA_FISICA)
@@ -863,6 +1003,7 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def _historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -870,11 +1011,15 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_save_model_corrige_e_bloqueia_apos_nota(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         bem = _criar_bem_cov(
-            self.ua, self.gestor, status=constants.BAIXA_FISICA,
+            self.ua,
+            self.gestor,
+            status=constants.BAIXA_FISICA,
             numero_processo="6016.2025/0117371-7",
             localizacao="Baixa Física - 6016.2025/0117371-7",
         )
@@ -897,8 +1042,11 @@ class TestCorrigirProcessoAdmin(TestCase):
         self.assertIsNotNone(historicos[0].alterado_em)
 
         nbbpm = NBBPM.objects.create(
-            numero="001.0000098/2026", numero_processo_baixa="6016.2025/0222222-2",
-            data_autorizacao=timezone.localdate(), responsavel="G", criado_por=self.gestor,
+            numero="001.0000098/2026",
+            numero_processo_baixa="6016.2025/0222222-2",
+            data_autorizacao=timezone.localdate(),
+            responsavel="G",
+            criado_por=self.gestor,
         )
         nbbpm.baixas.set([baixa])
         baixa.numero_processo_baixa = "6016.2025/0333333-3"
@@ -911,11 +1059,15 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_save_model_segunda_correcao_gera_novo_registro_imutavel(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         bem = _criar_bem_cov(
-            self.ua, self.gestor, status=constants.BAIXA_FISICA,
+            self.ua,
+            self.gestor,
+            status=constants.BAIXA_FISICA,
             numero_processo="6016.2025/0117371-7",
             localizacao="Baixa Física - 6016.2025/0117371-7",
         )
@@ -939,11 +1091,15 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_save_model_formato_invalido_nao_cria_historico(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         bem = _criar_bem_cov(
-            self.ua, self.gestor, status=constants.BAIXA_FISICA,
+            self.ua,
+            self.gestor,
+            status=constants.BAIXA_FISICA,
             numero_processo="6016.2025/0117371-7",
             localizacao="Baixa Física - 6016.2025/0117371-7",
         )
@@ -957,13 +1113,17 @@ class TestCorrigirProcessoAdmin(TestCase):
 
     def test_save_model_corrige_dois_bens_sem_alterar_status(self):
         baixa = _criar_baixa_cov(
-            self.ua, self.gestor, status=constants.ACEITA,
+            self.ua,
+            self.gestor,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         bens = []
         for i, num in enumerate(["000.000000071-0", "000.000000072-0"]):
             bem = _criar_bem_cov(
-                self.ua, self.gestor, status=constants.BAIXA_FISICA,
+                self.ua,
+                self.gestor,
+                status=constants.BAIXA_FISICA,
                 numero_patrimonial=num,
                 numero_processo="6016.2025/0117371-7",
                 localizacao="Baixa Física - 6016.2025/0117371-7",
@@ -1006,6 +1166,7 @@ class TestBaixaFisicaUnicidadeSolicitanteAdmin(TestCase):
 
     def _historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)

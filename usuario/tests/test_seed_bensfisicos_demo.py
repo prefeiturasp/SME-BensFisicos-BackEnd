@@ -116,9 +116,7 @@ class SeedBensfisicosDemoCommandTest(TestCase):
             try:
                 self._patch_handle_through_none()
                 bem_model = apps.get_model("bem_patrimonial.BemPatrimonial")
-                with patch.object(
-                    bem_model.objects, "create", return_value=MagicMock()
-                ):
+                with patch.object(bem_model.objects, "create", return_value=MagicMock()):
                     call_command("seed_bensfisicos_demo")
                 UA = apps.get_model("dados_comuns.UnidadeAdministrativa")
                 self.assertEqual(UA.objects.count(), 2)

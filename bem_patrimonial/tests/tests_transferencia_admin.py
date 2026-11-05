@@ -1,15 +1,17 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.test import Client
-from django.forms import modelform_factory
-from django.core.exceptions import PermissionDenied
-from django.core.exceptions import ValidationError
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
-from django.test import RequestFactory, TestCase
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.forms import modelform_factory
+from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 
+from bem_patrimonial import constants
+from bem_patrimonial.admins.forms.transferencia_bem_patrimonial_form import (
+    TransferenciaBemPatrimonialForm,
+)
 from bem_patrimonial.admins.inlines.inlines import (
     TransferenciaBensItemInline,
     TransferenciaBensItemInlineForm,
@@ -18,10 +20,6 @@ from bem_patrimonial.admins.inlines.inlines import (
 from bem_patrimonial.admins.transferencia_bem_patrimonial import (
     TransferenciaBemPatrimonialAdmin,
 )
-from bem_patrimonial.admins.forms.transferencia_bem_patrimonial_form import (
-    TransferenciaBemPatrimonialForm,
-)
-from bem_patrimonial import constants
 from bem_patrimonial.models import (
     BemPatrimonial,
     TransferenciaBemPatrimonial,
@@ -209,9 +207,7 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
             numero_processo="SEI-123/2026",
             criado_por=self.gestor,
         )
-        request = self.factory.get(
-            f"/admin/bem_patrimonial/transferenciabempatrimonial/{transferencia.pk}/change/"
-        )
+        request = self.factory.get(f"/admin/bem_patrimonial/transferenciabempatrimonial/{transferencia.pk}/change/")
         request.user = self.gestor
 
         form_class = self.admin.get_form(request, obj=transferencia)
@@ -260,9 +256,7 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
         self.assertEqual(fields[-1], "unidade_administrativa_filtro")
 
     def test_inline_formset_exige_ao_menos_um_bem(self):
-        formset = TransferenciaBensItemInlineFormSet.__new__(
-            TransferenciaBensItemInlineFormSet
-        )
+        formset = TransferenciaBensItemInlineFormSet.__new__(TransferenciaBensItemInlineFormSet)
         formset.forms = [SimpleNamespace(cleaned_data={"bem": None, "DELETE": False})]
         formset._errors = []
 
@@ -273,9 +267,7 @@ class TransferenciaBemPatrimonialAdminTestCase(TestCase):
         self.assertIn("ao menos um bem", str(ctx.exception))
 
     def test_inline_formset_ignora_validacao_quando_ha_erros(self):
-        formset = TransferenciaBensItemInlineFormSet.__new__(
-            TransferenciaBensItemInlineFormSet
-        )
+        formset = TransferenciaBensItemInlineFormSet.__new__(TransferenciaBensItemInlineFormSet)
         formset.forms = []
         formset._errors = [{"bem": ["erro"]}]
 

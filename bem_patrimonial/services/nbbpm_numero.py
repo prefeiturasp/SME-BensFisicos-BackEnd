@@ -1,8 +1,8 @@
-import re
 import logging
+import re
 
 from django.core.exceptions import ValidationError
-from django.db import transaction, IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import IntegerField, Max, Q, Value
 from django.db.models.functions import Cast, Replace, Substr
 from django.utils import timezone
@@ -63,7 +63,7 @@ def obter_proximo_sequencial_por_ano(ano: int) -> int:
     max_nbbpm = _max_sequencial_nbbpm_por_ano(ano)
     max_baixa = _max_sequencial_baixa_legado_por_ano(ano)
     maior = max(max_nbbpm, max_baixa)
-    return maior + 1
+    return int(maior) + 1
 
 
 def _extrair_ano_nbbpm(nbbpm):
@@ -130,7 +130,7 @@ def obter_processo_unico_baixas(baixas) -> str:
     processos = processos_normalizados_de_baixas(baixas)
     if len(processos) > 1:
         raise ValidationError(constants.NBBPM_PROCESSO_DIVERGENTE)
-    return next(iter(processos)) if processos else ""
+    return str(next(iter(processos))) if processos else ""
 
 
 def validar_processo_payload_baixas(baixas, numero_processo_baixa) -> str:
@@ -153,7 +153,9 @@ def _validar_uo_baixas(baixas):
         uo_id = getattr(ua, "unidade_orcamentaria_id", None)
         if uo_id is None:
             try:
-                uo_id = getattr(ua.unidade_orcamentaria, "pk", None) if getattr(ua, "unidade_orcamentaria", None) else None
+                uo_id = (
+                    getattr(ua.unidade_orcamentaria, "pk", None) if getattr(ua, "unidade_orcamentaria", None) else None
+                )
             except Exception:
                 uo_id = None
         uo_ids.add(uo_id)
@@ -204,7 +206,17 @@ def _rotulo_uo_de_baixa(baixa):
     return "-"
 
 
-def _criar_nbbpm_atomico(baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final, ano, uo_ids, tentativa):
+def _criar_nbbpm_atomico(
+    baixas,
+    numero_processo_baixa,
+    data_autorizacao,
+    responsavel,
+    criado_por,
+    numero_processo_destinacao_final,
+    ano,
+    uo_ids,
+    tentativa,
+):
     from bem_patrimonial.models import NBBPM, BaixaFisicaBemPatrimonial
 
     baixa_ids = [b.pk for b in baixas]
@@ -254,8 +266,9 @@ def _evoluir_bens_para_baixa_fisica(locked_baixas):
 
 
 def _registrar_historico_nbbpm(nbbpm, criado_por, uo_ids, ano, locked):
-    from dados_comuns.models import HistoricoGeral
     from django.contrib.contenttypes.models import ContentType
+
+    from dados_comuns.models import HistoricoGeral
 
     _ = uo_ids
     uo_label = _rotulo_uo_de_baixa(locked[0]) if locked else "-"
@@ -274,10 +287,10 @@ def _registrar_historico_nbbpm(nbbpm, criado_por, uo_ids, ano, locked):
 
 def _registrar_historico_baixas_nbbpm(nbbpm, criado_por, uo_ids, locked):
     """Evento imutável por baixa vinculada à NBBPM (consulta histórica, reemissão e bloqueio)."""
-    from dados_comuns.models import HistoricoGeral
     from django.contrib.contenttypes.models import ContentType
 
     from bem_patrimonial.models import BaixaFisicaBemPatrimonial
+    from dados_comuns.models import HistoricoGeral
 
     ct_baixa = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
     _ = uo_ids
@@ -311,7 +324,16 @@ def _registrar_historico_baixas_nbbpm(nbbpm, criado_por, uo_ids, locked):
         HistoricoGeral.objects.bulk_create(registros)
 
 
-def criar_nbbpm_com_retry(*, baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final="", max_tentativas=3):
+def criar_nbbpm_com_retry(
+    *,
+    baixas,
+    numero_processo_baixa,
+    data_autorizacao,
+    responsavel,
+    criado_por,
+    numero_processo_destinacao_final="",
+    max_tentativas=3,
+):
     """Cria NBBPM com select_for_update e retry em IntegrityError. Sequencial global por ano, escopo por UO."""
     if not baixas:
         raise ValidationError("Selecione ao menos uma Baixa.")
@@ -328,7 +350,15 @@ def criar_nbbpm_com_retry(*, baixas, numero_processo_baixa, data_autorizacao, re
         try:
             with transaction.atomic():
                 return _criar_nbbpm_atomico(
-                    baixas, numero_processo_baixa, data_autorizacao, responsavel, criado_por, numero_processo_destinacao_final, ano, uo_ids, tentativa + 1
+                    baixas,
+                    numero_processo_baixa,
+                    data_autorizacao,
+                    responsavel,
+                    criado_por,
+                    numero_processo_destinacao_final,
+                    ano,
+                    uo_ids,
+                    tentativa + 1,
                 )
         except IntegrityError as exc:
             logger.warning(

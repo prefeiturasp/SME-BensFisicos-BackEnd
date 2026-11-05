@@ -1,13 +1,14 @@
+from datetime import date
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from datetime import date
 
-from dados_comuns.models import UnidadeAdministrativa
 from dados_comuns.escopo import filtrar_ua_origem_por_escopo, usuario_e_super_admin
+from dados_comuns.models import UnidadeAdministrativa
 
-from .models import ConciliacaoUA, ParametroConciliacaoAnual
 from . import constants
+from .models import ConciliacaoUA, ParametroConciliacaoAnual
 
 
 def _get_ua_queryset_por_escopo(user):
@@ -76,9 +77,7 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
         if not unidade_administrativa:
             raise ValidationError({"unidade_administrativa": "Campo obrigatório."})
 
-        unidade_administrativa = self._clean_ua_permissao(
-            cleaned, user, unidade_administrativa
-        )
+        unidade_administrativa = self._clean_ua_permissao(cleaned, user, unidade_administrativa)
         self._clean_conciliacao_aberta(unidade_administrativa)
         self._clean_periodo_tipo(cleaned, tipo, periodo_final, unidade_administrativa)
         return cleaned
@@ -93,9 +92,7 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
             unidade_administrativa = ua_user
         if not allowed_qs.filter(pk=unidade_administrativa.pk).exists():
             raise ValidationError(
-                {
-                    "unidade_administrativa": "Você não tem permissão para usar esta Unidade Administrativa."
-                }
+                {"unidade_administrativa": "Você não tem permissão para usar esta Unidade Administrativa."}
             )
         return unidade_administrativa
 
@@ -120,9 +117,7 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
         hoje = timezone.localdate()
         ano_corrente = hoje.year
         if tipo == constants.CONCILIACAO_ANUAL:
-            self._clean_conciliacao_anual(
-                cleaned, hoje, ano_corrente, unidade_administrativa
-            )
+            self._clean_conciliacao_anual(cleaned, hoje, ano_corrente, unidade_administrativa)
         elif tipo == constants.CONCILIACAO_EVENTUAL:
             if not periodo_final:
                 raise ValidationError({"periodo_final": "Este campo é obrigatório."})
@@ -137,9 +132,7 @@ class ConciliacaoUAAdminForm(forms.ModelForm):
                     }
                 )
 
-    def _clean_conciliacao_anual(
-        self, cleaned, hoje, ano_corrente, unidade_administrativa
-    ):
+    def _clean_conciliacao_anual(self, cleaned, hoje, ano_corrente, unidade_administrativa):
         ano_referencia = hoje.year - 1
         uo_id = getattr(unidade_administrativa, "unidade_orcamentaria_id", None)
         parametro = ParametroConciliacaoAnual.objects.filter(

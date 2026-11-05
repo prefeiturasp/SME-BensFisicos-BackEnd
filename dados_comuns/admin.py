@@ -1,24 +1,23 @@
-from django.contrib import admin
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from import_export.admin import ImportExportModelAdmin
 from import_export.formats.base_formats import CSV, XLS, XLSX
+
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_ua_destino_por_uo_do_usuario,
     filtrar_ua_origem_por_escopo,
+)
+from dados_comuns.formats import (
+    UnidadeAdministrativaPDFFormat,
+    UnidadeOrcamentariaPDFFormat,
 )
 from dados_comuns.forms.unidade_administrativa_admin_form import (
     UnidadeAdministrativaAdminForm,
 )
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.resources import UnidadeAdministrativaResource
-from dados_comuns.formats import (
-    UnidadeAdministrativaPDFFormat,
-    UnidadeOrcamentariaPDFFormat,
-)
 from dados_comuns.utils import garantir_ua_ponto_central_externa
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
-
 
 UNIDADE_ADMINISTRATIVA_ORIGEM_AUTOCOMPLETE = "unidade_administrativa_origem"
 UNIDADE_ADMINISTRATIVA_DESTINO_AUTOCOMPLETE = "unidade_administrativa_destino"
@@ -242,9 +241,7 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
         if db_field.name == "unidade_orcamentaria":
 
             if request.user.unidade_orcamentaria_id:
-                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(
-                    pk=request.user.unidade_orcamentaria_id
-                )
+                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(pk=request.user.unidade_orcamentaria_id)
             else:
                 kwargs["queryset"] = UnidadeOrcamentaria.objects.none()
 
@@ -256,14 +253,8 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
         if "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].required = True
 
-        if (
-            obj is None
-            and request.user.unidade_orcamentaria_id
-            and "unidade_orcamentaria" in form.base_fields
-        ):
-            form.base_fields["unidade_orcamentaria"].initial = (
-                request.user.unidade_orcamentaria_id
-            )
+        if obj is None and request.user.unidade_orcamentaria_id and "unidade_orcamentaria" in form.base_fields:
+            form.base_fields["unidade_orcamentaria"].initial = request.user.unidade_orcamentaria_id
 
         if not request.user.is_superuser and "unidade_orcamentaria" in form.base_fields:
             form.base_fields["unidade_orcamentaria"].disabled = True
@@ -275,9 +266,7 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
             uo = cleaned_data.get("unidade_orcamentaria")
 
             if not uo:
-                raise ValidationError(
-                    {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-                )
+                raise ValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
             if uo != request.user.unidade_orcamentaria:
                 raise ValidationError(
@@ -292,9 +281,7 @@ class UnidadeAdministrativaAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmi
         return form
 
     def get_search_results(self, request, queryset, search_term):
-        queryset, use_distinct = super().get_search_results(
-            request, queryset, search_term
-        )
+        queryset, use_distinct = super().get_search_results(request, queryset, search_term)
 
         field_name = request.GET.get("field_name")
 

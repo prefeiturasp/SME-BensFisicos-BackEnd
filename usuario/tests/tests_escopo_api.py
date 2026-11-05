@@ -1,11 +1,12 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
+from itertools import count
+
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import status
 from rest_framework.test import APITestCase
-from itertools import count
 
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
@@ -30,9 +31,7 @@ class EscopoEndpointsTestCase(APITestCase):
         self.ua3 = criar_ua(uo=self.uo2, codigo=ua3_codigo, sigla="UA3", nome="UA 3")
 
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor = Usuario.objects.create_user(
             username="gestor",

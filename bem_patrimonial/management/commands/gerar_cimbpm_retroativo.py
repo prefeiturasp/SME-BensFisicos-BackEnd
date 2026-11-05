@@ -1,8 +1,9 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
-from bem_patrimonial.models import MovimentacaoBemPatrimonial
+
 from bem_patrimonial.cimbpm import gerar_numero_cimbpm
+from bem_patrimonial.models import MovimentacaoBemPatrimonial
 
 
 class Command(BaseCommand):
@@ -46,9 +47,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"{erros} erros"))
 
     def _limpar_numeros(self):
-        total = MovimentacaoBemPatrimonial.objects.filter(
-            numero_cimbpm__isnull=False
-        ).count()
+        total = MovimentacaoBemPatrimonial.objects.filter(numero_cimbpm__isnull=False).count()
 
         MovimentacaoBemPatrimonial.objects.filter(numero_cimbpm__isnull=False).update(
             numero_cimbpm=None, documento_cimbpm=""

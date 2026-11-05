@@ -1,15 +1,14 @@
-from django.contrib import admin, messages
-from django.db import transaction
-from django.http import HttpResponse
 import csv
 import re
-from django.template.response import TemplateResponse
-from django.contrib.admin import helpers
-from django.core.exceptions import ValidationError
-from django.db import IntegrityError
-from django.db.models import Q
 from collections import Counter
 
+from django.contrib import admin, messages
+from django.contrib.admin import helpers
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.http import HttpResponse
+from django.template.response import TemplateResponse
 
 NEW_PATTERN_STRICT = re.compile(r"^\d{3}\.\d{9}-\d$")
 ALPHA_RE = re.compile(r"[A-Za-zÁ-ú]")
@@ -96,18 +95,12 @@ def _extract_when_starts_with_alpha(nome: str, descricao: str):
         if not tok:
             continue
         cls, normalized = _classify_token(tok)
-        nome_sug = (
-            re.sub(r"\s{2,}", " ", nome[:a].strip()).strip() or nome
-            if field == "nome_fim"
-            else nome
-        )
+        nome_sug = re.sub(r"\s{2,}", " ", nome[:a].strip()).strip() or nome if field == "nome_fim" else nome
         return (normalized or tok, cls, nome_sug, field, a, tok, True)
     return None
 
 
-def _extract_from_first_token(
-    text: str, nome: str, fonte: str, use_resto_as_nome: bool
-):
+def _extract_from_first_token(text: str, nome: str, fonte: str, use_resto_as_nome: bool):
     """Tenta extrair do primeiro token de text. Retorna tupla ou None."""
     tok, _, b = _first_token(text)
     if not tok or ALPHA_RE.search(tok):
@@ -138,18 +131,14 @@ def _extract(nome: str, descricao: str):
     result = _extract_from_first_token(nome, nome, "nome", use_resto_as_nome=True)
     if result:
         return result
-    result = _extract_from_first_token(
-        descricao, nome, "descricao", use_resto_as_nome=False
-    )
+    result = _extract_from_first_token(descricao, nome, "descricao", use_resto_as_nome=False)
     if result:
         return result
     return None, "SEM_NUMERO", nome, None, None, None, False
 
 
 @admin.action(description="Simular extração do Número Patrimonial → CSV")
-@admin.action(
-    description="Simular extração do Número Patrimonial → CSV (TODOS os bens)"
-)
+@admin.action(description="Simular extração do Número Patrimonial → CSV (TODOS os bens)")
 def simular_extracao_numero(modeladmin, request, queryset):
 
     qs = modeladmin.model.objects.filter(numero_patrimonial__isnull=False).iterator()
@@ -176,9 +165,7 @@ def simular_extracao_numero(modeladmin, request, queryset):
 
     for bem in qs:
         num_atual = (bem.numero_patrimonial or "").strip()
-        numero, cls, nome_sug, fonte, pos, raw, aplicar_auto = _extract(
-            bem.nome, getattr(bem, "descricao", "")
-        )
+        numero, cls, nome_sug, fonte, pos, raw, aplicar_auto = _extract(bem.nome, getattr(bem, "descricao", ""))
 
         elegivel = (num_atual == "") and bool(aplicar_auto)
 
@@ -214,12 +201,8 @@ def _build_propostos(model, selected_ids):
     propostos = {}
     numeros_todos = []
     for pk in selected_ids:
-        bem = model.objects.only("id", "nome", "descricao", "numero_patrimonial").get(
-            pk=pk
-        )
-        numero, cls, _, fonte, _, _, aplicar_auto = _extract(
-            bem.nome, getattr(bem, "descricao", "")
-        )
+        bem = model.objects.only("id", "nome", "descricao", "numero_patrimonial").get(pk=pk)
+        numero, cls, _, fonte, _, _, aplicar_auto = _extract(bem.nome, getattr(bem, "descricao", ""))
         if cls in ("PADRAO_ATUAL", "PADRAO_ANTERIOR") and numero:
             numeros_todos.append(numero)
         propostos[pk] = {
@@ -238,8 +221,7 @@ def _duplicados_ids(propostos, existentes, numeros_todos):
     return {
         pk
         for pk, info in propostos.items()
-        if info["numero"]
-        and (info["numero"] in existentes or contagem.get(info["numero"], 0) > 1)
+        if info["numero"] and (info["numero"] in existentes or contagem.get(info["numero"], 0) > 1)
     }
 
 
@@ -282,27 +264,16 @@ def _sort_preview(preview):
     def key(r):
         order = 0 if r["duplicado"] else 1
         num = r["numero_resultado"]
-        sort_key = (
-            num.replace(".", "").replace("-", "").zfill(13)
-            if num and num[0].isdigit()
-            else "9999999999999"
-        )
+        sort_key = num.replace(".", "").replace("-", "").zfill(13) if num and num[0].isdigit() else "9999999999999"
         return (order, sort_key)
 
     return sorted(preview, key=key)
 
 
-def _show_confirm_page(
-    modeladmin, request, model, selected_ids, propostos, duplicados_ids
-):
-    amostra_ids = sorted(
-        selected_ids, key=lambda _pk: (0 if _pk in duplicados_ids else 1, _pk)
-    )
+def _show_confirm_page(modeladmin, request, model, selected_ids, propostos, duplicados_ids):
+    amostra_ids = sorted(selected_ids, key=lambda _pk: (0 if _pk in duplicados_ids else 1, _pk))
     sample_qs = list(model.objects.filter(pk__in=amostra_ids))
-    preview = [
-        _preview_row(bem, propostos[bem.pk], bem.pk in duplicados_ids)
-        for bem in sample_qs
-    ]
+    preview = [_preview_row(bem, propostos[bem.pk], bem.pk in duplicados_ids) for bem in sample_qs]
     preview = _sort_preview(preview)
     context = modeladmin.admin_site.each_context(request)
     context.update(
@@ -349,9 +320,7 @@ def _save_bem_from_extraction(bem, numero, cls, nome_sug):
 
 def _process_confirmed_bens(model, posted_ids, propostos_post, existentes):
     numeros_post = [
-        numero
-        for numero, cls, _, _ in propostos_post.values()
-        if cls in ("PADRAO_ATUAL", "PADRAO_ANTERIOR") and numero
+        numero for numero, cls, _, _ in propostos_post.values() if cls in ("PADRAO_ATUAL", "PADRAO_ANTERIOR") and numero
     ]
     contagem_post = Counter(numeros_post)
     dup_ids_runtime = {
@@ -365,17 +334,11 @@ def _process_confirmed_bens(model, posted_ids, propostos_post, existentes):
     ignorados_duplicados = len(posted_ids) - len(ids_to_process)
     atualizados, erros = 0, 0
     with transaction.atomic():
-        qs = (
-            model.objects.filter(pk__in=ids_to_process)
-            .select_for_update(skip_locked=True)
-            .order_by("pk")
-        )
+        qs = model.objects.filter(pk__in=ids_to_process).select_for_update(skip_locked=True).order_by("pk")
         for bem in qs:
             with transaction.atomic():
                 try:
-                    numero, cls, aplicar_auto, nome_sug = propostos_post.get(
-                        bem.pk, (None, "SEM_NUMERO", False, None)
-                    )
+                    numero, cls, aplicar_auto, nome_sug = propostos_post.get(bem.pk, (None, "SEM_NUMERO", False, None))
                     if not aplicar_auto:
                         if cls == "SEM_NUMERO" or not numero:
                             bem.sem_numeracao = True
@@ -395,9 +358,7 @@ def _process_confirmed_bens(model, posted_ids, propostos_post, existentes):
 
 
 @admin.action(description="Aplicar extração do Número Patrimonial (somente sem número)")
-@admin.action(
-    description="(135782/V5) Aplicar extração do Número Patrimonial (somente sem número)"
-)
+@admin.action(description="(135782/V5) Aplicar extração do Número Patrimonial (somente sem número)")
 def aplicar_extracao_numero(modeladmin, request, queryset):
     if not request.user.is_gestor_patrimonio:
         messages.error(
@@ -406,38 +367,24 @@ def aplicar_extracao_numero(modeladmin, request, queryset):
         )
         return None
     model = modeladmin.model
-    base_qs = queryset.filter(
-        Q(numero_patrimonial__isnull=True) | Q(numero_patrimonial="")
-    )
+    base_qs = queryset.filter(Q(numero_patrimonial__isnull=True) | Q(numero_patrimonial=""))
     if request.POST.get("confirm") != "yes":
         selected_ids = list(base_qs.values_list("pk", flat=True))
         existentes = _existentes_numeros(model)
         propostos, numeros_todos = _build_propostos(model, selected_ids)
         duplicados_ids = _duplicados_ids(propostos, existentes, numeros_todos)
-        return _show_confirm_page(
-            modeladmin, request, model, selected_ids, propostos, duplicados_ids
-        )
+        return _show_confirm_page(modeladmin, request, model, selected_ids, propostos, duplicados_ids)
     posted_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
     if not posted_ids:
-        messages.warning(
-            request, "Nenhum item foi enviado na confirmação. Ação cancelada."
-        )
+        messages.warning(request, "Nenhum item foi enviado na confirmação. Ação cancelada.")
         return None
     existentes = _existentes_numeros(model)
-    objs_post = list(
-        model.objects.filter(pk__in=posted_ids).only(
-            "id", "nome", "descricao", "numero_patrimonial"
-        )
-    )
+    objs_post = list(model.objects.filter(pk__in=posted_ids).only("id", "nome", "descricao", "numero_patrimonial"))
     propostos_post = {}
     for bem in objs_post:
-        numero, cls, nome_sug, _, _, _, aplicar_auto = _extract(
-            bem.nome, getattr(bem, "descricao", "")
-        )
+        numero, cls, nome_sug, _, _, _, aplicar_auto = _extract(bem.nome, getattr(bem, "descricao", ""))
         propostos_post[bem.pk] = (numero, cls, aplicar_auto, nome_sug)
-    atualizados, erros, ignorados_duplicados = _process_confirmed_bens(
-        model, posted_ids, propostos_post, existentes
-    )
+    atualizados, erros, ignorados_duplicados = _process_confirmed_bens(model, posted_ids, propostos_post, existentes)
     messages.info(
         request,
         (

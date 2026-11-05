@@ -5,29 +5,21 @@ from django.db import transaction
 from django.db.models import IntegerField, Max, Value
 from django.db.models.functions import Cast, Replace, Substr
 from django.utils import timezone
-
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import cm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
     PageTemplate,
-    Spacer,
     Paragraph,
+    Spacer,
     Table,
     TableStyle,
 )
 
-from bem_patrimonial.models import TransferenciaBemPatrimonial
-from bem_patrimonial.pdf_utils import (
-    PDFConfigBase as PDFConfig,
-    criar_estilo_base,
-    extrair_codigo_ua,
-    formatar_data,
-)
 from bem_patrimonial.documentos_pdf_utils import (
     aplicar_estilo_tabela_info,
     criar_cabecalho_registro_documento,
@@ -36,6 +28,15 @@ from bem_patrimonial.documentos_pdf_utils import (
     criar_tabela_total_bens,
     desenhar_rodape_padrao,
     desenhar_tabela_no_canvas,
+)
+from bem_patrimonial.models import TransferenciaBemPatrimonial
+from bem_patrimonial.pdf_utils import (
+    PDFConfigBase as PDFConfig,
+)
+from bem_patrimonial.pdf_utils import (
+    criar_estilo_base,
+    extrair_codigo_ua,
+    formatar_data,
 )
 
 DATE_FMT_BR = "%d/%m/%Y"
@@ -56,14 +57,8 @@ def gerar_numero_ntbpm(transferencia):
     Ex: 001.0000001.2026
     """
 
-    ano_transferencia = (
-        transferencia.criado_em.year
-        if transferencia.criado_em
-        else timezone.localdate().year
-    )
-    codigo_ua_destino = extrair_codigo_ua(
-        getattr(transferencia.unidade_administrativa_destino, "codigo", "")
-    )
+    ano_transferencia = transferencia.criado_em.year if transferencia.criado_em else timezone.localdate().year
+    codigo_ua_destino = extrair_codigo_ua(getattr(transferencia.unidade_administrativa_destino, "codigo", ""))
 
     with transaction.atomic():
         qs = (
@@ -78,9 +73,9 @@ def gerar_numero_ntbpm(transferencia):
         sequencial_raw = Substr("numero_ntbpm", 5, 7)
         sequencial_digits = Replace(sequencial_raw, Value("."), Value(""))
 
-        ultimo_sequencial = qs.annotate(
-            sequencial_int=Cast(sequencial_digits, IntegerField())
-        ).aggregate(max_seq=Max("sequencial_int"))["max_seq"]
+        ultimo_sequencial = qs.annotate(sequencial_int=Cast(sequencial_digits, IntegerField())).aggregate(
+            max_seq=Max("sequencial_int")
+        )["max_seq"]
 
         numero_sequencial = (ultimo_sequencial or 0) + 1
 
@@ -223,9 +218,7 @@ def _criar_tabela_resumo_transferencia(transferencia, label_style, value_style):
                     value_style,
                 ),
                 Paragraph(
-                    transferencia.criado_em.strftime(DATE_FMT_BR)
-                    if transferencia.criado_em
-                    else "-",
+                    transferencia.criado_em.strftime(DATE_FMT_BR) if transferencia.criado_em else "-",
                     value_style,
                 ),
                 Paragraph("TRANSFERIDO", value_style),

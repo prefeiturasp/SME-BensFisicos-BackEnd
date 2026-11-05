@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import Group
 from django.test import TestCase
@@ -8,38 +8,37 @@ from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.test import APIClient
 
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-
-from bem_patrimonial.models import (
-    BaixaFisicaBemPatrimonial,
-    BaixaFisicaBensItem,
-    BemPatrimonial,
-    NBBPM,
-)
+from bem_patrimonial import constants
 from bem_patrimonial.api_serializers import (
-    BaixaFisicaBemPatrimonialCreateSerializer,
-    BaixaFisicaBemPatrimonialUpdateSerializer,
-    BaixaFisicaBemPatrimonialDetailSerializer,
     BaixaFisicaAprovarSerializer,
-    BaixaFisicaCancelarSerializer,
-    BaixaFisicaSolicitarCorrecaoSerializer,
-    BaixaFisicaEnviarSolicitacaoSerializer,
+    BaixaFisicaBemPatrimonialCreateSerializer,
+    BaixaFisicaBemPatrimonialDetailSerializer,
+    BaixaFisicaBemPatrimonialUpdateSerializer,
     BaixaFisicaBensItemCreateSerializer,
-    UnidadeAdministrativaSimpleSerializer,
-    UserSimpleSerializer,
+    BaixaFisicaCancelarSerializer,
+    BaixaFisicaEnviarSolicitacaoSerializer,
+    BaixaFisicaSolicitarCorrecaoSerializer,
     BemPatrimonialSimpleSerializer,
     NBBPMGerarLoteSerializer,
     NBBPMSerializer,
+    UnidadeAdministrativaSimpleSerializer,
+    UserSimpleSerializer,
 )
-from bem_patrimonial import constants
-
+from bem_patrimonial.models import (
+    NBBPM,
+    BaixaFisicaBemPatrimonial,
+    BaixaFisicaBensItem,
+    BemPatrimonial,
+)
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 # ============================================================================
 # HELPERS / SETUP BASE
 # ============================================================================
+
 
 def criar_usuario(username, uo, ua, grupos=None, **kwargs):
     user = Usuario.objects.create_user(
@@ -50,7 +49,7 @@ def criar_usuario(username, uo, ua, grupos=None, **kwargs):
         unidade_orcamentaria=uo,
         **kwargs,
     )
-    for grupo_nome in (grupos or []):
+    for grupo_nome in grupos or []:
         grupo, _ = Group.objects.get_or_create(name=grupo_nome)
         user.groups.add(grupo)
     return user
@@ -90,16 +89,22 @@ class BaseSetup(TestCase):
         self.ua2 = criar_ua(uo=self.uo, codigo="002", nome="UA Dois", sigla="UAD")
 
         self.gestor = criar_usuario(
-            "gestor_api", self.uo, self.ua,
+            "gestor_api",
+            self.uo,
+            self.ua,
             grupos=[GRUPO_GESTOR_PATRIMONIO],
             is_staff=True,
         )
         self.operador = criar_usuario(
-            "operador_api", self.uo, self.ua,
+            "operador_api",
+            self.uo,
+            self.ua,
             grupos=[GRUPO_OPERADOR_INVENTARIO],
         )
         self.operador2 = criar_usuario(
-            "operador2_api", self.uo, self.ua2,
+            "operador2_api",
+            self.uo,
+            self.ua2,
             grupos=[GRUPO_OPERADOR_INVENTARIO],
         )
 
@@ -129,6 +134,7 @@ class BaseAPISetup(BaseSetup):
 # ============================================================================
 # TESTES DE SERIALIZERS SIMPLES
 # ============================================================================
+
 
 class UnidadeAdministrativaSimpleSerializerTestCase(BaseSetup):
     def test_campos_retornados(self):
@@ -185,6 +191,7 @@ class BemPatrimonialSimpleSerializerTestCase(BaseSetup):
 # TESTES DE SERIALIZERS DE ITEM
 # ============================================================================
 
+
 class BaixaFisicaBensItemCreateSerializerTestCase(BaseSetup):
     def _serializer(self, bem, baixa_id=None):
         return BaixaFisicaBensItemCreateSerializer(
@@ -224,6 +231,7 @@ class BaixaFisicaBensItemCreateSerializerTestCase(BaseSetup):
 # TESTES DE SERIALIZER DE CRIAÇÃO
 # ============================================================================
 
+
 class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
     def _req(self):
         req = MagicMock()
@@ -257,7 +265,8 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
         self.assertIn("itens", s.errors)
 
     def test_data_baixa_futura_invalida(self):
-        from datetime import datetime, timedelta, timezone as datetime_timezone
+        from datetime import datetime, timedelta
+        from datetime import timezone as datetime_timezone
 
         for hora in (0, 2, 3, 12, 23):
             with self.subTest(hora_utc=hora):
@@ -277,6 +286,7 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
 
     def test_ua_inativa_invalida(self):
         from dados_comuns.models import UnidadeAdministrativa
+
         self.ua.status = UnidadeAdministrativa.INATIVA
         self.ua.save()
         s = self._serializer(self._data())
@@ -303,6 +313,7 @@ class BaixaFisicaBemPatrimonialCreateSerializerTestCase(BaseSetup):
 # ============================================================================
 # TESTES DE SERIALIZER DE ATUALIZAÇÃO
 # ============================================================================
+
 
 class BaixaFisicaBemPatrimonialUpdateSerializerTestCase(BaseSetup):
     def setUp(self):
@@ -363,6 +374,7 @@ class BaixaFisicaBemPatrimonialUpdateSerializerTestCase(BaseSetup):
 # TESTES DE SERIALIZERS DE AÇÕES
 # ============================================================================
 
+
 class BaixaFisicaEnviarSolicitacaoSerializerTestCase(BaseSetup):
     def setUp(self):
         super().setUp()
@@ -370,24 +382,18 @@ class BaixaFisicaEnviarSolicitacaoSerializerTestCase(BaseSetup):
         BaixaFisicaBensItem.objects.create(baixa=self.baixa, bem=self.bem)
 
     def test_valido_quando_aguardando_envio(self):
-        s = BaixaFisicaEnviarSolicitacaoSerializer(
-            data={}, context={"baixa": self.baixa}
-        )
+        s = BaixaFisicaEnviarSolicitacaoSerializer(data={}, context={"baixa": self.baixa})
         self.assertTrue(s.is_valid(), s.errors)
 
     def test_invalido_quando_status_diferente(self):
         self.baixa.status = constants.SOLICITADA
         self.baixa.save()
-        s = BaixaFisicaEnviarSolicitacaoSerializer(
-            data={}, context={"baixa": self.baixa}
-        )
+        s = BaixaFisicaEnviarSolicitacaoSerializer(data={}, context={"baixa": self.baixa})
         self.assertFalse(s.is_valid())
 
     def test_invalido_sem_itens(self):
         baixa_vazia = criar_baixa(self.ua, self.operador, numero_processo_baixa="PROC-999")
-        s = BaixaFisicaEnviarSolicitacaoSerializer(
-            data={}, context={"baixa": baixa_vazia}
-        )
+        s = BaixaFisicaEnviarSolicitacaoSerializer(data={}, context={"baixa": baixa_vazia})
         self.assertFalse(s.is_valid())
 
 
@@ -568,14 +574,13 @@ class BaixaFisicaSolicitarCorrecaoSerializerTestCase(BaseSetup):
 # TESTES DO SERIALIZER DE DETALHE (URLs de ação)
 # ============================================================================
 
+
 class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
     def _serializer(self, baixa, user):
         req = MagicMock()
         req.user = user
         req.build_absolute_uri = lambda path: f"https://testserver{path}"
-        return BaixaFisicaBemPatrimonialDetailSerializer(
-            baixa, context={"request": req}
-        )
+        return BaixaFisicaBemPatrimonialDetailSerializer(baixa, context={"request": req})
 
     def test_url_solicitar_quando_aguardando_envio(self):
         baixa = criar_baixa(self.ua, self.operador, status=constants.AGUARDANDO_ENVIO)
@@ -590,8 +595,7 @@ class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
 
     def test_url_cancelar_disponivel_para_aguardando_e_solicitada(self):
         for st in [constants.AGUARDANDO_ENVIO, constants.SOLICITADA]:
-            baixa = criar_baixa(self.ua, self.operador, status=st,
-                                numero_processo_baixa=f"PROC-{st}")
+            baixa = criar_baixa(self.ua, self.operador, status=st, numero_processo_baixa=f"PROC-{st}")
             data = self._serializer(baixa, self.gestor).data
             self.assertIsNotNone(data["url_recusar"], f"Esperava url_recusar para status={st}")
 
@@ -649,6 +653,7 @@ class BaixaFisicaDetailSerializerUrlsTestCase(BaseSetup):
 # TESTES DO VIEWSET — AUTENTICAÇÃO E PERMISSÕES
 # ============================================================================
 
+
 class BaixaFisicaViewSetPermissaoTestCase(BaseAPISetup):
     def test_anonimo_recebe_401(self):
         resp = self.client.get(self.list_url)
@@ -675,13 +680,12 @@ class BaixaFisicaViewSetPermissaoTestCase(BaseAPISetup):
 # TESTES DO VIEWSET — LIST
 # ============================================================================
 
+
 class BaixaFisicaViewSetListTestCase(BaseAPISetup):
     def setUp(self):
         super().setUp()
-        self.baixa1 = criar_baixa(self.ua, self.operador,
-                                  numero_processo_baixa="PROC-001")
-        self.baixa2 = criar_baixa(self.ua2, self.operador2,
-                                  numero_processo_baixa="PROC-002")
+        self.baixa1 = criar_baixa(self.ua, self.operador, numero_processo_baixa="PROC-001")
+        self.baixa2 = criar_baixa(self.ua2, self.operador2, numero_processo_baixa="PROC-002")
 
     def test_operador_ve_apenas_sua_ua(self):
         self._auth(self.operador)
@@ -700,8 +704,7 @@ class BaixaFisicaViewSetListTestCase(BaseAPISetup):
         self.assertIn(self.baixa2.id, ids)
 
     def test_filtro_por_status(self):
-        criar_baixa(self.ua, self.operador, status=constants.SOLICITADA,
-                    numero_processo_baixa="PROC-SOL")
+        criar_baixa(self.ua, self.operador, status=constants.SOLICITADA, numero_processo_baixa="PROC-SOL")
         self._auth(self.operador)
         resp = self.client.get(self.list_url, {"status": constants.AGUARDANDO_ENVIO})
         for item in resp.data["results"]:
@@ -731,6 +734,7 @@ class BaixaFisicaViewSetListTestCase(BaseAPISetup):
 # TESTES DO VIEWSET — CREATE
 # ============================================================================
 
+
 class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
     def _payload(self, **kwargs):
         payload = {
@@ -756,6 +760,7 @@ class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
 
     def test_criacao_com_data_futura_retorna_400(self):
         from datetime import timedelta
+
         self._auth(self.operador)
         futura = str(timezone.localdate() + timedelta(days=2))
         resp = self.client.post(self.list_url, self._payload(data_baixa=futura), format="json")
@@ -778,6 +783,7 @@ class BaixaFisicaViewSetCreateTestCase(BaseAPISetup):
 # ============================================================================
 # TESTES DO VIEWSET — RETRIEVE
 # ============================================================================
+
 
 class BaixaFisicaViewSetRetrieveTestCase(BaseAPISetup):
     def setUp(self):
@@ -807,6 +813,7 @@ class BaixaFisicaViewSetRetrieveTestCase(BaseAPISetup):
 # TESTES DO VIEWSET — UPDATE
 # ============================================================================
 
+
 class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
     def setUp(self):
         super().setUp()
@@ -819,8 +826,7 @@ class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
         self._auth(self.operador)
         resp = self.client.patch(
             self.detail_url(self.baixa.id),
-            {"numero_processo_baixa": "PROC-ALTERADO",
-             "itens": [{"bem": self.bem.id}]},
+            {"numero_processo_baixa": "PROC-ALTERADO", "itens": [{"bem": self.bem.id}]},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
@@ -878,6 +884,7 @@ class BaixaFisicaViewSetUpdateTestCase(BaseAPISetup):
 # TESTES DO VIEWSET — ENVIAR SOLICITAÇÃO
 # ============================================================================
 
+
 class BaixaFisicaViewSetEnviarSolicitacaoTestCase(BaseAPISetup):
     def setUp(self):
         super().setUp()
@@ -923,6 +930,7 @@ class BaixaFisicaViewSetEnviarSolicitacaoTestCase(BaseAPISetup):
 # TESTES DO VIEWSET — HISTÓRICO
 # ============================================================================
 
+
 class BaixaFisicaViewSetHistoricoTestCase(BaseAPISetup):
     def setUp(self):
         super().setUp()
@@ -936,6 +944,7 @@ class BaixaFisicaViewSetHistoricoTestCase(BaseAPISetup):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertTrue(resp.data)
         self.assertIsNotNone(resp.data[0]["data_alteracao"])
+
 
 # ============================================================================
 # TESTES DO VIEWSET — APROVAR
@@ -997,8 +1006,7 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada",
-           side_effect=Exception("Erro de email"))
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_aprovada", side_effect=Exception("Erro de email"))
     def test_falha_email_nao_impede_aprovacao(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(
@@ -1012,6 +1020,7 @@ class BaixaFisicaViewSetAprovarTestCase(BaseAPISetup):
 # ============================================================================
 # TESTES DO VIEWSET — CANCELAR
 # ============================================================================
+
 
 class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     def setUp(self):
@@ -1036,30 +1045,23 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada")
     def test_cancelamento_restaura_status_bem(self, mock_email):
         self._auth(self.gestor)
-        self.client.post(
-            self.action_url(self.baixa.id, "recusar"), {}, format="json"
-        )
+        self.client.post(self.action_url(self.baixa.id, "recusar"), {}, format="json")
         self.bem.refresh_from_db()
         self.assertEqual(self.bem.status, constants.APROVADO)
 
     def test_operador_nao_pode_cancelar(self):
         self._auth(self.operador)
-        resp = self.client.post(
-            self.action_url(self.baixa.id, "recusar"), {}, format="json"
-        )
+        resp = self.client.post(self.action_url(self.baixa.id, "recusar"), {}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_nao_pode_cancelar_baixa_aceita(self):
         self.baixa.status = constants.ACEITA
         self.baixa.save()
         self._auth(self.gestor)
-        resp = self.client.post(
-            self.action_url(self.baixa.id, "recusar"), {}, format="json"
-        )
+        resp = self.client.post(self.action_url(self.baixa.id, "recusar"), {}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada",
-           side_effect=Exception("Erro email"))
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada", side_effect=Exception("Erro email"))
     def test_falha_email_nao_impede_cancelamento(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(
@@ -1070,15 +1072,14 @@ class BaixaFisicaViewSetCancelarTestCase(BaseAPISetup):
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada")
     def test_cancelamento_sem_motivo_valido(self, mock_email):
         self._auth(self.gestor)
-        resp = self.client.post(
-            self.action_url(self.baixa.id, "recusar"), {}, format="json"
-        )
+        resp = self.client.post(self.action_url(self.baixa.id, "recusar"), {}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
 
 # ============================================================================
 # TESTES DO VIEWSET — SOLICITAR CORREÇÃO
 # ============================================================================
+
 
 class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
     """
@@ -1124,9 +1125,7 @@ class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
 
     def test_solicitar_correcao_sem_motivo_retorna_400(self):
         self._auth(self.gestor)
-        resp = self.client.post(
-            self.action_url(self.baixa.id, "solicitar-correcao"), {}, format="json"
-        )
+        resp = self.client.post(self.action_url(self.baixa.id, "solicitar-correcao"), {}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.baixa.refresh_from_db()
         self.assertEqual(self.baixa.status, constants.SOLICITADA)
@@ -1154,7 +1153,10 @@ class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
     def test_operador_nao_criador_nao_pode_solicitar_correcao(self):
         # baixa criada por operador, tenta solicitar correção com outro operador da mesma UA (não criador)
         from usuario.constants import GRUPO_OPERADOR_INVENTARIO
-        operador_mesma_ua = criar_usuario("operador_mesma_ua_correcao", self.uo, self.ua, grupos=[GRUPO_OPERADOR_INVENTARIO])
+
+        operador_mesma_ua = criar_usuario(
+            "operador_mesma_ua_correcao", self.uo, self.ua, grupos=[GRUPO_OPERADOR_INVENTARIO]
+        )
         self._auth(operador_mesma_ua)
         resp = self.client.post(
             self.action_url(self.baixa.id, "solicitar-correcao"),
@@ -1187,8 +1189,7 @@ class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada",
-           side_effect=Exception("Erro email"))
+    @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_cancelada", side_effect=Exception("Erro email"))
     def test_falha_email_nao_impede_solicitacao_de_correcao(self, mock_email):
         self._auth(self.gestor)
         resp = self.client.post(
@@ -1234,6 +1235,7 @@ class BaixaFisicaViewSetSolicitarCorrecaoTestCase(BaseAPISetup):
 # TESTES DO VIEWSET — EXPORTAR EXCEL
 # ============================================================================
 
+
 class BaixaFisicaViewSetExportarExcelTestCase(BaseAPISetup):
     def setUp(self):
         super().setUp()
@@ -1242,9 +1244,7 @@ class BaixaFisicaViewSetExportarExcelTestCase(BaseAPISetup):
 
     def test_exportar_excel_retorna_xlsx(self):
         self._auth(self.operador)
-        resp = self.client.get(
-            reverse("baixas-fisicas-exportar-excel")
-        )
+        resp = self.client.get(reverse("baixas-fisicas-exportar-excel"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(
             resp["Content-Type"],
@@ -1253,9 +1253,7 @@ class BaixaFisicaViewSetExportarExcelTestCase(BaseAPISetup):
 
     def test_exportar_excel_respeita_escopo(self):
         self._auth(self.operador)
-        resp = self.client.get(
-            reverse("baixas-fisicas-exportar-excel")
-        )
+        resp = self.client.get(reverse("baixas-fisicas-exportar-excel"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     def test_exportar_excel_filtro_por_ids(self):
@@ -1277,16 +1275,12 @@ class BaixaFisicaViewSetExportarExcelTestCase(BaseAPISetup):
     def test_exportar_excel_sem_itens_inclui_linha(self):
         criar_baixa(self.ua, self.operador, numero_processo_baixa="PROC-VAZIO")
         self._auth(self.operador)
-        resp = self.client.get(
-            reverse("baixas-fisicas-exportar-excel")
-        )
+        resp = self.client.get(reverse("baixas-fisicas-exportar-excel"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     def test_nome_arquivo_no_header(self):
         self._auth(self.operador)
-        resp = self.client.get(
-            reverse("baixas-fisicas-exportar-excel")
-        )
+        resp = self.client.get(reverse("baixas-fisicas-exportar-excel"))
         self.assertIn("baixas_fisicas_", resp["Content-Disposition"])
         self.assertIn(".xlsx", resp["Content-Disposition"])
 
@@ -1294,6 +1288,7 @@ class BaixaFisicaViewSetExportarExcelTestCase(BaseAPISetup):
 # ============================================================================
 # TESTES DO VIEWSET — QUERYSET E ESCOPO
 # ============================================================================
+
 
 class BaixaFisicaViewSetQuerysetTestCase(BaseAPISetup):
     def setUp(self):
@@ -1322,14 +1317,11 @@ class BaixaFisicaViewSetQuerysetTestCase(BaseAPISetup):
         resp = self.client.get(self.list_url)
         if resp.data["results"]:
             item = resp.data["results"][0]
-            for campo in ["id", "status", "status_display", "total_itens",
-                          "data_criacao", "numero_processo_baixa"]:
+            for campo in ["id", "status", "status_display", "total_itens", "data_criacao", "numero_processo_baixa"]:
                 self.assertIn(campo, item)
 
     def test_total_itens_no_list(self):
-        BaixaFisicaBensItem.objects.create(
-            baixa=self.baixa_ua1, bem=self.bem
-        )
+        BaixaFisicaBensItem.objects.create(baixa=self.baixa_ua1, bem=self.bem)
         self._auth(self.operador)
         resp = self.client.get(self.list_url)
         item = next(r for r in resp.data["results"] if r["id"] == self.baixa_ua1.id)
@@ -1340,15 +1332,20 @@ class BaixaFisicaViewSetQuerysetTestCase(BaseAPISetup):
 # TESTES DE SERIALIZER — NBBPMGerarLoteSerializer
 # ============================================================================
 
+
 class NBBPMGerarLoteSerializerTestCase(BaseSetup):
     def setUp(self):
         super().setUp()
         self.baixa1 = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         self.baixa2 = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
 
@@ -1380,9 +1377,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
     def test_strip_no_numero_processo_baixa(self):
         s = self._serializer(self._data(numero_processo_baixa="  6016.2025/0117371-7  "))
         self.assertTrue(s.is_valid(), s.errors)
-        self.assertEqual(
-            s.validated_data["numero_processo_baixa"], "6016.2025/0117371-7"
-        )
+        self.assertEqual(s.validated_data["numero_processo_baixa"], "6016.2025/0117371-7")
 
     def test_strip_no_responsavel(self):
         s = self._serializer(self._data(responsavel="  Responsavel Teste  "))
@@ -1390,9 +1385,7 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         self.assertEqual(s.validated_data["responsavel"], "Responsavel Teste")
 
     def test_strip_no_numero_processo_destinacao_final(self):
-        s = self._serializer(
-            self._data(numero_processo_destinacao_final="  6016.2025/9999999-9  ")
-        )
+        s = self._serializer(self._data(numero_processo_destinacao_final="  6016.2025/9999999-9  "))
         self.assertTrue(s.is_valid(), s.errors)
         self.assertEqual(
             s.validated_data["numero_processo_destinacao_final"],
@@ -1411,12 +1404,12 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
 
     def test_baixa_fora_do_escopo_invalida(self):
         baixa_ua2 = criar_baixa(
-            self.ua2, self.operador2, status=constants.ACEITA,
+            self.ua2,
+            self.operador2,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
-        s = self._serializer(
-            self._data(baixas=[self.baixa1.id, baixa_ua2.id]), user=self.gestor
-        )
+        s = self._serializer(self._data(baixas=[self.baixa1.id, baixa_ua2.id]), user=self.gestor)
         self.assertFalse(s.is_valid())
         self.assertIn("baixas", s.errors)
 
@@ -1432,21 +1425,15 @@ class NBBPMGerarLoteSerializerTestCase(BaseSetup):
         # Isolado do pré-filtro de escopo — regra agora é mesma UO com prefixo fixo 001
         uo2 = criar_uo(codigo="200", nome="UO Dois", sigla="UOD")
         ua3 = criar_ua(uo=uo2, codigo="003", nome="UA Três", sigla="UAT2")
-        operador3 = criar_usuario(
-            "operador3_serializer", uo2, ua3, grupos=[GRUPO_OPERADOR_INVENTARIO]
-        )
-        baixa_uo2 = criar_baixa(
-            ua3, operador3, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7"
-        )
+        operador3 = criar_usuario("operador3_serializer", uo2, ua3, grupos=[GRUPO_OPERADOR_INVENTARIO])
+        baixa_uo2 = criar_baixa(ua3, operador3, status=constants.ACEITA, numero_processo_baixa="6016.2025/0117371-7")
 
         mock_escopo.return_value = BaixaFisicaBemPatrimonial.objects.all()
 
         self.gestor.unidade_administrativa = None
         self.gestor.save()
 
-        s = self._serializer(
-            self._data(baixas=[self.baixa1.id, baixa_uo2.id]), user=self.gestor
-        )
+        s = self._serializer(self._data(baixas=[self.baixa1.id, baixa_uo2.id]), user=self.gestor)
         self.assertFalse(s.is_valid())
         self.assertIn("Unidade Orçamentária", str(s.errors["baixas"]))
 
@@ -1487,15 +1474,21 @@ class NBBPMProcessoUnicoTestCase(BaseAPISetup):
     def setUp(self):
         super().setUp()
         self.baixa1 = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa=self.PROCESSO,
         )
         self.baixa2 = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa=self.PROCESSO,
         )
         self.baixa_outro_processo = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0999999-9",
         )
 
@@ -1547,7 +1540,9 @@ class NBBPMProcessoUnicoTestCase(BaseAPISetup):
 
     def test_post_bloqueia_payload_divergente(self):
         self._auth(self.gestor)
-        resp = self.client.post("/api/nbbpm/", self._payload([self.baixa1], numero="6016.2025/0000000-0"), format="json")
+        resp = self.client.post(
+            "/api/nbbpm/", self._payload([self.baixa1], numero="6016.2025/0000000-0"), format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("diverge", str(resp.data))
 
@@ -1562,11 +1557,14 @@ class NBBPMProcessoUnicoTestCase(BaseAPISetup):
 # TESTES DE SERIALIZER — NBBPMSerializer
 # ============================================================================
 
+
 class NBBPMSerializerTestCase(BaseSetup):
     def setUp(self):
         super().setUp()
         self.baixa1 = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="P1",
         )
         self.nbbpm = NBBPM.objects.create(
@@ -1582,9 +1580,16 @@ class NBBPMSerializerTestCase(BaseSetup):
     def test_campos_retornados(self):
         data = NBBPMSerializer(self.nbbpm).data
         for campo in [
-            "id", "numero", "baixas", "unidade_administrativa_origem",
-            "numero_processo_baixa", "data_autorizacao", "responsavel",
-            "numero_processo_destinacao_final", "criado_por", "data_criacao",
+            "id",
+            "numero",
+            "baixas",
+            "unidade_administrativa_origem",
+            "numero_processo_baixa",
+            "data_autorizacao",
+            "responsavel",
+            "numero_processo_destinacao_final",
+            "criado_por",
+            "data_criacao",
         ]:
             self.assertIn(campo, data)
 
@@ -1593,9 +1598,7 @@ class NBBPMSerializerTestCase(BaseSetup):
         self.assertEqual(data["numero"], "001.0000001.2026")
         self.assertEqual(data["numero_processo_baixa"], "6016.2025/0117371-7")
         self.assertEqual(data["responsavel"], "Responsavel Teste")
-        self.assertEqual(
-            data["numero_processo_destinacao_final"], "6016.2025/9999999-9"
-        )
+        self.assertEqual(data["numero_processo_destinacao_final"], "6016.2025/9999999-9")
         self.assertEqual(data["baixas"], [self.baixa1.id])
 
     def test_unidade_administrativa_origem_serializada(self):
@@ -1622,6 +1625,7 @@ class NBBPMSerializerTestCase(BaseSetup):
 # TESTES — CORRIGIR NÚMERO DO PROCESSO (Baixa Aceita, sem Nota)
 # ============================================================================
 
+
 class BaixaFisicaCorrigirProcessoSerializerTestCase(BaseSetup):
     def setUp(self):
         super().setUp()
@@ -1629,7 +1633,9 @@ class BaixaFisicaCorrigirProcessoSerializerTestCase(BaseSetup):
 
         self.Serializer = BaixaFisicaCorrigirProcessoSerializer
         self.baixa = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
 
@@ -1692,7 +1698,9 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
 
     def _nova_baixa_aceita(self, processo=None):
         baixa = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa=processo or self.PROCESSO_ANTIGO,
         )
         baixa.aprovado_por = self.gestor
@@ -1714,6 +1722,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
 
     def _contar_historico(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -1734,14 +1743,11 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
 
     def _obter_historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
-        return list(
-            HistoricoGeral.objects.filter(
-                content_type=ct, object_id=str(baixa.pk)
-            ).order_by("id")
-        )
+        return list(HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk)).order_by("id"))
 
     def test_corrige_valido_propaga_para_bens(self):
         baixa = self._criar_baixa_aceita_com_bem()
@@ -1765,9 +1771,7 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
         self.assertEqual(self.bem.localizacao, f"Baixa Física - {self.PROCESSO_NOVO}")
         self.assertEqual(self.bem.status, status_bem_antes)
         self.assertEqual(self.bem.nome, nome_antes)
-        self.assertTrue(
-            BaixaFisicaBensItem.objects.filter(baixa=baixa, bem=self.bem).exists()
-        )
+        self.assertTrue(BaixaFisicaBensItem.objects.filter(baixa=baixa, bem=self.bem).exists())
         self.assertEqual(self._contar_historico(baixa), historico_antes + 1)
         historicos = self._obter_historicos(baixa)
         registro = historicos[-1]
@@ -1823,12 +1827,17 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
     def test_corrige_valido_com_dois_bens_e_preserva_outra_baixa(self):
         baixa = self._criar_baixa_aceita_com_dois_bens()
         outra = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0999999-9",
         )
         bem_outra = criar_bem(
-            self.ua, self.operador, numero_patrimonial="000.000000009-0",
-            status=constants.BAIXA_FISICA, numero_processo="6016.2025/0999999-9",
+            self.ua,
+            self.operador,
+            numero_patrimonial="000.000000009-0",
+            status=constants.BAIXA_FISICA,
+            numero_processo="6016.2025/0999999-9",
             localizacao="Baixa Física - 6016.2025/0999999-9",
         )
         BaixaFisicaBensItem.objects.create(baixa=outra, bem=bem_outra)
@@ -1978,7 +1987,9 @@ class BaixaFisicaCorrigirProcessoViewSetTestCase(BaseAPISetup):
 class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
     def _baixa_aceita_com_bens_baixados(self):
         baixa = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         for bem in (self.bem, self.bem2):
@@ -1991,13 +2002,13 @@ class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
 
     def _contar_historico(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
         return HistoricoGeral.objects.filter(content_type=ct, object_id=str(baixa.pk))
 
     def test_corrigir_valido_propaga_para_bens(self):
-        from django.core.exceptions import ValidationError
 
         baixa = self._baixa_aceita_com_bens_baixados()
         nome_antes = self.bem.nome
@@ -2070,7 +2081,9 @@ class BaixaFisicaCorrigirProcessoModelTestCase(BaseSetup):
         from django.core.exceptions import ValidationError
 
         baixa = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa="6016.2025/0117371-7",
         )
         with self.assertRaises(ValidationError):
@@ -2085,7 +2098,9 @@ class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
     def _nova_baixa_aceita_com_bem(self, processo=None, npat="000.000000001-0"):
         bem = criar_bem(self.ua, self.operador, numero_patrimonial=npat)
         baixa = criar_baixa(
-            self.ua, self.operador, status=constants.ACEITA,
+            self.ua,
+            self.operador,
+            status=constants.ACEITA,
             numero_processo_baixa=processo or self.PROCESSO,
         )
         BaixaFisicaBensItem.objects.create(baixa=baixa, bem=bem)
@@ -2101,6 +2116,7 @@ class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
 
     def _historicos_baixa(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -2179,8 +2195,8 @@ class BaixaConsultaAposNBBPMTestCase(BaseAPISetup):
         self.assertEqual(self._historicos_baixa(baixa1).count(), hist_antes)
 
     def test_falha_no_historico_desfaz_nbbpm_e_vinculo(self):
-        from dados_comuns.models import HistoricoGeral
         from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+        from dados_comuns.models import HistoricoGeral
 
         baixa1, _ = self._nova_baixa_aceita_com_bem(npat="000.000000033-0")
         total_antes = NBBPM.objects.count()
@@ -2226,6 +2242,7 @@ class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
 
     def _historicos(self, baixa):
         from django.contrib.contenttypes.models import ContentType
+
         from dados_comuns.models import HistoricoGeral
 
         ct = ContentType.objects.get_for_model(BaixaFisicaBemPatrimonial)
@@ -2304,9 +2321,7 @@ class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
         req = MagicMock()
         req.user = self.operador
         req.data = {}
-        s = BaixaFisicaBemPatrimonialCreateSerializer(
-            data=self._payload(self.bem2), context={"request": req}
-        )
+        s = BaixaFisicaBemPatrimonialCreateSerializer(data=self._payload(self.bem2), context={"request": req})
         self.assertFalse(s.is_valid())
         abertas = BaixaFisicaBemPatrimonial.objects.filter(
             unidade_administrativa_origem=self.ua,
@@ -2344,9 +2359,10 @@ class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_solicitada")
     @patch("bem_patrimonial.api_views.envia_email_baixa_fisica_correcao_solicitada")
     def test_solicitar_troca_solicitante_preserva_historico(self, mock_corr, mock_sol):
-        from usuario.models import Usuario
         from django.contrib.auth.models import Group
+
         from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+        from usuario.models import Usuario
 
         operador_b = Usuario.objects.create_user(
             username="operador_b_troca",
@@ -2367,9 +2383,7 @@ class BaixaFisicaUnicidadePorUnidadeAPITestCase(BaseAPISetup):
         hist_antes = list(self._historicos(baixa))
         self.assertTrue(hist_antes)
         self._auth(self.operador)
-        rc = self.client.post(
-            self.action_url(baixa.id, "solicitar-correcao"), {"motivo": "ajuste"}, format="json"
-        )
+        rc = self.client.post(self.action_url(baixa.id, "solicitar-correcao"), {"motivo": "ajuste"}, format="json")
         self.assertEqual(rc.status_code, status.HTTP_200_OK)
         from datetime import timedelta
 

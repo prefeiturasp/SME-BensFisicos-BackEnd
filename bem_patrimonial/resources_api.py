@@ -61,10 +61,7 @@ class BemPatrimonialAPIResource(BemPatrimonialResource):
         user = getattr(self, "request", None) and self.request.user
         if not user:
             return False
-        return bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_superuser", False)
-        )
+        return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False))
 
     def _status_inicial_para_importacao(self) -> str:
         """Status com que cada bem importado deve ser persistido."""

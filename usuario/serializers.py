@@ -1,15 +1,16 @@
+import re
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework.exceptions import PermissionDenied
-from django.contrib.auth.password_validation import validate_password
-from usuario.models import Usuario
-from django.utils import timezone
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria, HistoricoGeral
+
 from dados_comuns.escopo import obter_unidade_orcamentaria_id_do_usuario
-from django.contrib.auth.models import Group
-from django.contrib.auth import get_user_model
-import re
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 MSG_SENHAS_NAO_CONFEREM = "As senhas não conferem."
 
@@ -43,9 +44,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 class PasswordResetConfirmSerializer(serializers.Serializer):
     uidb64 = serializers.CharField()
     token = serializers.CharField()
-    new_password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password]
-    )
+    new_password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     new_password_confirm = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
@@ -63,15 +62,12 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             raise serializers.ValidationError({"token": "Token inválido ou expirado."})
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
-            raise serializers.ValidationError(
-                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
-            )
+            raise serializers.ValidationError({"new_password_confirm": MSG_SENHAS_NAO_CONFEREM})
 
         attrs["user"] = user
         return attrs
 
     def save(self):
-        from django.utils import timezone
 
         user = self.validated_data["user"]
         user.set_password(self.validated_data["new_password"])
@@ -84,9 +80,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 class PasswordChangeSerializer(serializers.Serializer):
 
     old_password = serializers.CharField(write_only=True, required=True)
-    new_password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password]
-    )
+    new_password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     new_password_confirm = serializers.CharField(write_only=True, required=True)
 
     def validate_old_password(self, value):
@@ -97,9 +91,7 @@ class PasswordChangeSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         if attrs["new_password"] != attrs["new_password_confirm"]:
-            raise serializers.ValidationError(
-                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
-            )
+            raise serializers.ValidationError({"new_password_confirm": MSG_SENHAS_NAO_CONFEREM})
         return attrs
 
     def save(self):
@@ -112,36 +104,27 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 class FirstAccessPasswordChangeSerializer(serializers.Serializer):
 
-    new_password = serializers.CharField(
-        write_only=True, required=True, validators=[validate_password]
-    )
+    new_password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     new_password_confirm = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
         user = self.context["request"].user
 
         if not getattr(user, "must_change_password", False):
-            raise serializers.ValidationError(
-                {"detail": "Usuário não está marcado para troca obrigatória de senha."}
-            )
+            raise serializers.ValidationError({"detail": "Usuário não está marcado para troca obrigatória de senha."})
 
         if attrs["new_password"] != attrs["new_password_confirm"]:
-            raise serializers.ValidationError(
-                {"new_password_confirm": MSG_SENHAS_NAO_CONFEREM}
-            )
+            raise serializers.ValidationError({"new_password_confirm": MSG_SENHAS_NAO_CONFEREM})
 
         return attrs
 
     def save(self):
-        from django.utils import timezone
 
         user = self.context["request"].user
         user.set_password(self.validated_data["new_password"])
         user.must_change_password = False
         user.last_password_change = timezone.now()
-        user.save(
-            update_fields=["password", "must_change_password", "last_password_change"]
-        )
+        user.save(update_fields=["password", "must_change_password", "last_password_change"])
         return user
 
 
@@ -201,9 +184,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         if obj.is_superuser:
             uos_qs = UnidadeOrcamentaria.objects.filter(ativa=True)
-            uas_qs = UnidadeAdministrativa.objects.filter(
-                status=UnidadeAdministrativa.ATIVA
-            )
+            uas_qs = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
         elif obj.is_gestor_patrimonio:
             uo_id = obter_unidade_orcamentaria_id_do_usuario(obj)
             if uo_id:
@@ -213,9 +194,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
                     status=UnidadeAdministrativa.ATIVA,
                 )
         elif obj.is_operador_inventario:
-            uas_qs = obj.unidades_administrativas.filter(
-                status=UnidadeAdministrativa.ATIVA
-            )
+            uas_qs = obj.unidades_administrativas.filter(status=UnidadeAdministrativa.ATIVA)
             uo_id = obter_unidade_orcamentaria_id_do_usuario(obj)
             if uo_id:
                 uos_qs = UnidadeOrcamentaria.objects.filter(id=uo_id, ativa=True)
@@ -259,22 +238,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
 def _validate_ua_selecionada(ua_id, uo_id):
     """Resolve e valida UA quando unidade_administrativa_id é informado. Retorna (ua, uo_id)."""
     try:
-        ua = UnidadeAdministrativa.objects.select_related(
-            "unidade_orcamentaria"
-        ).get(id=ua_id)
+        ua = UnidadeAdministrativa.objects.select_related("unidade_orcamentaria").get(id=ua_id)
     except UnidadeAdministrativa.DoesNotExist:
-        raise serializers.ValidationError(
-            {"unidade_administrativa_id": "Unidade Administrativa invalida."}
-        )
+        raise serializers.ValidationError({"unidade_administrativa_id": "Unidade Administrativa invalida."})
     if ua.status != UnidadeAdministrativa.ATIVA:
-        raise serializers.ValidationError(
-            {"unidade_administrativa_id": "Unidade Administrativa inativa."}
-        )
+        raise serializers.ValidationError({"unidade_administrativa_id": "Unidade Administrativa inativa."})
     if uo_id is not None and ua.unidade_orcamentaria_id != uo_id:
         raise serializers.ValidationError(
-            {
-                "unidade_orcamentaria_id": "Unidade Orcamentaria nao corresponde a Unidade Administrativa."
-            }
+            {"unidade_orcamentaria_id": "Unidade Orcamentaria nao corresponde a Unidade Administrativa."}
         )
     return ua, ua.unidade_orcamentaria.id
 
@@ -282,15 +253,11 @@ def _validate_ua_selecionada(ua_id, uo_id):
 def _validate_uo_sem_ua(user, uo_id):
     """Valida e resolve uo_id quando nenhuma UA é selecionada."""
     if user.is_operador_inventario and not user.is_superuser:
-        raise serializers.ValidationError(
-            "Operador nao pode selecionar Unidade Orcamentaria."
-        )
+        raise serializers.ValidationError("Operador nao pode selecionar Unidade Orcamentaria.")
     if uo_id is None:
         uo_id = obter_unidade_orcamentaria_id_do_usuario(user)
     if not uo_id:
-        raise serializers.ValidationError(
-            {"unidade_orcamentaria_id": "Unidade Orcamentaria obrigatoria."}
-        )
+        raise serializers.ValidationError({"unidade_orcamentaria_id": "Unidade Orcamentaria obrigatoria."})
     return uo_id
 
 
@@ -298,26 +265,11 @@ def _validate_permissoes_uo_ua(user, uo_id, ua):
     """Valida permissões de UO/UA para não-superusuários."""
     uo_usuario_id = obter_unidade_orcamentaria_id_do_usuario(user)
     if uo_usuario_id and uo_id != uo_usuario_id:
-        raise serializers.ValidationError(
-            "Usuario nao pode selecionar Unidade Orcamentaria diferente."
-        )
-    if (
-        user.is_operador_inventario
-        and ua
-        and not user.unidades_administrativas.filter(id=ua.id).exists()
-    ):
-        raise serializers.ValidationError(
-            "Operador so pode selecionar UAs atribuidas a ele."
-        )
-    if (
-        user.is_gestor_patrimonio
-        and ua
-        and uo_usuario_id
-        and ua.unidade_orcamentaria_id != uo_usuario_id
-    ):
-        raise serializers.ValidationError(
-            "Gestor so pode selecionar UA da propria Unidade Orcamentaria."
-        )
+        raise serializers.ValidationError("Usuario nao pode selecionar Unidade Orcamentaria diferente.")
+    if user.is_operador_inventario and ua and not user.unidades_administrativas.filter(id=ua.id).exists():
+        raise serializers.ValidationError("Operador so pode selecionar UAs atribuidas a ele.")
+    if user.is_gestor_patrimonio and ua and uo_usuario_id and ua.unidade_orcamentaria_id != uo_usuario_id:
+        raise serializers.ValidationError("Gestor so pode selecionar UA da propria Unidade Orcamentaria.")
 
 
 def _resolve_uo(uo_id):
@@ -325,13 +277,9 @@ def _resolve_uo(uo_id):
     try:
         uo = UnidadeOrcamentaria.objects.get(id=uo_id)
     except UnidadeOrcamentaria.DoesNotExist:
-        raise serializers.ValidationError(
-            {"unidade_orcamentaria_id": "Unidade Orcamentaria invalida."}
-        )
+        raise serializers.ValidationError({"unidade_orcamentaria_id": "Unidade Orcamentaria invalida."})
     if not uo.ativa:
-        raise serializers.ValidationError(
-            {"unidade_orcamentaria_id": "Unidade Orcamentaria inativa."}
-        )
+        raise serializers.ValidationError({"unidade_orcamentaria_id": "Unidade Orcamentaria inativa."})
     return uo
 
 
@@ -376,21 +324,15 @@ class UsuarioSerializer(serializers.ModelSerializer):
     group_name = serializers.CharField(write_only=True, required=False, allow_null=True)
 
     unidade_orcamentaria = serializers.PrimaryKeyRelatedField(
-        queryset=UnidadeOrcamentaria.objects.all(),
-        allow_null=True,
-        required=False
+        queryset=UnidadeOrcamentaria.objects.all(), allow_null=True, required=False
     )
 
     unidade_administrativa = serializers.PrimaryKeyRelatedField(
-        queryset=UnidadeAdministrativa.objects.all(),
-        allow_null=True,
-        required=False
+        queryset=UnidadeAdministrativa.objects.all(), allow_null=True, required=False
     )
 
     unidades_administrativas = serializers.PrimaryKeyRelatedField(
-        queryset=UnidadeAdministrativa.objects.all(),
-        many=True,
-        required=False
+        queryset=UnidadeAdministrativa.objects.all(), many=True, required=False
     )
 
     unidade_codigo = serializers.SerializerMethodField()
@@ -473,9 +415,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         self._validar_group_name(attrs, raw, user, instance)
         self._validar_grupo_via_raw(raw, attrs)
 
-        groups, unidade_orcamentaria, unidade_administrativa = (
-            self._resolver_valores_existentes(attrs, instance)
-        )
+        groups, unidade_orcamentaria, unidade_administrativa = self._resolver_valores_existentes(attrs, instance)
         unidades_administrativas = self._resolver_unidades_administrativas(attrs, instance)
 
         self._validar_uo_create_obrigatoria_e_escopo(
@@ -509,23 +449,15 @@ class UsuarioSerializer(serializers.ModelSerializer):
             return
 
         if "unidade_orcamentaria" not in raw or raw.get("unidade_orcamentaria") in (None, ""):
-            raise serializers.ValidationError(
-                {"unidade_orcamentaria": "Unidade Orcamentaria obrigatoria."}
-            )
+            raise serializers.ValidationError({"unidade_orcamentaria": "Unidade Orcamentaria obrigatoria."})
 
         user_uo_id = getattr(user, "unidade_orcamentaria_id", None)
         if not user_uo_id:
-            raise serializers.ValidationError(
-                {"unidade_orcamentaria": "Usuario autenticado sem Unidade Orcamentaria."}
-            )
+            raise serializers.ValidationError({"unidade_orcamentaria": "Usuario autenticado sem Unidade Orcamentaria."})
 
         if unidade_orcamentaria is not None and unidade_orcamentaria.id != user_uo_id:
             raise serializers.ValidationError(
-                {
-                    "unidade_orcamentaria": (
-                        "Voce so pode criar usuarios na sua propria Unidade Orcamentaria."
-                    )
-                }
+                {"unidade_orcamentaria": ("Voce so pode criar usuarios na sua propria Unidade Orcamentaria.")}
             )
 
     def _validar_escopo_uo_gestor(self, user, unidade_orcamentaria, instance):
@@ -545,34 +477,24 @@ class UsuarioSerializer(serializers.ModelSerializer):
         if instance is None and unidade_orcamentaria:
             if unidade_orcamentaria.id != gestor_uo_id:
                 raise serializers.ValidationError(
-                    {
-                        "unidade_orcamentaria":
-                        "Você só pode criar usuários na sua própria unidade orçamentária."
-                    }
+                    {"unidade_orcamentaria": "Você só pode criar usuários na sua própria unidade orçamentária."}
                 )
 
         # Em atualização, não permite mover o usuário para outra UO
         if instance is not None and unidade_orcamentaria:
             if unidade_orcamentaria.id != gestor_uo_id:
                 raise serializers.ValidationError(
-                    {
-                        "unidade_orcamentaria":
-                        "Você não pode transferir um usuário para outra unidade orçamentária."
-                    }
+                    {"unidade_orcamentaria": "Você não pode transferir um usuário para outra unidade orçamentária."}
                 )
 
     def _validar_campos_sensiveis(self, raw):
 
         for campo in {"is_superuser", "is_staff"}:
             if campo in raw:
-                raise serializers.ValidationError(
-                    {campo: f"O campo '{campo}' não pode ser manipulado via API."}
-                )
+                raise serializers.ValidationError({campo: f"O campo '{campo}' não pode ser manipulado via API."})
 
         if raw.get("is_superuser"):
-            raise serializers.ValidationError(
-                "Superusuário não pode ser criado via API."
-            )
+            raise serializers.ValidationError("Superusuário não pode ser criado via API.")
 
     def _validar_group_name(self, attrs, raw, user, instance):
 
@@ -582,24 +504,19 @@ class UsuarioSerializer(serializers.ModelSerializer):
             return
 
         if instance and user and instance == user:
-            raise serializers.ValidationError(
-                "Você não pode alterar seu próprio grupo."
-            )
+            raise serializers.ValidationError("Você não pode alterar seu próprio grupo.")
 
         allowed_groups = {GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO}
 
         if group_name not in allowed_groups:
             raise serializers.ValidationError(
-                {"group_name": f"Grupo '{group_name}' não permitido. "
-                 f"Use: {', '.join(allowed_groups)}."}
+                {"group_name": f"Grupo '{group_name}' não permitido. Use: {', '.join(allowed_groups)}."}
             )
 
         try:
             resolved_group = Group.objects.get(name=group_name)
         except Group.DoesNotExist:
-            raise serializers.ValidationError(
-                {"group_name": f"Grupo '{group_name}' não encontrado no sistema."}
-            )
+            raise serializers.ValidationError({"group_name": f"Grupo '{group_name}' não encontrado no sistema."})
 
         attrs["groups"] = [resolved_group]
 
@@ -608,9 +525,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         group_name_enviado = attrs.get("groups") is not None
 
         if "groups" in raw and not group_name_enviado:
-            raise serializers.ValidationError(
-                {"groups": "Use o campo 'group_name' para definir o grupo do usuário."}
-            )
+            raise serializers.ValidationError({"groups": "Use o campo 'group_name' para definir o grupo do usuário."})
 
     def _resolver_valores_existentes(self, attrs, instance):
 
@@ -645,10 +560,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
         if unidade_administrativa.unidade_orcamentaria_id != unidade_orcamentaria.id:
             raise serializers.ValidationError(
-                {
-                    "unidade_administrativa":
-                    "A Unidade Administrativa não pertence à Unidade Orçamentária informada."
-                }
+                {"unidade_administrativa": "A Unidade Administrativa não pertence à Unidade Orçamentária informada."}
             )
 
     def _validar_senha(self, attrs):
@@ -663,24 +575,16 @@ class UsuarioSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"password": "As senhas não coincidem."})  # NOSONAR
 
         if len(password) < 6:
-            raise serializers.ValidationError(
-                {"password": "A senha deve possuir no mínimo 6 caracteres."}  # NOSONAR
-            )
+            raise serializers.ValidationError({"password": "A senha deve possuir no mínimo 6 caracteres."})  # NOSONAR
 
         if not re.search(r"[A-Za-z]", password):
-            raise serializers.ValidationError(
-                {"password": "A senha deve conter letras."}  # NOSONAR
-            )
+            raise serializers.ValidationError({"password": "A senha deve conter letras."})  # NOSONAR
 
         if not re.search(r"\d", password):
-            raise serializers.ValidationError(
-                {"password": "A senha deve conter números."}  # NOSONAR
-            )
+            raise serializers.ValidationError({"password": "A senha deve conter números."})  # NOSONAR
 
         if not re.search(r"[^\w\s]", password):
-            raise serializers.ValidationError(
-                {"password": "A senha deve conter caractere especial."}  # NOSONAR
-            )
+            raise serializers.ValidationError({"password": "A senha deve conter caractere especial."})  # NOSONAR
 
     def _validar_coerencia_grupo_unidade(
         self,
@@ -696,28 +600,18 @@ class UsuarioSerializer(serializers.ModelSerializer):
         group_names = {g.name for g in groups}
 
         if GRUPO_OPERADOR_INVENTARIO in group_names and not unidade_administrativa:
-            raise serializers.ValidationError(
-                "Operador deve possuir unidade administrativa."
-            )
+            raise serializers.ValidationError("Operador deve possuir unidade administrativa.")
 
         if GRUPO_OPERADOR_INVENTARIO in group_names and not unidades_administrativas:
-            raise serializers.ValidationError(
-                {"unidades_administrativas": "Operador deve ter pelo menos uma UA."}
-            )
+            raise serializers.ValidationError({"unidades_administrativas": "Operador deve ter pelo menos uma UA."})
 
         if unidades_administrativas and unidade_orcamentaria:
             ua_fora_da_uo = [
-                ua.id
-                for ua in unidades_administrativas
-                if ua.unidade_orcamentaria_id != unidade_orcamentaria.id
+                ua.id for ua in unidades_administrativas if ua.unidade_orcamentaria_id != unidade_orcamentaria.id
             ]
             if ua_fora_da_uo:
                 raise serializers.ValidationError(
-                    {
-                        "unidades_administrativas": (
-                            "Todas as UAs devem pertencer à Unidade Orçamentária selecionada."
-                        )
-                    }
+                    {"unidades_administrativas": ("Todas as UAs devem pertencer à Unidade Orçamentária selecionada.")}
                 )
 
         if (
@@ -727,17 +621,11 @@ class UsuarioSerializer(serializers.ModelSerializer):
             and all(ua.id != unidade_administrativa.id for ua in unidades_administrativas)
         ):
             raise serializers.ValidationError(
-                {
-                    "unidade_administrativa": (
-                        "A UA ativa deve estar entre as UAs selecionadas."
-                    )
-                }
+                {"unidade_administrativa": ("A UA ativa deve estar entre as UAs selecionadas.")}
             )
 
         if GRUPO_GESTOR_PATRIMONIO in group_names and not unidade_orcamentaria:
-            raise serializers.ValidationError(
-                "Gestor deve possuir unidade orçamentária."
-            )
+            raise serializers.ValidationError("Gestor deve possuir unidade orçamentária.")
 
     def create(self, validated_data):
 
