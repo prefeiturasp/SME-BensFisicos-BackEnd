@@ -129,7 +129,7 @@ class BaixaFisicaBensItemCreateSerializer(serializers.ModelSerializer):
 
         if item_atual:
             raise serializers.ValidationError(
-                f"Este bem já está incluído em outra baixa física " f"(Baixa #{item_atual.baixa.id})."
+                f"Este bem já está incluído em outra baixa física (Baixa #{item_atual.baixa.id})."
             )
         # Permite manter vínculo (edição de Em elaboração ou Aceita).
         mesma_baixa = BaixaFisicaBensItem.objects.filter(bem=value, baixa_id=baixa_id).exists() if baixa_id else False
@@ -340,7 +340,7 @@ class BaixaFisicaBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         uas_permitidas = filtrar_ua_origem_por_escopo(user, base_qs)
         if not uas_permitidas.filter(pk=value.pk).exists():
             raise serializers.ValidationError(
-                "Você não tem permissão para criar uma baixa física para esta " "unidade administrativa."
+                "Você não tem permissão para criar uma baixa física para esta unidade administrativa."
             )
         return value
 
@@ -727,7 +727,7 @@ class BaixaFisicaSolicitarCorrecaoSerializer(serializers.Serializer):
 
         if baixa.status != constants.SOLICITADA:
             raise serializers.ValidationError(
-                f"Não é possível solicitar correção desta baixa. " f"Status atual: {baixa.get_status_display()}"
+                f"Não é possível solicitar correção desta baixa. Status atual: {baixa.get_status_display()}"
             )
         # Gestor/superuser sempre pode; operador criador pode devolver sua própria baixa para correção
         is_criador = bool(getattr(baixa, "criado_por_id", None) and getattr(user, "pk", None) == baixa.criado_por_id)

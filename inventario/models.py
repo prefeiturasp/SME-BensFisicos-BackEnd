@@ -53,7 +53,7 @@ class ParametroConciliacaoAnual(models.Model):
         ordering = ["-ano_referencia", "-periodo_inicial"]
 
     def __str__(self):
-        return f"{self.ano_referencia} | " f"{self.periodo_inicial:%d/%m/%Y} → {self.periodo_final:%d/%m/%Y}"
+        return f"{self.ano_referencia} | {self.periodo_inicial:%d/%m/%Y} → {self.periodo_final:%d/%m/%Y}"
 
     def clean(self):
         super().clean()

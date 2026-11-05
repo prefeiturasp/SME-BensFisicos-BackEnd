@@ -430,7 +430,7 @@ class BemPatrimonialResource(resources.ModelResource):
                 idx,
                 normalizado,
                 "numero_patrimonial",
-                f"Número patrimonial duplicado no arquivo. " f"Primeira ocorrência na linha {linha_anterior}.",
+                f"Número patrimonial duplicado no arquivo. Primeira ocorrência na linha {linha_anterior}.",
             )
             return
 
@@ -561,7 +561,7 @@ class BemPatrimonialResource(resources.ModelResource):
             for erro in erros[:20]:
                 messages.warning(
                     self.request,
-                    f"Linha {erro['linha']} | {erro['numero_patrimonial']} | " f"{erro['campo']}: {erro['mensagem']}",
+                    f"Linha {erro['linha']} | {erro['numero_patrimonial']} | {erro['campo']}: {erro['mensagem']}",
                 )
             if qtd > 20:
                 messages.warning(self.request, f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima.")
@@ -993,7 +993,7 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
             numero_alterado = numero_post != numero_original
 
             if (nome_alterado or numero_alterado) and not justificativa:
-                msg = "A justificativa é obrigatória quando o Nome ou " "o Número Patrimonial forem alterados."
+                msg = "A justificativa é obrigatória quando o Nome ou o Número Patrimonial forem alterados."
                 raise ValidationError(
                     {
                         "justificativa": msg,

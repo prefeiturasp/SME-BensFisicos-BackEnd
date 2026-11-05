@@ -102,7 +102,7 @@ def _check_operador_destino_mesma_uo(mov, request, acao):
         messages.add_message(
             request,
             messages.ERROR,
-            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino " f"podem {acao} esta movimentação.",
+            f"Movimentação #{mov.pk}: Apenas operadores da unidade de destino podem {acao} esta movimentação.",
         )
         return True
     if mov.solicitado_por_id == request.user.pk:

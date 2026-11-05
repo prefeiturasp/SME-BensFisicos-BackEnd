@@ -584,7 +584,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
         cor = cores.get(obj.status, "#000")
 
         return format_html(
-            '<span style="background-color: {}; color: white; padding: 2px 4px; ' 'border-radius: 3px;">{}</span>',
+            '<span style="background-color: {}; color: white; padding: 2px 4px; border-radius: 3px;">{}</span>',
             cor,
             obj.get_status_display(),
         )
@@ -621,7 +621,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
     def acao_visualizar(self, obj):
         url = reverse(URL_NAME_CONCILIACAOUA_CHANGE, args=[obj.pk])
         return format_html(
-            '<a class="button" href="{}" ' 'style="padding: 4px 12px; font-size: 12px; color: white;">Visualizar</a>',
+            '<a class="button" href="{}" style="padding: 4px 12px; font-size: 12px; color: white;">Visualizar</a>',
             url,
         )
 
@@ -673,7 +673,7 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
 
         messages.error(
             request,
-            "Bem com status 'Baixa Física' não pode ter ocorrência registrada. " "Este status é definitivo.",
+            "Bem com status 'Baixa Física' não pode ter ocorrência registrada. Este status é definitivo.",
         )
         return redirect(URL_NAME_CONCILIACAOUA_CHANGE, item.conciliacao.pk)
 

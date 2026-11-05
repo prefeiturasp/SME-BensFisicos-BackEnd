@@ -43,7 +43,7 @@ def _validate_bem_para_movimentacao(bem):
         )
     if bem.status == BLOQUEADO:
         raise ValidationError(
-            f"O bem '{bem.nome}' está bloqueado para movimentação. " f"Aguarde a resolução da movimentação pendente."
+            f"O bem '{bem.nome}' está bloqueado para movimentação. Aguarde a resolução da movimentação pendente."
         )
     if getattr(bem, "bloqueado_conciliacao", False):
         from inventario import constants as inv_constants

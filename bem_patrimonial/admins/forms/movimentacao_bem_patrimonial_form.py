@@ -21,7 +21,7 @@ from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 CODIGO_UA_PONTO_CENTRAL = "001"
 MENSAGEM_ITENS_LOTE_INVALIDOS = "Itens de movimentação inválidos."
 MENSAGEM_SEM_PONTO_CENTRAL = (
-    "Não há ponto central cadastrado na Unidade Orçamentária de destino. " "Por favor, entrar em contato com o gestor"
+    "Não há ponto central cadastrado na Unidade Orçamentária de destino. Por favor, entrar em contato com o gestor"
 )
 
 
@@ -336,7 +336,7 @@ class MovimentacaoBemPatrimonialForm(forms.ModelForm):
             raise ValidationError(
                 {
                     "unidade_administrativa_destino": (
-                        "A Unidade Administrativa de destino não pertence à Unidade " "Orçamentária selecionada."
+                        "A Unidade Administrativa de destino não pertence à Unidade Orçamentária selecionada."
                     )
                 }
             )

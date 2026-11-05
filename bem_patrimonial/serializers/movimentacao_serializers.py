@@ -20,7 +20,7 @@ User = get_user_model()
 
 CODIGO_UA_PONTO_CENTRAL = "001"
 MENSAGEM_SEM_PONTO_CENTRAL = (
-    "Não há ponto central cadastrado na Unidade Orçamentária de destino. " "Por favor, entrar em contato com o gestor."
+    "Não há ponto central cadastrado na Unidade Orçamentária de destino. Por favor, entrar em contato com o gestor."
 )
 PADRAO_NUMERO_PATRIMONIAL = re.compile(r"^(?P<prefixo>\d{3})\.(?P<sequencia>\d{9})-(?P<digito>\d)$")
 LIMITE_BENS_POR_FAIXA = 500
@@ -175,7 +175,7 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
     indice_ate = dados_ate[0]
     if indice_ate < indice_de:
         raise serializers.ValidationError(
-            {"faixas": ("O Número Patrimonial Até deve ser maior ou igual ao " "Número Patrimonial De.")}
+            {"faixas": ("O Número Patrimonial Até deve ser maior ou igual ao Número Patrimonial De.")}
         )
     quantidade, numeros_esperados = _numeros_patrimoniais_da_faixa(dados_de, dados_ate)
     if quantidade > LIMITE_BENS_POR_FAIXA:

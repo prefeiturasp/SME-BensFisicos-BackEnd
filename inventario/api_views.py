@@ -104,7 +104,7 @@ class ParametroConciliacaoAnualPermission(BasePermission):
         tags=["Inventário"],
         summary="Listar parâmetros de conciliação anual",
         description=(
-            "Lista paginada com busca, filtros e ordenação. " "Acesso restrito a superusuário e gestor de patrimônio."
+            "Lista paginada com busca, filtros e ordenação. Acesso restrito a superusuário e gestor de patrimônio."
         ),
     ),
     retrieve=extend_schema(
@@ -201,7 +201,7 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
         user_uo = getattr(user, "unidade_orcamentaria", None)
         if user_uo is None or nova_uo != user_uo:
             raise DRFValidationError(
-                {"unidade_orcamentaria": ("Você não pode gerenciar parâmetros de outra " "Unidade Orçamentária.")}
+                {"unidade_orcamentaria": ("Você não pode gerenciar parâmetros de outra Unidade Orçamentária.")}
             )
 
     def _raise_drf_validation_error(self, exc):
@@ -274,7 +274,7 @@ class ParametroConciliacaoAnualViewSet(viewsets.ModelViewSet):
             instance.delete()
         except ProtectedError:
             raise DRFValidationError(
-                {"detail": ("Não foi possível excluir este parâmetro porque " "existem vínculos ativos no sistema.")}
+                {"detail": ("Não foi possível excluir este parâmetro porque existem vínculos ativos no sistema.")}
             )
 
 
@@ -307,7 +307,7 @@ CONCILIACAO_LIST_QUERY_PARAMETERS = [
         name="search",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
-        description=("Busca em: número da conciliação, código/nome/sigla da Unidade " "Administrativa."),
+        description=("Busca em: número da conciliação, código/nome/sigla da Unidade Administrativa."),
     ),
     OpenApiParameter(
         name="ordering",
@@ -324,7 +324,7 @@ CONCILIACAO_LIST_QUERY_PARAMETERS = [
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
         enum=[c[0] for c in constants.STATUS_CONCILIACAO],
-        description=("Filtra por status da conciliação. Aceita um valor ou vários " "separados por vírgula."),
+        description=("Filtra por status da conciliação. Aceita um valor ou vários separados por vírgula."),
     ),
     OpenApiParameter(
         name="tipo",
@@ -1102,7 +1102,7 @@ class ItemConciliacaoViewSet(
             raise DRFValidationError(
                 {
                     "detail": (
-                        "Bem com status 'Baixa Física' não pode ter ocorrência " "registrada. Este status é definitivo."
+                        "Bem com status 'Baixa Física' não pode ter ocorrência registrada. Este status é definitivo."
                     )
                 }
             )

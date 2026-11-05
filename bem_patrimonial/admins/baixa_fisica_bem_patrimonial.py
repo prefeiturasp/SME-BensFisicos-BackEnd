@@ -1122,7 +1122,7 @@ class BaixaFisicaBemPatrimonialAdmin(UnsavedChangesAdminMixin, ExportMixin, admi
             lista_aceitas = ", ".join(f"#{b.pk} (proc. {b.numero_processo_baixa})" for b in baixas_aceitas)
             self.message_user(
                 request,
-                ("As seguintes Baixas Físicas já estão aprovadas e " "não podem ser recusadas: " f"{lista_aceitas}"),
+                (f"As seguintes Baixas Físicas já estão aprovadas e não podem ser recusadas: {lista_aceitas}"),
                 level=messages.ERROR,
             )
 

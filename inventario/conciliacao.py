@@ -34,7 +34,7 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
 
     if situacao == inv_constants.BAIXA_FISICA:
         raise ValidationError(
-            "Situação 'Baixa Física' é definitiva e não pode ser registrada manualmente. " "Use 'Em processo de baixa'."
+            "Situação 'Baixa Física' é definitiva e não pode ser registrada manualmente. Use 'Em processo de baixa'."
         )
 
     if situacao == inv_constants.DIVERGENTE and not divergencia:

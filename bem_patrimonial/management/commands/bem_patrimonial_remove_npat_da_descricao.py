@@ -7,7 +7,7 @@ from bem_patrimonial.models import NPAT_NUM_REGEX, BemPatrimonial
 
 
 class Command(BaseCommand):
-    help = "Remove o número patrimonial da descrição dos bens e limpa caracteres " "especiais no início da descrição."
+    help = "Remove o número patrimonial da descrição dos bens e limpa caracteres especiais no início da descrição."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -30,9 +30,7 @@ class Command(BaseCommand):
         if re.fullmatch(NPAT_NUM_REGEX, numero):
             return False
         self.stdout.write(
-            self.style.WARNING(
-                f"[#{bem.pk}] Número '{numero}' deveria ser formato novo " f"mas não bate regex. Ignorando."
-            )
+            self.style.WARNING(f"[#{bem.pk}] Número '{numero}' deveria ser formato novo mas não bate regex. Ignorando.")
         )
         return True
 
@@ -59,7 +57,7 @@ class Command(BaseCommand):
         total_alterados = 0
 
         self.stdout.write(
-            self.style.WARNING(f"Processando {qs.count()} bens " f"({'DRY RUN' if dry_run else 'EXECUÇÃO REAL'})...")
+            self.style.WARNING(f"Processando {qs.count()} bens ({'DRY RUN' if dry_run else 'EXECUÇÃO REAL'})...")
         )
 
         with transaction.atomic():

@@ -419,9 +419,7 @@ class BaixaFisicaBemPatrimonialViewSet(
     @extend_schema(
         tags=["Baixas Físicas"],
         summary="Histórico de alterações",
-        description=(
-            "Retorna o histórico de alterações da baixa física, " "seguindo o padrão dos demais módulos da API."
-        ),
+        description=("Retorna o histórico de alterações da baixa física, seguindo o padrão dos demais módulos da API."),
         request=None,
         responses={
             200: OpenApiResponse(description="Lista de registros do histórico"),

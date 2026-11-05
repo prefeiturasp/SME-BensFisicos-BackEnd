@@ -25,7 +25,7 @@ from dados_comuns.models import UnidadeOrcamentaria
 from dados_comuns.utils import PREFIXO_CODIGO_UO_SME, unidade_orcamentaria_eh_externa
 
 MENSAGEM_SEM_PONTO_CENTRAL = (
-    "Não há ponto central cadastrado na Unidade Orçamentária de destino. " "Por favor, entrar em contato com o gestor."
+    "Não há ponto central cadastrado na Unidade Orçamentária de destino. Por favor, entrar em contato com o gestor."
 )
 
 

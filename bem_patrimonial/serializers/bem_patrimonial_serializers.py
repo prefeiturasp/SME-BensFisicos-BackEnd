@@ -522,7 +522,7 @@ class ImportacaoBemPatrimonialSerializer(serializers.Serializer):
     """
 
     arquivo = serializers.FileField(
-        help_text=("Planilha com os bens a importar. " "Formatos aceitos: XLSX, XLS, CSV. " "Tamanho máximo: 10 MB.")
+        help_text=("Planilha com os bens a importar. Formatos aceitos: XLSX, XLS, CSV. Tamanho máximo: 10 MB.")
     )
 
     def validate_arquivo(self, value):

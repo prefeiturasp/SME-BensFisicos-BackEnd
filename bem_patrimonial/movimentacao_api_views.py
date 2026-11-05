@@ -98,7 +98,7 @@ MOVIMENTACAO_LIST_QUERY_PARAMETERS = [
         name="status",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
-        description=("Filtra por status da movimentação. Aceita um valor ou vários separados " "por vírgula."),
+        description=("Filtra por status da movimentação. Aceita um valor ou vários separados por vírgula."),
     ),
     OpenApiParameter(
         name="unidade_administrativa_origem",

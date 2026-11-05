@@ -510,7 +510,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
 
         if group_name not in allowed_groups:
             raise serializers.ValidationError(
-                {"group_name": f"Grupo '{group_name}' não permitido. " f"Use: {', '.join(allowed_groups)}."}
+                {"group_name": f"Grupo '{group_name}' não permitido. Use: {', '.join(allowed_groups)}."}
             )
 
         try:

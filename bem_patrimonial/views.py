@@ -731,7 +731,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         ua = uas_acessiveis_para_importacao(request.user).filter(id=ua_id).first()
         if ua is None:
             return None, Response(
-                {"detail": "A Unidade Administrativa selecionada não está " "disponível para o seu usuário."},
+                {"detail": "A Unidade Administrativa selecionada não está disponível para o seu usuário."},
                 status=http_status.HTTP_403_FORBIDDEN,
             )
 

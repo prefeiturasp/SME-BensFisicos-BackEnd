@@ -183,7 +183,7 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
                 return user.unidade_administrativa.unidade_orcamentaria
         except ProgrammingError:
             logger.warning(
-                "Falha ao carregar Unidade Orçamentária ativa no selecionar_ua. " "Verifique migrações pendentes."
+                "Falha ao carregar Unidade Orçamentária ativa no selecionar_ua. Verifique migrações pendentes."
             )
         return None
 
