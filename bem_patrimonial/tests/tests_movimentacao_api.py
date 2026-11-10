@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -1292,6 +1292,7 @@ class MovimentacaoApiTestCase(TestCase):
         )
         return mov, bens
 
+    @override_settings(DEFAULT_FROM_EMAIL="testes@bensfisicos.test")
     def test_acoes_de_lote_enviam_um_unico_email(self):
         casos = [
             ("aprovar", self.gestor_origem, constants.ACEITA, self.mock_email_aprovada, 1),
