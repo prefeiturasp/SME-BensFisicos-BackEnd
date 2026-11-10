@@ -627,3 +627,74 @@ class TestEdgeCasesPDF(CIMBPMTestBase):
 
         buffer = gerar_pdf_cimbpm(mov, usuario_gerador=operador_sem_rf)
         self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+
+
+class TestDocumentoAceite(CIMBPMTestBase):
+    def _criar_mov_com_itens(self, qtd=2):
+        bens = [self.criar_bem(numero_patrimonial=f"001.0000000{i:02d}-{i % 10}") for i in range(10, 10 + qtd)]
+        mov = MovimentacaoBemPatrimonial.objects.create(
+            bem_patrimonial=bens[0],
+            unidade_administrativa_origem=self.ua_origem,
+            unidade_administrativa_destino=self.ua_destino,
+            solicitado_por=self.operador,
+            status=constants.ENVIADA,
+        )
+        for bem in bens:
+            MovimentacaoBensItem.objects.create(movimentacao=mov, bem=bem)
+        return mov, bens
+
+    def test_rodape_pendente_tem_recebimento_em_branco(self):
+        mov, _ = self._criar_mov_com_itens(1)
+        tabela = _criar_rodape_cimbpm(mov, None)[0]
+        recebimento = tabela._cellvalues[1][1].getPlainText()
+        self.assertEqual(recebimento, "")
+
+    def test_rodape_aceita_exibe_responsavel_aprovador(self):
+        mov, _ = self._criar_mov_com_itens(1)
+        mov.aprovar_solicitacao(self.gestor)
+        mov.refresh_from_db()
+        tabela = _criar_rodape_cimbpm(mov, mov.atualizado_em)[0]
+        recebimento = tabela._cellvalues[1][1].getPlainText()
+        entrega = tabela._cellvalues[1][0].getPlainText()
+        self.assertEqual(recebimento, "7654321")
+        self.assertEqual(entrega, "1234567")
+
+    def test_api_documento_aceita_envia_data_aceite(self):
+        from unittest.mock import patch
+
+        from rest_framework.test import APIClient
+
+        mov, _ = self._criar_mov_com_itens(1)
+        mov.aprovar_solicitacao(self.gestor)
+        mov.refresh_from_db()
+
+        client = APIClient()
+        client.force_authenticate(user=self.gestor)
+        with patch("bem_patrimonial.movimentacao_api_views.gerar_pdf_cimbpm") as mock_gerar:
+            from io import BytesIO
+
+            mock_gerar.return_value = BytesIO(b"%PDF-fake")
+            url = reverse("movimentacoes-documento-cimbpm", kwargs={"pk": mov.pk})
+            response = client.get(url)
+            self.assertEqual(response.status_code, 200)
+            _, kwargs = mock_gerar.call_args
+            self.assertIsNotNone(kwargs.get("data_aceite"))
+
+    def test_api_documento_pendente_envia_aceite_em_branco(self):
+        from unittest.mock import patch
+
+        from rest_framework.test import APIClient
+
+        mov, _ = self._criar_mov_com_itens(1)
+
+        client = APIClient()
+        client.force_authenticate(user=self.gestor)
+        with patch("bem_patrimonial.movimentacao_api_views.gerar_pdf_cimbpm") as mock_gerar:
+            from io import BytesIO
+
+            mock_gerar.return_value = BytesIO(b"%PDF-fake")
+            url = reverse("movimentacoes-documento-cimbpm", kwargs={"pk": mov.pk})
+            response = client.get(url)
+            self.assertEqual(response.status_code, 200)
+            _, kwargs = mock_gerar.call_args
+            self.assertIsNone(kwargs.get("data_aceite"))
