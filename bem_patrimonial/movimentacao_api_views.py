@@ -141,7 +141,7 @@ MOVIMENTACAO_LIST_QUERY_PARAMETERS = [
     ),
 ]
 
-JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API = "Movimentação criada via API"
+JUSTIFICATIVA_MOVIMENTACAO_CRIADA = "Movimentação criada"
 
 
 class MovimentacaoBemPatrimonialFilter(django_filters.FilterSet):
@@ -589,7 +589,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             valor_antigo=status_anterior,
             valor_novo=mov.get_status_display(),
             usuario=usuario,
-            justificativa=f"Movimentação {acao} via API",
+            justificativa=f"Movimentação {acao}",
         )
         self._registrar_historico(
             mov,
@@ -597,7 +597,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             valor_antigo="",
             valor_novo=str(usuario),
             usuario=usuario,
-            justificativa=f"Movimentação {acao} via API",
+            justificativa=f"Movimentação {acao}",
         )
 
     def _notificar_solicitante(self, envio_fn, *args):
@@ -645,7 +645,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                     valor_antigo="",
                     valor_novo=movimentacao.get_status_display(),
                     usuario=request.user,
-                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API,
+                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA,
                 )
                 self._registrar_historico(
                     movimentacao,
@@ -653,7 +653,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                     valor_antigo="",
                     valor_novo=str(movimentacao.unidade_administrativa_origem),
                     usuario=request.user,
-                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API,
+                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA,
                 )
                 self._registrar_historico(
                     movimentacao,
@@ -661,7 +661,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                     valor_antigo="",
                     valor_novo=str(movimentacao.unidade_administrativa_destino),
                     usuario=request.user,
-                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API,
+                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA,
                 )
                 self._registrar_historico_bulk(
                     movimentacao,
@@ -705,7 +705,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                         valor_antigo=observacao_anterior,
                         valor_novo=movimentacao.observacao,
                         usuario=request.user,
-                        justificativa="Observação atualizada via API",
+                        justificativa="Observação atualizada",
                     )
 
         detail = MovimentacaoBemPatrimonialDetailSerializer(movimentacao, context={"request": request})
@@ -744,12 +744,11 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
         if mov.solicitado_por and mov.solicitado_por.email and settings.DEFAULT_FROM_EMAIL:
             emails = [mov.solicitado_por.email]
-            for item in mov.itens.select_related("bem"):
-                self._notificar_solicitante(
-                    envia_email_solicitacao_movimentacao_aceita,
-                    item.bem,
-                    emails,
-                )
+            self._notificar_solicitante(
+                envia_email_solicitacao_movimentacao_aceita,
+                mov,
+                emails,
+            )
 
         return Response(MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data)
 
@@ -775,12 +774,11 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
         if mov.solicitado_por and mov.solicitado_por.email and settings.DEFAULT_FROM_EMAIL:
             emails = [mov.solicitado_por.email]
-            for item in mov.itens.select_related("bem"):
-                self._notificar_solicitante(
-                    envia_email_solicitacao_movimentacao_rejeitada,
-                    item.bem,
-                    emails,
-                )
+            self._notificar_solicitante(
+                envia_email_solicitacao_movimentacao_rejeitada,
+                mov,
+                emails,
+            )
 
         return Response(MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data)
 
@@ -806,13 +804,12 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
         if mov.solicitado_por and mov.solicitado_por.email and settings.DEFAULT_FROM_EMAIL:
             emails = [mov.solicitado_por.email]
-            for item in mov.itens.select_related("bem"):
-                self._notificar_solicitante(
-                    envia_email_solicitacao_movimentacao_cancelada,
-                    item.bem,
-                    request.user,
-                    emails,
-                )
+            self._notificar_solicitante(
+                envia_email_solicitacao_movimentacao_cancelada,
+                mov,
+                request.user,
+                emails,
+            )
 
         return Response(MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data)
 
@@ -843,8 +840,13 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         if not mov.numero_cimbpm:
             raise NotFound("Número CIMBPM não gerado para esta movimentação.")
 
+        data_aceite = None
+        if mov.aceita and mov.aprovado_por:
+            data_aceite = mov.atualizado_em
+
         pdf_buffer = gerar_pdf_cimbpm(
             mov,
+            data_aceite=data_aceite,
             usuario_gerador=request.user,
             data_geracao=timezone.now(),
         )

@@ -1,6 +1,7 @@
 import json
 
 from django.contrib import admin, messages
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponseNotAllowed, JsonResponse
@@ -44,7 +45,7 @@ from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
 from dados_comuns.escopo import (
     filtrar_queryset_movimentacao_por_escopo,
 )
-from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 
 
 def _obter_uo_id_do_usuario(usuario):
@@ -71,6 +72,86 @@ def _bens_da_movimentacao(mov):
     Helper: retorna queryset de bens da movimentação, já com select_related.
     """
     return mov.itens.select_related("bem").all()
+
+
+JUSTIFICATIVA_MOVIMENTACAO_CRIADA_ADMIN = "Movimentação criada"
+
+
+def _registrar_historico_movimentacao_admin(mov, campo, valor_antigo, valor_novo, usuario, justificativa=""):
+    HistoricoGeral.objects.create(
+        content_type=ContentType.objects.get_for_model(MovimentacaoBemPatrimonial),
+        object_id=str(mov.pk),
+        campo=campo,
+        valor_antigo=str(valor_antigo) if valor_antigo is not None else "",
+        valor_novo=str(valor_novo) if valor_novo is not None else "",
+        alterado_por=usuario,
+        justificativa=justificativa,
+    )
+
+
+def _registrar_evento_movimentacao_admin(mov, usuario, acao, status_anterior):
+    campo_usuario = {
+        constants.ACEITA: "aprovado_por",
+        constants.REJEITADA: "rejeitado_por",
+        constants.CANCELADA: "cancelado_por",
+    }[mov.status]
+    _registrar_historico_movimentacao_admin(
+        mov,
+        campo="status",
+        valor_antigo=status_anterior,
+        valor_novo=mov.get_status_display(),
+        usuario=usuario,
+        justificativa=f"Movimentação {acao}",
+    )
+    _registrar_historico_movimentacao_admin(
+        mov,
+        campo=campo_usuario,
+        valor_antigo="",
+        valor_novo=str(usuario),
+        usuario=usuario,
+        justificativa=f"Movimentação {acao}",
+    )
+
+
+def _registrar_criacao_movimentacao_admin(mov, usuario):
+    _registrar_historico_movimentacao_admin(
+        mov,
+        campo="status",
+        valor_antigo="",
+        valor_novo=mov.get_status_display(),
+        usuario=usuario,
+        justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_ADMIN,
+    )
+    _registrar_historico_movimentacao_admin(
+        mov,
+        campo="unidade_administrativa_origem",
+        valor_antigo="",
+        valor_novo=str(mov.unidade_administrativa_origem),
+        usuario=usuario,
+        justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_ADMIN,
+    )
+    _registrar_historico_movimentacao_admin(
+        mov,
+        campo="unidade_administrativa_destino",
+        valor_antigo="",
+        valor_novo=str(mov.unidade_administrativa_destino),
+        usuario=usuario,
+        justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_ADMIN,
+    )
+    HistoricoGeral.objects.bulk_create(
+        [
+            HistoricoGeral(
+                content_type=ContentType.objects.get_for_model(MovimentacaoBemPatrimonial),
+                object_id=str(mov.pk),
+                campo="itens",
+                valor_antigo="",
+                valor_novo=str(item.bem),
+                alterado_por=usuario,
+                justificativa="Bem incluído na movimentação",
+            )
+            for item in mov.itens.select_related("bem")
+        ]
+    )
 
 
 def _mensagem_mov_origem_destino_inativas(mov, request, acao_verb):
@@ -230,17 +311,13 @@ def aprovar_solicitacao(modeladmin, request, queryset):
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
+        status_anterior = mov.get_status_display()
         with transaction.atomic():
-            for item in bens_itens:
-                bem = item.bem
-                bem.unidade_administrativa = mov.unidade_administrativa_destino
-                bem.status = constants.APROVADO
-                bem.save()
-                if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_aceita(bem, mov.solicitado_por.email)
-            mov.status = constants.ACEITA
-            mov.aprovado_por = request.user
-            mov.save()
+            mov.aprovar_solicitacao(request.user)
+            _registrar_evento_movimentacao_admin(mov, request.user, "aprovada", status_anterior)
+            modeladmin.log_change(request, mov, "Movimentação aprovada.")
+        if mov.solicitado_por and mov.solicitado_por.email:
+            envia_email_solicitacao_movimentacao_aceita(mov, mov.solicitado_por.email)
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -284,16 +361,13 @@ def rejeitar_solicitacao(modeladmin, request, queryset):
                 f"Movimentação #{mov.pk} não possui bens associados.",
             )
             continue
+        status_anterior = mov.get_status_display()
         with transaction.atomic():
-            mov.status = constants.REJEITADA
-            mov.rejeitado_por = request.user
-            mov.save()
-            for item in bens_itens:
-                bem = item.bem
-                bem.status = constants.APROVADO
-                bem.save()
-                if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_rejeitada(bem, mov.solicitado_por.email)
+            mov.rejeitar_solicitacao(request.user)
+            _registrar_evento_movimentacao_admin(mov, request.user, "rejeitada", status_anterior)
+            modeladmin.log_change(request, mov, "Movimentação rejeitada.")
+        if mov.solicitado_por and mov.solicitado_por.email:
+            envia_email_solicitacao_movimentacao_rejeitada(mov, mov.solicitado_por.email)
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -345,17 +419,13 @@ def cancelar_solicitacao(modeladmin, request, queryset):
     for mov in queryset:
         if _nao_pode_cancelar(mov, request):
             continue
-        bens_itens = _bens_da_movimentacao(mov)
+        status_anterior = mov.get_status_display()
         with transaction.atomic():
-            mov.status = constants.CANCELADA
-            mov.cancelado_por = request.user
-            mov.save()
-            for item in bens_itens:
-                bem = item.bem
-                bem.status = constants.APROVADO
-                bem.save()
-                if mov.solicitado_por and mov.solicitado_por.email:
-                    envia_email_solicitacao_movimentacao_cancelada(bem, request.user, mov.solicitado_por.email)
+            mov.cancelar_solicitacao(request.user)
+            _registrar_evento_movimentacao_admin(mov, request.user, "cancelada", status_anterior)
+            modeladmin.log_change(request, mov, "Movimentação cancelada.")
+        if mov.solicitado_por and mov.solicitado_por.email:
+            envia_email_solicitacao_movimentacao_cancelada(mov, request.user, mov.solicitado_por.email)
         messages.add_message(
             request,
             messages.SUCCESS,
@@ -616,6 +686,8 @@ class MovimentacaoBemPatrimonialAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin
 
         for bem in form.cleaned_data["bens_lote_resolvidos"]:
             MovimentacaoBensItem.objects.create(movimentacao=form.instance, bem=bem)
+        form.instance.refresh_from_db()
+        _registrar_criacao_movimentacao_admin(form.instance, request.user)
 
     @admin.display(description="Documento CIMBPM")
     def get_documento_cimbpm_link(self, obj):

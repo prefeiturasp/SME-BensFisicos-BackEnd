@@ -195,9 +195,49 @@ class AdminActionCancelamentoTestCase(TestCase):
 
         mock_email.assert_called_once()
         call_args = mock_email.call_args[0]
-        self.assertEqual(call_args[0], self.bem)
+        self.assertEqual(call_args[0].pk, self.movimentacao.pk)
         self.assertEqual(call_args[1], self.gestor)
         self.assertEqual(call_args[2], self.operador_origem.email)
+
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_aceita")
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_rejeitada")
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada")
+    def test_actions_registram_historico(self, *_mocks):
+        from django.contrib.contenttypes.models import ContentType
+
+        from dados_comuns.models import HistoricoGeral
+
+        casos = [
+            (cancelar_solicitacao, self.gestor, "cancelado_por", "Cancelada", "Movimentação cancelada"),
+            (aprovar_solicitacao, self.operador_destino, "aprovado_por", "Aceita", "Movimentação aprovada"),
+            (rejeitar_solicitacao, self.operador_destino, "rejeitado_por", "Rejeitada", "Movimentação rejeitada"),
+        ]
+        ct = ContentType.objects.get_for_model(MovimentacaoBemPatrimonial)
+        for acao, usuario, campo_responsavel, status_novo, justificativa in casos:
+            with self.subTest(acao=acao.__name__):
+                MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk).update(
+                    status=ENVIADA,
+                    aprovado_por=None,
+                    rejeitado_por=None,
+                    cancelado_por=None,
+                )
+                HistoricoGeral.objects.filter(content_type=ct, object_id=str(self.movimentacao.pk)).delete()
+                self.movimentacao.refresh_from_db()
+
+                request = self._create_request_with_messages(usuario)
+                queryset = MovimentacaoBemPatrimonial.objects.filter(pk=self.movimentacao.pk)
+                acao(self.admin, request, queryset)
+
+                por_campo = {
+                    r.campo: r
+                    for r in HistoricoGeral.objects.filter(content_type=ct, object_id=str(self.movimentacao.pk))
+                }
+                self.assertIn("status", por_campo)
+                self.assertIn(campo_responsavel, por_campo)
+                self.assertEqual(por_campo["status"].valor_novo, status_novo)
+                self.assertEqual(por_campo["status"].justificativa, justificativa)
+                self.assertEqual(por_campo["status"].alterado_por_id, usuario.pk)
+                self.assertEqual(por_campo[campo_responsavel].alterado_por_id, usuario.pk)
 
     def test_action_cancelar_exibe_mensagem_sucesso(self):
         request = self._create_request_with_messages(self.gestor)
@@ -425,11 +465,24 @@ class EmailCancelamentoTestCase(TestCase):
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_email_contem_nome_gestor(self, mock_send_email):
+        from unittest.mock import patch as mock_patch
+
         from bem_patrimonial.emails import (
             envia_email_solicitacao_movimentacao_cancelada,
         )
+        from bem_patrimonial.models import MovimentacaoBemPatrimonial, MovimentacaoBensItem
 
-        envia_email_solicitacao_movimentacao_cancelada(self.bem, self.gestor, self.operador_origem.email)
+        with mock_patch("bem_patrimonial.models.envia_email_nova_solicitacao_movimentacao"):
+            mov = MovimentacaoBemPatrimonial.objects.create(
+                bem_patrimonial=self.bem,
+                unidade_administrativa_origem=self.ua_origem,
+                unidade_administrativa_destino=self.ua_destino,
+                solicitado_por=self.operador_origem,
+            )
+            MovimentacaoBensItem.objects.create(movimentacao=mov, bem=self.bem)
+
+        mock_send_email.reset_mock()
+        envia_email_solicitacao_movimentacao_cancelada(mov, self.gestor, self.operador_origem.email)
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]
@@ -437,12 +490,17 @@ class EmailCancelamentoTestCase(TestCase):
 
         self.assertIn("José Teste", dict_param["subtitle"])
         self.assertIn(self.bem.nome, dict_param["subtitle"])
+        mov.refresh_from_db()
+        self.assertIn(f"CIMBPM {mov.numero_cimbpm}", dict_param["subtitle"])
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_email_usa_username_como_fallback(self, mock_send_email):
+        from unittest.mock import patch as mock_patch
+
         from bem_patrimonial.emails import (
             envia_email_solicitacao_movimentacao_cancelada,
         )
+        from bem_patrimonial.models import MovimentacaoBemPatrimonial, MovimentacaoBensItem
 
         grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
         gestor_sem_nome = Usuario.objects.create_user(
@@ -455,7 +513,17 @@ class EmailCancelamentoTestCase(TestCase):
         )
         gestor_sem_nome.groups.add(grupo_gestor)
 
-        envia_email_solicitacao_movimentacao_cancelada(self.bem, gestor_sem_nome, self.operador_origem.email)
+        with mock_patch("bem_patrimonial.models.envia_email_nova_solicitacao_movimentacao"):
+            mov = MovimentacaoBemPatrimonial.objects.create(
+                bem_patrimonial=self.bem,
+                unidade_administrativa_origem=self.ua_origem,
+                unidade_administrativa_destino=self.ua_destino,
+                solicitado_por=self.operador_origem,
+            )
+            MovimentacaoBensItem.objects.create(movimentacao=mov, bem=self.bem)
+
+        mock_send_email.reset_mock()
+        envia_email_solicitacao_movimentacao_cancelada(mov, gestor_sem_nome, self.operador_origem.email)
 
         mock_send_email.assert_called_once()
         call_args = mock_send_email.call_args[0]

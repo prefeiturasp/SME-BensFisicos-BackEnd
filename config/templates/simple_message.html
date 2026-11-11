@@ -867,9 +867,9 @@
                                 >
                                   <h1>{{context.title}}</h1>
                                   <br />
-                                  <div style="white-space: pre-line;">{{context.subtitle}}</div>
+                                  <div>{{context.subtitle|linebreaksbr}}</div>
                                   <br />
-                                  <div>{{context.body}}</div>
+                                  <div>{{context.body|default:''|linebreaksbr}}</div>
                                   <h3>Obrigado.</h3>
                                   <br />
                                   <div>Equipe SME/COSERV/NOTBENS/BENS PATRIMONIAIS</div>

@@ -273,13 +273,14 @@ class EmailMovimentacaoM2MTestCase(TestCase):
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")
     def test_notifica_operador_com_ua_no_m2m_mas_nao_ativo_nela(self, mock_send):
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
-        MovimentacaoBensItem.objects.create(movimentacao=mov, bem=self.bem)
+        with self.captureOnCommitCallbacks(execute=True):
+            mov = MovimentacaoBemPatrimonial.objects.create(
+                bem_patrimonial=self.bem,
+                unidade_administrativa_origem=self.ua_origem,
+                unidade_administrativa_destino=self.ua_destino,
+                solicitado_por=self.operador_origem,
+            )
+            MovimentacaoBensItem.objects.create(movimentacao=mov, bem=self.bem)
 
         mock_send.assert_called_once()
         call_args = mock_send.call_args[0]
