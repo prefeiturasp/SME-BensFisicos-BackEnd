@@ -48,6 +48,7 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
 )
 from dados_comuns.context import audit_as
 from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
+from dados_comuns.historico_consulta import limpar_justificativa_historico
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.permissions import MovimentacaoBemPatrimonialPermission
 
@@ -436,7 +437,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                             "campo": item.campo,
                             "valor_antigo": item.valor_antigo,
                             "valor_novo": item.valor_novo,
-                            "justificativa": item.justificativa,
+                            "justificativa": limpar_justificativa_historico(item.justificativa),
                         }
                         for item in itens
                     ],
