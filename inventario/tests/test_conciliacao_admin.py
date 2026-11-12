@@ -236,6 +236,73 @@ class ConciliacaoAdminMethodsTest(ConciliacaoAdminBaseTest):
         self.assertIn("Editar", html)
         self.assertIn("Excluir", html)
 
+    def test_situacao_display_laudado_mostra_duas_badges_em_aberta(self):
+        bem_laudado = BemPatrimonial.objects.create(
+            numero_patrimonial="SEM-NUMERO-LAUD-1",
+            nome="Bem Laudado",
+            descricao="Descricao",
+            valor_unitario=100,
+            status=bem_constants.LAUDADO_PARA_BAIXA,
+            unidade_administrativa=self.ua,
+            criado_por=self.criador,
+        )
+        item = ItemConciliacao.objects.create(
+            conciliacao=self.conciliacao,
+            bem=bem_laudado,
+            situacao=constants.EM_PROCESSO_BAIXA_FISICA,
+        )
+        html = self.item_admin.situacao_display(item)
+
+        self.assertIn("Em processo de baixa", html)
+        self.assertIn("Laudado para Baixa", html)
+
+    def test_situacao_display_laudado_esconde_em_fechada(self):
+        bem_laudado = BemPatrimonial.objects.create(
+            numero_patrimonial="SEM-NUMERO-LAUD-2",
+            nome="Bem Laudado Fechado",
+            descricao="Descricao",
+            valor_unitario=100,
+            status=bem_constants.LAUDADO_PARA_BAIXA,
+            unidade_administrativa=self.ua,
+            criado_por=self.criador,
+        )
+        item = ItemConciliacao.objects.create(
+            conciliacao=self.conciliacao,
+            bem=bem_laudado,
+            situacao=constants.EM_PROCESSO_BAIXA_FISICA,
+        )
+        ConciliacaoUA.objects.filter(pk=self.conciliacao.pk).update(status=constants.CONCILIACAO_FECHADO)
+        item.conciliacao.status = constants.CONCILIACAO_FECHADO
+        html = self.item_admin.situacao_display(item)
+
+        self.assertIn("Em processo de baixa", html)
+        self.assertNotIn("Laudado para Baixa", html)
+
+    def test_filtro_laudado_retorna_so_em_processo_laudado(self):
+        from inventario.admin import LaudadoParaBaixaFilter
+
+        bem_laudado = BemPatrimonial.objects.create(
+            numero_patrimonial="SEM-NUMERO-LAUD-3",
+            nome="Bem Laudado Filtro",
+            descricao="Descricao",
+            valor_unitario=100,
+            status=bem_constants.LAUDADO_PARA_BAIXA,
+            unidade_administrativa=self.ua,
+            criado_por=self.criador,
+        )
+        ItemConciliacao.objects.create(
+            conciliacao=self.conciliacao,
+            bem=bem_laudado,
+            situacao=constants.EM_PROCESSO_BAIXA_FISICA,
+        )
+        request = self.factory.get("/admin/", {"laudado_para_baixa": "sim"})
+        request.user = self.superuser
+        filtro = LaudadoParaBaixaFilter(request, {"laudado_para_baixa": "sim"}, ItemConciliacao, self.item_admin)
+        qs = filtro.queryset(request, ItemConciliacao.objects.all())
+
+        self.assertTrue(qs.filter(bem=bem_laudado).exists())
+        self.assertFalse(qs.filter(pk=self.item_sem_ocorrencia.pk).exists())
+
 
 class ItemConciliacaoChangeListViewTest(ConciliacaoAdminBaseTest):
     def test_changelist_da_conciliacao_exibe_so_contexto_da_conciliacao(self):
