@@ -43,6 +43,66 @@ def remover_bem_de_conciliacoes_em_aberto(bem_id, ua_id):
     ItemConciliacao.objects.filter(bem_id=bem_id, conciliacao__in=_conciliacoes_em_aberto(ua_id)).delete()
 
 
+def _processar_item_laudado(item, usuario):
+    # Bem laudado para baixa (fluxo novo): leitura distinta do processo
+    # de baixa comum, sem tratar como bem normal. Preserva somente se o
+    # estado atual já é EM_PROCESSO, senão força EM_PROCESSO zerado.
+    # Preserva ocorrências antigas para auditoria: registrar/excluir já
+    # bloqueiam divergente para laudado, sem bypass.
+    ultima_ocorrencia = OcorrenciaConciliacao.objects.filter(item=item).order_by("-registrado_em").first()
+    if (
+        item.situacao == inv_constants.EM_PROCESSO_BAIXA_FISICA
+        and ultima_ocorrencia is not None
+        and ultima_ocorrencia.situacao == inv_constants.EM_PROCESSO_BAIXA_FISICA
+    ):
+        return
+    if (
+        item.situacao != inv_constants.EM_PROCESSO_BAIXA_FISICA
+        or (item.observacao or "") != ""
+        or (item.divergencia or "") != ""
+    ):
+        item.situacao = inv_constants.EM_PROCESSO_BAIXA_FISICA
+        item.observacao = ""
+        item.divergencia = ""
+        item.atualizado_por = usuario
+        item.save(
+            update_fields=[
+                "situacao",
+                "observacao",
+                "divergencia",
+                "atualizado_por",
+                "atualizado_em",
+            ]
+        )
+
+
+def _marcar_item_encontrado(item, usuario):
+    OcorrenciaConciliacao.objects.filter(item=item).exclude(situacao=inv_constants.EM_PROCESSO_BAIXA_FISICA).delete()
+
+    item.situacao = inv_constants.ENCONTRADO_SEM_DIVERGENCIA
+    item.observacao = ""
+    item.divergencia = ""
+    item.atualizado_por = usuario
+    item.save(
+        update_fields=[
+            "situacao",
+            "observacao",
+            "divergencia",
+            "atualizado_por",
+            "atualizado_em",
+        ]
+    )
+
+
+def _atualizar_bloqueio_pos_sync(bem, em_processo):
+    if bem.status in bem_constants.STATUS_FINAIS_BEM:
+        # Status final (laudado, baixa_fisica, transferido): sem bloqueio
+        # por conciliação, igual a _recalcular_bloqueio_bem_por_inventario.
+        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=False)
+    else:
+        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=em_processo)
+
+
 @transaction.atomic
 def incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, ua_id):
     if not ua_id:
@@ -68,36 +128,7 @@ def incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, ua_id):
         )
 
         if eh_laudado:
-            # Bem laudado para baixa (fluxo novo): leitura distinta do processo
-            # de baixa comum, sem tratar como bem normal. Preserva somente se o
-            # estado atual já é EM_PROCESSO, senão força EM_PROCESSO zerado.
-            # Preserva ocorrências antigas para auditoria: registrar/excluir já
-            # bloqueiam divergente para laudado, sem bypass.
-            ultima_ocorrencia = OcorrenciaConciliacao.objects.filter(item=item).order_by("-registrado_em").first()
-            if (
-                item.situacao == inv_constants.EM_PROCESSO_BAIXA_FISICA
-                and ultima_ocorrencia is not None
-                and ultima_ocorrencia.situacao == inv_constants.EM_PROCESSO_BAIXA_FISICA
-            ):
-                continue
-            if (
-                item.situacao != inv_constants.EM_PROCESSO_BAIXA_FISICA
-                or (item.observacao or "") != ""
-                or (item.divergencia or "") != ""
-            ):
-                item.situacao = inv_constants.EM_PROCESSO_BAIXA_FISICA
-                item.observacao = ""
-                item.divergencia = ""
-                item.atualizado_por = usuario
-                item.save(
-                    update_fields=[
-                        "situacao",
-                        "observacao",
-                        "divergencia",
-                        "atualizado_por",
-                        "atualizado_em",
-                    ]
-                )
+            _processar_item_laudado(item, usuario)
             continue
 
         if pendente:
@@ -110,30 +141,9 @@ def incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, ua_id):
             # sobrescrever aqui reverteria o registro recém-feito.
             continue
 
-        OcorrenciaConciliacao.objects.filter(item=item).exclude(
-            situacao=inv_constants.EM_PROCESSO_BAIXA_FISICA
-        ).delete()
+        _marcar_item_encontrado(item, usuario)
 
-        item.situacao = inv_constants.ENCONTRADO_SEM_DIVERGENCIA
-        item.observacao = ""
-        item.divergencia = ""
-        item.atualizado_por = usuario
-        item.save(
-            update_fields=[
-                "situacao",
-                "observacao",
-                "divergencia",
-                "atualizado_por",
-                "atualizado_em",
-            ]
-        )
-
-    if bem.status in bem_constants.STATUS_FINAIS_BEM:
-        # Status final (laudado, baixa_fisica, transferido): sem bloqueio
-        # por conciliação, igual a _recalcular_bloqueio_bem_por_inventario.
-        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=False)
-    else:
-        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=em_processo)
+    _atualizar_bloqueio_pos_sync(bem, em_processo)
 
 
 @transaction.atomic
