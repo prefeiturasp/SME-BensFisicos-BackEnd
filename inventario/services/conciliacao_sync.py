@@ -53,6 +53,7 @@ def incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, ua_id):
 
     pendente = _status_pendente_acao(bem)
     em_processo = _tem_em_processo_baixa(bem.pk, ua_id)
+    eh_laudado = bem.status == bem_constants.LAUDADO_PARA_BAIXA
 
     for conciliacao in conciliacoes:
         item, _ = ItemConciliacao.objects.get_or_create(
@@ -65,6 +66,39 @@ def incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, ua_id):
                 "atualizado_por": usuario,
             },
         )
+
+        if eh_laudado:
+            # Bem laudado para baixa (fluxo novo): leitura distinta do processo
+            # de baixa comum, sem tratar como bem normal. Preserva somente se o
+            # estado atual já é EM_PROCESSO, senão força EM_PROCESSO zerado.
+            # Preserva ocorrências antigas para auditoria: registrar/excluir já
+            # bloqueiam divergente para laudado, sem bypass.
+            ultima_ocorrencia = OcorrenciaConciliacao.objects.filter(item=item).order_by("-registrado_em").first()
+            if (
+                item.situacao == inv_constants.EM_PROCESSO_BAIXA_FISICA
+                and ultima_ocorrencia is not None
+                and ultima_ocorrencia.situacao == inv_constants.EM_PROCESSO_BAIXA_FISICA
+            ):
+                continue
+            if (
+                item.situacao != inv_constants.EM_PROCESSO_BAIXA_FISICA
+                or (item.observacao or "") != ""
+                or (item.divergencia or "") != ""
+            ):
+                item.situacao = inv_constants.EM_PROCESSO_BAIXA_FISICA
+                item.observacao = ""
+                item.divergencia = ""
+                item.atualizado_por = usuario
+                item.save(
+                    update_fields=[
+                        "situacao",
+                        "observacao",
+                        "divergencia",
+                        "atualizado_por",
+                        "atualizado_em",
+                    ]
+                )
+            continue
 
         if pendente:
             continue
@@ -94,7 +128,12 @@ def incluir_ou_atualizar_bem_em_conciliacoes_em_aberto(bem, ua_id):
             ]
         )
 
-    bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=em_processo)
+    if bem.status in bem_constants.STATUS_FINAIS_BEM:
+        # Status final (laudado, baixa_fisica, transferido): sem bloqueio
+        # por conciliação, igual a _recalcular_bloqueio_bem_por_inventario.
+        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=False)
+    else:
+        bem.__class__.objects.filter(pk=bem.pk).update(bloqueado_conciliacao=em_processo)
 
 
 @transaction.atomic

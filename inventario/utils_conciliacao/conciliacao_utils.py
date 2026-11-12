@@ -61,6 +61,11 @@ def _confirmar_baixas_fisicas_pos_conciliacao(conciliacao, usuario):
         if item.bem_id not in bem_ids_confirmados:
             continue
 
+        # Laudado para baixa (fluxo novo) ainda aguarda a baixa final (NBBPM):
+        # não confirma como baixa física no fechamento.
+        if getattr(item.bem, "status", None) == bem_constants.LAUDADO_PARA_BAIXA:
+            continue
+
         ocorrencias.append(
             OcorrenciaConciliacao(
                 item=item,
@@ -72,20 +77,35 @@ def _confirmar_baixas_fisicas_pos_conciliacao(conciliacao, usuario):
         )
 
         item.situacao = constants.BAIXA_FISICA
+        item.observacao = "Baixa Física confirmada automaticamente após fechamento da conciliação."
+        item.divergencia = ""
         itens_para_atualizar.append(item)
 
     if ocorrencias:
         OcorrenciaConciliacao.objects.bulk_create(ocorrencias, batch_size=500)
 
     if itens_para_atualizar:
-        ItemConciliacao.objects.bulk_update(itens_para_atualizar, ["situacao"], batch_size=500)
+        ItemConciliacao.objects.bulk_update(
+            itens_para_atualizar, ["situacao", "observacao", "divergencia"], batch_size=500
+        )
+        BemPatrimonial.objects.filter(pk__in=[item.bem_id for item in itens_para_atualizar]).update(
+            bloqueado_conciliacao=False
+        )
 
     return len(ocorrencias)
 
 
 def finalizar_conciliacao(conciliacao, usuario):
+    from inventario.conciliacao import _recalcular_bloqueio_bem_por_inventario
+
     conciliacao.finalizar(usuario)
     _confirmar_baixas_fisicas_pos_conciliacao(conciliacao, usuario)
+    # Pós-fechamento: esta conciliação saiu de em_aberto, então itens
+    # EM_PROCESSO não confirmados não podem manter bloqueio preso.
+    # Recalcula por bem (respeita outra aberta com EM_PROCESSO e finais).
+    bem_ids = list(ItemConciliacao.objects.filter(conciliacao=conciliacao).values_list("bem_id", flat=True).distinct())
+    for bem in BemPatrimonial.objects.filter(pk__in=bem_ids):
+        _recalcular_bloqueio_bem_por_inventario(bem)
 
 
 def get_filtro_bens_baixados(ano_baixa_minimo):
@@ -133,11 +153,24 @@ def criar_itens_conciliacao(conciliacao):
     - incluir bens ativos
     - incluir bens BAIXADOS apenas no ano anterior ao ano do inventário
       (ano da baixa = baixa_fisica.data_aprovacao, com baixa ACEITA)
+    - bens LAUDADOS PARA BAIXA (fluxo novo da baixa física) são incluídos como
+      ativos e têm leitura distinta: item em processo de baixa, com status do
+      bem exposto para a tela distinguir do processo de baixa comum.
     - Regra de herança de situação:
       * Se situação anterior foi NAO_ENCONTRADO, DIVERGENTE ou BAIXA_FISICA → herda situação, divergência e observação
       * Se situação anterior foi ENCONTRADO ou ENCONTRADO_SEM_DIVERGENCIA → inicia como ENCONTRADO_SEM_DIVERGENCIA
       * Se não tinha situação anterior → inicia como ENCONTRADO_SEM_DIVERGENCIA
+      * Bem laudado para baixa -> sempre EM_PROCESSO_BAIXA_FISICA (não trata como bem normal)
+    - Só cria em conciliação aberta. Fechada não muda.
     """
+
+    if not conciliacao.esta_aberto:
+        return
+
+    # Proteção básica: criar só uma vez. Se já tem itens, não recria para
+    # não apagar ocorrências registradas pelo usuário em aberta.
+    if ItemConciliacao.objects.filter(conciliacao=conciliacao).exists():
+        return
 
     if conciliacao.tipo == constants.CONCILIACAO_EVENTUAL:
         if not conciliacao.periodo_final:
@@ -170,6 +203,8 @@ def criar_itens_conciliacao(conciliacao):
             bem_constants.TRANSFERIDO,
         ]
     )
+    # LAUDADO_PARA_BAIXA permanece no filtro de ativos: o bem laudado continua
+    # na conciliação aberta com leitura distinta do processo de baixa comum.
 
     filtro_baixados = get_filtro_bens_baixados(ano_baixa_minimo)
 
@@ -185,7 +220,11 @@ def criar_itens_conciliacao(conciliacao):
     for bem in bens:
         ultima_situacao = bem.ultima_situacao_conciliacao
 
-        if ultima_situacao in situacoes_problematicas:
+        if bem.status == bem_constants.LAUDADO_PARA_BAIXA:
+            situacao = constants.EM_PROCESSO_BAIXA_FISICA
+            divergencia = ""
+            observacao = ""
+        elif ultima_situacao in situacoes_problematicas:
             situacao = ultima_situacao
 
             divergencia = bem.ultima_divergencia_conciliacao if ultima_situacao == constants.DIVERGENTE else ""
