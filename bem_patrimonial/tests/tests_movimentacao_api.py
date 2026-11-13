@@ -1,13 +1,15 @@
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.contrib.contenttypes.models import ContentType
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from bem_patrimonial import constants
 from bem_patrimonial.models import BemPatrimonial, MovimentacaoBemPatrimonial, MovimentacaoBensItem
+from dados_comuns.models import HistoricoGeral
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
@@ -1275,3 +1277,83 @@ class MovimentacaoApiTestCase(TestCase):
         self.assertEqual(retrieve.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(historico.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(documento.status_code, status.HTTP_404_NOT_FOUND)
+
+    def _criar_mov_lote_api(self, qtd=2, inicio=20):
+        bens = [
+            self._criar_bem(f"001.0000001{i:02d}-0", self.ua_origem, self.operador_origem)
+            for i in range(inicio, inicio + qtd)
+        ]
+        mov = self._criar_movimentacao(
+            bem=bens[0],
+            ua_origem=self.ua_origem,
+            ua_destino=self.ua_destino,
+            solicitado_por=self.operador_origem,
+            bens=bens,
+        )
+        return mov, bens
+
+    @override_settings(DEFAULT_FROM_EMAIL="testes@bensfisicos.test")
+    def test_acoes_de_lote_enviam_um_unico_email(self):
+        casos = [
+            ("aprovar", self.gestor_origem, constants.ACEITA, self.mock_email_aprovada, 1),
+            ("rejeitar", self.gestor_origem, constants.REJEITADA, self.mock_email_rejeitada, 1),
+            ("cancelar", self.operador_origem, constants.CANCELADA, self.mock_email_cancelada, 2),
+        ]
+        for indice, (acao, usuario, status_esperado, mock_envio, indice_emails) in enumerate(casos):
+            with self.subTest(acao=acao):
+                mov, _ = self._criar_mov_lote_api(2, inicio=20 + 10 * indice)
+                mock_envio.reset_mock()
+                self._autenticar(usuario)
+
+                response = self.client.post(reverse(f"movimentacoes-{acao}", kwargs={"pk": mov.pk}))
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                mov.refresh_from_db()
+                self.assertEqual(mov.status, status_esperado)
+                mock_envio.assert_called_once()
+                args = mock_envio.call_args[0]
+                self.assertEqual(args[0].pk, mov.pk)
+                self.assertEqual(args[indice_emails], [self.operador_origem.email])
+
+    def test_email_resumido_contem_todos_bens_no_corpo(self):
+        from unittest.mock import patch as mock_patch
+
+        from bem_patrimonial.emails import (
+            envia_email_solicitacao_movimentacao_aceita,
+            envia_email_solicitacao_movimentacao_cancelada,
+            envia_email_solicitacao_movimentacao_rejeitada,
+        )
+
+        mov, bens = self._criar_mov_lote_api(2)
+
+        for envio, extra in [
+            (envia_email_solicitacao_movimentacao_aceita, []),
+            (envia_email_solicitacao_movimentacao_rejeitada, []),
+            (envia_email_solicitacao_movimentacao_cancelada, [self.operador_origem]),
+        ]:
+            with mock_patch("bem_patrimonial.emails.email_utils.send_email_ctrl") as mock_send:
+                if extra:
+                    envio(mov, extra[0], [self.operador_origem.email])
+                else:
+                    envio(mov, [self.operador_origem.email])
+                mock_send.assert_called_once()
+                corpo = mock_send.call_args[0][1]["subtitle"]
+                for bem in bens:
+                    self.assertIn(bem.nome, corpo)
+                    self.assertIn(bem.numero_patrimonial, corpo)
+
+    def test_historico_sem_sufixo_via_api(self):
+        mov, _ = self._criar_mov_lote_api(1)
+        self._autenticar(self.gestor_origem)
+        response = self.client.post(reverse("movimentacoes-aprovar", kwargs={"pk": mov.pk}))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ct = ContentType.objects.get_for_model(MovimentacaoBemPatrimonial)
+        justificativas = list(
+            HistoricoGeral.objects.filter(content_type=ct, object_id=str(mov.pk)).values_list(
+                "justificativa", flat=True
+            )
+        )
+        self.assertTrue(justificativas)
+        for texto in justificativas:
+            self.assertNotIn("via API", texto)

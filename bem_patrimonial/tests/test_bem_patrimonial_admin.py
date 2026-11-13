@@ -7,6 +7,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase
@@ -1375,10 +1376,83 @@ class ImportacaoDuplicidadeTest(_Base):
             resource.before_import(ds)
         self.assertEqual(BemPatrimonial.objects.count(), count_antes)
 
+    def test_previa_do_admin_rejeita_numero_equivalente_ao_legado(self):
+        for numero in ("10538588879", "0010538588879", " 1.053858887-9 "):
+            with self.subTest(numero=numero):
+                bem = self._criar_bem(numero_patrimonial=numero, numero_formato_antigo=True, sem_numeracao=False)
+                req = _request_with_messages(self.factory, self.gestor)
+                resource_class = self.admin.get_resource_classes(req)[0]
+                resource = resource_class(request=req)
+                dataset = _dataset_importacao(_linha_valida(numero_patrimonial="001.053858887-9"))
+
+                result = resource.import_data(dataset, dry_run=True, use_transactions=True)
+
+                self.assertTrue(result.has_errors() or result.has_validation_errors())
+                self.assertEqual(resource._erros_por_linha[0]["campo"], "numero_patrimonial")
+                self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.053858887-9").exists())
+                bem.delete()
+
 
 # ===========================================================================
 # 34. Normalização de marca e modelo — vazios persistem como "-"
 # ===========================================================================
+
+
+class ImportacaoMensagensAdminTest(_Base):
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.gestor)
+        self.url = reverse("admin:bem_patrimonial_bempatrimonial_import")
+
+    def _enviar(self, conteudo):
+        arquivo = SimpleUploadedFile("bens.xlsx", conteudo)
+        return self.client.post(self.url, {"import_file": arquivo, "input_format": "2"})
+
+    def test_duplicidade_exibe_linha_e_motivo_sem_rastreamento(self):
+        self._criar_bem(numero_patrimonial="10538588879", numero_formato_antigo=True, sem_numeracao=False)
+        dataset = _dataset_importacao(
+            _linha_valida(numero_patrimonial="001.053858887-9"),
+            _linha_valida(numero_patrimonial="001.000000099-0"),
+        )
+        total_antes = BemPatrimonial.objects.count()
+
+        response = self._enviar(dataset.xlsx)
+
+        self.assertContains(response, "Linha 1 | 001.053858887-9")
+        self.assertContains(response, "Número patrimonial já cadastrado no sistema.", count=1)
+        self.assertNotContains(response, "Traceback")
+        self.assertNotContains(response, "process_import/")
+        self.assertEqual(BemPatrimonial.objects.count(), total_antes)
+
+    def test_arquivo_invalido_exibe_orientacao_sem_detalhes_do_leitor(self):
+        response = self._enviar(b"nao e um xlsx")
+
+        self.assertContains(response, "Não foi possível ler o arquivo. Confira o formato selecionado")
+        self.assertNotContains(response, "BadZipFile")
+
+    def test_falha_inesperada_na_previa_registra_erro_sem_expor_detalhes(self):
+        dataset = _dataset_importacao(_linha_valida())
+        with (
+            patch.object(BemPatrimonialResource, "before_import", side_effect=RuntimeError("detalhe interno")),
+            self.assertLogs("bem_patrimonial.admins.bem_patrimonial", level="ERROR") as logs,
+        ):
+            response = self._enviar(dataset.xlsx)
+
+        self.assertContains(response, "Não foi possível concluir a importação.", count=1)
+        self.assertNotContains(response, "detalhe interno")
+        self.assertIn("detalhe interno", "\n".join(logs.output))
+
+    def test_falha_inesperada_na_confirmacao_volta_ao_formulario(self):
+        url = reverse("admin:bem_patrimonial_bempatrimonial_process_import")
+        with (
+            patch("import_export.admin.ImportMixin.process_import", side_effect=RuntimeError("detalhe interno")),
+            self.assertLogs("bem_patrimonial.admins.bem_patrimonial", level="ERROR"),
+        ):
+            response = self.client.post(url, follow=True)
+
+        self.assertRedirects(response, self.url)
+        self.assertContains(response, "Não foi possível concluir a importação.")
+        self.assertNotContains(response, "detalhe interno")
 
 
 class ImportacaoNormalizacaoMarcaModeloTest(_Base):

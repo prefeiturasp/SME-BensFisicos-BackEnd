@@ -30,6 +30,17 @@ def envia_email_cadastro_nao_aprovado(status):
     )
 
 
+def _link_movimentacao_frontend(movimentacao):
+    """Link direto para o detalhe no frontend, pesquisável por CIMBPM/id."""
+    base = (getattr(settings, "FRONTEND_URL", "") or "").rstrip("/")
+    return f"{base}/movimentacoes/{movimentacao.pk}"
+
+
+def _link_movimentacoes_frontend():
+    base = (getattr(settings, "FRONTEND_URL", "") or "").rstrip("/")
+    return f"{base}/movimentacoes"
+
+
 def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
     if not emails:
         return
@@ -38,27 +49,10 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
 
     ua_info = f"{ua_destino.codigo} – {ua_destino.nome}" if ua_destino.codigo else ua_destino.nome
 
-    itens = movimentacao.itens.select_related("bem").all()
-
-    bens_info = []
-
-    for item in itens:
-        bem = item.bem
-        if not bem:
-            continue
-
-        identificador = f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
-        bens_info.append(identificador)
-
-    if not bens_info and movimentacao.bem_patrimonial:
-        bem = movimentacao.bem_patrimonial
-        identificador = f"{bem.numero_patrimonial} – {bem.nome}" if bem.numero_patrimonial else bem.nome
-        bens_info.append(identificador)
+    bens_info = _lista_bens_movimentacao_para_email(movimentacao)
 
     if not bens_info:
         return
-
-    lista_bens_formatada = "\n".join(f"- {info}" for info in bens_info)
 
     subject = "[Bens Físicos] Movimentação recebida para aceite"
 
@@ -66,9 +60,10 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
         "subject": subject,
         "title": "Olá!",
         "subtitle": (
-            f"A Unidade Administrativa {ua_info} recebeu a movimentação dos seguintes bens patrimoniais para aceite:\n\n"  # noqa: E501
-            f"{lista_bens_formatada}\n\n"
-            f"Acesse {settings.ADMIN_URL} para concluir a movimentação."
+            f"A Unidade Administrativa {ua_info} recebeu a movimentação "
+            f"{_ref_movimentacao_para_email(movimentacao)} para aceite.\n\n"
+            f"{_texto_bens_para_email(movimentacao, bens_info=bens_info)}\n\n"
+            f"Acesse {_link_movimentacao_frontend(movimentacao)} para concluir a movimentação."
         ),
     }
 
@@ -80,45 +75,107 @@ def envia_email_nova_solicitacao_movimentacao(movimentacao, emails):
     )
 
 
-def envia_email_solicitacao_movimentacao_aceita(bem_patrimonial, emails=[]):
+def _lista_bens_movimentacao_para_email(movimentacao):
+    """Monta lista resumida dos bens da movimentação para o corpo do e-mail."""
+    try:
+        itens = list(movimentacao.itens.select_related("bem").all())
+    except Exception:
+        itens = []
+    bens_info = []
+    for item in itens:
+        bem = getattr(item, "bem", None)
+        if not bem:
+            continue
+        numero = getattr(bem, "numero_patrimonial", None)
+        nome = getattr(bem, "nome", None) or str(bem)
+        identificador = f"{numero} – {nome}" if numero else nome
+        bens_info.append(identificador)
+    if not bens_info:
+        bem_legado = getattr(movimentacao, "bem_patrimonial", None)
+        # bem_patrimonial pode ser FK já resolvida ou id, só usa se for objeto
+        if bem_legado and hasattr(bem_legado, "nome"):
+            numero = getattr(bem_legado, "numero_patrimonial", None)
+            nome = getattr(bem_legado, "nome", None) or str(bem_legado)
+            identificador = f"{numero} – {nome}" if numero else nome
+            bens_info.append(identificador)
+    return bens_info
+
+
+def _texto_bens_para_email(movimentacao, limite=10, bens_info=None):
+    """Texto organizado com total + lista resumida, um bem por linha."""
+    if bens_info is None:
+        bens_info = _lista_bens_movimentacao_para_email(movimentacao)
+    if not bens_info:
+        return "Total de bens: 0\n-"
+    if len(bens_info) <= limite:
+        lista_formatada = "\n".join(f"- {info}" for info in bens_info)
+        return f"Total de bens: {len(bens_info)}\n{lista_formatada}"
+    primeiros = "\n".join(f"- {info}" for info in bens_info[:limite])
+    restantes = len(bens_info) - limite
+    return (
+        f"Total de bens: {len(bens_info)}\n{primeiros}\n"
+        f"- e mais {restantes} bens. Veja a lista completa no sistema."
+    )
+
+
+def _ref_movimentacao_para_email(movimentacao):
+    """Usa CIMBPM pesquisável quando houver, senão cai para #id."""
+    numero = getattr(movimentacao, "numero_cimbpm", None)
+    if numero:
+        return f"CIMBPM {numero}"
+    return f"#{movimentacao.pk}"
+
+
+def envia_email_solicitacao_movimentacao_aceita(movimentacao, emails=[]):
     subject = "[Bens físicos] Sua solicitação de movimentação foi aceita."
     email_context = {
         "subject": subject,
         "title": "Olá!",
-        "subtitle": """A solicitação de movimentação do bem patrimonial {} foi aceita.
-                       Acesse {} para visualizar mais detalhes.
-                    """.format(
-            bem_patrimonial.__str__(), settings.ADMIN_URL
+        "subtitle": (
+            f"A solicitação de movimentação {_ref_movimentacao_para_email(movimentacao)} foi aceita.\n\n"
+            f"{_texto_bens_para_email(movimentacao)}\n\n"
+            f"Acesse {_link_movimentacao_frontend(movimentacao)} para visualizar mais detalhes."
         ),
     }
     email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
 
 
-def envia_email_solicitacao_movimentacao_rejeitada(bem_patrimonial, emails=[]):
+def envia_email_solicitacao_movimentacao_rejeitada(movimentacao, emails=[]):
     subject = "[Bens físicos] Sua solicitação de movimentação foi rejeitada."
     email_context = {
         "subject": subject,
         "title": "Olá!",
-        "subtitle": """A solicitação de movimentação do bem patrimonial {} foi rejeitada.
-                       Acesse {} para visualizar mais detalhes.
-                    """.format(
-            bem_patrimonial.__str__(), settings.ADMIN_URL
+        "subtitle": (
+            f"A solicitação de movimentação {_ref_movimentacao_para_email(movimentacao)} foi rejeitada.\n\n"
+            f"{_texto_bens_para_email(movimentacao)}\n\n"
+            f"Acesse {_link_movimentacao_frontend(movimentacao)} para visualizar mais detalhes."
         ),
     }
     email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
 
 
-def envia_email_solicitacao_movimentacao_cancelada(bem_patrimonial, cancelado_por, emails=[]):
+def _nome_rf_usuario(usuario):
+    """Padrão do sistema: 'Nome (RF xxx)', com fallback para username."""
+    if not usuario:
+        return "responsável"
+    nome = getattr(usuario, "nome", None) or getattr(usuario, "username", None) or "responsável"
+    rf = (getattr(usuario, "rf", None) or "").strip() if getattr(usuario, "rf", None) else ""
+    if rf and rf != "-":
+        return f"{nome} (RF {rf})"
+    return nome
+
+
+def envia_email_solicitacao_movimentacao_cancelada(movimentacao, cancelado_por, emails=[]):
     subject = "[Bens físicos] Sua solicitação de movimentação foi cancelada."
+    nome_cancelador = _nome_rf_usuario(cancelado_por)
     email_context = {
         "subject": subject,
         "title": "Olá!",
-        "subtitle": """A solicitação de movimentação do bem patrimonial {} foi cancelada por {}.
-                       Acesse {} para visualizar mais detalhes.
-                    """.format(
-            bem_patrimonial.__str__(),
-            cancelado_por.nome or cancelado_por.username,
-            settings.ADMIN_URL,
+        "subtitle": (
+            f"A solicitação de movimentação {_ref_movimentacao_para_email(movimentacao)} "
+            f"foi cancelada por {nome_cancelador}.\n\n"
+            f"{_texto_bens_para_email(movimentacao)}\n\n"
+            f"Acesse {_link_movimentacao_frontend(movimentacao)} para visualizar mais detalhes."
         ),
     }
     email_utils.send_email_ctrl(subject, email_context, EMAIL_TEMPLATE_SIMPLE_MESSAGE, emails)
@@ -171,6 +228,8 @@ def envia_email_movimentacoes_pendentes_aceite(
         movimentacoes_info.append(
             {
                 "id": mov.pk,
+                "ref": _ref_movimentacao_para_email(mov),
+                "numero_cimbpm": getattr(mov, "numero_cimbpm", "") or "",
                 "ua_origem": str(mov.unidade_administrativa_origem),
                 "data_envio": data_envio.strftime("%d/%m/%Y"),
                 "dias_pendentes": dias_pendentes,
@@ -181,7 +240,7 @@ def envia_email_movimentacoes_pendentes_aceite(
         )
 
     total_urgentes = sum(1 for m in movimentacoes_info if m["urgente"])
-    pendentes_url = f"{settings.ADMIN_URL}/bem_patrimonial/movimentacaobempatrimonial/?atrasada=1"
+    pendentes_url = _link_movimentacoes_frontend()
     subject = "[Bens Físicos] Movimentações pendentes de aceite"
     dict_params = {
         "subject": subject,

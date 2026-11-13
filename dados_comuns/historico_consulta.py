@@ -5,6 +5,36 @@ from django.contrib.contenttypes.models import ContentType
 
 from dados_comuns.models import HistoricoGeral
 
+SUFIXOS_JUSTIFICATIVA_LEGADOS = ("via API", "via Django admin")
+
+
+def limpar_justificativa_historico(texto):
+    """Remove sufixos legados ('via API', 'via Django admin') da justificativa.
+
+    Aplica a mesma limpeza usada no histórico de movimentações, para exibir
+    registros antigos sem o sufixo. Novos registros já são gravados sem sufixo.
+    Remove em loop para cobrir sufixo duplo em qualquer ordem.
+    """
+    if not texto:
+        return texto
+    resultado = texto.rstrip()
+    while True:
+        removido = False
+        for sufixo in SUFIXOS_JUSTIFICATIVA_LEGADOS:
+            if len(resultado) <= len(sufixo):
+                continue
+            trecho = resultado[-len(sufixo) :]
+            if trecho.lower() != sufixo.lower():
+                continue
+            anterior = resultado[len(resultado) - len(sufixo) - 1]
+            if anterior.strip() != "":
+                continue
+            resultado = resultado[: -len(sufixo)].rstrip()
+            removido = True
+        if not removido:
+            break
+    return resultado
+
 
 def _eh_criacao_usuario(registro):
     return registro.campo == "" and registro.justificativa == "Usuário criado"
@@ -22,7 +52,7 @@ def _acao_registro(registro):
         "campo": "acao" if criacao_usuario else registro.campo,
         "valor_antigo": registro.valor_antigo,
         "valor_novo": "criado" if criacao_usuario else registro.valor_novo,
-        "justificativa": registro.justificativa,
+        "justificativa": limpar_justificativa_historico(registro.justificativa),
     }
 
 
@@ -70,7 +100,7 @@ def _grupo_log(log):
                 "campo": "acao",
                 "valor_antigo": "",
                 "valor_novo": operacao,
-                "justificativa": log.get_change_message() or None,
+                "justificativa": limpar_justificativa_historico(log.get_change_message() or None),
             }
         ],
     }

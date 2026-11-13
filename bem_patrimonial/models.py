@@ -761,21 +761,35 @@ def bloquear_bem_quando_item_criado(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=MovimentacaoBemPatrimonial)
 def envia_email_alert_nova_solicitacao(sender, instance, created, **kwargs):
-    if created:
-        emails = []
+    if not created:
+        return
+    mov_pk = instance.pk
+
+    def _send():
+        try:
+            mov = (
+                MovimentacaoBemPatrimonial.objects.select_related(
+                    "unidade_administrativa_destino",
+                )
+                .prefetch_related("itens__bem", "itens__bem__unidade_administrativa")
+                .get(pk=mov_pk)
+            )
+        except MovimentacaoBemPatrimonial.DoesNotExist:
+            return
         usuarios = (
             Usuario.objects.filter(
                 is_active=True,
-                unidades_administrativas=instance.unidade_administrativa_destino,
+                unidades_administrativas=mov.unidade_administrativa_destino,
             )
             .distinct()
             .only("email")
         )
-        for usuario in usuarios:
-            if usuario.email:
-                emails.append(usuario.email)
+        emails = [usuario.email for usuario in usuarios if usuario.email]
+        if not emails:
+            return
+        envia_email_nova_solicitacao_movimentacao(mov, emails)
 
-        envia_email_nova_solicitacao_movimentacao(instance, emails)
+    transaction.on_commit(_send)
 
 
 @receiver(post_save, sender=MovimentacaoBemPatrimonial)

@@ -81,17 +81,20 @@ class EmailNovaMovimentacaoTestCase(TestCase):
     def _cria_movimentacao_com_item(self):
         """
         Helper para evitar repetição: cria movimentação + item ligado ao bem.
+        Usa captureOnCommitCallbacks para executar o on_commit do sinal,
+        garantindo que itens e CIMBPM já existam no e-mail.
         """
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,  # legado, ainda pode ser preenchido
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
-        MovimentacaoBensItem.objects.create(
-            movimentacao=mov,
-            bem=self.bem,
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            mov = MovimentacaoBemPatrimonial.objects.create(
+                bem_patrimonial=self.bem,  # legado, ainda pode ser preenchido
+                unidade_administrativa_origem=self.ua_origem,
+                unidade_administrativa_destino=self.ua_destino,
+                solicitado_por=self.operador_origem,
+            )
+            MovimentacaoBensItem.objects.create(
+                movimentacao=mov,
+                bem=self.bem,
+            )
         return mov
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")

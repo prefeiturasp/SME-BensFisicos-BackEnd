@@ -110,6 +110,24 @@ class ParametroConciliacaoAnualAdminForm(forms.ModelForm):
         return cleaned
 
 
+class LaudadoParaBaixaFilter(SimpleListFilter):
+    title = "laudado para baixa"
+    parameter_name = "laudado_para_baixa"
+
+    def lookups(self, request, model_admin):
+        return (("sim", "Laudado para baixa"),)
+
+    def queryset(self, request, queryset):
+        from bem_patrimonial import constants as bem_constants
+
+        if self.value() == "sim":
+            return queryset.filter(
+                situacao=constants.EM_PROCESSO_BAIXA_FISICA,
+                bem__status=bem_constants.LAUDADO_PARA_BAIXA,
+            )
+        return queryset
+
+
 @admin.register(ParametroConciliacaoAnual)
 class ParametroConciliacaoAnualAdmin(UnsavedChangesAdminMixin, admin.ModelAdmin):
     form = ParametroConciliacaoAnualAdminForm
@@ -180,7 +198,7 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         "observacao_resumida",
         "acoes_lista",
     )
-    list_filter = ("situacao",)
+    list_filter = ("situacao", LaudadoParaBaixaFilter)
     search_fields = (
         "bem__nome",
         "bem__numero_patrimonial",
@@ -314,6 +332,8 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
 
     @admin.display(description="Situação", ordering="situacao")
     def situacao_display(self, obj):
+        from bem_patrimonial import constants as bem_constants
+
         cores = {
             constants.ENCONTRADO_SEM_DIVERGENCIA: ("#28a745", "white"),
             constants.ENCONTRADO: ("#007bff", "white"),
@@ -324,14 +344,31 @@ class ItemConciliacaoAdmin(admin.ModelAdmin):
         }
         cor_fundo, cor_texto = cores.get(obj.situacao, ("#000", "white"))
 
-        return format_html(
+        badge_situacao = (
             '<span style="display:inline-flex; align-items:center; justify-content:center; '
             "white-space:nowrap; min-width: 148px; box-sizing: border-box; "
             "background-color: {}; color: {}; padding: 3px 8px; "
-            'border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.2;">{}</span>',
-            cor_fundo,
-            cor_texto,
-            obj.get_situacao_display(),
+            'border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.2;">{}</span>'
+        ).format(cor_fundo, cor_texto, obj.get_situacao_display())
+
+        mostra_laudado = (
+            obj.situacao == constants.EM_PROCESSO_BAIXA_FISICA
+            and getattr(getattr(obj, "bem", None), "status", None) == bem_constants.LAUDADO_PARA_BAIXA
+            and getattr(getattr(obj, "conciliacao", None), "esta_aberto", False)
+        )
+        if not mostra_laudado:
+            return format_html(badge_situacao)
+
+        badge_laudado = (
+            '<span style="display:inline-flex; align-items:center; justify-content:center; '
+            "white-space:nowrap; min-width: 148px; box-sizing: border-box; "
+            "background-color: #ea580c; color: white; padding: 3px 8px; "
+            'border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.2;">'
+            "Laudado para Baixa</span>"
+        )
+        return format_html(
+            '<span style="display:inline-flex; flex-direction:column; '
+            'align-items:flex-start; gap:4px;">' + badge_situacao + badge_laudado + "</span>"
         )
 
     @admin.display(description="Observação/Divergência")
@@ -696,6 +733,10 @@ class ConciliacaoUAAdmin(admin.ModelAdmin):
             return str(e)
 
     def _get_situacoes_disponiveis_para_item(self, item):
+        from bem_patrimonial import constants as bem_constants
+
+        if getattr(getattr(item, "bem", None), "status", None) == bem_constants.LAUDADO_PARA_BAIXA:
+            return [s for s in constants.SITUACOES_ITEM_CONCILIACAO if s[0] == constants.EM_PROCESSO_BAIXA_FISICA]
         situacoes_disponiveis = list(constants.SITUACOES_ITEM_CONCILIACAO)
         situacoes_disponiveis = [s for s in situacoes_disponiveis if s[0] != constants.BAIXA_FISICA]
 
