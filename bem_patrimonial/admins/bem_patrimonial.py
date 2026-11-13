@@ -757,8 +757,11 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         if result is not None and result.has_errors():
             erros = [(None, erro) for erro in result.base_errors]
             erros.extend((linha, erro) for linha, erros_linha in result.row_errors() for erro in erros_linha)
-            inesperados = [self._notificar_falha_importacao(request, erro.error, linha) for linha, erro in erros]
-            if any(inesperados):
+            houve_falha_inesperada = False
+            for linha, erro in erros:
+                if self._notificar_falha_importacao(request, erro.error, linha):
+                    houve_falha_inesperada = True
+            if houve_falha_inesperada:
                 self._notificar_erro_inesperado_importacao(request)
             # O template padrão inclui exceções e traceback quando recebe o resultado com erros.
             contexto.pop("result")

@@ -53,6 +53,8 @@ from dados_comuns.escopo import (
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.permissions import BemPatrimonialPermission
 
+PDF_CONTENT_TYPE = "application/pdf"
+
 # Mapeamento extensão → formato tablib
 _EXTENSAO_PARA_FORMATO = {
     ".xlsx": "xlsx",
@@ -104,7 +106,7 @@ def download_documento_cimbpm(request, pk):
         pdf_buffer,
         as_attachment=True,
         filename=filename,
-        content_type="application/pdf",
+        content_type=PDF_CONTENT_TYPE,
     )
 
 
@@ -145,7 +147,7 @@ def download_documento_ntbpm(request, pk):
         pdf_buffer,
         as_attachment=True,
         filename=filename,
-        content_type="application/pdf",
+        content_type=PDF_CONTENT_TYPE,
     )
 
 
@@ -359,14 +361,14 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
     # Actions
     # ------------------------------------------------------------------
 
-    @extend_schema(tags=["Bens Patrimoniais"], responses={(200, "application/pdf"): bytes})
+    @extend_schema(tags=["Bens Patrimoniais"], responses={(200, PDF_CONTENT_TYPE): bytes})
     @action(detail=False, methods=["get"], url_path="relatorio")
     def relatorio(self, request):
         bens = self.filter_queryset(self.get_queryset())
         pdf = PDFFormat().gerar_pdf(bens, request)
         return HttpResponse(
             pdf,
-            content_type="application/pdf",
+            content_type=PDF_CONTENT_TYPE,
             headers={"Content-Disposition": 'attachment; filename="relatorio-bens-patrimoniais.pdf"'},
         )
 
