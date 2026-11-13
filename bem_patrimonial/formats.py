@@ -34,7 +34,9 @@ class PDFFormat(Format):
     def export_data(self, dataset, **kwargs):
         request = getattr(self, "_export_request", None)
         queryset = getattr(self, "_export_queryset", None)
+        return self.gerar_pdf(queryset, request)
 
+    def gerar_pdf(self, queryset, request=None):
         bens_list = list(queryset) if queryset is not None else []
 
         total_registros = len(bens_list)

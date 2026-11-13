@@ -760,3 +760,26 @@ class ImportacaoNormalizacaoNumeroPatrimonialTestCase(APITransactionTestCase):
         response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
         self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+
+    def test_numero_formatado_nao_duplica_bem_legado(self):
+        existente = BemPatrimonial.objects.create(
+            nome="Bem legado",
+            descricao="Desc",
+            valor_unitario=10,
+            numero_patrimonial="10538588879",
+            numero_formato_antigo=True,
+            unidade_administrativa=self.ua,
+            criado_por=self.gestor,
+            status=bem_constants.APROVADO,
+        )
+        count_antes = BemPatrimonial.objects.count()
+        arquivo = _planilha_valida([["001.053858887-9", "Note", "Desc", "10,00", "M", "X"]])
+
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
+        self.assertEqual(response.data["erros_por_linha"][0]["linha"], 1)
+        self.assertEqual(response.data["erros_por_linha"][0]["campo"], "numero_patrimonial")
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+        existente.refresh_from_db()
+        self.assertEqual(existente.numero_patrimonial, "10538588879")

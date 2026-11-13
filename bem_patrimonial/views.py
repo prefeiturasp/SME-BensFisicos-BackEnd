@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Cast
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -27,6 +27,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from bem_patrimonial import constants
+from bem_patrimonial.formats import PDFFormat
 from bem_patrimonial.models import (
     BaixaFisicaBensItem,
     BemPatrimonial,
@@ -172,8 +173,23 @@ class BemPatrimonialFilter(FilterSet):
 
     unidade_administrativa = _NumberInFilter(
         field_name="unidade_administrativa_id",
+        method="filtrar_unidade_administrativa",
         lookup_expr="in",
     )
+    unidade_orcamentaria = _NumberInFilter(method="filtrar_unidade_orcamentaria")
+
+    def filtrar_unidade_administrativa(self, queryset, name, value):
+        if self.form.cleaned_data.get("unidade_orcamentaria"):
+            return queryset
+        return queryset.filter(unidade_administrativa_id__in=value)
+
+    def filtrar_unidade_orcamentaria(self, queryset, name, value):
+        # Uma UO inteira e UAs avulsas são seleções alternativas, não cumulativas.
+        unidades = models.Q(unidade_administrativa__unidade_orcamentaria_id__in=value)
+        uas = self.form.cleaned_data.get("unidade_administrativa")
+        if uas:
+            unidades |= models.Q(unidade_administrativa_id__in=uas)
+        return queryset.filter(unidades)
 
     class Meta:
         model = BemPatrimonial
@@ -271,7 +287,7 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
             "yes",
             "sim",
         }
-        if action == "list":
+        if action in {"list", "relatorio"}:
             if bens_baixados:
                 qs = qs.filter(status=constants.BAIXA_FISICA)
             elif self.request.query_params.get("status") not in {
@@ -342,6 +358,17 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
+
+    @extend_schema(tags=["Bens Patrimoniais"], responses={(200, "application/pdf"): bytes})
+    @action(detail=False, methods=["get"], url_path="relatorio")
+    def relatorio(self, request):
+        bens = self.filter_queryset(self.get_queryset())
+        pdf = PDFFormat().gerar_pdf(bens, request)
+        return HttpResponse(
+            pdf,
+            content_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="relatorio-bens-patrimoniais.pdf"'},
+        )
 
     @action(detail=False, methods=["post"], url_path="multi")
     def create_multi(self, request):

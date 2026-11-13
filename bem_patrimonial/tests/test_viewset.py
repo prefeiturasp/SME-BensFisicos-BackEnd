@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
@@ -65,6 +67,63 @@ class BemPatrimonialViewSetTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("results", response.data)
+
+    def test_relatorio_exporta_todos_os_bens_filtrados_sem_paginacao(self):
+        outra_uo = criar_uo(codigo="211", nome="UO Selecionada")
+        outra_ua = criar_ua(nome="UA Selecionada", uo=outra_uo)
+        ua_fora = criar_ua(nome="UA fora do filtro", uo=self.uo)
+        primeiro = self._mk_bem(nome="Mesa A", status=constants.APROVADO)
+        segundo = self._mk_bem(nome="Mesa B", status=constants.APROVADO, unidade_administrativa=outra_ua)
+        self._mk_bem(nome="Mesa C", status=constants.APROVADO, unidade_administrativa=ua_fora)
+        self._mk_bem(nome="Cadeira", status=constants.APROVADO)
+        self._mk_bem(nome="Mesa pendente")
+        filtros = {
+            "search": "Mesa",
+            "status": constants.APROVADO,
+            "unidade_administrativa": self.ua.pk,
+            "unidade_orcamentaria": outra_uo.pk,
+            "busca_geral_uos": "true",
+            "ordering": "-nome",
+            "page_size": 1,
+        }
+
+        lista = self.client.get(reverse("bens-list"), filtros)
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(lista.data["count"], 2)
+        with patch("bem_patrimonial.views.PDFFormat.gerar_pdf", return_value=b"%PDF-teste") as gerar_pdf:
+            response = self.client.get(reverse("bens-relatorio"), filtros)
+            self.assertEqual(response.status_code, 200)
+            queryset = gerar_pdf.call_args.args[0]
+            self.assertEqual(list(queryset.values_list("pk", flat=True)), [segundo.pk, primeiro.pk])
+
+    def test_relatorio_nao_exporta_bens_fora_do_escopo_padrao(self):
+        outra_uo = criar_uo(codigo="211", nome="UO Externa")
+        outra_ua = criar_ua(nome="UA Externa", uo=outra_uo)
+        permitido = self._mk_bem(status=constants.APROVADO)
+        self._mk_bem(status=constants.APROVADO, unidade_administrativa=outra_ua)
+
+        with patch("bem_patrimonial.views.PDFFormat.gerar_pdf", return_value=b"%PDF-teste") as gerar_pdf:
+            response = self.client.get(reverse("bens-relatorio"))
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(list(gerar_pdf.call_args.args[0].values_list("pk", flat=True)), [permitido.pk])
+
+    def test_relatorio_retorna_pdf_e_respeita_filtro_de_baixados(self):
+        ativo = self._mk_bem(nome="Mesa ativa", status=constants.APROVADO)
+        baixado = self._mk_bem(nome="Mesa baixada", status=constants.BAIXA_FISICA)
+        url = reverse("bens-relatorio")
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("relatorio-bens-patrimoniais.pdf", response["Content-Disposition"])
+        self.assertTrue(response.content.startswith(b"%PDF-"))
+        with patch("bem_patrimonial.views.PDFFormat.gerar_pdf", return_value=b"%PDF-teste") as gerar_pdf:
+            for params, ids in (({}, [ativo.pk]), ({"bens_baixados": "true"}, [baixado.pk])):
+                with self.subTest(params=params):
+                    response = self.client.get(url, params)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(list(gerar_pdf.call_args.args[0].values_list("pk", flat=True)), ids)
 
     def test_list_bens_com_param_bens_baixados(self):
         url = reverse("bens-list")

@@ -1,3 +1,4 @@
+import logging
 import re
 
 from django.contrib import admin, messages
@@ -7,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, models, transaction
 from django.db.models import OuterRef, Subquery
-from django.db.models.functions import Cast, Concat
+from django.db.models.functions import Cast, Concat, Length, LPad
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -52,6 +53,11 @@ from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
 
 HTML_END_FORM_CONTAINER = "</div><!-- END form-container -->"
 HTML_END_FORM = "</form>"
+logger = logging.getLogger(__name__)
+
+
+class ImportacaoBemRejeitada(ValidationError):
+    """Rejeição esperada, com mensagem que pode ser exibida ao usuário."""
 
 
 @admin.action(description="Aprovar bens selecionados")
@@ -412,14 +418,36 @@ class BemPatrimonialResource(resources.ModelResource):
             if not self._normalizar_valor(row.get(campo)):
                 self._registrar_erro(idx, numero_patrimonial, campo, msg)
 
-    def _validar_numero_patrimonial(self, idx, numero_patrimonial, numeros_vistos):
+    def _numeros_equivalentes_cadastrados(self, numeros):
+        if not numeros:
+            return set()
+
+        digitos = models.Func(
+            "numero_patrimonial",
+            models.Value("[^0-9]"),
+            models.Value(""),
+            models.Value("g"),
+            function="REGEXP_REPLACE",
+            output_field=models.CharField(),
+        )
+        # Compare a carga inteira de uma vez, sem ler ou regravar os bens cadastrados.
+        return set(
+            BemPatrimonial.objects.filter(numero_patrimonial__regex=r"^[0-9.[:space:]-]+$")
+            .alias(digitos=digitos, tamanho=Length("digitos"))
+            .filter(tamanho__range=(1, TAMANHO_NUMERO_PATROMONIAL))
+            .annotate(chave=LPad("digitos", TAMANHO_NUMERO_PATROMONIAL, models.Value("0")))
+            .filter(chave__in=numeros)
+            .values_list("chave", flat=True)
+        )
+
+    def _validar_numero_patrimonial(self, idx, numero_normalizado, numeros_vistos, numeros_cadastrados):
         """Valida duplicidade do número patrimonial no arquivo e no banco.
 
         A comparação considera o valor já normalizado (máscara padrão),
         de modo que "10538588879" e "001.053858887-9" são a mesma chave.
         """
-        normalizado, sem_numeracao, _ = self._normalizar_numero_patrimonial(numero_patrimonial)
-        if sem_numeracao or not normalizado:
+        normalizado, _, formato_antigo = numero_normalizado
+        if not normalizado:
             return
 
         numero_key = normalizado.lower()
@@ -436,7 +464,11 @@ class BemPatrimonialResource(resources.ModelResource):
 
         numeros_vistos[numero_key] = idx
 
-        if BemPatrimonial.objects.filter(numero_patrimonial__iexact=normalizado).exists():
+        if formato_antigo:
+            ja_cadastrado = BemPatrimonial.objects.filter(numero_patrimonial__iexact=normalizado).exists()
+        else:
+            ja_cadastrado = _RE_NAO_DIGITO.sub("", normalizado) in numeros_cadastrados
+        if ja_cadastrado:
             self._registrar_erro(idx, normalizado, "numero_patrimonial", "Número patrimonial já cadastrado no sistema.")
 
     def _validar_dataset_completo(self, dataset):
@@ -447,16 +479,24 @@ class BemPatrimonialResource(resources.ModelResource):
         self._erros_por_linha = []
         numeros_vistos: dict[str, int] = {}
 
-        for idx, row in enumerate(dataset.dict, start=1):
+        linhas = [(row, self._normalizar_numero_patrimonial(row.get("numero_patrimonial"))) for row in dataset.dict]
+        numeros_cadastrados = self._numeros_equivalentes_cadastrados(
+            {
+                _RE_NAO_DIGITO.sub("", numero)
+                for _, (numero, _sem_numeracao, formato_antigo) in linhas
+                if numero and not formato_antigo
+            }
+        )
+
+        for idx, (row, numero_normalizado) in enumerate(linhas, start=1):
             linha_original = self._numero_linha_original(idx)
-            raw_numero = row.get("numero_patrimonial")
-            normalizado = self._normalizar_numero_patrimonial(raw_numero)[0]
+            normalizado = numero_normalizado[0]
             numero_para_erro = normalizado if normalizado is not None else ""
             valor_raw = self._normalizar_valor(row.get("valor_unitario"))
 
             self._validar_campos_obrigatorios(linha_original, numero_para_erro, row)
             self._parse_valor_unitario(valor_raw, linha_original, numero_para_erro)
-            self._validar_numero_patrimonial(linha_original, raw_numero, numeros_vistos)
+            self._validar_numero_patrimonial(linha_original, numero_normalizado, numeros_vistos, numeros_cadastrados)
 
         return self._erros_por_linha
 
@@ -495,10 +535,10 @@ class BemPatrimonialResource(resources.ModelResource):
             self._bloquear_linhas_por_erro = True
             self._rejeitar_erros_dataset(erros)
 
-    def _falhar_importacao(self, mensagem: str):
+    def _falhar_importacao(self, mensagem: str, *, code=None):
         """Marca as linhas como bloqueadas e rejeita a importação."""
         self._bloquear_linhas_por_erro = True
-        raise ValidationError(mensagem)
+        raise ImportacaoBemRejeitada(mensagem, code=code)
 
     def _ua_ou_erro_importacao(self):
         """UA de destino ou ValidationError quando o usuário não pode importar."""
@@ -531,7 +571,10 @@ class BemPatrimonialResource(resources.ModelResource):
                     self.request,
                     "Importação não realizada: existe Conciliação em aberto.",
                 )
-            self._falhar_importacao("Importação não realizada: existe Conciliação em aberto.")
+            self._falhar_importacao(
+                "Importação não realizada: existe Conciliação em aberto.",
+                code="mensagem_exibida",
+            )
 
     def _preparar_dataset(self, dataset):
         """Checa cabeçalho e remove linhas vazias, ou rejeita planilha vazia."""
@@ -565,14 +608,18 @@ class BemPatrimonialResource(resources.ModelResource):
                 )
             if qtd > 20:
                 messages.warning(self.request, f"Existem mais {qtd - 20} linha(s) com erro além das listadas acima.")
-        raise ValidationError(
-            f"Importação rejeitada: {len(erros)} linha(s) com erro. " "Corrija o arquivo e tente novamente."
+        raise ImportacaoBemRejeitada(
+            f"Importação rejeitada: {len(erros)} linha(s) com erro. Corrija o arquivo e tente novamente.",
+            code="mensagem_exibida",
         )
 
     def before_import_row(self, row, row_number=None, **kwargs):
         """Força status, limpa ID, normaliza marca/modelo e valor_unitario."""
         if getattr(self, "_bloquear_linhas_por_erro", False):
-            raise ValidationError("Importação rejeitada: corrija o arquivo e tente novamente.")
+            raise ImportacaoBemRejeitada(
+                "Importação rejeitada: corrija o arquivo e tente novamente.",
+                code="mensagem_exibida",
+            )
         # Remove colunas que não fazem parte do modelo de importação para
         # evitar que o django-import-export tente mapeá-las (ex: id, status
         # presentes em planilhas exportadas pelo próprio sistema).
@@ -666,6 +713,69 @@ class BemPatrimonialAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin):
         )
 
         return BemPatrimonialImportForm
+
+    def _notificar_falha_importacao(self, request, erro, linha=None):
+        if isinstance(erro, ImportacaoBemRejeitada):
+            if erro.code != "mensagem_exibida":
+                self.message_user(request, " ".join(erro.messages), level=messages.ERROR)
+            return False
+
+        logger.error(
+            "Falha inesperada na importação de bens (usuário=%s, linha=%s).",
+            request.user.pk,
+            linha,
+            exc_info=(type(erro), erro, erro.__traceback__),
+        )
+        return True
+
+    def _notificar_erro_inesperado_importacao(self, request):
+        self.message_user(
+            request,
+            "Não foi possível concluir a importação. Tente novamente. Se o problema persistir, contate o suporte.",
+            level=messages.ERROR,
+        )
+
+    def import_action(self, request, *args, **kwargs):
+        try:
+            resposta = super().import_action(request, *args, **kwargs)
+        except PermissionDenied:
+            raise
+        except Exception as erro:
+            return self._retornar_para_importacao(request, erro)
+        contexto = resposta.context_data
+        form = contexto["form"]
+        arquivo = request.FILES.get("import_file")
+        # O importador anexa o erro do leitor ao campo depois de gravar o arquivo temporário.
+        if getattr(arquivo, "tmp_storage_name", None) and "import_file" in form.errors:
+            logger.warning("Arquivo de importação de bens não pôde ser lido (usuário=%s).", request.user.pk)
+            del form.errors["import_file"]
+            form.add_error(
+                "import_file",
+                "Não foi possível ler o arquivo. Confira o formato selecionado e tente novamente.",
+            )
+        result = contexto.get("result")
+        if result is not None and result.has_errors():
+            erros = [(None, erro) for erro in result.base_errors]
+            erros.extend((linha, erro) for linha, erros_linha in result.row_errors() for erro in erros_linha)
+            inesperados = [self._notificar_falha_importacao(request, erro.error, linha) for linha, erro in erros]
+            if any(inesperados):
+                self._notificar_erro_inesperado_importacao(request)
+            # O template padrão inclui exceções e traceback quando recebe o resultado com erros.
+            contexto.pop("result")
+        return resposta
+
+    def process_import(self, request, *args, **kwargs):
+        try:
+            return super().process_import(request, *args, **kwargs)
+        except PermissionDenied:
+            raise
+        except Exception as erro:
+            return self._retornar_para_importacao(request, erro)
+
+    def _retornar_para_importacao(self, request, erro):
+        if self._notificar_falha_importacao(request, erro):
+            self._notificar_erro_inesperado_importacao(request)
+        return HttpResponseRedirect(reverse("admin:bem_patrimonial_bempatrimonial_import"))
 
     def get_confirm_form_class(self, request):
         from bem_patrimonial.admins.forms.importacao_form import (
