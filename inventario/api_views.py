@@ -30,7 +30,7 @@ from rest_framework.response import Response
 from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
 from dados_comuns.context import audit_as
 from dados_comuns.escopo import filtrar_queryset_por_escopo
-from dados_comuns.historico_consulta import consultar_historico
+from dados_comuns.historico_consulta import consultar_historico, limpar_justificativa_historico
 from dados_comuns.models import HistoricoGeral
 from dados_comuns.utils import dict_changes
 from inventario import constants
@@ -403,10 +403,21 @@ ITEM_LIST_QUERY_PARAMETERS = [
         name="situacao",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
-        enum=[c[0] for c in constants.SITUACOES_ITEM_CONCILIACAO],
+        enum=[c[0] for c in constants.SITUACOES_ITEM_CONCILIACAO] + ["laudado_para_baixa"],
         description=(
             "Filtra por situação do item. Aceita um valor ou vários separados "
-            "por vírgula (ex.: divergente,nao_encontrado)."
+            "por vírgula (ex.: divergente,nao_encontrado). Aceita também "
+            "'laudado_para_baixa' como atalho para em_processo + bem laudado."
+        ),
+    ),
+    OpenApiParameter(
+        name="bem_status",
+        type=OpenApiTypes.STR,
+        location=OpenApiParameter.QUERY,
+        description=(
+            "Filtra pelo status do bem (ex.: laudado_para_baixa). Aceita um valor "
+            "ou vários separados por vírgula. Permite distinguir o bem laudado "
+            "para baixa do processo de baixa comum."
         ),
     ),
     OpenApiParameter(
@@ -476,26 +487,61 @@ class ItemConciliacaoFilter(django_filters.FilterSet):
     FilterSet customizado para ItemConciliacao.
 
     Suporta:
-    - situacao: filtro exato ou lista (via valores separados por vírgula)
+    - situacao: filtro exato ou lista (via valores separados por vírgula).
+      Aceita também 'laudado_para_baixa' como atalho para
+      situacao=em_processo_de_baixa_fisica + bem laudado (OR com demais).
+    - bem_status: filtra pelo status do bem (ex.: laudado_para_baixa),
+      para distinguir o laudado do processo de baixa comum.
     """
 
     situacao = django_filters.CharFilter(method="filter_situacao")
+    bem_status = django_filters.CharFilter(method="filter_bem_status")
 
     class Meta:
         model = ItemConciliacao
-        fields = ["situacao"]
+        fields = ["situacao", "bem_status"]
 
     def filter_situacao(self, queryset, name, value):
+        from django.db.models import Q
+
+        from bem_patrimonial import constants as bem_constants
+
         if not value:
             return queryset
         valores = [v.strip() for v in value.split(",") if v.strip()]
         if not valores:
             return queryset
+        laudado_requested = bem_constants.LAUDADO_PARA_BAIXA in valores
+        valores_situacao = [v for v in valores if v != bem_constants.LAUDADO_PARA_BAIXA]
         valores_validos = {c[0] for c in constants.SITUACOES_ITEM_CONCILIACAO}
-        invalidos = [v for v in valores if v not in valores_validos]
+        invalidos = [v for v in valores_situacao if v not in valores_validos]
         if invalidos:
             raise DRFValidationError({"situacao": f"Valor(es) inválido(s): {', '.join(invalidos)}"})
-        return queryset.filter(situacao__in=valores)
+        consulta = Q()
+        if valores_situacao:
+            consulta |= Q(situacao__in=valores_situacao)
+        if laudado_requested:
+            consulta |= Q(
+                situacao=constants.EM_PROCESSO_BAIXA_FISICA,
+                bem__status=bem_constants.LAUDADO_PARA_BAIXA,
+            )
+        if consulta:
+            return queryset.filter(consulta)
+        return queryset
+
+    def filter_bem_status(self, queryset, name, value):
+        from bem_patrimonial import constants as bem_constants
+
+        if not value:
+            return queryset
+        valores = [v.strip() for v in value.split(",") if v.strip()]
+        if not valores:
+            return queryset
+        valores_validos = {c[0] for c in bem_constants.STATUS}
+        invalidos = [v for v in valores if v not in valores_validos]
+        if invalidos:
+            raise DRFValidationError({"bem_status": f"Valor(es) inválido(s): {', '.join(invalidos)}"})
+        return queryset.filter(bem__status__in=valores)
 
 
 class AuditHistoryConciliacaoMixin:
@@ -544,7 +590,7 @@ class AuditHistoryConciliacaoMixin:
                             "campo": i.campo,
                             "valor_antigo": i.valor_antigo,
                             "valor_novo": i.valor_novo,
-                            "justificativa": i.justificativa,
+                            "justificativa": limpar_justificativa_historico(i.justificativa),
                         }
                         for i in itens
                     ],
@@ -686,7 +732,7 @@ class ConciliacaoUAViewSet(
                 valor_antigo="",
                 valor_novo="criado",
                 usuario=request.user,
-                justificativa="Conciliação criada via API",
+                justificativa="Conciliação criada",
             )
             criar_itens_conciliacao(conciliacao)
 
@@ -807,7 +853,7 @@ class ConciliacaoUAViewSet(
                 valor_antigo=constants.CONCILIACAO_EM_ABERTO,
                 valor_novo=conciliacao.get_status_display(),
                 usuario=request.user,
-                justificativa="Conciliação finalizada via API",
+                justificativa="Conciliação finalizada",
             )
             self._registrar_historico(
                 conciliacao,
@@ -815,7 +861,7 @@ class ConciliacaoUAViewSet(
                 valor_antigo="",
                 valor_novo=str(request.user),
                 usuario=request.user,
-                justificativa="Conciliação finalizada via API",
+                justificativa="Conciliação finalizada",
             )
 
         conciliacao.refresh_from_db()
@@ -964,6 +1010,10 @@ class ItemConciliacaoViewSet(
         return Response([{"value": v, "label": label} for v, label in situacoes])
 
     def _get_situacoes_disponiveis_para_item(self, item):
+        from bem_patrimonial import constants as bem_constants
+
+        if getattr(getattr(item, "bem", None), "status", None) == bem_constants.LAUDADO_PARA_BAIXA:
+            return [s for s in constants.SITUACOES_ITEM_CONCILIACAO if s[0] == constants.EM_PROCESSO_BAIXA_FISICA]
         situacoes = list(constants.SITUACOES_ITEM_CONCILIACAO)
         situacoes = [s for s in situacoes if s[0] != constants.BAIXA_FISICA]
 
@@ -1024,7 +1074,7 @@ class ItemConciliacaoViewSet(
                 serializer.validated_data["situacao"],
             ),
             usuario=request.user,
-            justificativa="Ocorrência registrada via API",
+            justificativa="Ocorrência registrada",
         )
 
         item.refresh_from_db()
@@ -1069,7 +1119,7 @@ class ItemConciliacaoViewSet(
             valor_antigo=situacao_anterior,
             valor_novo=item.get_situacao_display(),
             usuario=request.user,
-            justificativa="Ocorrência excluída via API",
+            justificativa="Ocorrência excluída",
         )
 
         item.refresh_from_db()

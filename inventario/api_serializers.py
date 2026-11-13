@@ -285,6 +285,7 @@ class BemPatrimonialSimplificadoSerializer(serializers.Serializer):
     modelo = serializers.CharField(read_only=True)
     valor_unitario = serializers.DecimalField(max_digits=16, decimal_places=2, read_only=True)
     status = serializers.CharField(read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
     localizacao = serializers.CharField(read_only=True)
     bloqueado_conciliacao = serializers.BooleanField(read_only=True)
 

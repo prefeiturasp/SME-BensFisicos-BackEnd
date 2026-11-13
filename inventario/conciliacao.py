@@ -37,6 +37,10 @@ def registrar_ocorrencia(item, situacao, observacao="", divergencia="", usuario=
             "Situação 'Baixa Física' é definitiva e não pode ser registrada manualmente. Use 'Em processo de baixa'."
         )
 
+    if getattr(item.bem, "status", None) == bem_constants.LAUDADO_PARA_BAIXA:
+        if situacao != inv_constants.EM_PROCESSO_BAIXA_FISICA:
+            raise ValidationError("Bem laudado para baixa deve permanecer em processo de baixa.")
+
     if situacao == inv_constants.DIVERGENTE and not divergencia:
         raise ValidationError("Campo divergência é obrigatório quando situação é Divergente")
 
@@ -86,7 +90,11 @@ def excluir_ocorrencia(item, usuario):
 
     ultima_ocorrencia.delete()
 
-    if ocorrencia_anterior:
+    if getattr(item.bem, "status", None) == bem_constants.LAUDADO_PARA_BAIXA:
+        item.situacao = inv_constants.EM_PROCESSO_BAIXA_FISICA
+        item.observacao = ""
+        item.divergencia = ""
+    elif ocorrencia_anterior:
         item.situacao = ocorrencia_anterior.situacao
         item.observacao = ocorrencia_anterior.observacao
         item.divergencia = ocorrencia_anterior.divergencia
