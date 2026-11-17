@@ -6,10 +6,14 @@ from io import BytesIO
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
-from rest_framework.test import APIClient
+from rest_framework import status
+from rest_framework.test import APIClient, APITransactionTestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from bem_patrimonial import constants
 from bem_patrimonial.models import (
@@ -26,7 +30,10 @@ from bem_patrimonial.nbbpm_lote import (
     http_response_nbbpm_lote,
     obter_bens_nbbpm_lote,
 )
+from dados_comuns.models import HistoricoGeral
+from dados_comuns.tests.auth_test_utils import codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 from usuario.models import Usuario
 
 # ============================================================================
@@ -741,3 +748,62 @@ class ProcessoUnicoNBBPMTestCase(BaseSetup):
                 criado_por=self.usuario,
             )
         self.assertIn("diverge", str(ctx2.exception))
+
+
+class NBBPMAuditoriaJWTTestCase(APITransactionTestCase):
+    """Regressão: geração de NBBPM com JWT sem sessão deve gravar auditoria."""
+
+    def setUp(self):
+        self.uo = criar_uo(codigo=codigo_uo(66, 66, 66), nome="UO Auditoria", sigla="UOA")
+        self.ua = criar_ua(
+            uo=self.uo,
+            codigo=codigo_ua(66, 66, 66, 1),
+            nome="UA Auditoria",
+            sigla="UAA",
+        )
+
+        grupo, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
+        self.usuario = criar_usuario("gestor_auditoria_nbbpm", self.uo, self.ua)
+        self.usuario.groups.add(grupo)
+
+        self.bem = criar_bem(
+            self.ua,
+            self.usuario,
+            numero_patrimonial="999.000000001-1",
+            status=constants.LAUDADO_PARA_BAIXA,
+        )
+        self.baixa = criar_baixa(
+            self.ua,
+            self.usuario,
+            numero_processo_baixa="6016.2026/0000001-1",
+        )
+        criar_item(self.bem, self.baixa)
+
+        self.client = APIClient()
+        token = str(RefreshToken.for_user(self.usuario).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        self.client.raise_request_exception = False
+
+    def test_gerar_nbbpm_grava_historico_com_usuario_autenticado(self):
+        response = self.client.post(
+            reverse("nbbpm-list"),
+            {
+                "baixas": [self.baixa.id],
+                "numero_processo_baixa": "6016.2026/0000001-1",
+                "data_autorizacao": timezone.localdate().isoformat(),
+                "responsavel": "Responsável Auditoria",
+                "numero_processo_destinacao_final": "",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        self.bem.refresh_from_db()
+        self.assertEqual(self.bem.status, constants.BAIXA_FISICA)
+
+        historico = HistoricoGeral.objects.get(
+            content_type=ContentType.objects.get_for_model(BemPatrimonial),
+            object_id=str(self.bem.pk),
+            campo="status",
+        )
+        self.assertEqual(historico.alterado_por, self.usuario)
