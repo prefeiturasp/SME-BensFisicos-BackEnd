@@ -10,6 +10,7 @@ from bem_patrimonial.api_serializers import NBBPMDetailSerializer, NBBPMGerarLot
 from bem_patrimonial.models import NBBPM
 from bem_patrimonial.nbbpm_lote import http_response_nbbpm_lote
 from bem_patrimonial.services.nbbpm_numero import criar_nbbpm_com_retry
+from dados_comuns.context import audit_as
 from dados_comuns.escopo import resolver_ids_escopo
 
 
@@ -112,11 +113,12 @@ class NBBPMViewSet(
         validated = serializer.validated_data
         baixas = validated.pop("baixas")
 
-        nbbpm = criar_nbbpm_com_retry(
-            baixas=baixas,
-            criado_por=user,
-            **validated,
-        )
+        with audit_as(user):
+            nbbpm = criar_nbbpm_com_retry(
+                baixas=baixas,
+                criado_por=user,
+                **validated,
+            )
 
         out = NBBPMSerializer(nbbpm, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
