@@ -1,12 +1,12 @@
 from textwrap import dedent
 
-
 # ==========================================
 # DOCUMENTAÇÃO PARA A API "baixas-fisicas"
 # ==========================================
 
 # API: /api/baixas-fisicas/ (GET)
-LIST_BAIXAS_FISICAS_DOC = dedent("""
+LIST_BAIXAS_FISICAS_DOC = dedent(
+    """
 Retorna uma lista paginada de baixas físicas cadastradas no sistema.
 
 ### Filtros disponíveis
@@ -34,10 +34,12 @@ A resposta segue o padrão de paginação da API.
 
 **Importante:** O usuário visualiza apenas as baixas das unidades administrativas
 às quais tem acesso (filtro de escopo aplicado automaticamente).
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/ (POST)
-CREATE_BAIXAS_FISICAS_DOC = dedent("""
+CREATE_BAIXAS_FISICAS_DOC = dedent(
+    """
 Cria uma nova baixa física de bens patrimoniais.
 
 Após a criação:
@@ -54,10 +56,12 @@ Após a criação:
 - Bens não podem estar em outra baixa física pendente
 
 Somente usuários **Gestor de Patrimônio** ou **Operador de Inventário** podem executar esta operação.
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/{id}/ (GET)
-RETRIEVE_BAIXAS_FISICAS_DOC = dedent("""
+RETRIEVE_BAIXAS_FISICAS_DOC = dedent(
+    """
 Retorna todas as informações de uma baixa física específica.
 
 A baixa é identificada pelo **ID** informado na URL.
@@ -71,10 +75,12 @@ A resposta inclui:
   - `url_aprovar` → se status for solicitada
   - `url_recusar` → se status for aguardando_envio ou solicitada
   - `url_gerar_nbbpm` → se status for aceita e tiver número NBBPM
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/{id}/ (PUT/PATCH)
-UPDATE_BAIXAS_FISICAS_DOC = dedent("""
+UPDATE_BAIXAS_FISICAS_DOC = dedent(
+    """
 Atualiza os dados de uma baixa física existente.
 
 ### Restrições importantes
@@ -94,10 +100,12 @@ Ao atualizar a lista de itens, a API trata o payload como a lista final desejada
 O status dos bens é ajustado automaticamente conforme inclusão/remoção de itens.
 
 Todas as alterações são aplicadas de forma transacional (tudo ou nada).
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/{id}/solicitar/ (POST)
-ENVIAR_SOLICITACAO_DOC = dedent("""
+ENVIAR_SOLICITACAO_DOC = dedent(
+    """
 Envia a baixa física para aprovação do Gestor de Patrimônio.
 
 ### Comportamento
@@ -114,15 +122,18 @@ Envia a baixa física para aprovação do Gestor de Patrimônio.
 - Deve ter ao menos **um item** (bem)
 
 Somente usuários **Gestor de Patrimônio** ou **Operador de Inventário** podem executar esta operação.
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/{id}/aprovar/ (POST)
-APROVAR_BAIXA_FISICA_DOC = dedent("""
+APROVAR_BAIXA_FISICA_DOC = dedent(
+    """
 Aprova a baixa física, autorizando a baixa definitiva dos bens.
 
 ### Parâmetros obrigatórios
 
-- **numero_processo_baixa** (string) → Número do processo no formato obrigatório `XXXX.XXXX/XXXXXXX-X` (ex: `6016.2025/0117371-7`). O número é salvo na baixa e propagado para todos os bens vinculados.
+- **numero_processo_baixa** (string) → Número do processo no formato obrigatório `XXXX.XXXX/XXXXXXX-X`
+  (ex: `6016.2025/0117371-7`). O número é salvo na baixa e propagado para todos os bens vinculados.
 
 ### Comportamento
 
@@ -148,10 +159,12 @@ manualmente em lote (mesma Unidade Orçamentária) via módulo de NBBPM.
 Após a aprovação, o único documento gerado automaticamente é o
 **Laudo de Avaliação de Bens Patrimoniais Móveis Baixados Contabilmente para Descarte**,
 disponível em `GET /api/baixa-fisica/{id}/gerar-laudo/` (apenas para status **Aceita**).
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/{id}/corrigir-processo/ (POST)
-CORRIGIR_PROCESSO_DOC = dedent("""
+CORRIGIR_PROCESSO_DOC = dedent(
+    """
 Corrige o número do processo de uma Baixa Física aprovada, sem reiniciar o processo.
 
 ### Parâmetros obrigatórios
@@ -164,7 +177,8 @@ Corrige o número do processo de uma Baixa Física aprovada, sem reiniciar o pro
 2. Valida permissões do usuário (apenas Gestor de Patrimônio)
 3. Valida **numero_processo_baixa** no mesmo padrão do aceite
 4. Bloqueia quando já existe Nota (NBBPM consolidada ou número legado)
-5. Em transação única atualiza **numero_processo_baixa** na baixa e propaga o novo número para todos os bens vinculados (`numero_processo` e `localizacao` como `Baixa Física - <processo>`), sem alterar vínculo ou status
+5. Em transação única atualiza **numero_processo_baixa** na baixa e propaga o novo número para todos os bens
+   vinculados (`numero_processo` e `localizacao` como `Baixa Física - <processo>`), sem alterar vínculo ou status
 6. Não cria nova solicitação e não altera status da baixa ou dos bens
 
 ### Restrições
@@ -174,10 +188,12 @@ Corrige o número do processo de uma Baixa Física aprovada, sem reiniciar o pro
 - Laudo e PDF da NBBPM em lote gerados após a correção usam o número atualizado
 
 Somente usuários **Gestor de Patrimônio** podem executar esta operação.
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/{id}/recusar/ (POST)
-CANCELAR_BAIXA_FISICA_DOC = dedent("""
+CANCELAR_BAIXA_FISICA_DOC = dedent(
+    """
 Recusa a baixa física, restaurando o status dos bens.
 
 ### Comportamento
@@ -199,10 +215,12 @@ Recusa a baixa física, restaurando o status dos bens.
 - **Apenas Gestor de Patrimônio** pode executar esta ação
 
 A ação é irreversível - não é possível reverter um cancelamento.
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/{id}/gerar-nbbpm/ (GET)
-GERAR_NBBPM_DOC = dedent("""
+GERAR_NBBPM_DOC = dedent(
+    """
 Gera o arquivo PDF da Nota de Baixa de Bens Patrimoniais Móveis (NBBPM).
 
 O PDF contém:
@@ -223,10 +241,12 @@ O PDF contém:
 O endpoint retorna um arquivo **PDF** pronto para download ou impressão.
 
 O nome do arquivo segue o padrão: `NBBPM_{numero}.pdf`
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/exportar-excel/ (GET)
-EXPORTAR_EXCEL_DOC = dedent("""
+EXPORTAR_EXCEL_DOC = dedent(
+    """
 Exporta baixas físicas para arquivo Excel (.xlsx).
 
 ### Parâmetros opcionais
@@ -260,28 +280,30 @@ O nome do arquivo segue o padrão: `baixas_fisicas_{data}_{hora}.xlsx`
 
 **Importante:** A exportação respeita o filtro de escopo - apenas baixas das UAs
 do usuário serão incluídas.
-""")
+"""
+)
 
-IMPORTAR_BENS_DOC = dedent("""
+IMPORTAR_BENS_DOC = dedent(
+    """
 Importa bens patrimoniais em lote a partir de uma planilha.
- 
+
 O arquivo deve ser enviado como `multipart/form-data` no campo `arquivo`.
- 
+
 ### Formatos aceitos
- 
+
 - **XLSX** (recomendado)
 - **XLS**
 - **CSV** (UTF-8 ou Latin-1)
- 
+
 Tamanho máximo: **10 MB**.
- 
+
 ---
- 
+
 ### Colunas esperadas na planilha
- 
+
 O cabeçalho aceita variações de caixa e acentuação
 (ex: `Número Patrimonial`, `NUMERO PATRIMONIAL`, `numero_patrimonial`).
- 
+
 | Coluna | Observações |
 |---|---|
 | `numero_patrimonial` | Vazio = bem sem numeração |
@@ -292,11 +314,11 @@ O cabeçalho aceita variações de caixa e acentuação
 | `valor_unitario` | Formato: `0,00` ou `0.000,00` |
 | `numero_processo` | |
 | `localizacao` | |
- 
+
 ---
- 
+
 ### Regras de negócio
- 
+
 - A **Unidade Administrativa** e a **Unidade Orçamentária** dos bens importados
   são sempre as do usuário autenticado. Qualquer coluna UA na planilha é ignorada.
 - O usuário deve ter uma UA ativa vinculada ao perfil. Caso contrário,
@@ -305,13 +327,13 @@ O cabeçalho aceita variações de caixa e acentuação
 - Linhas com `numero_patrimonial` duplicado (dentro do arquivo ou já no banco)
   são **ignoradas individualmente** — as demais linhas são salvas normalmente.
 - `sem_numeracao` e `numero_formato_antigo` são inferidos automaticamente.
- 
+
 ---
- 
+
 ### Retornos HTTP
- 
+
 #### `201 Created` — todos os bens importados sem erros
- 
+
 ```json
 {
   "detail": "42 bem(ns) importado(s) com sucesso.",
@@ -320,9 +342,9 @@ O cabeçalho aceita variações de caixa e acentuação
   "total_linhas": 42
 }
 ```
- 
+
 #### `207 Multi-Status` — importação parcial (alguns importados, alguns com erro)
- 
+
 ```json
 {
   "detail": "38 bem(ns) importado(s) com sucesso. 4 linha(s) com erro foram ignoradas.",
@@ -331,13 +353,14 @@ O cabeçalho aceita variações de caixa e acentuação
   "total_linhas": 42,
   "erros_por_linha": [
     "Linha 5 | Número Patrimonial: 001.000000001-0 | Erro: Número patrimonial já cadastrado no sistema.",
-    "Linha 12 | Número Patrimonial: 001.000000002-0 | Erro: Número patrimonial duplicado no arquivo. Primeira ocorrência na linha 3."
+    "Linha 12 | Número Patrimonial: 001.000000002-0 | Erro: Número patrimonial duplicado no arquivo. Primeira "
+    "ocorrência na linha 3."
   ]
 }
 ```
- 
+
 #### `400 Bad Request` — arquivo ausente, formato inválido ou tamanho excedido
- 
+
 ```json
 {
   "detail": "Arquivo inválido.",
@@ -346,17 +369,18 @@ O cabeçalho aceita variações de caixa e acentuação
   }
 }
 ```
- 
+
 #### `403 Forbidden` — usuário sem UA vinculada ou UA inativa
- 
+
 ```json
 {
-  "detail": "Não é possível importar bens: seu usuário não possui uma Unidade Administrativa vinculada. Entre em contato com o gestor de patrimônio."
+  "detail": "Não é possível importar bens: seu usuário não possui uma Unidade Administrativa vinculada. Entre em "
+    "contato com o gestor de patrimônio."
 }
 ```
- 
+
 #### `422 Unprocessable Entity` — planilha vazia, ilegível ou todas as linhas com erro
- 
+
 ```json
 {
   "detail": "Nenhum bem foi importado. Todas as linhas contêm erros. Corrija o arquivo e tente novamente.",
@@ -366,62 +390,66 @@ O cabeçalho aceita variações de caixa e acentuação
   "erros_por_linha": ["Linha 1 | Número Patrimonial: 001.000000001-0 | Erro: ..."]
 }
 ```
- 
+
 #### `500 Internal Server Error` — erro inesperado durante o processamento
- 
+
 ```json
 {
   "detail": "Erro inesperado durante a importação.",
   "erro": "descrição técnica do erro"
 }
 ```
- 
+
 ---
- 
+
 ### Observações
- 
+
 - Mesmo com erros parciais (`207`), os bens válidos **já foram persistidos**.
   Não há rollback das linhas bem-sucedidas.
 - A rota não suporta dry-run via API. Use o Admin Django para pré-visualizar.
- 
+
 Somente usuários com permissão de criação de bens patrimoniais podem usar este endpoint.
-""")
+"""
+)
 
 # API: /api/baixas-fisicas/:id/solicitar-correcao/ (POST)
-SOLICITAR_CORRECAO_DOC = dedent("""
+SOLICITAR_CORRECAO_DOC = dedent(
+    """
 Solicita correção de uma baixa física, devolvendo-a ao solicitante original.
- 
+
 ### Quando usar
- 
+
 O Gestor utiliza este endpoint ao revisar uma baixa com status **Solicitada**
 e identificar que um ou mais itens precisam de ajuste antes da aprovação.
- 
+
 ### Diferença em relação a `recusar`
- 
+
 - **`recusar`**: encerra definitivamente o processo (status → Recusada).
 - **`solicitar-correcao`**: devolve a baixa para edição (status →
   Em elaboração), permitindo que o solicitante ajuste os itens e
   reenvie para nova análise.
- 
+
 ### Parâmetros obrigatórios
- 
+
 - **motivo** → texto livre com as orientações sobre o que precisa ser
   corrigido (obrigatório, não pode ser vazio)
- 
+
 ### Comportamento
 
  1. Valida que o status atual da baixa é **Solicitada**
- 2. Valida que o usuário é Gestor de Patrimônio, superuser **ou o solicitante (criado_por)** — permite withdraw pelo operador
+ 2. Valida que o usuário é Gestor de Patrimônio, superuser **ou o solicitante (criado_por)** — permite withdraw
+    pelo operador
  3. Altera o status da baixa para **Em elaboração**
 4. Registra o motivo no histórico da baixa
 5. Notifica o solicitante original por e-mail (melhor esforço,
    falhas de envio não impedem a operação)
- 
+
 ### Retorno
- 
+
 Retorna o objeto **BaixaFisicaBemPatrimonialDetailSerializer** atualizado,
 já refletindo o novo status.
- 
+
 **Importante:** este endpoint só pode ser chamado a partir do status
 Solicitada. Para baixas em outros status, a API retorna erro de validação.
-""")
+"""
+)

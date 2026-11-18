@@ -1,27 +1,26 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase
 from unittest.mock import patch
+
 from django.contrib.auth.models import Group
 from django.template import Context
 from django.template.loader import render_to_string
+from django.test import TestCase
 
+from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.constants import APROVADO
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
 from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class EmailNovaMovimentacaoTestCase(TestCase):
     def setUp(self):
 
-        self.ua_origem = criar_ua(
-            nome="DRE Centro", codigo="01.16.10.500", sigla="DRE-CENTRO"
-        )
+        self.ua_origem = criar_ua(nome="DRE Centro", codigo="01.16.10.500", sigla="DRE-CENTRO")
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="MEMORIAL",
@@ -82,17 +81,20 @@ class EmailNovaMovimentacaoTestCase(TestCase):
     def _cria_movimentacao_com_item(self):
         """
         Helper para evitar repetição: cria movimentação + item ligado ao bem.
+        Usa captureOnCommitCallbacks para executar o on_commit do sinal,
+        garantindo que itens e CIMBPM já existam no e-mail.
         """
-        mov = MovimentacaoBemPatrimonial.objects.create(
-            bem_patrimonial=self.bem,  # legado, ainda pode ser preenchido
-            unidade_administrativa_origem=self.ua_origem,
-            unidade_administrativa_destino=self.ua_destino,
-            solicitado_por=self.operador_origem,
-        )
-        MovimentacaoBensItem.objects.create(
-            movimentacao=mov,
-            bem=self.bem,
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            mov = MovimentacaoBemPatrimonial.objects.create(
+                bem_patrimonial=self.bem,  # legado, ainda pode ser preenchido
+                unidade_administrativa_origem=self.ua_origem,
+                unidade_administrativa_destino=self.ua_destino,
+                solicitado_por=self.operador_origem,
+            )
+            MovimentacaoBensItem.objects.create(
+                movimentacao=mov,
+                bem=self.bem,
+            )
         return mov
 
     @patch("bem_patrimonial.emails.email_utils.send_email_ctrl")

@@ -1,9 +1,9 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
 from django.contrib.sessions.middleware import SessionMiddleware
+from django.test import RequestFactory, TestCase
 
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from usuario.signals import mark_first_admin_login
 
 User = get_user_model()
@@ -23,9 +23,7 @@ class FirstLoginSignalTests(TestCase):
 
     def test_sets_session_flag_when_last_login_was_null(self):
         u = User.objects.create_user(username="bob", **auth_kwargs("x"))
-        self.assertIsNone(
-            User.objects.filter(pk=u.pk).values_list("last_login", flat=True).first()
-        )
+        self.assertIsNone(User.objects.filter(pk=u.pk).values_list("last_login", flat=True).first())
 
         request = add_session_to_request(self.factory.get("/admin/"))
         mark_first_admin_login(sender=User, user=u, request=request)
@@ -38,9 +36,7 @@ class FirstLoginSignalTests(TestCase):
         c.login(username="bob2", **auth_kwargs("x"))
         c.logout()
 
-        self.assertIsNotNone(
-            User.objects.filter(pk=u.pk).values_list("last_login", flat=True).first()
-        )
+        self.assertIsNotNone(User.objects.filter(pk=u.pk).values_list("last_login", flat=True).first())
 
         request = add_session_to_request(self.factory.get("/admin/"))
         user_logged_in.send(sender=User, request=request, user=u)

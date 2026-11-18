@@ -1,16 +1,16 @@
 from django.contrib.auth.models import Group
-from django.urls import reverse
 from django.test import TestCase
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from bem_patrimonial import constants
 from bem_patrimonial.models import (
     BemPatrimonial,
-    TransferenciaBemPatrimonial,
-    TransferenciaBensItem,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
+    TransferenciaBemPatrimonial,
+    TransferenciaBensItem,
 )
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
@@ -341,9 +341,7 @@ class TransferenciaApiTestCase(TestCase):
             self.uo_destino.id,
             {item["unidade_orcamentaria_destino"]["id"] for item in resultados},
         )
-        self.assertTrue(
-            all(item["unidade_orcamentaria_destino"]["id"] == self.uo_destino_2.id for item in resultados)
-        )
+        self.assertTrue(all(item["unidade_orcamentaria_destino"]["id"] == self.uo_destino_2.id for item in resultados))
 
     def test_listagem_paginada_respeita_page_size(self):
         primeira = self._criar_transferencia("SEI-005/2026")
@@ -542,9 +540,7 @@ class TransferenciaApiTestCase(TestCase):
         )
 
         self._autenticar(self.gestor)
-        response = self.client.get(
-            reverse("transferencias-detail", kwargs={"pk": transferencia.pk})
-        )
+        response = self.client.get(reverse("transferencias-detail", kwargs={"pk": transferencia.pk}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], transferencia.id)
@@ -559,9 +555,7 @@ class TransferenciaApiTestCase(TestCase):
         transferencia = self._criar_transferencia("SEI-778/2026")
 
         self._autenticar(self.gestor)
-        response = self.client.get(
-            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
-        )
+        response = self.client.get(reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/pdf")
@@ -581,9 +575,7 @@ class TransferenciaApiTestCase(TestCase):
         )
 
         self._autenticar(self.gestor)
-        response = self.client.get(
-            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
-        )
+        response = self.client.get(reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -591,9 +583,7 @@ class TransferenciaApiTestCase(TestCase):
         transferencia = self._criar_transferencia("SEI-780/2026")
 
         self._autenticar(self.operador)
-        response = self.client.get(
-            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
-        )
+        response = self.client.get(reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk}))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -612,13 +602,9 @@ class TransferenciaApiTestCase(TestCase):
             is_staff=True,
             unidade_orcamentaria=uo_terceira,
         )
-        gestor_fora_escopo.groups.add(
-            Group.objects.get(name=GRUPO_GESTOR_PATRIMONIO)
-        )
+        gestor_fora_escopo.groups.add(Group.objects.get(name=GRUPO_GESTOR_PATRIMONIO))
 
         self._autenticar(gestor_fora_escopo)
-        response = self.client.get(
-            reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk})
-        )
+        response = self.client.get(reverse("transferencias-documento-ntbpm", kwargs={"pk": transferencia.pk}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

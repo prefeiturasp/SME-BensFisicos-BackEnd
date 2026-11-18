@@ -29,17 +29,13 @@ class StatusBemPatrimonialFilter(admin.SimpleListFilter):
     def choices(self, changelist):
         yield {
             "selected": self.valor() is None,
-            "query_string": changelist.get_query_string(
-                remove=[self.parameter_name]
-            ),
+            "query_string": changelist.get_query_string(remove=[self.parameter_name]),
             "display": "Todos (sem transferidos)",
         }
         for lookup, title in self.lookup_choices:
             yield {
                 "selected": self.valor() == str(lookup),
-                "query_string": changelist.get_query_string(
-                    {self.parameter_name: lookup}
-                ),
+                "query_string": changelist.get_query_string({self.parameter_name: lookup}),
                 "display": title,
             }
 
@@ -59,14 +55,10 @@ class BaixadosMaisDeUmPeriodoFilter(admin.SimpleListFilter):
         self.title = f"Baixados antes de {ano_corrente - 1}"
         super().__init__(request, params, model, model_admin)
         self.other_parameter_name = "busca_geral_todas_uos"
-        self.other_parameter_value = _normalizar_bool_param(
-            request.GET.get(self.other_parameter_name, "0")
-        )
+        self.other_parameter_value = _normalizar_bool_param(request.GET.get(self.other_parameter_name, "0"))
 
     def lookups(self, request, model_admin):
-        return (
-            ("1", "Marcado"),
-        )
+        return (("1", "Marcado"),)
 
     def queryset(self, request, queryset):
         if _normalizar_bool_param(self.value()) != "1":
@@ -80,6 +72,7 @@ class BaixadosMaisDeUmPeriodoFilter(admin.SimpleListFilter):
             baixa_data__year__lt=ano_limite,
         )
 
+
 class BuscaGeralTodasUOsFilter(admin.SimpleListFilter):
     title = "Busca geral em todas as UOs"
     parameter_name = "busca_geral_todas_uos"
@@ -91,9 +84,7 @@ class BuscaGeralTodasUOsFilter(admin.SimpleListFilter):
     def __init__(self, request, params, model, model_admin):
         super().__init__(request, params, model, model_admin)
         self.other_parameter_name = "baixados_mais_de_um_periodo"
-        self.other_parameter_value = _normalizar_bool_param(
-            request.GET.get(self.other_parameter_name, "0")
-        )
+        self.other_parameter_value = _normalizar_bool_param(request.GET.get(self.other_parameter_name, "0"))
 
     def queryset(self, request, queryset):
         return queryset

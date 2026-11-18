@@ -30,13 +30,14 @@ import openpyxl
 from django.contrib.auth.models import Group
 from rest_framework import status
 from rest_framework.test import APIClient, APITransactionTestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from bem_patrimonial import constants as bem_constants
 from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from inventario import constants as inv_constants
-from inventario.models import ConciliacaoUA
+from inventario.models import ConciliacaoUA, ItemConciliacao
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
@@ -45,9 +46,7 @@ def _planilha_valida(linhas):
     """Monta um XLSX em memória com o cabeçalho oficial do modelo de importação."""
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(
-        ["numero_patrimonial", "nome", "descricao", "valor_unitario", "marca", "modelo"]
-    )
+    ws.append(["numero_patrimonial", "nome", "descricao", "valor_unitario", "marca", "modelo"])
     for linha in linhas:
         ws.append(linha)
 
@@ -70,9 +69,7 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
         super().setUp()
 
         self.uo = criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO 1", sigla="UO1")
-        self.ua = criar_ua(
-            uo=self.uo, codigo=codigo_ua(10, 10, 10, 1), sigla="UA1", nome="Unidade 1"
-        )
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(10, 10, 10, 1), sigla="UA1", nome="Unidade 1")
 
         grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
 
@@ -103,13 +100,9 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
     # ------------------------------------------------------------------
 
     def test_importar_bloqueada_com_409_quando_ha_conciliacao_em_aberto(self):
-        arquivo = _planilha_valida(
-            [["001.000000001-0", "Notebook", "Notebook Dell", "1500,00", "Dell", "Latitude"]]
-        )
+        arquivo = _planilha_valida([["001.000000001-0", "Notebook", "Notebook Dell", "1500,00", "Dell", "Latitude"]])
 
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertEqual(
@@ -124,9 +117,31 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
 
         self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
-        self.assertFalse(
-            BemPatrimonial.objects.filter(numero_patrimonial="001.000000002-0").exists()
+        self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.000000002-0").exists())
+
+    def test_create_multi_grava_item_conciliacao_com_usuario_autenticado(self):
+        client = APIClient()
+        token = str(RefreshToken.for_user(self.usuario).access_token)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = client.post(
+            "/api/bens/multi/",
+            {
+                "unidade_administrativa": self.ua.id,
+                "nome": "Bem Multi Auditoria",
+                "descricao": "Descrição",
+                "valor_unitario": "10,00",
+                "marca": "Marca",
+                "modelo": "Modelo",
+                "multi_payload": [{"numero_patrimonial": "001.000000010-0", "localizacao": "Sala"}],
+            },
+            format="json",
         )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000010-0")
+        item = ItemConciliacao.objects.get(conciliacao=self.conciliacao_aberta, bem=bem)
+        self.assertEqual(item.atualizado_por, self.usuario)
 
     def test_importar_bloqueada_mesmo_com_multiplas_conciliacoes_abertas_para_a_ua(self):
         ConciliacaoUA.objects.create(
@@ -137,12 +152,8 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
             status=inv_constants.CONCILIACAO_EM_ABERTO,
         )
 
-        arquivo = _planilha_valida(
-            [["001.000000003-0", "Monitor", "Monitor 24pol", "800,00", "LG", "24ML"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000003-0", "Monitor", "Monitor 24pol", "800,00", "LG", "24ML"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
 
@@ -154,44 +165,30 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
         self.conciliacao_aberta.status = inv_constants.CONCILIACAO_FECHADO
         self.conciliacao_aberta.save(update_fields=["status"])
 
-        arquivo = _planilha_valida(
-            [["001.000000004-0", "Impressora", "Impressora laser", "600,00", "HP", "LaserJet"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000004-0", "Impressora", "Impressora laser", "600,00", "HP", "LaserJet"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(
             response.status_code,
             status.HTTP_201_CREATED,
             msg=f"Resposta inesperada: {response.status_code} — {response.data}",
         )
-        self.assertTrue(
-            BemPatrimonial.objects.filter(numero_patrimonial="001.000000004-0").exists()
-        )
+        self.assertTrue(BemPatrimonial.objects.filter(numero_patrimonial="001.000000004-0").exists())
 
     def test_importar_permitida_quando_conciliacao_esta_fechada_por_admin(self):
         self.conciliacao_aberta.status = inv_constants.CONCILIACAO_FECHADO_ADMIN
         self.conciliacao_aberta.save(update_fields=["status"])
 
-        arquivo = _planilha_valida(
-            [["001.000000005-0", "Teclado", "Teclado sem fio", "150,00", "Logitech", "K380"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000005-0", "Teclado", "Teclado sem fio", "150,00", "Logitech", "K380"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_importar_sem_nenhuma_conciliacao_para_a_ua_funciona_normalmente(self):
         self.conciliacao_aberta.delete()
 
-        arquivo = _planilha_valida(
-            [["001.000000006-0", "Mouse", "Mouse sem fio", "80,00", "Logitech", "M170"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000006-0", "Mouse", "Mouse sem fio", "80,00", "Logitech", "M170"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -201,9 +198,7 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
 
     def test_importar_nao_e_bloqueada_por_conciliacao_em_aberto_de_outra_ua(self):
         outra_uo = criar_uo(codigo=codigo_uo(20, 20, 20), nome="UO 2", sigla="UO2")
-        outra_ua = criar_ua(
-            uo=outra_uo, codigo=codigo_ua(20, 20, 20, 1), sigla="UA2", nome="Unidade 2"
-        )
+        outra_ua = criar_ua(uo=outra_uo, codigo=codigo_ua(20, 20, 20, 1), sigla="UA2", nome="Unidade 2")
         ConciliacaoUA.objects.create(
             tipo=inv_constants.CONCILIACAO_EVENTUAL,
             periodo_final=date(2025, 12, 31),
@@ -216,12 +211,8 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
         self.conciliacao_aberta.status = inv_constants.CONCILIACAO_FECHADO
         self.conciliacao_aberta.save(update_fields=["status"])
 
-        arquivo = _planilha_valida(
-            [["001.000000007-0", "Webcam", "Webcam HD", "200,00", "Logitech", "C920"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000007-0", "Webcam", "Webcam HD", "200,00", "Logitech", "C920"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(
             response.status_code,
@@ -260,17 +251,13 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
             nome="Gestor Sem UA",
             is_staff=True,
         )
-        usuario_sem_ua.groups.add(
-            Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        )
+        usuario_sem_ua.groups.add(Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0])
         self.client.force_authenticate(usuario_sem_ua)
 
         arquivo = _planilha_valida(
             [["001.000000008-0", "Headset", "Headset com microfone", "100,00", "JBL", "Quantum"]]
         )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertNotEqual(
             response.status_code,
@@ -306,9 +293,7 @@ class ImportacaoBensPorPerfilTestCase(APITransactionTestCase):
         )
 
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor = Usuario.objects.create_user(
             username="gestor_perfil",
@@ -341,13 +326,9 @@ class ImportacaoBensPorPerfilTestCase(APITransactionTestCase):
 
     def test_gestor_importa_bem_entra_aprovado(self):
         self.client.force_authenticate(self.gestor)
-        arquivo = _planilha_valida(
-            [["001.000000101-0", "Notebook", "Notebook Dell", "1500,00", "Dell", "Latitude"]]
-        )
+        arquivo = _planilha_valida([["001.000000101-0", "Notebook", "Notebook Dell", "1500,00", "Dell", "Latitude"]])
 
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(
             response.status_code,
@@ -359,13 +340,9 @@ class ImportacaoBensPorPerfilTestCase(APITransactionTestCase):
 
     def test_gestor_importa_response_sinaliza_aprovacao_automatica(self):
         self.client.force_authenticate(self.gestor)
-        arquivo = _planilha_valida(
-            [["001.000000102-0", "Monitor", "Monitor 24pol", "800,00", "LG", "24ML"]]
-        )
+        arquivo = _planilha_valida([["001.000000102-0", "Monitor", "Monitor 24pol", "800,00", "LG", "24ML"]])
 
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertTrue(response.data.get("aprovacao_automatica"))
 
@@ -375,16 +352,10 @@ class ImportacaoBensPorPerfilTestCase(APITransactionTestCase):
             [["001.000000103-0", "Cadeira", "Cadeira ergonômica", "300,00", "Flexform", "Cavaletti"]]
         )
 
-        self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000103-0")
-        self.assertTrue(
-            bem.statusbempatrimonial_set.filter(
-                status=bem_constants.APROVADO
-            ).exists()
-        )
+        self.assertTrue(bem.statusbempatrimonial_set.filter(status=bem_constants.APROVADO).exists())
 
     # ------------------------------------------------------------------
     # Operador de Inventário: mantém fluxo de aprovação
@@ -392,13 +363,9 @@ class ImportacaoBensPorPerfilTestCase(APITransactionTestCase):
 
     def test_operador_importa_bem_fica_aguardando_aprovacao(self):
         self.client.force_authenticate(self.operador)
-        arquivo = _planilha_valida(
-            [["001.000000201-0", "Impressora", "Impressora laser", "600,00", "HP", "LaserJet"]]
-        )
+        arquivo = _planilha_valida([["001.000000201-0", "Impressora", "Impressora laser", "600,00", "HP", "LaserJet"]])
 
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(
             response.status_code,
@@ -410,32 +377,20 @@ class ImportacaoBensPorPerfilTestCase(APITransactionTestCase):
 
     def test_operador_importa_response_nao_sinaliza_aprovacao_automatica(self):
         self.client.force_authenticate(self.operador)
-        arquivo = _planilha_valida(
-            [["001.000000202-0", "Teclado", "Teclado sem fio", "150,00", "Logitech", "K380"]]
-        )
+        arquivo = _planilha_valida([["001.000000202-0", "Teclado", "Teclado sem fio", "150,00", "Logitech", "K380"]])
 
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertFalse(response.data.get("aprovacao_automatica"))
 
     def test_operador_importa_nao_registra_historico_aprovado(self):
         self.client.force_authenticate(self.operador)
-        arquivo = _planilha_valida(
-            [["001.000000203-0", "Mouse", "Mouse sem fio", "80,00", "Logitech", "M170"]]
-        )
+        arquivo = _planilha_valida([["001.000000203-0", "Mouse", "Mouse sem fio", "80,00", "Logitech", "M170"]])
 
-        self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000203-0")
-        self.assertFalse(
-            bem.statusbempatrimonial_set.filter(
-                status=bem_constants.APROVADO
-            ).exists()
-        )
+        self.assertFalse(bem.statusbempatrimonial_set.filter(status=bem_constants.APROVADO).exists())
 
     # ------------------------------------------------------------------
     # Regressão: importação por usuário sem UA não pode dar "falso sucesso"
@@ -460,18 +415,12 @@ class ImportacaoBensPorPerfilTestCase(APITransactionTestCase):
         gestor_sem_ua.groups.add(self.grupo_gestor)
         self.client.force_authenticate(gestor_sem_ua)
 
-        arquivo = _planilha_valida(
-            [["001.000000301-0", "Notebook", "Notebook Dell", "1500,00", "Dell", "Latitude"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000301-0", "Notebook", "Notebook Dell", "1500,00", "Dell", "Latitude"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertFalse(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial="001.000000301-0"
-            ).exists(),
+            BemPatrimonial.objects.filter(numero_patrimonial="001.000000301-0").exists(),
             "Nenhum bem deve ser criado quando o usuário não tem UA vinculada.",
         )
 
@@ -492,12 +441,8 @@ class ImportacaoUnidadeAdministrativaDestinoTestCase(APITransactionTestCase):
         super().setUp()
 
         self.uo = criar_uo(codigo=codigo_uo(40, 40, 40), nome="UO Dest", sigla="UOD")
-        self.ua1 = criar_ua(
-            uo=self.uo, codigo=codigo_ua(40, 40, 40, 1), sigla="UAD1", nome="UA Dest 1"
-        )
-        self.ua2 = criar_ua(
-            uo=self.uo, codigo=codigo_ua(40, 40, 40, 2), sigla="UAD2", nome="UA Dest 2"
-        )
+        self.ua1 = criar_ua(uo=self.uo, codigo=codigo_ua(40, 40, 40, 1), sigla="UAD1", nome="UA Dest 1")
+        self.ua2 = criar_ua(uo=self.uo, codigo=codigo_ua(40, 40, 40, 2), sigla="UAD2", nome="UA Dest 2")
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
 
         # Gestor logado na UO (sem UA direta).
@@ -527,9 +472,7 @@ class ImportacaoUnidadeAdministrativaDestinoTestCase(APITransactionTestCase):
 
     def test_uo_com_ua_escolhida_grava_na_ua(self):
         self.client.force_authenticate(self.gestor_uo)
-        arquivo = _planilha_valida(
-            [["001.000000401-0", "Note", "Desc", "10,00", "M", "X"]]
-        )
+        arquivo = _planilha_valida([["001.000000401-0", "Note", "Desc", "10,00", "M", "X"]])
         response = self.client.post(
             "/api/bens/importar/",
             {"arquivo": arquivo, "unidade_administrativa_id": self.ua2.id},
@@ -541,48 +484,30 @@ class ImportacaoUnidadeAdministrativaDestinoTestCase(APITransactionTestCase):
 
     def test_uo_sem_ua_escolhida_retorna_403(self):
         self.client.force_authenticate(self.gestor_uo)
-        arquivo = _planilha_valida(
-            [["001.000000402-0", "Note", "Desc", "10,00", "M", "X"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000402-0", "Note", "Desc", "10,00", "M", "X"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertFalse(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial="001.000000402-0"
-            ).exists()
-        )
+        self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.000000402-0").exists())
 
     def test_uo_com_ua_fora_do_escopo_retorna_403(self):
         outra_uo = criar_uo(codigo=codigo_uo(50, 50, 50), nome="UO X", sigla="UOX")
-        ua_fora = criar_ua(
-            uo=outra_uo, codigo=codigo_ua(50, 50, 50, 1), sigla="UAX", nome="UA Fora"
-        )
+        ua_fora = criar_ua(uo=outra_uo, codigo=codigo_ua(50, 50, 50, 1), sigla="UAX", nome="UA Fora")
         self.client.force_authenticate(self.gestor_uo)
-        arquivo = _planilha_valida(
-            [["001.000000403-0", "Note", "Desc", "10,00", "M", "X"]]
-        )
+        arquivo = _planilha_valida([["001.000000403-0", "Note", "Desc", "10,00", "M", "X"]])
         response = self.client.post(
             "/api/bens/importar/",
             {"arquivo": arquivo, "unidade_administrativa_id": ua_fora.id},
             format="multipart",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertFalse(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial="001.000000403-0"
-            ).exists()
-        )
+        self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.000000403-0").exists())
 
     def test_ua_direta_ignora_ua_id_e_usa_a_do_usuario(self):
         # Usuário com UA direta: mesmo que um id seja enviado, a UA do usuário
         # prevalece por já estar no escopo (filtrar_ua_origem_por_escopo só
         # devolve a própria UA quando o usuário tem UA direta).
         self.client.force_authenticate(self.gestor_ua)
-        arquivo = _planilha_valida(
-            [["001.000000404-0", "Note", "Desc", "10,00", "M", "X"]]
-        )
+        arquivo = _planilha_valida([["001.000000404-0", "Note", "Desc", "10,00", "M", "X"]])
         response = self.client.post(
             "/api/bens/importar/",
             {"arquivo": arquivo, "unidade_administrativa_id": self.ua2.id},
@@ -593,12 +518,8 @@ class ImportacaoUnidadeAdministrativaDestinoTestCase(APITransactionTestCase):
 
     def test_ua_direta_sem_ua_id_grava_na_ua_do_usuario(self):
         self.client.force_authenticate(self.gestor_ua)
-        arquivo = _planilha_valida(
-            [["001.000000405-0", "Note", "Desc", "10,00", "M", "X"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["001.000000405-0", "Note", "Desc", "10,00", "M", "X"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000405-0")
         self.assertEqual(bem.unidade_administrativa_id, self.ua1.id)
@@ -614,9 +535,7 @@ class ImportacaoDescartaLinhasVaziasTestCase(APITransactionTestCase):
     def setUp(self):
         super().setUp()
         self.uo = criar_uo(codigo=codigo_uo(60, 60, 60), nome="UO Vazias", sigla="UOV")
-        self.ua = criar_ua(
-            uo=self.uo, codigo=codigo_ua(60, 60, 60, 1), sigla="UAV", nome="UA Vazias"
-        )
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(60, 60, 60, 1), sigla="UAV", nome="UA Vazias")
         self.gestor = Usuario.objects.create_user(
             username="gestor_vazias",
             email="gestor.vazias@test.com",
@@ -626,9 +545,7 @@ class ImportacaoDescartaLinhasVaziasTestCase(APITransactionTestCase):
             unidade_administrativa=self.ua,
             unidade_orcamentaria=self.uo,
         )
-        self.gestor.groups.add(
-            Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        )
+        self.gestor.groups.add(Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0])
         self.client = APIClient()
         self.client.force_authenticate(self.gestor)
 
@@ -636,21 +553,17 @@ class ImportacaoDescartaLinhasVaziasTestCase(APITransactionTestCase):
         arquivo = _planilha_valida(
             [
                 ["001.000000601-0", "Note", "Desc", "10,00", "M", "X"],
-                ["", "", "", "", "", ""],                      # 100% vazia
-                [None, None, None, None, None, None],          # 100% vazia
-                ["   ", "  ", "", "  ", "", ""],               # só espaços
+                ["", "", "", "", "", ""],  # 100% vazia
+                [None, None, None, None, None, None],  # 100% vazia
+                ["   ", "  ", "", "  ", "", ""],  # só espaços
                 ["001.000000602-0", "Mouse", "Desc", "5,00", "M", "Y"],
             ]
         )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(response.data["importados"], 2)
         self.assertEqual(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial__in=["001.000000601-0", "001.000000602-0"]
-            ).count(),
+            BemPatrimonial.objects.filter(numero_patrimonial__in=["001.000000601-0", "001.000000602-0"]).count(),
             2,
         )
 
@@ -658,20 +571,12 @@ class ImportacaoDescartaLinhasVaziasTestCase(APITransactionTestCase):
         arquivo = _planilha_valida(
             [
                 ["001.000000603-0", "Note", "Desc", "10,00", "M", "X"],
-                ["", "Mouse", "", "", "", ""],                 # parcial -> erro
+                ["", "Mouse", "", "", "", ""],  # parcial -> erro
             ]
         )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
-        self.assertEqual(
-            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
-        )
-        self.assertFalse(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial="001.000000603-0"
-            ).exists()
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
+        self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.000000603-0").exists())
 
     def test_planilha_apenas_com_linhas_vazias_e_tratada_como_vazia(self):
         arquivo = _planilha_valida(
@@ -680,12 +585,8 @@ class ImportacaoDescartaLinhasVaziasTestCase(APITransactionTestCase):
                 [None, None, None, None, None, None],
             ]
         )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
-        self.assertEqual(
-            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
         self.assertIn("vazia", str(response.data).lower())
 
 
@@ -701,9 +602,7 @@ class ImportacaoUAEscopoPorPerfilTestCase(APITransactionTestCase):
     def setUp(self):
         super().setUp()
         self.uo = criar_uo(codigo=codigo_uo(70, 70, 70), nome="UO Esc", sigla="UOE")
-        self.ua = criar_ua(
-            uo=self.uo, codigo=codigo_ua(70, 70, 70, 1), sigla="UAE", nome="UA Esc"
-        )
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(70, 70, 70, 1), sigla="UAE", nome="UA Esc")
         self.client = APIClient()
 
     def _importa(self, user, num):
@@ -711,9 +610,7 @@ class ImportacaoUAEscopoPorPerfilTestCase(APITransactionTestCase):
         return self.client.post(
             "/api/bens/importar/",
             {
-                "arquivo": _planilha_valida(
-                    [[num, "Note", "Desc", "10,00", "M", "X"]]
-                ),
+                "arquivo": _planilha_valida([[num, "Note", "Desc", "10,00", "M", "X"]]),
                 "unidade_administrativa_id": self.ua.id,
             },
             format="multipart",
@@ -728,9 +625,7 @@ class ImportacaoUAEscopoPorPerfilTestCase(APITransactionTestCase):
             is_staff=True,
             unidade_orcamentaria=self.uo,
         )
-        operador.groups.add(
-            Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
-        )
+        operador.groups.add(Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0])
         operador.unidades_administrativas.add(self.ua)
 
         response = self._importa(operador, "001.000000701-0")
@@ -766,9 +661,7 @@ class ImportacaoNumeroLinhaOriginalTestCase(APITransactionTestCase):
     def setUp(self):
         super().setUp()
         self.uo = criar_uo(codigo=codigo_uo(80, 80, 80), nome="UO NL", sigla="UONL")
-        self.ua = criar_ua(
-            uo=self.uo, codigo=codigo_ua(80, 80, 80, 1), sigla="UANL", nome="UA NL"
-        )
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(80, 80, 80, 1), sigla="UANL", nome="UA NL")
         self.gestor = Usuario.objects.create_user(
             username="gestor_nl",
             email="gestor.nl@test.com",
@@ -778,9 +671,7 @@ class ImportacaoNumeroLinhaOriginalTestCase(APITransactionTestCase):
             unidade_administrativa=self.ua,
             unidade_orcamentaria=self.uo,
         )
-        self.gestor.groups.add(
-            Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        )
+        self.gestor.groups.add(Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0])
         self.client = APIClient()
         self.client.force_authenticate(self.gestor)
 
@@ -793,12 +684,8 @@ class ImportacaoNumeroLinhaOriginalTestCase(APITransactionTestCase):
                 ["001.000000812-0", "Mouse", "", "5,00", "M", "Y"],
             ]
         )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
-        self.assertEqual(
-            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
         linhas_erro = {e["linha"] for e in response.data.get("erros_por_linha", [])}
         # A 3ª linha de dados mantém o número 3 (posição original), não 2.
         self.assertIn(3, linhas_erro)
@@ -819,9 +706,7 @@ class ImportacaoNormalizacaoNumeroPatrimonialTestCase(APITransactionTestCase):
     def setUp(self):
         super().setUp()
         self.uo = criar_uo(codigo=codigo_uo(90, 90, 90), nome="UO Norm", sigla="UON")
-        self.ua = criar_ua(
-            uo=self.uo, codigo=codigo_ua(90, 90, 90, 1), sigla="UAN", nome="UA Norm"
-        )
+        self.ua = criar_ua(uo=self.uo, codigo=codigo_ua(90, 90, 90, 1), sigla="UAN", nome="UA Norm")
         self.gestor = Usuario.objects.create_user(
             username="gestor_norm",
             email="gestor.norm@test.com",
@@ -831,58 +716,38 @@ class ImportacaoNormalizacaoNumeroPatrimonialTestCase(APITransactionTestCase):
             unidade_administrativa=self.ua,
             unidade_orcamentaria=self.uo,
         )
-        self.gestor.groups.add(
-            Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        )
+        self.gestor.groups.add(Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0])
         self.client = APIClient()
         self.client.force_authenticate(self.gestor)
 
     def test_vazio_salva_como_sem_numero(self):
-        arquivo = _planilha_valida(
-            [["", "Cadeira", "Cadeira sem número", "300,00", "Marca X", "Modelo Y"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["", "Cadeira", "Cadeira sem número", "300,00", "Marca X", "Modelo Y"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        bem = BemPatrimonial.objects.filter(
-            unidade_administrativa=self.ua, nome="Cadeira"
-        ).first()
+        bem = BemPatrimonial.objects.filter(unidade_administrativa=self.ua, nome="Cadeira").first()
         self.assertIsNotNone(bem)
         self.assertTrue(bem.sem_numeracao)
         self.assertFalse(bem.numero_formato_antigo)
 
     def test_treze_digitos_sem_mascara_aplica_mascara_padrao(self):
-        arquivo = _planilha_valida(
-            [["0010000009010", "Note", "Desc", "10,00", "M", "X"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["0010000009010", "Note", "Desc", "10,00", "M", "X"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000901-0")
         self.assertFalse(bem.sem_numeracao)
         self.assertFalse(bem.numero_formato_antigo)
 
     def test_onze_digitos_completa_zeros_e_aplica_mascara(self):
-        arquivo = _planilha_valida(
-            [["10538588879", "Note", "Desc", "10,00", "M", "X"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["10538588879", "Note", "Desc", "10,00", "M", "X"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         bem = BemPatrimonial.objects.get(numero_patrimonial="001.053858887-9")
         self.assertFalse(bem.sem_numeracao)
         self.assertFalse(bem.numero_formato_antigo)
 
     def test_valor_com_letras_permanece_formato_anterior(self):
-        arquivo = _planilha_valida(
-            [["ANT-902-XYZ", "Note", "Desc", "10,00", "M", "X"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
+        arquivo = _planilha_valida([["ANT-902-XYZ", "Note", "Desc", "10,00", "M", "X"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         bem = BemPatrimonial.objects.get(numero_patrimonial="ANT-902-XYZ")
         self.assertFalse(bem.sem_numeracao)
@@ -896,18 +761,10 @@ class ImportacaoNormalizacaoNumeroPatrimonialTestCase(APITransactionTestCase):
             ]
         )
         count_antes = BemPatrimonial.objects.count()
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
-        self.assertEqual(
-            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
-        )
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
         self.assertEqual(BemPatrimonial.objects.count(), count_antes)
-        self.assertFalse(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial="001.053858887-9"
-            ).exists()
-        )
+        self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.053858887-9").exists())
 
     def test_duplicidade_com_banco_apos_normalizacao_retorna_422(self):
         BemPatrimonial.objects.create(
@@ -924,13 +781,30 @@ class ImportacaoNormalizacaoNumeroPatrimonialTestCase(APITransactionTestCase):
             status=bem_constants.APROVADO,
         )
         count_antes = BemPatrimonial.objects.count()
-        arquivo = _planilha_valida(
-            [["10538588879", "Note", "Desc", "10,00", "M", "X"]]
-        )
-        response = self.client.post(
-            "/api/bens/importar/", {"arquivo": arquivo}, format="multipart"
-        )
-        self.assertEqual(
-            response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data
-        )
+        arquivo = _planilha_valida([["10538588879", "Note", "Desc", "10,00", "M", "X"]])
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
         self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+
+    def test_numero_formatado_nao_duplica_bem_legado(self):
+        existente = BemPatrimonial.objects.create(
+            nome="Bem legado",
+            descricao="Desc",
+            valor_unitario=10,
+            numero_patrimonial="10538588879",
+            numero_formato_antigo=True,
+            unidade_administrativa=self.ua,
+            criado_por=self.gestor,
+            status=bem_constants.APROVADO,
+        )
+        count_antes = BemPatrimonial.objects.count()
+        arquivo = _planilha_valida([["001.053858887-9", "Note", "Desc", "10,00", "M", "X"]])
+
+        response = self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY, response.data)
+        self.assertEqual(response.data["erros_por_linha"][0]["linha"], 1)
+        self.assertEqual(response.data["erros_por_linha"][0]["campo"], "numero_patrimonial")
+        self.assertEqual(BemPatrimonial.objects.count(), count_antes)
+        existente.refresh_from_db()
+        self.assertEqual(existente.numero_patrimonial, "10538588879")

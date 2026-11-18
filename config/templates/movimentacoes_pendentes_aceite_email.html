@@ -129,7 +129,7 @@
             {% for mov in context.movimentacoes %}
               <li class="mov-item{% if mov.urgente %} urgente{% endif %}">
                 <div class="mov-title">
-                  Movimentação #{{ mov.id }}
+                  {% if mov.ref %}Movimentação {{ mov.ref }}{% else %}Movimentação #{{ mov.id }}{% endif %}
                   {% if mov.urgente %}<span class="badge">Urgente</span>{% endif %}
                 </div>
                 <div class="mov-meta">

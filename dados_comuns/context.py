@@ -1,5 +1,5 @@
-from contextlib import contextmanager
 import threading
+from contextlib import contextmanager
 
 _local = threading.local()
 
@@ -9,7 +9,10 @@ def set_user(user):
 
 
 def get_user():
-    return getattr(_local, "user", None)
+    user = getattr(_local, "user", None)
+    if user is not None and getattr(user, "is_anonymous", False):
+        return None
+    return user
 
 
 @contextmanager

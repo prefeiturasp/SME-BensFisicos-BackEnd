@@ -1,13 +1,12 @@
 import sys
+
 from django.conf import settings
 from django.core.mail import EmailMessage
 from django.template import Context
 from django.template.loader import render_to_string
 
 
-def send_email_ctrl(
-    subject, context_dict, template, to_email, from_email=settings.DEFAULT_FROM_EMAIL
-):
+def send_email_ctrl(subject, context_dict, template, to_email, from_email=settings.DEFAULT_FROM_EMAIL):
     if isinstance(to_email, str):
         to_email = [to_email]
 

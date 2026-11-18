@@ -1,25 +1,25 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
-from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib import messages
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory, TestCase
 
-from bem_patrimonial.models import BemPatrimonial
-from bem_patrimonial.constants import (
-    AGUARDANDO_APROVACAO,
-    APROVADO,
-    NAO_APROVADO,
-)
 from bem_patrimonial.admins.bem_patrimonial import (
     BemPatrimonialAdmin,
     aprovar_bens,
     reprovar_bens,
 )
+from bem_patrimonial.constants import (
+    AGUARDANDO_APROVACAO,
+    APROVADO,
+    NAO_APROVADO,
+)
+from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class BaseAprovacaoTestCase(TestCase):
@@ -164,9 +164,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         self.assertTrue(any("permissão" in msg.lower() for msg in msgs))
 
     def test_nao_aprova_bens_ja_aprovados(self):
-        queryset = BemPatrimonial.objects.filter(
-            pk__in=[self.bem1.pk, self.bem_aprovado.pk]
-        )
+        queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem_aprovado.pk])
         request = self._create_request_with_messages(self.gestor)
 
         aprovar_bens(self.admin, request, queryset)
@@ -179,16 +177,10 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
 
         msgs = [str(m) for m in messages.get_messages(request)]
         self.assertTrue(any("1 bem(ns) aprovado(s)" in msg for msg in msgs))
-        self.assertTrue(
-            any(
-                "não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs
-            )
-        )
+        self.assertTrue(any("não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs))
 
     def test_nao_reprova_bens_ja_aprovados(self):
-        queryset = BemPatrimonial.objects.filter(
-            pk__in=[self.bem1.pk, self.bem_aprovado.pk]
-        )
+        queryset = BemPatrimonial.objects.filter(pk__in=[self.bem1.pk, self.bem_aprovado.pk])
         request = self._create_request_with_messages(self.gestor)
 
         reprovar_bens(self.admin, request, queryset)
@@ -201,11 +193,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
 
         msgs = [str(m) for m in messages.get_messages(request)]
         self.assertTrue(any("1 bem(ns) reprovado(s)" in msg for msg in msgs))
-        self.assertTrue(
-            any(
-                "não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs
-            )
-        )
+        self.assertTrue(any("não estava(m) com status 'Aguardando aprovação'" in msg for msg in msgs))
 
     def test_mensagem_quando_nenhum_bem_aguardando_aprovacao(self):
         queryset = BemPatrimonial.objects.filter(pk=self.bem_aprovado.pk)
@@ -214,12 +202,7 @@ class AprovacaoLoteTestCase(BaseAprovacaoTestCase):
         aprovar_bens(self.admin, request, queryset)
 
         msgs = [str(m) for m in messages.get_messages(request)]
-        self.assertTrue(
-            any(
-                "Nenhum bem selecionado está com status 'Aguardando aprovação'" in msg
-                for msg in msgs
-            )
-        )
+        self.assertTrue(any("Nenhum bem selecionado está com status 'Aguardando aprovação'" in msg for msg in msgs))
 
     def test_actions_nao_disponiveis_para_operador(self):
         request = self._create_request_with_messages(self.operador)
@@ -252,9 +235,7 @@ class FormularioStatusTestCase(BaseAprovacaoTestCase):
             status=AGUARDANDO_APROVACAO,
         )
 
-        request = self.factory.get(
-            f"/admin/bem_patrimonial/bempatrimonial/{bem.pk}/change/"
-        )
+        request = self.factory.get(f"/admin/bem_patrimonial/bempatrimonial/{bem.pk}/change/")
         request.user = self.gestor
 
         form_class = self.admin.get_form(request, obj=bem)

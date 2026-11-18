@@ -41,12 +41,8 @@ class ConciliacaoAPIBaseTestCase(APITestCase):
 
     @classmethod
     def _criar_estrutura_organizacional(cls):
-        cls.uo1 = criar_uo(
-            codigo=codigo_uo(10, 10, 10), nome="UO 1", sigla="UO1"
-        )
-        cls.uo2 = criar_uo(
-            codigo=codigo_uo(20, 20, 20), nome="UO 2", sigla="UO2"
-        )
+        cls.uo1 = criar_uo(codigo=codigo_uo(10, 10, 10), nome="UO 1", sigla="UO1")
+        cls.uo2 = criar_uo(codigo=codigo_uo(20, 20, 20), nome="UO 2", sigla="UO2")
         cls.ua1 = criar_ua(
             uo=cls.uo1,
             codigo=codigo_ua(10, 10, 10, 1),
@@ -68,12 +64,8 @@ class ConciliacaoAPIBaseTestCase(APITestCase):
 
     @classmethod
     def _criar_grupos(cls):
-        cls.grupo_gestor = Group.objects.get_or_create(
-            name=GRUPO_GESTOR_PATRIMONIO
-        )[0]
-        cls.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        cls.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
+        cls.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
     @classmethod
     def _criar_usuario(cls, *, username, email, nome, grupo, **kwargs):
@@ -133,12 +125,8 @@ class ConciliacaoAPIBaseTestCase(APITestCase):
 
     def setUp(self):
         super().setUp()
-        self.conciliacao_ua1 = self._criar_conciliacao(
-            self.ua1, periodo=date(2025, 8, 23)
-        )
-        self.conciliacao_ua2 = self._criar_conciliacao(
-            self.ua2, periodo=date(2025, 9, 1)
-        )
+        self.conciliacao_ua1 = self._criar_conciliacao(self.ua1, periodo=date(2025, 8, 23))
+        self.conciliacao_ua2 = self._criar_conciliacao(self.ua2, periodo=date(2025, 9, 1))
         self.conciliacao_fora = self._criar_conciliacao(
             self.ua_fora,
             criado_por=self.operador_fora,

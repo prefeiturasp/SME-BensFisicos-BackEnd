@@ -6,10 +6,7 @@ def _pode_acessar_modulo_inventario(user):
         return False
     if getattr(user, "is_superuser", False):
         return True
-    return bool(
-        getattr(user, "is_gestor_patrimonio", False)
-        or getattr(user, "is_operador_inventario", False)
-    )
+    return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_operador_inventario", False))
 
 
 class ConciliacaoUAPermission(BasePermission):
@@ -31,8 +28,7 @@ class ConciliacaoUAPermission(BasePermission):
 
         action = getattr(view, "action", None)
 
-        if action in ("list", "retrieve", "historico", "exportar",
-                      "create", "finalizar"):
+        if action in ("list", "retrieve", "historico", "exportar", "create", "finalizar"):
             return True
 
         if action in ("update", "partial_update", "destroy"):

@@ -1,5 +1,4 @@
 import re
-from collections import defaultdict
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -13,7 +12,6 @@ from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.serializers.historico_serializers import HistoricoGrupoSerializer
 from dados_comuns.escopo import filtrar_ua_origem_por_escopo
 from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
 
@@ -22,12 +20,9 @@ User = get_user_model()
 
 CODIGO_UA_PONTO_CENTRAL = "001"
 MENSAGEM_SEM_PONTO_CENTRAL = (
-    "Não há ponto central cadastrado na Unidade Orçamentária de destino. "
-    "Por favor, entrar em contato com o gestor."
+    "Não há ponto central cadastrado na Unidade Orçamentária de destino. Por favor, entrar em contato com o gestor."
 )
-PADRAO_NUMERO_PATRIMONIAL = re.compile(
-    r"^(?P<prefixo>\d{3})\.(?P<sequencia>\d{9})-(?P<digito>\d)$"
-)
+PADRAO_NUMERO_PATRIMONIAL = re.compile(r"^(?P<prefixo>\d{3})\.(?P<sequencia>\d{9})-(?P<digito>\d)$")
 LIMITE_BENS_POR_FAIXA = 500
 
 
@@ -68,10 +63,7 @@ def obter_ua_ponto_central(unidade_orcamentaria):
 
     return (
         queryset_uas_da_uo(unidade_orcamentaria)
-        .filter(
-            Q(codigo=CODIGO_UA_PONTO_CENTRAL)
-            | Q(codigo__endswith=f".{CODIGO_UA_PONTO_CENTRAL}")
-        )
+        .filter(Q(codigo=CODIGO_UA_PONTO_CENTRAL) | Q(codigo__endswith=f".{CODIGO_UA_PONTO_CENTRAL}"))
         .order_by("id")
         .first()
     )
@@ -96,14 +88,11 @@ def queryset_bens_movimentaveis(unidade_administrativa):
         bem_id=OuterRef("pk"),
         movimentacao__status=constants.ENVIADA,
     )
-    return (
-        BemPatrimonial.objects.filter(
-            unidade_administrativa=unidade_administrativa,
-            status=constants.APROVADO,
-            bloqueado_conciliacao=False,
-        )
-        .filter(~Exists(movimentacao_pendente))
-    )
+    return BemPatrimonial.objects.filter(
+        unidade_administrativa=unidade_administrativa,
+        status=constants.APROVADO,
+        bloqueado_conciliacao=False,
+    ).filter(~Exists(movimentacao_pendente))
 
 
 def _dados_numero_patrimonial(numero_patrimonial):
@@ -154,7 +143,7 @@ def _filtrar_intervalo_patrimonial(bens, inicio, fim):
 
 
 def _chave_numero_patrimonial(numero, ignorar_digito):
-    return numero.split('-')[0] if ignorar_digito else numero
+    return numero.split("-")[0] if ignorar_digito else numero
 
 
 def _mensagem_bens_nao_movimentaveis(numeros_patrimoniais):
@@ -179,30 +168,18 @@ def _resolver_bens_da_faixa(unidade_administrativa, faixa):
     numero_ate = numero_ate_informado or numero_de
     dados_de = _dados_numero_patrimonial(numero_de)
     dados_ate = _dados_numero_patrimonial(numero_ate)
-    if (
-        not dados_de or not dados_ate
-        or dados_de[3] != dados_ate[3] or dados_de[1] != dados_ate[1]
-    ):
-        raise serializers.ValidationError(
-            {"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])}
-        )
+    if not dados_de or not dados_ate or dados_de[3] != dados_ate[3] or dados_de[1] != dados_ate[1]:
+        raise serializers.ValidationError({"faixas": _mensagem_bens_nao_movimentaveis([numero_de, numero_ate])})
 
     indice_de = dados_de[0]
     indice_ate = dados_ate[0]
     if indice_ate < indice_de:
         raise serializers.ValidationError(
-            {
-                "faixas": (
-                    "O Número Patrimonial Até deve ser maior ou igual ao "
-                    "Número Patrimonial De."
-                )
-            }
+            {"faixas": ("O Número Patrimonial Até deve ser maior ou igual ao Número Patrimonial De.")}
         )
     quantidade, numeros_esperados = _numeros_patrimoniais_da_faixa(dados_de, dados_ate)
     if quantidade > LIMITE_BENS_POR_FAIXA:
-        raise serializers.ValidationError(
-            {"faixas": "Cada faixa pode conter no máximo 500 bens."}
-        )
+        raise serializers.ValidationError({"faixas": "Cada faixa pode conter no máximo 500 bens."})
 
     ignorar_digito = bool(numero_ate_informado) and dados_de[3]
     return _buscar_e_validar_bens_da_faixa(
@@ -219,38 +196,26 @@ def _buscar_e_validar_bens_da_faixa(ua, numero_de, numero_ate, numeros_esperados
     bens_da_ua = list(bens_da_ua.order_by("numero_patrimonial", "id"))
     if len(bens_da_ua) > LIMITE_BENS_POR_FAIXA:
         raise serializers.ValidationError({"faixas": "Cada faixa pode conter no máximo 500 bens."})
-    numeros_encontrados = {
-        _chave_numero_patrimonial(bem.numero_patrimonial, ignorar_digito)
-        for bem in bens_da_ua
-    }
+    numeros_encontrados = {_chave_numero_patrimonial(bem.numero_patrimonial, ignorar_digito) for bem in bens_da_ua}
     ids_movimentaveis = set(
-        queryset_bens_movimentaveis(ua)
-        .filter(id__in=[bem.id for bem in bens_da_ua])
-        .values_list("id", flat=True)
+        queryset_bens_movimentaveis(ua).filter(id__in=[bem.id for bem in bens_da_ua]).values_list("id", flat=True)
     )
 
     numeros_invalidos = [
-        numero for numero in numeros_esperados
+        numero
+        for numero in numeros_esperados
         if _chave_numero_patrimonial(numero, ignorar_digito) not in numeros_encontrados
     ]
-    numeros_invalidos.extend(
-        bem.numero_patrimonial for bem in bens_da_ua if bem.id not in ids_movimentaveis
-    )
+    numeros_invalidos.extend(bem.numero_patrimonial for bem in bens_da_ua if bem.id not in ids_movimentaveis)
 
     if numeros_invalidos:
-        raise serializers.ValidationError(
-            {"faixas": _mensagem_bens_nao_movimentaveis(numeros_invalidos)}
-        )
+        raise serializers.ValidationError({"faixas": _mensagem_bens_nao_movimentaveis(numeros_invalidos)})
     return bens_da_ua
 
 
 def resolver_bens_movimentacao_lote(unidade_administrativa, faixas, selecionar_todos):
     if selecionar_todos:
-        return list(
-            queryset_bens_movimentaveis(unidade_administrativa).order_by(
-                "numero_patrimonial", "id"
-            )
-        )
+        return list(queryset_bens_movimentaveis(unidade_administrativa).order_by("numero_patrimonial", "id"))
 
     bens_por_id = {}
     for faixa in faixas:
@@ -296,9 +261,7 @@ def motivo_impedimento_movimentacao(unidade_administrativa, bem, bens_pendentes)
 
 
 class BuscaBensMovimentacaoSerializer(serializers.Serializer):
-    unidade_administrativa_origem = serializers.PrimaryKeyRelatedField(
-        queryset=queryset_uas_ativas()
-    )
+    unidade_administrativa_origem = serializers.PrimaryKeyRelatedField(queryset=queryset_uas_ativas())
     id = serializers.IntegerField(required=False, min_value=1)
     numero_patrimonial = serializers.CharField(required=False)
     numero_patrimonial_de = serializers.CharField(required=False)
@@ -308,9 +271,7 @@ class BuscaBensMovimentacaoSerializer(serializers.Serializer):
     pagina = serializers.IntegerField(required=False, min_value=1, default=1)
 
     def validate(self, attrs):
-        validar_ua_origem_movimentacao(
-            self.context["request"].user, attrs["unidade_administrativa_origem"]
-        )
+        validar_ua_origem_movimentacao(self.context["request"].user, attrs["unidade_administrativa_origem"])
         modos = (
             "id",
             "numero_patrimonial",
@@ -327,11 +288,7 @@ class BuscaBensMovimentacaoSerializer(serializers.Serializer):
             fim = attrs.get("numero_patrimonial_ate") or inicio
             dados_inicio = _dados_numero_patrimonial(inicio)
             dados_fim = _dados_numero_patrimonial(fim)
-            if (
-                not dados_inicio or not dados_fim
-                or dados_inicio[3] != dados_fim[3]
-                or dados_inicio[1] != dados_fim[1]
-            ):
+            if not dados_inicio or not dados_fim or dados_inicio[3] != dados_fim[3] or dados_inicio[1] != dados_fim[1]:
                 raise serializers.ValidationError("Informe números patrimoniais comparáveis.")
             if dados_inicio[0] > dados_fim[0]:
                 raise serializers.ValidationError(
@@ -372,7 +329,7 @@ def buscar_bens_para_movimentacao(criterios):
 
     total = bens.count()
     pagina = criterios["pagina"]
-    bens_pagina = list(bens.order_by("numero_patrimonial", "id")[(pagina - 1) * 100:pagina * 100])
+    bens_pagina = list(bens.order_by("numero_patrimonial", "id")[(pagina - 1) * 100 : pagina * 100])
     pendentes = set(
         MovimentacaoBensItem.objects.filter(
             bem_id__in=[bem.id for bem in bens_pagina], movimentacao__status=constants.ENVIADA
@@ -381,16 +338,23 @@ def buscar_bens_para_movimentacao(criterios):
     itens = []
     for bem in bens_pagina:
         motivo = motivo_impedimento_movimentacao(ua, bem, pendentes)
-        itens.append({
-            "id": bem.id,
-            "numero_patrimonial": None if bem.sem_numeracao else bem.numero_patrimonial,
-            "nome": bem.nome,
-            "descricao": bem.descricao,
-            "localizacao": bem.localizacao,
-            "apto": motivo is None,
-            "motivo": motivo,
-        })
-    return {"count": total, "pagina": pagina, "proxima_pagina": pagina + 1 if pagina * 100 < total else None, "itens": itens}
+        itens.append(
+            {
+                "id": bem.id,
+                "numero_patrimonial": None if bem.sem_numeracao else bem.numero_patrimonial,
+                "nome": bem.nome,
+                "descricao": bem.descricao,
+                "localizacao": bem.localizacao,
+                "apto": motivo is None,
+                "motivo": motivo,
+            }
+        )
+    return {
+        "count": total,
+        "pagina": pagina,
+        "proxima_pagina": pagina + 1 if pagina * 100 < total else None,
+        "itens": itens,
+    }
 
 
 class MovimentacaoFaixaNumeroPatrimonialSerializer(serializers.Serializer):
@@ -399,9 +363,7 @@ class MovimentacaoFaixaNumeroPatrimonialSerializer(serializers.Serializer):
 
 
 class MovimentacaoBensLotePreviewSerializer(serializers.Serializer):
-    unidade_administrativa_origem = serializers.PrimaryKeyRelatedField(
-        queryset=queryset_uas_ativas()
-    )
+    unidade_administrativa_origem = serializers.PrimaryKeyRelatedField(queryset=queryset_uas_ativas())
     faixas = MovimentacaoFaixaNumeroPatrimonialSerializer(many=True, required=False)
     selecionar_todos = serializers.BooleanField(required=False, default=False)
 
@@ -413,9 +375,7 @@ class MovimentacaoBensLotePreviewSerializer(serializers.Serializer):
         faixas = attrs.get("faixas", [])
         selecionar_todos = attrs.get("selecionar_todos", False)
         if selecionar_todos == bool(faixas):
-            raise serializers.ValidationError(
-                "Informe uma ou mais faixas ou selecione todos os bens da UA."
-            )
+            raise serializers.ValidationError("Informe uma ou mais faixas ou selecione todos os bens da UA.")
 
         bens = resolver_bens_movimentacao_lote(ua_origem, faixas, selecionar_todos)
         if not bens:
@@ -477,9 +437,7 @@ class MovimentacaoBensLoteItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BemPatrimonial
-        fields = [
-            "id", "numero_patrimonial", "nome", "descricao", "localizacao", "status"
-        ]
+        fields = ["id", "numero_patrimonial", "nome", "descricao", "localizacao", "status"]
         read_only_fields = fields
 
     def get_numero_patrimonial(self, obj):
@@ -500,9 +458,7 @@ class MovimentacaoBensItemSimpleSerializer(serializers.ModelSerializer):
 
 
 class MovimentacaoBensItemCreateSerializer(serializers.Serializer):
-    bem = serializers.PrimaryKeyRelatedField(
-        queryset=BemPatrimonial.objects.select_related("unidade_administrativa")
-    )
+    bem = serializers.PrimaryKeyRelatedField(queryset=BemPatrimonial.objects.select_related("unidade_administrativa"))
 
 
 class MovimentacaoBemPatrimonialBaseSerializer(serializers.ModelSerializer):
@@ -558,18 +514,14 @@ class MovimentacaoBemPatrimonialBaseSerializer(serializers.ModelSerializer):
             return None
 
 
-class MovimentacaoBemPatrimonialListSerializer(
-    MovimentacaoBemPatrimonialBaseSerializer
-):
+class MovimentacaoBemPatrimonialListSerializer(MovimentacaoBemPatrimonialBaseSerializer):
     itens = MovimentacaoBensItemSimpleSerializer(many=True, read_only=True)
 
     class Meta(MovimentacaoBemPatrimonialBaseSerializer.Meta):
         fields = MovimentacaoBemPatrimonialBaseSerializer.Meta.fields + ["itens"]
 
 
-class MovimentacaoBemPatrimonialDetailSerializer(
-    MovimentacaoBemPatrimonialBaseSerializer
-):
+class MovimentacaoBemPatrimonialDetailSerializer(MovimentacaoBemPatrimonialBaseSerializer):
     itens = MovimentacaoBensItemSimpleSerializer(many=True, read_only=True)
     url_aprovar = serializers.SerializerMethodField()
     url_rejeitar = serializers.SerializerMethodField()
@@ -578,17 +530,14 @@ class MovimentacaoBemPatrimonialDetailSerializer(
     url_documento_cimbpm = serializers.SerializerMethodField()
 
     class Meta(MovimentacaoBemPatrimonialBaseSerializer.Meta):
-        fields = (
-            MovimentacaoBemPatrimonialBaseSerializer.Meta.fields
-            + [
-                "itens",
-                "url_aprovar",
-                "url_rejeitar",
-                "url_cancelar",
-                "url_historico",
-                "url_documento_cimbpm",
-            ]
-        )
+        fields = MovimentacaoBemPatrimonialBaseSerializer.Meta.fields + [
+            "itens",
+            "url_aprovar",
+            "url_rejeitar",
+            "url_cancelar",
+            "url_historico",
+            "url_documento_cimbpm",
+        ]
 
     def get_url_aprovar(self, obj):
         if obj.status == constants.ENVIADA:
@@ -618,12 +567,8 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
     itens = MovimentacaoBensItemCreateSerializer(many=True, required=False)
     faixas = MovimentacaoFaixaNumeroPatrimonialSerializer(many=True, required=False)
     selecionar_todos = serializers.BooleanField(required=False, default=False)
-    unidade_orcamentaria_destino = serializers.PrimaryKeyRelatedField(
-        queryset=queryset_uos_destino(), required=False
-    )
-    unidade_administrativa_destino = serializers.PrimaryKeyRelatedField(
-        queryset=queryset_uas_ativas(), required=False
-    )
+    unidade_orcamentaria_destino = serializers.PrimaryKeyRelatedField(queryset=queryset_uos_destino(), required=False)
+    unidade_administrativa_destino = serializers.PrimaryKeyRelatedField(queryset=queryset_uas_ativas(), required=False)
 
     class Meta:
         model = MovimentacaoBemPatrimonial
@@ -685,14 +630,10 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         else:
             ua_destino = obter_ua_ponto_central(uo_destino)
             if not ua_destino:
-                raise serializers.ValidationError(
-                    {"unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL}
-                )
+                raise serializers.ValidationError({"unidade_orcamentaria_destino": MENSAGEM_SEM_PONTO_CENTRAL})
 
         if ua_destino.id == ua_origem.id:
-            raise serializers.ValidationError(
-                "Operação não permitida: origem e destino são iguais."
-            )
+            raise serializers.ValidationError("Operação não permitida: origem e destino são iguais.")
 
         attrs["unidade_orcamentaria_destino"] = uo_destino
         attrs["unidade_administrativa_destino"] = ua_destino
@@ -704,14 +645,10 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
         itens = attrs.get("itens", [])
 
         if selecionar_todos and faixas:
-            raise serializers.ValidationError(
-                "Não informe faixas junto com a seleção de todos os bens."
-            )
+            raise serializers.ValidationError("Não informe faixas junto com a seleção de todos os bens.")
         if faixas or selecionar_todos:
             if itens:
-                raise serializers.ValidationError(
-                    "Não informe itens junto com faixas ou seleção de todos os bens."
-                )
+                raise serializers.ValidationError("Não informe itens junto com faixas ou seleção de todos os bens.")
             bens = resolver_bens_movimentacao_lote(
                 attrs["unidade_administrativa_origem"],
                 faixas,
@@ -723,9 +660,7 @@ class MovimentacaoBemPatrimonialCreateSerializer(serializers.ModelSerializer):
                 )
             attrs["itens"] = [{"bem": bem} for bem in bens]
         elif not itens:
-            raise serializers.ValidationError(
-                {"itens": "Adicione ao menos um bem na movimentação."}
-            )
+            raise serializers.ValidationError({"itens": "Adicione ao menos um bem na movimentação."})
 
         self._validar_bens(attrs["unidade_administrativa_origem"], attrs["itens"])
         return attrs
@@ -760,14 +695,10 @@ class MovimentacaoBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if set(self.initial_data.keys()) - {"observacao"}:
-            raise serializers.ValidationError(
-                {"detail": "Nesta versão da API, apenas observação pode ser alterada."}
-            )
+            raise serializers.ValidationError({"detail": "Nesta versão da API, apenas observação pode ser alterada."})
 
         if self.instance.status != constants.ENVIADA:
-            raise serializers.ValidationError(
-                "Apenas movimentações com status 'Enviada' podem ser editadas."
-            )
+            raise serializers.ValidationError("Apenas movimentações com status 'Enviada' podem ser editadas.")
 
         request = self.context.get("request")
         user = getattr(request, "user", None)
@@ -777,9 +708,7 @@ class MovimentacaoBemPatrimonialUpdateSerializer(serializers.ModelSerializer):
             and not getattr(user, "is_gestor_patrimonio", False)
             and self.instance.solicitado_por_id != user.id
         ):
-            raise serializers.ValidationError(
-                "Não é permitido alterar uma movimentação solicitada por outro usuário."
-            )
+            raise serializers.ValidationError("Não é permitido alterar uma movimentação solicitada por outro usuário.")
 
         return attrs
 

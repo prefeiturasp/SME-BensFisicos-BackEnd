@@ -1,0 +1,18 @@
+-r base.txt
+
+# Testes e qualidade (pins verificados no PyPI; ver docs de padronização)
+pytest==7.4.4
+pytest-django==4.5.2
+coverage==7.5.4
+black==25.1.0
+ruff==0.15.0
+mypy==0.991
+django-stubs==1.13.2
+pre-commit==3.8.0
+sphinx==7.3.7
+myst-parser==2.0.0
+debugpy==1.8.5
+
+# Movidos do requirements.txt único (uso dev)
+autopep8==2.0.0
+pycodestyle==2.10.0

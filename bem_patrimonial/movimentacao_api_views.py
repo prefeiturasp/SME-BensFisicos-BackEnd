@@ -1,15 +1,14 @@
+import logging
 from collections import defaultdict
 from datetime import timedelta
-import logging
-
-from django.contrib.contenttypes.models import ContentType
-from django.conf import settings
-from django.db import transaction
-from django.http import FileResponse
-from django.utils import timezone
-from django.db.models import Exists, OuterRef
 
 import django_filters
+from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
+from django.db.models import Exists, OuterRef
+from django.http import FileResponse
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -30,17 +29,16 @@ from bem_patrimonial.emails import (
     envia_email_solicitacao_movimentacao_cancelada,
     envia_email_solicitacao_movimentacao_rejeitada,
 )
-from bem_patrimonial.models import MovimentacaoBemPatrimonial
-from bem_patrimonial.models import MovimentacaoBensItem
+from bem_patrimonial.models import MovimentacaoBemPatrimonial, MovimentacaoBensItem
 from bem_patrimonial.serializers.movimentacao_serializers import (
     BemPatrimonialSimpleSerializer,
     BuscaBensMovimentacaoSerializer,
-    MovimentacaoBensLotePreviewResponseSerializer,
-    MovimentacaoBensLotePreviewSerializer,
     MovimentacaoBemPatrimonialCreateSerializer,
     MovimentacaoBemPatrimonialDetailSerializer,
     MovimentacaoBemPatrimonialListSerializer,
     MovimentacaoBemPatrimonialUpdateSerializer,
+    MovimentacaoBensLotePreviewResponseSerializer,
+    MovimentacaoBensLotePreviewSerializer,
     MovimentacaoHistoricoGrupoSerializer,
     MovimentacaoUoCadastroOptionSerializer,
     buscar_bens_para_movimentacao,
@@ -50,6 +48,7 @@ from bem_patrimonial.serializers.movimentacao_serializers import (
 )
 from dados_comuns.context import audit_as
 from dados_comuns.escopo import filtrar_queryset_movimentacao_por_escopo
+from dados_comuns.historico_consulta import limpar_justificativa_historico
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.permissions import MovimentacaoBemPatrimonialPermission
 
@@ -100,10 +99,7 @@ MOVIMENTACAO_LIST_QUERY_PARAMETERS = [
         name="status",
         type=OpenApiTypes.STR,
         location=OpenApiParameter.QUERY,
-        description=(
-            "Filtra por status da movimentação. Aceita um valor ou vários separados "
-            "por vírgula."
-        ),
+        description=("Filtra por status da movimentação. Aceita um valor ou vários separados por vírgula."),
     ),
     OpenApiParameter(
         name="unidade_administrativa_origem",
@@ -146,18 +142,14 @@ MOVIMENTACAO_LIST_QUERY_PARAMETERS = [
     ),
 ]
 
-JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API = "Movimentação criada via API"
+JUSTIFICATIVA_MOVIMENTACAO_CRIADA = "Movimentação criada"
 
 
 class MovimentacaoBemPatrimonialFilter(django_filters.FilterSet):
     status = django_filters.CharFilter(method="filter_status")
     atrasada = django_filters.CharFilter(method="filter_atrasada")
-    numero_patrimonial_inicial = django_filters.CharFilter(
-        method="filter_numero_patrimonial_inicial"
-    )
-    numero_patrimonial_final = django_filters.CharFilter(
-        method="filter_numero_patrimonial_final"
-    )
+    numero_patrimonial_inicial = django_filters.CharFilter(method="filter_numero_patrimonial_inicial")
+    numero_patrimonial_final = django_filters.CharFilter(method="filter_numero_patrimonial_final")
 
     class Meta:
         model = MovimentacaoBemPatrimonial
@@ -318,9 +310,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
     def bens_movimentaveis(self, request):
         ua_origem = validar_ua_origem_movimentacao(
             request.user,
-            UnidadeAdministrativa.objects.filter(
-                pk=request.query_params.get("unidade_administrativa_origem")
-            ).first(),
+            UnidadeAdministrativa.objects.filter(pk=request.query_params.get("unidade_administrativa_origem")).first(),
         )
         busca = request.query_params.get("search", "").strip()
         bens = queryset_bens_movimentaveis(ua_origem)
@@ -352,12 +342,14 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=["get"], url_path="buscar-bens")
     def buscar_bens(self, request):
-        serializer = BuscaBensMovimentacaoSerializer(
-            data=request.query_params, context={"request": request}
-        )
+        serializer = BuscaBensMovimentacaoSerializer(data=request.query_params, context={"request": request})
         serializer.is_valid(raise_exception=True)
         return Response(buscar_bens_para_movimentacao(serializer.validated_data))
 
+    @extend_schema(
+        tags=["Movimentações"],
+        summary="Opções para cadastro de movimentação",
+    )
     @action(detail=False, methods=["get"], url_path="opcoes-cadastro")
     def opcoes_cadastro(self, request):
         uos = UnidadeOrcamentaria.objects.filter(ativa=True).order_by("codigo", "nome")
@@ -375,20 +367,17 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def get_queryset(self):
-        qs = (
-            MovimentacaoBemPatrimonial.objects.select_related(
-                "bem_patrimonial",
-                "unidade_administrativa_origem",
-                "unidade_administrativa_origem__unidade_orcamentaria",
-                "unidade_administrativa_destino",
-                "unidade_administrativa_destino__unidade_orcamentaria",
-                "solicitado_por",
-                "aprovado_por",
-                "rejeitado_por",
-                "cancelado_por",
-            )
-            .prefetch_related("itens__bem", "itens__bem__unidade_administrativa")
-        )
+        qs = MovimentacaoBemPatrimonial.objects.select_related(
+            "bem_patrimonial",
+            "unidade_administrativa_origem",
+            "unidade_administrativa_origem__unidade_orcamentaria",
+            "unidade_administrativa_destino",
+            "unidade_administrativa_destino__unidade_orcamentaria",
+            "solicitado_por",
+            "aprovado_por",
+            "rejeitado_por",
+            "cancelado_por",
+        ).prefetch_related("itens__bem", "itens__bem__unidade_administrativa")
         return filtrar_queryset_movimentacao_por_escopo(self.request.user, qs).distinct()
 
     def _content_type(self):
@@ -442,15 +431,13 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                 {
                     "alterado_em": alterado_em,
                     "alterado_por": alterado_por_id,
-                    "alterado_por_nome": (
-                        itens[0].alterado_por.nome if itens[0].alterado_por else None
-                    ),
+                    "alterado_por_nome": (itens[0].alterado_por.nome if itens[0].alterado_por else None),
                     "acoes": [
                         {
                             "campo": item.campo,
                             "valor_antigo": item.valor_antigo,
                             "valor_novo": item.valor_novo,
-                            "justificativa": item.justificativa,
+                            "justificativa": limpar_justificativa_historico(item.justificativa),
                         }
                         for item in itens
                     ],
@@ -462,12 +449,8 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         return serializer.data
 
     def _movimentacao_entre_uos_diferentes(self, mov):
-        origem_uo_id = getattr(
-            mov.unidade_administrativa_origem, "unidade_orcamentaria_id", None
-        )
-        destino_uo_id = getattr(
-            mov.unidade_administrativa_destino, "unidade_orcamentaria_id", None
-        )
+        origem_uo_id = getattr(mov.unidade_administrativa_origem, "unidade_orcamentaria_id", None)
+        destino_uo_id = getattr(mov.unidade_administrativa_destino, "unidade_orcamentaria_id", None)
         return bool(origem_uo_id and destino_uo_id and origem_uo_id != destino_uo_id)
 
     def _obter_uo_id_do_usuario(self, usuario):
@@ -478,16 +461,11 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         return getattr(unidade_administrativa, "unidade_orcamentaria_id", None)
 
     def _usuario_e_gestor_da_uo(self, usuario, uo_id):
-        return bool(
-            getattr(usuario, "is_gestor_patrimonio", False)
-            and self._obter_uo_id_do_usuario(usuario) == uo_id
-        )
+        return bool(getattr(usuario, "is_gestor_patrimonio", False) and self._obter_uo_id_do_usuario(usuario) == uo_id)
 
     def _validar_status_movimentacao_para_acao(self, mov, acao):
         if getattr(mov, "status", None) != constants.ENVIADA:
-            raise ValidationError(
-                f"Movimentação #{mov.pk}: apenas movimentações enviadas podem ser {acao}."
-            )
+            raise ValidationError(f"Movimentação #{mov.pk}: apenas movimentações enviadas podem ser {acao}.")
         if mov.aceita:
             raise ValidationError(f"Movimentação #{mov.pk} já foi aprovada anteriormente.")
         if mov.rejeitada:
@@ -519,9 +497,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                 f"Movimentação #{mov.pk}: apenas operadores da unidade de destino podem {acao} esta movimentação."
             )
         if mov.solicitado_por_id == user.pk:
-            raise ValidationError(
-                f"Movimentação #{mov.pk}: você não pode {acao} sua própria solicitação."
-            )
+            raise ValidationError(f"Movimentação #{mov.pk}: você não pode {acao} sua própria solicitação.")
 
     def _validar_acao_em_uos_diferentes(self, mov, user, acao):
         if mov.solicitado_por_id == user.pk:
@@ -529,9 +505,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                 f"Movimentação #{mov.pk}: você não pode {acao} sua própria solicitação em movimentações entre UOs."
             )
 
-        if getattr(user, "is_operador_inventario", False) and not getattr(
-            user, "is_gestor_patrimonio", False
-        ):
+        if getattr(user, "is_operador_inventario", False) and not getattr(user, "is_gestor_patrimonio", False):
             self._validar_acao_por_operador(mov, user, acao)
             return
 
@@ -539,13 +513,12 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             destino_uo_id = mov.unidade_administrativa_destino.unidade_orcamentaria_id
             if not self._usuario_e_gestor_da_uo(user, destino_uo_id):
                 raise PermissionDenied(
-                    f"Movimentação #{mov.pk}: apenas gestores da UO de destino podem {acao} esta movimentação entre UOs."
+                    f"Movimentação #{mov.pk}: apenas gestores da UO de destino podem {acao} "
+                    "esta movimentação entre UOs."
                 )
 
     def _validar_acao_na_mesma_uo(self, mov, user, acao):
-        if getattr(user, "is_operador_inventario", False) and not getattr(
-            user, "is_gestor_patrimonio", False
-        ):
+        if getattr(user, "is_operador_inventario", False) and not getattr(user, "is_gestor_patrimonio", False):
             self._validar_acao_por_operador(mov, user, acao)
 
     def _validar_acao(self, mov, user, acao):
@@ -561,15 +534,11 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
     def _validar_tem_itens_para_acao(self, mov):
         if not mov.itens.exists():
-            raise ValidationError(
-                {"itens": f"Movimentação #{mov.pk} não possui bens associados."}
-            )
+            raise ValidationError({"itens": f"Movimentação #{mov.pk} não possui bens associados."})
 
     def _validar_cancelamento_por_operador(self, mov, user):
         if mov.solicitado_por_id != user.pk:
-            raise ValidationError(
-                f"Movimentação #{mov.pk}: você só pode cancelar movimentações criadas por você."
-            )
+            raise ValidationError(f"Movimentação #{mov.pk}: você só pode cancelar movimentações criadas por você.")
 
     def _validar_cancelamento_por_gestor(self, mov, user):
         usuario_uo_id = self._obter_uo_id_do_usuario(user)
@@ -577,13 +546,12 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         destino_uo_id = mov.unidade_administrativa_destino.unidade_orcamentaria_id
         if usuario_uo_id not in (origem_uo_id, destino_uo_id):
             raise PermissionDenied(
-                f"Movimentação #{mov.pk}: apenas gestores da UO de origem ou destino podem cancelar esta movimentação entre UOs."
+                f"Movimentação #{mov.pk}: apenas gestores da UO de origem ou destino podem cancelar "
+                "esta movimentação entre UOs."
             )
 
     def _validar_cancelamento_em_uos_diferentes(self, mov, user):
-        if getattr(user, "is_operador_inventario", False) and not getattr(
-            user, "is_gestor_patrimonio", False
-        ):
+        if getattr(user, "is_operador_inventario", False) and not getattr(user, "is_gestor_patrimonio", False):
             self._validar_cancelamento_por_operador(mov, user)
             return
 
@@ -591,28 +559,18 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             self._validar_cancelamento_por_gestor(mov, user)
 
     def _validar_cancelamento_na_mesma_uo(self, mov, user):
-        if getattr(user, "is_operador_inventario", False) and not getattr(
-            user, "is_gestor_patrimonio", False
-        ):
+        if getattr(user, "is_operador_inventario", False) and not getattr(user, "is_gestor_patrimonio", False):
             self._validar_cancelamento_por_operador(mov, user)
 
     def _validar_cancelamento(self, mov, user):
         if getattr(mov, "status", None) != constants.ENVIADA:
-            raise ValidationError(
-                f"Movimentação #{mov.pk}: apenas movimentações enviadas podem ser canceladas."
-            )
+            raise ValidationError(f"Movimentação #{mov.pk}: apenas movimentações enviadas podem ser canceladas.")
         if mov.aceita:
-            raise ValidationError(
-                f"Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada."
-            )
+            raise ValidationError(f"Movimentação #{mov.pk} já foi aprovada e não pode ser cancelada.")
         if mov.rejeitada:
-            raise ValidationError(
-                f"Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada."
-            )
+            raise ValidationError(f"Movimentação #{mov.pk} já foi rejeitada e não pode ser cancelada.")
         if mov.cancelada:
-            raise ValidationError(
-                f"Movimentação #{mov.pk} já foi cancelada anteriormente."
-            )
+            raise ValidationError(f"Movimentação #{mov.pk} já foi cancelada anteriormente.")
 
         if self._movimentacao_entre_uos_diferentes(mov):
             self._validar_cancelamento_em_uos_diferentes(mov, user)
@@ -632,7 +590,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             valor_antigo=status_anterior,
             valor_novo=mov.get_status_display(),
             usuario=usuario,
-            justificativa=f"Movimentação {acao} via API",
+            justificativa=f"Movimentação {acao}",
         )
         self._registrar_historico(
             mov,
@@ -640,7 +598,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
             valor_antigo="",
             valor_novo=str(usuario),
             usuario=usuario,
-            justificativa=f"Movimentação {acao} via API",
+            justificativa=f"Movimentação {acao}",
         )
 
     def _notificar_solicitante(self, envio_fn, *args):
@@ -688,7 +646,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                     valor_antigo="",
                     valor_novo=movimentacao.get_status_display(),
                     usuario=request.user,
-                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API,
+                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA,
                 )
                 self._registrar_historico(
                     movimentacao,
@@ -696,7 +654,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                     valor_antigo="",
                     valor_novo=str(movimentacao.unidade_administrativa_origem),
                     usuario=request.user,
-                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API,
+                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA,
                 )
                 self._registrar_historico(
                     movimentacao,
@@ -704,7 +662,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                     valor_antigo="",
                     valor_novo=str(movimentacao.unidade_administrativa_destino),
                     usuario=request.user,
-                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA_VIA_API,
+                    justificativa=JUSTIFICATIVA_MOVIMENTACAO_CRIADA,
                 )
                 self._registrar_historico_bulk(
                     movimentacao,
@@ -720,9 +678,7 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                     request.user,
                 )
 
-        detail = MovimentacaoBemPatrimonialDetailSerializer(
-            movimentacao, context={"request": request}
-        )
+        detail = MovimentacaoBemPatrimonialDetailSerializer(movimentacao, context={"request": request})
         return Response(detail.data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
@@ -750,12 +706,10 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
                         valor_antigo=observacao_anterior,
                         valor_novo=movimentacao.observacao,
                         usuario=request.user,
-                        justificativa="Observação atualizada via API",
+                        justificativa="Observação atualizada",
                     )
 
-        detail = MovimentacaoBemPatrimonialDetailSerializer(
-            movimentacao, context={"request": request}
-        )
+        detail = MovimentacaoBemPatrimonialDetailSerializer(movimentacao, context={"request": request})
         return Response(detail.data, status=status.HTTP_200_OK)
 
     @extend_schema(
@@ -791,16 +745,13 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
         if mov.solicitado_por and mov.solicitado_por.email and settings.DEFAULT_FROM_EMAIL:
             emails = [mov.solicitado_por.email]
-            for item in mov.itens.select_related("bem"):
-                self._notificar_solicitante(
-                    envia_email_solicitacao_movimentacao_aceita,
-                    item.bem,
-                    emails,
-                )
+            self._notificar_solicitante(
+                envia_email_solicitacao_movimentacao_aceita,
+                mov,
+                emails,
+            )
 
-        return Response(
-            MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data
-        )
+        return Response(MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data)
 
     @extend_schema(
         tags=["Movimentações"],
@@ -824,16 +775,13 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
         if mov.solicitado_por and mov.solicitado_por.email and settings.DEFAULT_FROM_EMAIL:
             emails = [mov.solicitado_por.email]
-            for item in mov.itens.select_related("bem"):
-                self._notificar_solicitante(
-                    envia_email_solicitacao_movimentacao_rejeitada,
-                    item.bem,
-                    emails,
-                )
+            self._notificar_solicitante(
+                envia_email_solicitacao_movimentacao_rejeitada,
+                mov,
+                emails,
+            )
 
-        return Response(
-            MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data
-        )
+        return Response(MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data)
 
     @extend_schema(
         tags=["Movimentações"],
@@ -857,17 +805,14 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
 
         if mov.solicitado_por and mov.solicitado_por.email and settings.DEFAULT_FROM_EMAIL:
             emails = [mov.solicitado_por.email]
-            for item in mov.itens.select_related("bem"):
-                self._notificar_solicitante(
-                    envia_email_solicitacao_movimentacao_cancelada,
-                    item.bem,
-                    request.user,
-                    emails,
-                )
+            self._notificar_solicitante(
+                envia_email_solicitacao_movimentacao_cancelada,
+                mov,
+                request.user,
+                emails,
+            )
 
-        return Response(
-            MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data
-        )
+        return Response(MovimentacaoBemPatrimonialDetailSerializer(mov, context={"request": request}).data)
 
     @extend_schema(
         tags=["Movimentações"],
@@ -896,8 +841,13 @@ class MovimentacaoBemPatrimonialViewSet(viewsets.ModelViewSet):
         if not mov.numero_cimbpm:
             raise NotFound("Número CIMBPM não gerado para esta movimentação.")
 
+        data_aceite = None
+        if mov.aceita and mov.aprovado_por:
+            data_aceite = mov.atualizado_em
+
         pdf_buffer = gerar_pdf_cimbpm(
             mov,
+            data_aceite=data_aceite,
             usuario_gerador=request.user,
             data_geracao=timezone.now(),
         )

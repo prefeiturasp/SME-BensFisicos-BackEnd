@@ -15,10 +15,7 @@ def verificar_movimentacoes_duplicadas(modeladmin, request, queryset):
 
     user = request.user
 
-    if not (
-        getattr(user, "is_gestor_patrimonio", False)
-        or getattr(user, "is_operador_inventario", False)
-    ):
+    if not (getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_operador_inventario", False)):
         messages.error(
             request,
             "Você não tem permissão para executar esta ação. "
@@ -39,8 +36,7 @@ def verificar_movimentacoes_duplicadas(modeladmin, request, queryset):
         ua_user = getattr(user, "unidade_administrativa", None)
         if ua_user:
             base_qs = base_qs.filter(
-                Q(unidade_administrativa_origem=ua_user)
-                | Q(unidade_administrativa_destino=ua_user)
+                Q(unidade_administrativa_origem=ua_user) | Q(unidade_administrativa_destino=ua_user)
             )
 
     grupos = defaultdict(list)

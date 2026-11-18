@@ -178,9 +178,7 @@ class TransferenciaBemPatrimonialModelTestCase(TestCase):
         transferencia.save()
 
         self.assertEqual(
-            TransferenciaBemPatrimonial.objects.filter(
-                numero_processo="SEI-123456/2026"
-            ).count(),
+            TransferenciaBemPatrimonial.objects.filter(numero_processo="SEI-123456/2026").count(),
             2,
         )
 

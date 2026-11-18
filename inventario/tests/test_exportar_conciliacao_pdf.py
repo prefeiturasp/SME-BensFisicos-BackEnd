@@ -1,29 +1,27 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from io import BytesIO
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 
-from django.test import TestCase, Client
-from django.urls import reverse
 from django.contrib.auth.models import Group
+from django.test import Client, TestCase
+from django.urls import reverse
 from django.utils import timezone
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Spacer
 
-from dados_comuns.models import UnidadeAdministrativa
-from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
-
 from bem_patrimonial.models import BemPatrimonial
-
+from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua
+from inventario import constants
 from inventario.models import (
     ConciliacaoUA,
     ItemConciliacao,
     OcorrenciaConciliacao,
     ParametroConciliacaoAnual,
 )
-from inventario import constants
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class ConciliacaoPDFTestBase(TestCase):
@@ -31,9 +29,7 @@ class ConciliacaoPDFTestBase(TestCase):
         self.client = Client()
 
         self.grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
-        self.grupo_operador, _ = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )
+        self.grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
 
         self.ua_a = criar_ua(
             codigo="01.16.10.379",
@@ -145,9 +141,7 @@ class TestDownloadConciliacaoPDFView(ConciliacaoPDFTestBase):
     def setUp(self):
         super().setUp()
         self.conciliacao = self.criar_conciliacao_eventual(ua=self.ua_a)
-        self.url = reverse(
-            "download_conciliacao_pdf", kwargs={"pk": self.conciliacao.pk}
-        )
+        self.url = reverse("download_conciliacao_pdf", kwargs={"pk": self.conciliacao.pk})
 
     def test_nao_autenticado_redireciona_login(self):
         resp = self.client.get(self.url)
@@ -288,9 +282,7 @@ class TestHelpersRelatorioConciliacao(TestCase):
         self.assertEqual(estilos["txt_center"].leading, 9)
         self.assertEqual(estilos["totalizador_label"].fontName, "Helvetica-Bold")
         self.assertEqual(estilos["totalizador_valor"].fontName, "Helvetica-Bold")
-        self.assertEqual(
-            estilos["totalizador_geral_label"].fontName, "Helvetica-Bold"
-        )
+        self.assertEqual(estilos["totalizador_geral_label"].fontName, "Helvetica-Bold")
         self.assertEqual(estilos["ocorrencia_badge"].fontName, "Helvetica-Bold")
 
 
@@ -344,24 +336,20 @@ class TestGerarPDFConciliacao(ConciliacaoPDFTestBase):
             "inventario.relatorio_conciliacao_pdf.Image",
             side_effect=Exception("sem logo"),
         ):
-            buf = gerar_pdf_conciliacao(
-                self.conciliacao, usuario_gerador=self.operador_a
-            )
+            buf = gerar_pdf_conciliacao(self.conciliacao, usuario_gerador=self.operador_a)
 
         self.assertTrue(buf.getvalue().startswith(b"%PDF"))
 
     def test_rodape_e_ocorrencia_exibem_apenas_rf(self):
         from inventario.relatorio_conciliacao_pdf import (
             _criar_rodape_conciliacao,
-            _linhas_tabela_item,
             _estilos_blocos_itens,
+            _linhas_tabela_item,
         )
 
         self.conciliacao.fechado_por = self.gestor
 
-        rodape_table = _criar_rodape_conciliacao(
-            self.conciliacao, usuario_gerador=self.operador_a
-        )[0]
+        rodape_table = _criar_rodape_conciliacao(self.conciliacao, usuario_gerador=self.operador_a)[0]
         responsavel_exportacao = rodape_table._cellvalues[1][0].getPlainText()
         responsavel_fechamento = rodape_table._cellvalues[1][1].getPlainText()
 
@@ -412,11 +400,7 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
                 bem=bem,
                 situacao=situacao,
                 observacao="" if situacao != constants.DIVERGENTE else "Obs do item",
-                divergencia=(
-                    "Divergência do item"
-                    if situacao == constants.DIVERGENTE
-                    else ""
-                ),
+                divergencia=("Divergência do item" if situacao == constants.DIVERGENTE else ""),
                 atualizado_por=self.operador_a,
             )
             self.itens[situacao] = item
@@ -449,9 +433,7 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
 
         textos = []
-        self._recuperar_textos_blocos(
-            _criar_blocos_itens_conciliacao(conciliacao), textos
-        )
+        self._recuperar_textos_blocos(_criar_blocos_itens_conciliacao(conciliacao), textos)
         return "\n".join(t for t in textos if t)
 
     def test_pdf_agrupa_por_categorias_de_situacao(self):
@@ -496,8 +478,9 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         self.assertEqual(posicao_valor_geral, texto.rfind("R$ 1.610,00"))
 
     def test_titulo_categoria_agrupado_com_primeiro_item(self):
-        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
         from reportlab.platypus import KeepTogether, Table
+
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
@@ -510,8 +493,9 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         self.assertIsInstance(conteudo[1], Spacer)
 
     def test_totalizador_categoria_tem_tres_celulas_com_grade(self):
-        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
         from reportlab.platypus import Table
+
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
@@ -527,8 +511,9 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         )
 
     def test_total_geral_ultimo_elemento_com_tres_celulas(self):
-        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
         from reportlab.platypus import Table
+
+        from inventario.relatorio_conciliacao_pdf import _criar_blocos_itens_conciliacao
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
@@ -543,11 +528,12 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         )
 
     def test_espacamentos_entre_categorias_e_apos_titulo(self):
-        from inventario.relatorio_conciliacao_pdf import (
-            _criar_blocos_itens_conciliacao,
-            PDFConfig,
-        )
         from reportlab.platypus import Spacer, Table
+
+        from inventario.relatorio_conciliacao_pdf import (
+            PDFConfig,
+            _criar_blocos_itens_conciliacao,
+        )
 
         elements = _criar_blocos_itens_conciliacao(self.conciliacao)
 
@@ -560,9 +546,7 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
         )
 
         self.assertIsInstance(elements[-2], Spacer)
-        self.assertAlmostEqual(
-            elements[-2].height, PDFConfig.ESPACO_ENTRE_CATEGORIAS, places=2
-        )
+        self.assertAlmostEqual(elements[-2].height, PDFConfig.ESPACO_ENTRE_CATEGORIAS, places=2)
         self.assertIsInstance(elements[-1], Table)
 
         conteudo = elements[0]._content
@@ -623,6 +607,4 @@ class TestGerarPDFConciliacaoCategoriasETotais(ConciliacaoPDFTestBase):
     def test_pdf_sinaliza_item_com_ocorrencia(self):
         texto = self._coletar_texto_blocos()
 
-        self.assertEqual(
-            texto.count("ITEM COM OCORRÊNCIA NESTA CONCILIAÇÃO"), 1
-        )
+        self.assertEqual(texto.count("ITEM COM OCORRÊNCIA NESTA CONCILIAÇÃO"), 1)

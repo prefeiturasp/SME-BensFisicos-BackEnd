@@ -1,32 +1,33 @@
+from django.conf import settings
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.contrib.contenttypes.models import ContentType
+from django.core.mail import send_mail
+from django.db import transaction
+from django.template.loader import render_to_string
+from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
 from rest_framework import generics, status, views
-from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
     TokenVerifyView,
 )
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.core.mail import send_mail
-from django.conf import settings
-from django.template.loader import render_to_string
-from drf_spectacular.utils import extend_schema, OpenApiResponse, OpenApiExample
+
+from dados_comuns.models import HistoricoGeral
+from dados_comuns.utils import dict_changes
 from usuario.models import Usuario
 from usuario.serializers import (
     CustomTokenObtainPairSerializer,
-    PasswordResetRequestSerializer,
-    PasswordResetConfirmSerializer,
-    PasswordChangeSerializer,
     FirstAccessPasswordChangeSerializer,
-    UserProfileSerializer,
+    PasswordChangeSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     SelecionarUnidadeAdministrativaSerializer,
+    UserProfileSerializer,
 )
-from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.db import transaction
-from django.contrib.contenttypes.models import ContentType
-from dados_comuns.models import HistoricoGeral
-from dados_comuns.utils import dict_changes
 
 
 def set_refresh_token_cookie(response, refresh_token):
@@ -73,7 +74,7 @@ def set_refresh_token_cookie(response, refresh_token):
 )
 class CustomTokenObtainPairView(TokenObtainPairView):
 
-    serializer_class = CustomTokenObtainPairSerializer
+    serializer_class = CustomTokenObtainPairSerializer  # type: ignore[assignment]
 
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
@@ -217,16 +218,14 @@ class PasswordResetRequestAPIView(generics.GenericAPIView):
         email = serializer.validated_data["email"]
 
         try:
-            from django.utils.http import urlsafe_base64_encode
             from django.utils.encoding import force_bytes
+            from django.utils.http import urlsafe_base64_encode
 
             user = Usuario.objects.get(email=email, is_active=True)
             token_generator = PasswordResetTokenGenerator()
             reset_token = token_generator.make_token(user)
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
-            reset_url = (
-                f"{settings.FRONTEND_URL}/recuperar-senha/{uidb64}/{reset_token}/"
-            )
+            reset_url = f"{settings.FRONTEND_URL}/recuperar-senha/{uidb64}/{reset_token}/"
 
             context = {
                 "user": user,
@@ -234,9 +233,7 @@ class PasswordResetRequestAPIView(generics.GenericAPIView):
             }
 
             subject = "Recuperação de Senha - SME Bens Físicos"
-            html_message = render_to_string(
-                "admin/password_recovery_email_api.html", context
-            )
+            html_message = render_to_string("admin/password_recovery_email_api.html", context)
 
             send_mail(
                 subject,
@@ -250,9 +247,7 @@ class PasswordResetRequestAPIView(generics.GenericAPIView):
             pass
 
         return Response(
-            {
-                "detail": "Se o email informado estiver cadastrado, você receberá instruções para recuperação de senha."
-            },
+            {"detail": "Se o email informado estiver cadastrado, você receberá instruções para recuperação de senha."},
             status=status.HTTP_200_OK,
         )
 
@@ -306,9 +301,7 @@ class PasswordResetConfirmAPIView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(
-            {"detail": "Senha redefinida com sucesso."}, status=status.HTTP_200_OK
-        )
+        return Response({"detail": "Senha redefinida com sucesso."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -347,9 +340,7 @@ class PasswordChangeAPIView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(
-            {"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK
-        )
+        return Response({"detail": "Senha alterada com sucesso."}, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -361,9 +352,7 @@ class PasswordChangeAPIView(generics.GenericAPIView):
             examples=[
                 OpenApiExample(
                     "Sucesso",
-                    value={
-                        "detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."
-                    },
+                    value={"detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."},
                 )
             ],
         ),
@@ -372,9 +361,7 @@ class PasswordChangeAPIView(generics.GenericAPIView):
             examples=[
                 OpenApiExample(
                     "Não marcado para troca",
-                    value={
-                        "detail": "Usuário não está marcado para troca obrigatória de senha."
-                    },
+                    value={"detail": "Usuário não está marcado para troca obrigatória de senha."},
                 )
             ],
         ),
@@ -393,9 +380,7 @@ class FirstAccessPasswordChangeAPIView(generics.GenericAPIView):
         serializer.save()
 
         return Response(
-            {
-                "detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."
-            },
+            {"detail": "Senha alterada com sucesso. Você pode continuar usando o sistema."},
             status=status.HTTP_200_OK,
         )
 

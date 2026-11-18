@@ -33,7 +33,7 @@ class MovimentacaoMotivosTestCase(SimpleTestCase):
         self.assertIn('value="todos"', html)
         self.assertIn('data-modo="geral"', html)
         self.assertIn('data-modo="faixa"', html)
-        self.assertIn('Informe o número patrimonial completo do primeiro bem', html)
+        self.assertIn("Informe o número patrimonial completo do primeiro bem", html)
 
     def test_status_impedido_informa_status_e_aprovacao_obrigatoria(self):
         for status, rotulo in constants.STATUS:

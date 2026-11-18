@@ -20,24 +20,36 @@ router.register(
 )
 
 
-item_list = ItemConciliacaoViewSet.as_view({
-    "get": "list",
-})
-item_detail = ItemConciliacaoViewSet.as_view({
-    "get": "retrieve",
-})
-item_situacoes = ItemConciliacaoViewSet.as_view({
-    "get": "situacoes_disponiveis",
-})
-item_registrar_ocorrencia = ItemConciliacaoViewSet.as_view({
-    "post": "registrar_ocorrencia",
-})
-item_excluir_ocorrencia = ItemConciliacaoViewSet.as_view({
-    "post": "excluir_ocorrencia",
-})
-item_historico = ItemConciliacaoViewSet.as_view({
-    "get": "historico",
-})
+item_list = ItemConciliacaoViewSet.as_view(
+    {
+        "get": "list",
+    }
+)
+item_detail = ItemConciliacaoViewSet.as_view(
+    {
+        "get": "retrieve",
+    }
+)
+item_situacoes = ItemConciliacaoViewSet.as_view(
+    {
+        "get": "situacoes_disponiveis",
+    }
+)
+item_registrar_ocorrencia = ItemConciliacaoViewSet.as_view(
+    {
+        "post": "registrar_ocorrencia",
+    }
+)
+item_excluir_ocorrencia = ItemConciliacaoViewSet.as_view(
+    {
+        "post": "excluir_ocorrencia",
+    }
+)
+item_historico = ItemConciliacaoViewSet.as_view(
+    {
+        "get": "historico",
+    }
+)
 
 urlpatterns = router.urls + [
     path(

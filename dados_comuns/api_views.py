@@ -1,13 +1,13 @@
 from datetime import datetime
+from typing import Any, ClassVar
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
@@ -20,10 +20,14 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import (
     NotFound,
+)
+from rest_framework.exceptions import (
     ValidationError as DRFValidationError,
 )
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from dados_comuns.api_serializers import (
     UnidadeAdministrativaDetailSerializer,
@@ -36,25 +40,24 @@ from dados_comuns.api_serializers import (
     UnidadeOrcamentariaListSerializer,
 )
 from dados_comuns.context import audit_as
-from dados_comuns.historico_consulta import consultar_historico
 from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
 from dados_comuns.formats import (
     UnidadeAdministrativaPDFFormat,
     UnidadeOrcamentariaPDFFormat,
 )
+from dados_comuns.historico_consulta import consultar_historico
+from dados_comuns.libs.pagination import SafePagination
 from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa, UnidadeOrcamentaria
 from dados_comuns.permissions import (
     UnidadeAdministrativaPermission,
     UnidadeOrcamentariaPermission,
 )
-from dados_comuns.libs.pagination import SafePagination
 from dados_comuns.resources import (
     UnidadeAdministrativaResource,
     UnidadeOrcamentariaResource,
 )
 from dados_comuns.utils import dict_changes, garantir_ua_ponto_central_externa
 from usuario.serializers import UnidadeAdministrativaUsuarioSerializer
-
 
 User = get_user_model()
 
@@ -84,11 +87,11 @@ UO_ID_PATH_PARAM = OpenApiParameter(
 
 
 class AuditHistoryExportMixin:
-    audit_model = None
-    historico_grupo_serializer_class = None
-    export_query_serializer_class = None
-    export_resource_class = None
-    export_pdf_format_class = None
+    audit_model: ClassVar[Any] = None
+    historico_grupo_serializer_class: ClassVar[Any] = None
+    export_query_serializer_class: ClassVar[Any] = None
+    export_resource_class: ClassVar[Any] = None
+    export_pdf_format_class: ClassVar[Any] = None
     export_filename_prefix = ""
 
     def _get_audit_content_type(self):
@@ -179,9 +182,7 @@ class AuditHistoryExportMixin:
             content_type = "application/vnd.ms-excel"
         else:
             content = dataset.xlsx
-            content_type = (
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -279,7 +280,9 @@ class AuditHistoryExportMixin:
     destroy=extend_schema(
         tags=["Unidades Orçamentárias"],
         summary="Excluir unidade orçamentária",
-        description="A exclusão é permitida apenas para superusuário e bloqueada quando existirem vínculos ativos no sistema.",
+        description=(
+            "A exclusão é permitida apenas para superusuário e bloqueada quando existirem vínculos ativos no sistema."
+        ),
         parameters=[UO_ID_PATH_PARAM],
         responses={
             204: OpenApiResponse(description="Unidade orçamentária excluída com sucesso."),
@@ -340,9 +343,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
         if vinculos:
             raise DRFValidationError(
                 {
-                    "detail": "Não foi possível excluir esta Unidade Orçamentária porque existem vínculos ativos no sistema: {}.".format(
-                        ", ".join(vinculos)
-                    )
+                    "detail": (
+                        "Não foi possível excluir esta Unidade Orçamentária porque existem "
+                        "vínculos ativos no sistema: {}."
+                    ).format(", ".join(vinculos))
                 }
             )
 
@@ -373,7 +377,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
             except ProtectedError:
                 raise DRFValidationError(
                     {
-                        "detail": "Não foi possível excluir esta Unidade Orçamentária porque existem vínculos ativos no sistema."
+                        "detail": (
+                            "Não foi possível excluir esta Unidade Orçamentária porque existem "
+                            "vínculos ativos no sistema."
+                        )
                     }
                 )
 
@@ -443,7 +450,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
                 name="ordering",
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
-                description="Ordenação por: id, codigo, sigla, nome, status, created_at, updated_at, unidade_orcamentaria__codigo. Use '-' para descendente.",
+                description=(
+                    "Ordenação por: id, codigo, sigla, nome, status, created_at, updated_at, "
+                    "unidade_orcamentaria__codigo. Use '-' para descendente."
+                ),
             ),
             OpenApiParameter(
                 name="status",
@@ -484,7 +494,11 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
     create=extend_schema(
         tags=["Unidades Administrativas"],
         summary="Criar unidade administrativa",
-        description="Cria unidade administrativa. O campo 'codigo' deve receber apenas o sufixo numérico com 3 ou 4 dígitos (ex.: 002 ou 1002). O backend compõe o código final com o prefixo da unidade orçamentária (ex.: 01.16.10.002).",
+        description=(
+            "Cria unidade administrativa. O campo 'codigo' deve receber apenas o sufixo numérico com 3 ou 4 dígitos "
+            "(ex.: 002 ou 1002). O backend compõe o código final com o prefixo da unidade orçamentária "
+            "(ex.: 01.16.10.002)."
+        ),
         responses={
             201: OpenApiResponse(description="Unidade administrativa criada com sucesso."),
             400: OpenApiResponse(description="Dados inválidos."),
@@ -519,7 +533,10 @@ class UnidadeOrcamentariaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSet)
     destroy=extend_schema(
         tags=["Unidades Administrativas"],
         summary="Excluir unidade administrativa",
-        description="Somente superusuário ou gestor de patrimônio podem excluir. A exclusão pode falhar caso existam vínculos protegidos no banco (ex.: bens patrimoniais associados).",
+        description=(
+            "Somente superusuário ou gestor de patrimônio podem excluir. A exclusão pode falhar caso existam "
+            "vínculos protegidos no banco (ex.: bens patrimoniais associados)."
+        ),
         parameters=[UA_ID_PATH_PARAM],
         responses={
             204: OpenApiResponse(description="Unidade administrativa excluída com sucesso."),
@@ -569,6 +586,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
     )
 
     @extend_schema(
+        tags=["Unidades Administrativas"],
         parameters=[
             UA_ID_PATH_PARAM,
             OpenApiParameter(
@@ -641,10 +659,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
         # ordenação em seguida, o que poderia gerar duplicidade de linhas.
         usuario_ids = (
             filtrar_queryset_usuario_por_escopo(request.user, User.objects.all())
-            .filter(
-                Q(unidade_administrativa_id=unidade.id)
-                | Q(unidades_administrativas__id=unidade.id)
-            )
+            .filter(Q(unidade_administrativa_id=unidade.id) | Q(unidades_administrativas__id=unidade.id))
             .values_list("id", flat=True)
             .distinct()
         )
@@ -653,9 +668,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
         search_term = (request.query_params.get("search") or "").strip()
         if search_term:
             queryset = queryset.filter(
-                Q(nome__icontains=search_term)
-                | Q(username__icontains=search_term)
-                | Q(rf__icontains=search_term)
+                Q(nome__icontains=search_term) | Q(username__icontains=search_term) | Q(rf__icontains=search_term)
             )
 
         ordering_param = request.query_params.get("ordering") or ""
@@ -714,9 +727,7 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
             nova_uo = instance.unidade_orcamentaria
 
         if nova_uo is None:
-            raise DRFValidationError(
-                {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-            )
+            raise DRFValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
         if getattr(user, "is_superuser", False):
             return
@@ -754,7 +765,10 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
             except ProtectedError:
                 raise DRFValidationError(
                     {
-                        "detail": "Não foi possível excluir esta Unidade Administrativa porque existem vínculos ativos no sistema."
+                        "detail": (
+                            "Não foi possível excluir esta Unidade Administrativa porque existem "
+                            "vínculos ativos no sistema."
+                        )
                     }
                 )
 
@@ -806,3 +820,21 @@ class UnidadeAdministrativaViewSet(AuditHistoryExportMixin, viewsets.ModelViewSe
     @action(detail=False, methods=["get"], url_path="exportar")
     def exportar(self, request):
         return self._build_export_response(request)
+
+
+class HealthCheckView(APIView):
+    """Verificação de saúde pública (sem autenticação)."""
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Health"],
+        summary="Verificação de saúde",
+        responses={200: OpenApiResponse(description="API e banco operacionais.")},
+    )
+    def get(self, request):
+        try:
+            connection.ensure_connection()
+            return Response({"status": "ok"})
+        except Exception:
+            return Response({"status": "degraded"}, status=503)

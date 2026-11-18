@@ -1,6 +1,9 @@
 # bem_patrimonial/admin.py
 
 from django.contrib import admin
+
+# Registra NBBPMAdmin via import (decorator)
+import bem_patrimonial.admins.nbbpm  # noqa: F401
 from bem_patrimonial.admins.baixa_fisica_bem_patrimonial import (
     BaixaFisicaBemPatrimonialAdmin,
 )
@@ -8,15 +11,14 @@ from bem_patrimonial.admins.transferencia_bem_patrimonial import (
     TransferenciaBemPatrimonialAdmin,
 )
 from bem_patrimonial.models import (
+    BaixaFisicaBemPatrimonial,
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
-    BaixaFisicaBemPatrimonial,
     TransferenciaBemPatrimonial,
 )
+
 from .admins.bem_patrimonial import BemPatrimonialAdmin
 from .admins.movimentacao_bem_patrimonial import MovimentacaoBemPatrimonialAdmin
-# Registra NBBPMAdmin via import (decorator)
-import bem_patrimonial.admins.nbbpm  # noqa: F401
 
 admin.site.register(BemPatrimonial, BemPatrimonialAdmin)
 admin.site.register(MovimentacaoBemPatrimonial, MovimentacaoBemPatrimonialAdmin)

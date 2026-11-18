@@ -1,15 +1,16 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
 from datetime import date
-from django.test import TestCase
+
 from django.core.exceptions import ValidationError
+from django.test import TestCase
 from django.utils import timezone
 
-from dados_comuns.tests.factories import criar_ua
-from usuario.models import Usuario
-from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
-from inventario import constants
-from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants as bem_constants
+from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.tests.auth_test_utils import auth_kwargs
+from dados_comuns.tests.factories import criar_ua
+from inventario import constants
+from inventario.models import ConciliacaoUA, ParametroConciliacaoAnual
+from usuario.models import Usuario
 
 
 class ConciliacaoAnualModelTest(TestCase):

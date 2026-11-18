@@ -1,25 +1,25 @@
+from django.contrib.auth.models import Group
 from django.test import Client, TestCase
 from django.urls import reverse
 
 from bem_patrimonial import constants
-from bem_patrimonial.ntbpm import (
-    _criar_tabela_bens,
-    _criar_total_bens,
-    _criar_informacoes_complementares,
-    _criar_informacoes_gerais,
-    _criar_rodape_ntbpm,
-    gerar_pdf_ntbpm,
-)
 from bem_patrimonial.models import (
     BemPatrimonial,
     TransferenciaBemPatrimonial,
     TransferenciaBensItem,
 )
+from bem_patrimonial.ntbpm import (
+    _criar_informacoes_complementares,
+    _criar_informacoes_gerais,
+    _criar_rodape_ntbpm,
+    _criar_tabela_bens,
+    _criar_total_bens,
+    gerar_pdf_ntbpm,
+)
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO
 from usuario.models import Usuario
-from django.contrib.auth.models import Group
 
 
 class NTBPMTestCase(TestCase):
@@ -225,10 +225,7 @@ class NTBPMTestCase(TestCase):
 
     def test_informacoes_gerais_exibem_uos_de_origem_e_destino(self):
         tabela = _criar_informacoes_gerais(self.transferencia)[0]
-        linhas = [
-            [celula.getPlainText() for celula in linha]
-            for linha in tabela._cellvalues
-        ]
+        linhas = [[celula.getPlainText() for celula in linha] for linha in tabela._cellvalues]
 
         self.assertEqual(
             linhas[0],
@@ -265,20 +262,14 @@ class NTBPMTestCase(TestCase):
 
     def test_informacoes_complementares_exibem_apenas_observacao(self):
         tabela = _criar_informacoes_complementares(self.transferencia)[0]
-        linhas = [
-            [celula.getPlainText() for celula in linha]
-            for linha in tabela._cellvalues
-        ]
+        linhas = [[celula.getPlainText() for celula in linha] for linha in tabela._cellvalues]
 
         self.assertEqual(linhas[0], ["OBSERVAÇÃO"])
         self.assertEqual(linhas[1], ["Observação da transferência externa."])
 
     def test_resumo_transferencia_exibe_processo_data_e_status(self):
         tabela = _criar_informacoes_gerais(self.transferencia)[2]
-        linhas = [
-            [celula.getPlainText() for celula in linha]
-            for linha in tabela._cellvalues
-        ]
+        linhas = [[celula.getPlainText() for celula in linha] for linha in tabela._cellvalues]
 
         self.assertEqual(
             linhas[0],
@@ -289,10 +280,7 @@ class NTBPMTestCase(TestCase):
 
     def test_rodape_ntbpm_deixa_campos_de_responsaveis_em_branco(self):
         tabela = _criar_rodape_ntbpm(self.transferencia)[0]
-        linhas = [
-            [celula.getPlainText() for celula in linha]
-            for linha in tabela._cellvalues
-        ]
+        linhas = [[celula.getPlainText() for celula in linha] for linha in tabela._cellvalues]
 
         self.assertEqual(linhas[1][0], "")
         self.assertEqual(linhas[1][1], "")

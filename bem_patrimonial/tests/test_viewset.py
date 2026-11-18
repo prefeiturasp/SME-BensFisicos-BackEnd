@@ -1,20 +1,21 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase
-from django.urls import reverse
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.test import TestCase
+from django.urls import reverse
 from rest_framework.test import APIClient
 
-from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial import constants
 from bem_patrimonial.models import (
+    BemPatrimonial,
     TransferenciaBemPatrimonial,
     TransferenciaBensItem,
 )
-from bem_patrimonial import constants
 from dados_comuns.context import audit_as
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.constants import GRUPO_GESTOR_PATRIMONIO
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
 class BemPatrimonialViewSetTest(TestCase):
@@ -36,9 +37,7 @@ class BemPatrimonialViewSetTest(TestCase):
         self.user.unidade_administrativa = self.ua
         self.user.save()
 
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
     def _mk_bem(self, **kwargs):
         count = BemPatrimonial.objects.count() + 1
@@ -68,6 +67,63 @@ class BemPatrimonialViewSetTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("results", response.data)
+
+    def test_relatorio_exporta_todos_os_bens_filtrados_sem_paginacao(self):
+        outra_uo = criar_uo(codigo="211", nome="UO Selecionada")
+        outra_ua = criar_ua(nome="UA Selecionada", uo=outra_uo)
+        ua_fora = criar_ua(nome="UA fora do filtro", uo=self.uo)
+        primeiro = self._mk_bem(nome="Mesa A", status=constants.APROVADO)
+        segundo = self._mk_bem(nome="Mesa B", status=constants.APROVADO, unidade_administrativa=outra_ua)
+        self._mk_bem(nome="Mesa C", status=constants.APROVADO, unidade_administrativa=ua_fora)
+        self._mk_bem(nome="Cadeira", status=constants.APROVADO)
+        self._mk_bem(nome="Mesa pendente")
+        filtros = {
+            "search": "Mesa",
+            "status": constants.APROVADO,
+            "unidade_administrativa": self.ua.pk,
+            "unidade_orcamentaria": outra_uo.pk,
+            "busca_geral_uos": "true",
+            "ordering": "-nome",
+            "page_size": 1,
+        }
+
+        lista = self.client.get(reverse("bens-list"), filtros)
+        self.assertEqual(lista.status_code, 200)
+        self.assertEqual(lista.data["count"], 2)
+        with patch("bem_patrimonial.views.PDFFormat.gerar_pdf", return_value=b"%PDF-teste") as gerar_pdf:
+            response = self.client.get(reverse("bens-relatorio"), filtros)
+            self.assertEqual(response.status_code, 200)
+            queryset = gerar_pdf.call_args.args[0]
+            self.assertEqual(list(queryset.values_list("pk", flat=True)), [segundo.pk, primeiro.pk])
+
+    def test_relatorio_nao_exporta_bens_fora_do_escopo_padrao(self):
+        outra_uo = criar_uo(codigo="211", nome="UO Externa")
+        outra_ua = criar_ua(nome="UA Externa", uo=outra_uo)
+        permitido = self._mk_bem(status=constants.APROVADO)
+        self._mk_bem(status=constants.APROVADO, unidade_administrativa=outra_ua)
+
+        with patch("bem_patrimonial.views.PDFFormat.gerar_pdf", return_value=b"%PDF-teste") as gerar_pdf:
+            response = self.client.get(reverse("bens-relatorio"))
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(list(gerar_pdf.call_args.args[0].values_list("pk", flat=True)), [permitido.pk])
+
+    def test_relatorio_retorna_pdf_e_respeita_filtro_de_baixados(self):
+        ativo = self._mk_bem(nome="Mesa ativa", status=constants.APROVADO)
+        baixado = self._mk_bem(nome="Mesa baixada", status=constants.BAIXA_FISICA)
+        url = reverse("bens-relatorio")
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("relatorio-bens-patrimoniais.pdf", response["Content-Disposition"])
+        self.assertTrue(response.content.startswith(b"%PDF-"))
+        with patch("bem_patrimonial.views.PDFFormat.gerar_pdf", return_value=b"%PDF-teste") as gerar_pdf:
+            for params, ids in (({}, [ativo.pk]), ({"bens_baixados": "true"}, [baixado.pk])):
+                with self.subTest(params=params):
+                    response = self.client.get(url, params)
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(list(gerar_pdf.call_args.args[0].values_list("pk", flat=True)), ids)
 
     def test_list_bens_com_param_bens_baixados(self):
         url = reverse("bens-list")
@@ -226,9 +282,7 @@ class BemPatrimonialViewSetTest(TestCase):
         bem_ign = self._mk_bem(status=constants.APROVADO)
 
         url = reverse("bens-aprovar-bens")
-        response = self.client.post(
-            url, {"ids": [bem_ok.id, bem_ign.id]}, format="json"
-        )
+        response = self.client.post(url, {"ids": [bem_ok.id, bem_ign.id]}, format="json")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["aprovados"], 1)
@@ -291,15 +345,19 @@ class CreateMultiViewSetTest(TestCase):
             "valor_unitario": "500,00",
             "marca": "Flexform",
             "modelo": "Ergo500",
-            "multi_payload": multi_payload if multi_payload is not None else [
-                {
-                    "numero_patrimonial": "000.000000100-0",
-                    "numero_formato_antigo": False,
-                    "sem_numeracao": False,
-                    "localizacao": "Sala 1",
-                    "numero_processo": "PROC-01",
-                }
-            ],
+            "multi_payload": (
+                multi_payload
+                if multi_payload is not None
+                else [
+                    {
+                        "numero_patrimonial": "000.000000100-0",
+                        "numero_formato_antigo": False,
+                        "sem_numeracao": False,
+                        "localizacao": "Sala 1",
+                        "numero_processo": "PROC-01",
+                    }
+                ]
+            ),
         }
 
     def test_create_multi_retorna_201(self):
@@ -393,9 +451,7 @@ class CreateMultiViewSetTest(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["count"], 2)
         self.assertEqual(
-            BemPatrimonial.objects.filter(
-                numero_patrimonial__in=["000.000000101-0", "000.000000102-0"]
-            ).count(),
+            BemPatrimonial.objects.filter(numero_patrimonial__in=["000.000000101-0", "000.000000102-0"]).count(),
             2,
         )
 
@@ -618,14 +674,10 @@ class BemPatrimonialTransferidoHistoricoViewSetTest(TestCase):
         client = APIClient()
         client.force_authenticate(self.gestor_destino)
 
-        response = client.get(
-            reverse("bens-list"), {"status": constants.TRANSFERIDO}
-        )
+        response = client.get(reverse("bens-list"), {"status": constants.TRANSFERIDO})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            [bem["id"] for bem in response.data["results"]], [self.bem.pk]
-        )
+        self.assertEqual([bem["id"] for bem in response.data["results"]], [self.bem.pk])
 
     def test_operador_visualiza_transferido_fora_da_ua_com_busca_geral(self):
         operador = get_user_model().objects.create_user(
@@ -636,9 +688,7 @@ class BemPatrimonialTransferidoHistoricoViewSetTest(TestCase):
             unidade_administrativa=self.ua_destino_usuario,
             is_staff=True,
         )
-        operador.groups.add(
-            Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
-        )
+        operador.groups.add(Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0])
         operador.unidades_administrativas.add(self.ua_destino_usuario)
 
         client = APIClient()
@@ -654,9 +704,7 @@ class BemPatrimonialTransferidoHistoricoViewSetTest(TestCase):
         self.assertEqual(sem_busca_geral.status_code, 200)
         self.assertEqual(com_busca_geral.status_code, 200)
         self.assertEqual(sem_busca_geral.data["count"], 0)
-        self.assertEqual(
-            [bem["id"] for bem in com_busca_geral.data["results"]], [self.bem.pk]
-        )
+        self.assertEqual([bem["id"] for bem in com_busca_geral.data["results"]], [self.bem.pk])
 
     def test_destino_pode_consultar_historico_de_bem_transferido(self):
         client = APIClient()

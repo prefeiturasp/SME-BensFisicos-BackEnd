@@ -262,18 +262,14 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
         self.assertIn("acoes", historico_response.data[0])
         self.assertTrue(
             any(
-                acao["campo"] in {"nome", "sigla_orgao"}
-                for grupo in historico_response.data
-                for acao in grupo["acoes"]
+                acao["campo"] in {"nome", "sigla_orgao"} for grupo in historico_response.data for acao in grupo["acoes"]
             )
         )
 
     def test_historico_sem_evidencia_nao_inventa_criacao(self):
         self._auth(self.superuser)
 
-        response = self.client.get(
-            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
-        )
+        response = self.client.get(reverse("unidades-orcamentarias-historico", args=[self.uo1.id]))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
@@ -291,9 +287,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             alterado_por=self.superuser,
         )
 
-        response = self.client.get(
-            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
-        )
+        response = self.client.get(reverse("unidades-orcamentarias-historico", args=[self.uo1.id]))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         grupo = response.data[0]
@@ -312,9 +306,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             valor_novo=self.uo1.nome,
         )
 
-        response = self.client.get(
-            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
-        )
+        response = self.client.get(reverse("unidades-orcamentarias-historico", args=[self.uo1.id]))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         grupo = response.data[0]
@@ -335,9 +327,7 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             change_message="",
         )
 
-        response = self.client.get(
-            reverse("unidades-orcamentarias-historico", args=[self.uo1.id])
-        )
+        response = self.client.get(reverse("unidades-orcamentarias-historico", args=[self.uo1.id]))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         grupo = response.data[0]
@@ -353,7 +343,16 @@ class UnidadeOrcamentariaAPITestCase(APITestCase):
             ({"codigo": "", "sigla": "UO", "nome": "Nome", "ativa": True}, "codigo"),
             ({"codigo": codigo_uo(70, 70, 70), "sigla": "UO", "nome": "", "ativa": True}, "nome"),
             ({"codigo": self.uo1.codigo, "sigla": "UO", "nome": "Duplicada", "ativa": True}, "codigo"),
-            ({"codigo": codigo_uo(70, 70, 71), "sigla": "UO", "nome": "Inválida", "ativa": True, "codigo_orgao": "7071"}, "codigo_orgao"),
+            (
+                {
+                    "codigo": codigo_uo(70, 70, 71),
+                    "sigla": "UO",
+                    "nome": "Inválida",
+                    "ativa": True,
+                    "codigo_orgao": "7071",
+                },
+                "codigo_orgao",
+            ),
         ]
 
         for payload, campo in cenarios:

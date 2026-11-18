@@ -17,30 +17,17 @@ class UsuarioFilter(django_filters.FilterSet):
     is_active = django_filters.BooleanFilter()
 
     # sigla do grupo (ex: Gestor Patrimonio)
-    group_name = django_filters.CharFilter(
-        field_name="groups__name",
-        lookup_expr="icontains"
-    )
+    group_name = django_filters.CharFilter(field_name="groups__name", lookup_expr="icontains")
 
-    unidade = django_filters.CharFilter(
-        method="filter_unidade"
-    )
+    unidade = django_filters.CharFilter(method="filter_unidade")
 
-    unidade_orcamentaria = django_filters.NumberFilter(
-        field_name="unidade_orcamentaria_id"
-    )
+    unidade_orcamentaria = django_filters.NumberFilter(field_name="unidade_orcamentaria_id")
 
     # data inicial
-    date_joined_after = django_filters.DateFilter(
-        field_name="date_joined",
-        lookup_expr="gte"
-    )
+    date_joined_after = django_filters.DateFilter(field_name="date_joined", lookup_expr="gte")
 
     # data final
-    date_joined_before = django_filters.DateFilter(
-        field_name="date_joined",
-        lookup_expr="lte"
-    )
+    date_joined_before = django_filters.DateFilter(field_name="date_joined", lookup_expr="lte")
 
     class Meta:
         model = User
@@ -55,7 +42,7 @@ class UsuarioFilter(django_filters.FilterSet):
 
     def filter_unidade(self, queryset, name, value):
         return queryset.filter(
-            Q(unidade_administrativa__nome__icontains=value) |
-            Q(unidade_administrativa__codigo__icontains=value) |
-            Q(unidade_administrativa__sigla__icontains=value)
+            Q(unidade_administrativa__nome__icontains=value)
+            | Q(unidade_administrativa__codigo__icontains=value)
+            | Q(unidade_administrativa__sigla__icontains=value)
         )

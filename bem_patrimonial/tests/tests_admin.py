@@ -1,14 +1,14 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs
-from django.test import TestCase, RequestFactory
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory, TestCase
 
-from bem_patrimonial.models import BemPatrimonial
+from bem_patrimonial import constants
 from bem_patrimonial.admins.bem_patrimonial import BemPatrimonialAdmin
 from bem_patrimonial.admins.filters.baixados_periodo_filter import (
     StatusBemPatrimonialFilter,
 )
-from bem_patrimonial import constants
+from bem_patrimonial.models import BemPatrimonial
+from dados_comuns.tests.auth_test_utils import auth_kwargs
 from dados_comuns.tests.factories import criar_ua, criar_uo
 
 
@@ -45,9 +45,7 @@ class BemPatrimonialAdminTest(TestCase):
 
     def _get_form_for(self, obj=None):
         if obj:
-            request = self.factory.get(
-                f"/admin/bem_patrimonial/bempatrimonial/{obj.pk}/change/"
-            )
+            request = self.factory.get(f"/admin/bem_patrimonial/bempatrimonial/{obj.pk}/change/")
         else:
             request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/add/")
         request.user = self.admin_user
@@ -62,9 +60,7 @@ class BemPatrimonialAdminTest(TestCase):
         self.assertIn("numero_formato_antigo", form.fields)
 
         self.assertFalse(getattr(form.fields["sem_numeracao"], "disabled", False))
-        self.assertFalse(
-            getattr(form.fields["numero_formato_antigo"], "disabled", False)
-        )
+        self.assertFalse(getattr(form.fields["numero_formato_antigo"], "disabled", False))
         self.assertFalse(getattr(form.fields["numero_patrimonial"], "disabled", False))
 
     def test_edicao_trava_flags_mas_numero_editavel_quando_nao_sem_numeracao(self):
@@ -89,9 +85,7 @@ class StatusBemPatrimonialFilterTest(TestCase):
         self.ua = criar_ua(uo=criar_uo(codigo="910", nome="UO 910"))
         self.model_admin = BemPatrimonialAdmin(BemPatrimonial, admin.site)
         self.bem_aprovado = self._criar_bem("Bem aprovado", constants.APROVADO)
-        self.bem_transferido = self._criar_bem(
-            "Bem transferido", constants.TRANSFERIDO
-        )
+        self.bem_transferido = self._criar_bem("Bem transferido", constants.TRANSFERIDO)
 
     def _criar_bem(self, nome, status):
         return BemPatrimonial.objects.create(
@@ -112,12 +106,15 @@ class StatusBemPatrimonialFilterTest(TestCase):
     def _filtro(self, data=None):
         request = self.factory.get("/admin/bem_patrimonial/bempatrimonial/", data)
         request.user = self.user
-        return StatusBemPatrimonialFilter(
+        return (
+            StatusBemPatrimonialFilter(
+                request,
+                request.GET.copy(),
+                BemPatrimonial,
+                self.model_admin,
+            ),
             request,
-            request.GET.copy(),
-            BemPatrimonial,
-            self.model_admin,
-        ), request
+        )
 
     def test_padrao_exibe_todos_sem_transferidos(self):
         filtro, request = self._filtro()
@@ -127,9 +124,7 @@ class StatusBemPatrimonialFilterTest(TestCase):
         self.assertEqual(list(queryset), [self.bem_aprovado])
 
     def test_status_transferido_exibe_apenas_transferidos(self):
-        filtro, request = self._filtro(
-            {StatusBemPatrimonialFilter.parameter_name: constants.TRANSFERIDO}
-        )
+        filtro, request = self._filtro({StatusBemPatrimonialFilter.parameter_name: constants.TRANSFERIDO})
 
         queryset = filtro.queryset(request, BemPatrimonial.objects.all())
 

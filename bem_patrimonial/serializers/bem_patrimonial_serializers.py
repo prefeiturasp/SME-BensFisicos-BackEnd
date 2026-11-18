@@ -2,13 +2,12 @@ import os
 import re
 from decimal import Decimal, InvalidOperation
 
-from django.db import IntegrityError
 from django.core.exceptions import ValidationError as DjangoValidationError
-
+from django.db import IntegrityError
 from rest_framework import serializers
 
-from bem_patrimonial.models import BemPatrimonial
 from bem_patrimonial import constants
+from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.models import UnidadeAdministrativa
 
 
@@ -62,10 +61,7 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
         return obj.get_status_display()
 
     def _is_gestor(self, user):
-        return bool(
-            getattr(user, "is_gestor_patrimonio", False)
-            or getattr(user, "is_superuser", False)
-        )
+        return bool(getattr(user, "is_gestor_patrimonio", False) or getattr(user, "is_superuser", False))
 
     def _is_operador(self, user):
         return bool(getattr(user, "is_operador_inventario", False))
@@ -138,44 +134,30 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
         - converte para Decimal
         """
         if raw is None or (isinstance(raw, str) and not raw.strip()):
-            raise serializers.ValidationError(
-                {"valor_unitario": "Informe o valor unitário (obrigatório)."}
-            )
+            raise serializers.ValidationError({"valor_unitario": "Informe o valor unitário (obrigatório)."})
 
         if isinstance(raw, (int, float, Decimal)):
             val = Decimal(str(raw))
             if val < 0:
-                raise serializers.ValidationError(
-                    {"valor_unitario": "O valor unitário não pode ser negativo."}
-                )
+                raise serializers.ValidationError({"valor_unitario": "O valor unitário não pode ser negativo."})
             return val
 
         if not isinstance(raw, str):
-            raise serializers.ValidationError(
-                {"valor_unitario": "Valor inválido. Use o formato 0,00 ou 0.000,00."}
-            )
+            raise serializers.ValidationError({"valor_unitario": "Valor inválido. Use o formato 0,00 ou 0.000,00."})
 
         try:
             norm = raw.strip().replace(".", "").replace(",", ".")
             val = Decimal(norm)
             if val < 0:
-                raise serializers.ValidationError(
-                    {"valor_unitario": "O valor unitário não pode ser negativo."}
-                )
+                raise serializers.ValidationError({"valor_unitario": "O valor unitário não pode ser negativo."})
             return val
         except (InvalidOperation, ValueError):
-            raise serializers.ValidationError(
-                {"valor_unitario": "Valor inválido. Use o formato 0,00 ou 0.000,00."}
-            )
+            raise serializers.ValidationError({"valor_unitario": "Valor inválido. Use o formato 0,00 ou 0.000,00."})
 
     _NEW_FMT_RE = r"^\d{3}\.\d{9}-\d$"
     _SEM_NUM_RE = r"^SEM-NUMERO-\d+$"
-    _MSG_NUMERO_FORMATO_INVALIDO = (
-        "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
-    )
-    _MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM = (
-        "Informe o Número Patrimonial ou marque 'Sem numeração'."
-    )
+    _MSG_NUMERO_FORMATO_INVALIDO = "Use o formato 000.000000000-0 ou marque 'Formato antigo'."
+    _MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM = "Informe o Número Patrimonial ou marque 'Sem numeração'."
 
     def _validate_numero_edicao(self, cleaned, sem, antigo, numero):
         """Valida número patrimonial na edição (tem_pk)."""
@@ -185,35 +167,25 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
                 cleaned["numero_formato_antigo"] = False
                 return cleaned
             if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
-                raise serializers.ValidationError(
-                    {"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO}
-                )
+                raise serializers.ValidationError({"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO})
         else:
             if not sem:
-                raise serializers.ValidationError(
-                    {"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM}
-                )
+                raise serializers.ValidationError({"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM})
             cleaned["numero_formato_antigo"] = False
         return cleaned
 
     def _validate_numero_criacao(self, cleaned, sem, antigo, numero):
         """Valida número patrimonial na criação."""
         if sem and antigo:
-            raise serializers.ValidationError(
-                "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
-            )
+            raise serializers.ValidationError("Selecione 'Formato antigo' OU 'Sem numeração' — não ambos.")
         if sem:
             cleaned["numero_patrimonial"] = None
             cleaned["numero_formato_antigo"] = False
             return cleaned
         if not numero:
-            raise serializers.ValidationError(
-                {"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM}
-            )
+            raise serializers.ValidationError({"numero_patrimonial": self._MSG_NUMERO_OBRIGATORIO_OU_SEM_NUM})
         if not antigo and not re.fullmatch(self._NEW_FMT_RE, numero):
-            raise serializers.ValidationError(
-                {"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO}
-            )
+            raise serializers.ValidationError({"numero_patrimonial": self._MSG_NUMERO_FORMATO_INVALIDO})
         cleaned["numero_patrimonial"] = numero
         return cleaned
 
@@ -233,9 +205,7 @@ class _BemPatrimonialBaseMixin(serializers.Serializer):
         return self._validate_numero_criacao(cleaned, sem, antigo, numero)
 
 
-class BemPatrimonialListSerializer(
-    _BemPatrimonialBaseMixin, serializers.ModelSerializer
-):
+class BemPatrimonialListSerializer(_BemPatrimonialBaseMixin, serializers.ModelSerializer):
     class Meta:
         model = BemPatrimonial
         fields = [
@@ -257,9 +227,7 @@ class BemPatrimonialListSerializer(
 _CAMPOS_QUE_EXIGEM_JUSTIFICATIVA = {"nome", "numero_patrimonial"}
 
 
-class BemPatrimonialDetailSerializer(
-    _BemPatrimonialBaseMixin, serializers.ModelSerializer
-):
+class BemPatrimonialDetailSerializer(_BemPatrimonialBaseMixin, serializers.ModelSerializer):
     # Write-only: nunca retorna ao frontend, só usado para salvar no histórico
     justificativa = serializers.CharField(
         required=False,
@@ -318,18 +286,17 @@ class BemPatrimonialDetailSerializer(
         if not self.instance:
             return
         if getattr(self.instance, "excluido", False):
-            raise serializers.ValidationError(
-                "Este bem está excluído e não pode ser editado."
-            )
+            raise serializers.ValidationError("Este bem está excluído e não pode ser editado.")
         if self.instance.status in constants.STATUS_FINAIS_BEM:
             raise serializers.ValidationError(
                 f"Este bem está com status '{self.instance.get_status_display()}' e não pode ser editado."
             )
-        if "unidade_administrativa" in attrs and attrs["unidade_administrativa"] != self.instance.unidade_administrativa:
+        if (
+            "unidade_administrativa" in attrs
+            and attrs["unidade_administrativa"] != self.instance.unidade_administrativa
+        ):
             raise serializers.ValidationError(
-                {
-                    "unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."
-                }
+                {"unidade_administrativa": "Não é permitido alterar a Unidade Administrativa na edição."}
             )
 
     def _validate_valor_unitario_incoming(self, attrs):
@@ -338,9 +305,7 @@ class BemPatrimonialDetailSerializer(
         if incoming_vu is not None:
             attrs["valor_unitario"] = self._parse_valor_unitario(incoming_vu)
         elif not self.instance:
-            raise serializers.ValidationError(
-                {"valor_unitario": "Informe o valor unitário (obrigatório)."}
-            )
+            raise serializers.ValidationError({"valor_unitario": "Informe o valor unitário (obrigatório)."})
 
     def _validate_justificativa(self, attrs):
         """
@@ -354,21 +319,14 @@ class BemPatrimonialDetailSerializer(
         if not campos_alterados:
             return
 
-        mudou = any(
-            str(attrs[campo]) != str(getattr(self.instance, campo, ""))
-            for campo in campos_alterados
-        )
+        mudou = any(str(attrs[campo]) != str(getattr(self.instance, campo, "")) for campo in campos_alterados)
         if not mudou:
             return
 
         justificativa = attrs.get("justificativa", "").strip()
         if not justificativa:
             raise serializers.ValidationError(
-                {
-                    "justificativa": (
-                        "Justificativa é obrigatória ao alterar nome ou número patrimonial."
-                    )
-                }
+                {"justificativa": ("Justificativa é obrigatória ao alterar nome ou número patrimonial.")}
             )
 
     def validate(self, attrs):
@@ -433,7 +391,9 @@ class BemPatrimonialDetailSerializer(
             if "numero_patrimonial" in str(e).lower():
                 raise serializers.ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": (
+                            "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        )
                     }
                 )
             raise
@@ -451,7 +411,9 @@ class BemPatrimonialDetailSerializer(
             if "numero_patrimonial" in str(e).lower():
                 raise serializers.ValidationError(
                     {
-                        "numero_patrimonial": "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        "numero_patrimonial": (
+                            "Não foi possível salvar. O Número Patrimonial já está cadastrado no sistema."
+                        )
                     }
                 )
             raise
@@ -483,9 +445,7 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
     patrimonial for inválido ou duplicado (no payload ou no banco), nenhum bem é criado.
     """
 
-    unidade_administrativa = serializers.PrimaryKeyRelatedField(
-        queryset=UnidadeAdministrativa.objects.all()
-    )
+    unidade_administrativa = serializers.PrimaryKeyRelatedField(queryset=UnidadeAdministrativa.objects.all())
     nome = serializers.CharField()
     descricao = serializers.CharField()
     valor_unitario = serializers.CharField()
@@ -501,9 +461,7 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
         numero = (item.get("numero_patrimonial") or "").strip() or None
 
         if sem and antigo:
-            item_errors["numero_patrimonial"] = (
-                "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
-            )
+            item_errors["numero_patrimonial"] = "Selecione 'Formato antigo' OU 'Sem numeração' — não ambos."
             return item_errors
 
         if sem:
@@ -518,15 +476,11 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
             return item_errors
 
         if numero in numeros_vistos:
-            item_errors["numero_patrimonial"] = (
-                "Número patrimonial duplicado neste cadastro."
-            )
+            item_errors["numero_patrimonial"] = "Número patrimonial duplicado neste cadastro."
             return item_errors
 
         if BemPatrimonial.objects.filter(numero_patrimonial=numero, excluido=False).exists():
-            item_errors["numero_patrimonial"] = (
-                "Número Patrimonial já está cadastrado no sistema."
-            )
+            item_errors["numero_patrimonial"] = "Número Patrimonial já está cadastrado no sistema."
             return item_errors
 
         numeros_vistos.add(numero)
@@ -537,9 +491,7 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
 
         multi_payload = attrs.get("multi_payload", [])
         if not multi_payload:
-            raise serializers.ValidationError(
-                {"multi_payload": "Informe ao menos um bem."}
-            )
+            raise serializers.ValidationError({"multi_payload": "Informe ao menos um bem."})
         linhas_errors = {}
         numeros_vistos = set()
 
@@ -559,6 +511,7 @@ class BemPatrimonialMultiCreateSerializer(_BemPatrimonialBaseMixin, serializers.
 # Importação via planilha
 # ---------------------------------------------------------------------------
 
+
 class ImportacaoBemPatrimonialSerializer(serializers.Serializer):
     """
     Serializer de entrada para importação em lote via planilha.
@@ -569,26 +522,19 @@ class ImportacaoBemPatrimonialSerializer(serializers.Serializer):
     """
 
     arquivo = serializers.FileField(
-        help_text=(
-            "Planilha com os bens a importar. "
-            "Formatos aceitos: XLSX, XLS, CSV. "
-            "Tamanho máximo: 10 MB."
-        )
+        help_text=("Planilha com os bens a importar. Formatos aceitos: XLSX, XLS, CSV. Tamanho máximo: 10 MB.")
     )
 
     def validate_arquivo(self, value):
         max_bytes = 10 * 1024 * 1024  # 10 MB
         if value.size > max_bytes:
-            raise serializers.ValidationError(
-                "O arquivo excede o tamanho máximo permitido de 10 MB."
-            )
+            raise serializers.ValidationError("O arquivo excede o tamanho máximo permitido de 10 MB.")
 
         _, ext = os.path.splitext((value.name or "").lower())
         formatos_aceitos = {".xlsx", ".xls", ".csv"}
         if ext not in formatos_aceitos:
             raise serializers.ValidationError(
-                f"Formato de arquivo não suportado: '{value.name}'. "
-                "Use XLSX, XLS ou CSV."
+                f"Formato de arquivo não suportado: '{value.name}'. " "Use XLSX, XLS ou CSV."
             )
 
         return value

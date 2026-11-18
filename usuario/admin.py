@@ -1,26 +1,24 @@
-from django.contrib import admin
 from django import forms
+from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django_admin_listfilter_dropdown.filters import DropdownFilter
 from import_export.admin import ImportExportModelAdmin
 from import_export.formats.base_formats import XLSX
 from rangefilter.filters import DateRangeFilter
+
+from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
+from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
+from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 from usuario.resources import UsuarioResource
-from dados_comuns.models import UnidadeAdministrativa, UnidadeOrcamentaria
-from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
-from dados_comuns.admin_mixins import UnsavedChangesAdminMixin
-from django.core.exceptions import ValidationError
-
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
 
 
 def _ensure_uo_obrigatoria(uo):
     if not uo:
-        raise ValidationError(
-            {"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."}
-        )
+        raise ValidationError({"unidade_orcamentaria": "Unidade Orçamentária é obrigatória."})
 
 
 def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
@@ -31,9 +29,7 @@ def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
     ua = cleaned_data.get("unidade_administrativa")
 
     if not form_ref.user.is_superuser and cleaned_data.get("is_superuser"):
-        raise ValidationError(
-            {"is_superuser": "Você não tem permissão para definir super-admin."}
-        )
+        raise ValidationError({"is_superuser": "Você não tem permissão para definir super-admin."})
 
     is_operador = bool(grupo and grupo.name == GRUPO_OPERADOR_INVENTARIO)
     is_gestor = bool(grupo and grupo.name == GRUPO_GESTOR_PATRIMONIO)
@@ -43,11 +39,7 @@ def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
     if not form_ref.user.is_superuser:
         uo_criador = form_ref.user.unidade_orcamentaria
         if not uo_criador:
-            raise ValidationError(
-                {
-                    "unidade_orcamentaria": "Seu usuário não possui Unidade Orçamentária vinculada."
-                }
-            )
+            raise ValidationError({"unidade_orcamentaria": "Seu usuário não possui Unidade Orçamentária vinculada."})
         cleaned_data["unidade_orcamentaria"] = uo_criador
         uo = uo_criador
 
@@ -66,11 +58,7 @@ def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
             }
         )
 
-    if (
-        is_operador
-        and not is_gestor
-        and not cleaned_data.get("unidade_administrativa")
-    ):
+    if is_operador and not is_gestor and not cleaned_data.get("unidade_administrativa"):
         raise ValidationError(
             {
                 "unidade_administrativa": "Operador de Inventário deve ter uma Unidade Administrativa vinculada."  # noqa: E501
@@ -85,25 +73,13 @@ def _apply_usuario_clean_validation(*, form_ref, admin, cleaned_data):
 def _validate_operador_uas(uo, ua, uas_m2m_ids):
     """Valida regras de UAs para operador de inventário."""
     if not uas_m2m_ids:
-        raise ValidationError(
-            {"unidades_administrativas": "Operador deve ter pelo menos uma UA."}
-        )
+        raise ValidationError({"unidades_administrativas": "Operador deve ter pelo menos uma UA."})
     if uo:
-        uas_invalidas = [
-            u for u in uas_m2m_ids if u.unidade_orcamentaria_id != uo.id
-        ]
+        uas_invalidas = [u for u in uas_m2m_ids if u.unidade_orcamentaria_id != uo.id]
         if uas_invalidas:
-            raise ValidationError(
-                {
-                    "unidades_administrativas": "Todas as UAs devem pertencer à UO selecionada."
-                }
-            )
+            raise ValidationError({"unidades_administrativas": "Todas as UAs devem pertencer à UO selecionada."})
     if ua and ua not in uas_m2m_ids:
-        raise ValidationError(
-            {
-                "unidade_administrativa": "A UA ativa deve estar entre as UAs selecionadas."
-            }
-        )
+        raise ValidationError({"unidade_administrativa": "A UA ativa deve estar entre as UAs selecionadas."})
 
 
 class GroupSingleSelectWidget(forms.Select):
@@ -116,11 +92,7 @@ class GroupSingleSelectWidget(forms.Select):
         groups = super().optgroups(name, value, attrs)
         value = value or []
 
-        has_blank = any(
-            option["value"] in ("", None)
-            for _, subgroup, _ in groups
-            for option in subgroup
-        )
+        has_blank = any(option["value"] in ("", None) for _, subgroup, _ in groups for option in subgroup)
         if not has_blank:
             empty_option = self.create_option(
                 name,
@@ -150,10 +122,11 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
     ordering = ("unidade_administrativa__codigo",)
     filter_horizontal = ("unidades_administrativas",)
 
-    list_filter = UserAdmin.list_filter + (
+    list_filter = [
+        *UserAdmin.list_filter,
         ("unidade_administrativa__sigla", DropdownFilter),
         ("date_joined", DateRangeFilter),
-    )
+    ]
 
     fieldsets = (
         ("Acesso", {"fields": ("username", "password")}),
@@ -203,10 +176,7 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
         return request.user.is_superuser or request.user.is_gestor_patrimonio
 
     def _pode_gerenciar(self, user):
-        return bool(
-            getattr(user, "is_superuser", False)
-            or getattr(user, "is_gestor_patrimonio", False)
-        )
+        return bool(getattr(user, "is_superuser", False) or getattr(user, "is_gestor_patrimonio", False))
 
     def has_module_permission(self, request):
         return self._pode_gerenciar(request.user)
@@ -277,11 +247,7 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
         if not uo_id:
             uo_id = request.GET.get("unidade_orcamentaria") or None
 
-        if (
-            not uo_id
-            and hasattr(request, "_obj_usuario_admin")
-            and request._obj_usuario_admin
-        ):
+        if not uo_id and hasattr(request, "_obj_usuario_admin") and request._obj_usuario_admin:
             uo_id = request._obj_usuario_admin.unidade_orcamentaria_id or None
 
         if not uo_id and not request.user.is_superuser:
@@ -296,31 +262,19 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
             )
 
             if not uo_id:
-                uo_id = (
-                    UnidadeOrcamentaria.objects.order_by("codigo", "id")
-                    .values_list("id", flat=True)
-                    .first()
-                )
+                uo_id = UnidadeOrcamentaria.objects.order_by("codigo", "id").values_list("id", flat=True).first()
 
         return uo_id
 
     def _get_grupo_queryset(self):
-        return Group.objects.filter(
-            name__in=[GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO]
-        ).order_by("name")
+        return Group.objects.filter(name__in=[GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO]).order_by("name")
 
     def _grupo_preferencial(self, user):
         nomes = set(user.groups.values_list("name", flat=True))
         if GRUPO_GESTOR_PATRIMONIO in nomes:
-            return (
-                self._get_grupo_queryset().filter(name=GRUPO_GESTOR_PATRIMONIO).first()
-            )
+            return self._get_grupo_queryset().filter(name=GRUPO_GESTOR_PATRIMONIO).first()
         if GRUPO_OPERADOR_INVENTARIO in nomes:
-            return (
-                self._get_grupo_queryset()
-                .filter(name=GRUPO_OPERADOR_INVENTARIO)
-                .first()
-            )
+            return self._get_grupo_queryset().filter(name=GRUPO_OPERADOR_INVENTARIO).first()
         return None
 
     def _selecionar_grupo_unico(self, groups_qs):
@@ -343,9 +297,7 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
             kwargs["widget"] = forms.Select
 
         if db_field.name == "unidades_administrativas":
-            qs = UnidadeAdministrativa.objects.filter(
-                status=UnidadeAdministrativa.ATIVA
-            )
+            qs = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
             uo_id = self._resolver_uo_id_contexto_admin(request)
 
             if uo_id:
@@ -364,18 +316,14 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
     def _configure_uo_queryset(self, request, kwargs):
         if not request.user.is_superuser:
             if request.user.unidade_orcamentaria_id:
-                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(
-                    pk=request.user.unidade_orcamentaria_id
-                )
+                kwargs["queryset"] = UnidadeOrcamentaria.objects.filter(pk=request.user.unidade_orcamentaria_id)
             else:
                 kwargs["queryset"] = UnidadeOrcamentaria.objects.none()
         else:
             kwargs["queryset"] = UnidadeOrcamentaria.objects.all()
 
     def _configure_ua_queryset(self, request, kwargs):
-        qs = UnidadeAdministrativa.objects.filter(
-            status=UnidadeAdministrativa.ATIVA
-        )
+        qs = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
         uo_id = self._resolver_uo_id_contexto_admin(request)
         if not uo_id:
             kwargs["queryset"] = UnidadeAdministrativa.objects.none()
@@ -401,9 +349,7 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
         )
         if obj and obj.pk:
             grupo_inicial = self._grupo_preferencial(obj)
-            form.base_fields["groups"].initial = (
-                [grupo_inicial.pk] if grupo_inicial else []
-            )
+            form.base_fields["groups"].initial = [grupo_inicial.pk] if grupo_inicial else []
         else:
             form.base_fields["groups"].initial = []
 
@@ -418,9 +364,7 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
         if not request.user.is_superuser:
             form.base_fields["unidade_orcamentaria"].disabled = True
             if request.user.unidade_orcamentaria_id:
-                form.base_fields["unidade_orcamentaria"].initial = (
-                    request.user.unidade_orcamentaria_id
-                )
+                form.base_fields["unidade_orcamentaria"].initial = request.user.unidade_orcamentaria_id
 
     def _wrap_form_clean_with_validation(self, form, request):
         original_clean = form.clean
@@ -428,9 +372,7 @@ class CustomUserModelAdmin(UnsavedChangesAdminMixin, ImportExportModelAdmin, Use
 
         def custom_clean(form_self):
             cleaned_data = original_clean(form_self)
-            _apply_usuario_clean_validation(
-                form_ref=request_ref, admin=self, cleaned_data=cleaned_data
-            )
+            _apply_usuario_clean_validation(form_ref=request_ref, admin=self, cleaned_data=cleaned_data)
             return cleaned_data
 
         form.clean = custom_clean

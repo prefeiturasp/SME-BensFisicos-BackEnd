@@ -51,9 +51,7 @@ class UnsavedChangesAdminMixinTest(SimpleTestCase):
         self.assertIn("admin/unsaved_changes.css", media._css["all"])
 
     def test_localizacao_do_cadastro_multiplo_atualiza_payload_monitorado(self):
-        script = (
-            Path(settings.BASE_DIR) / "static" / "admin" / "bem_patrimonial.js"
-        ).read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static" / "admin" / "bem_patrimonial.js").read_text(encoding="utf-8")
 
         self.assertIn("function updateRowValidation()", script)
         self.assertIn("toPayload();", script)
@@ -63,9 +61,7 @@ class UnsavedChangesAdminMixinTest(SimpleTestCase):
         )
 
     def test_script_padroniza_textos_de_criacao_e_edicao(self):
-        script = (
-            Path(settings.BASE_DIR) / "static" / "admin" / "unsaved_changes.js"
-        ).read_text(encoding="utf-8")
+        script = (Path(settings.BASE_DIR) / "static" / "admin" / "unsaved_changes.js").read_text(encoding="utf-8")
 
         textos = (
             "Sair sem salvar?",

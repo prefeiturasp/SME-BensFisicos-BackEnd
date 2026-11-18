@@ -1,4 +1,5 @@
 from django.urls import path
+
 from inventario.views import download_conciliacao_pdf
 
 urlpatterns = [

@@ -1,6 +1,5 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
-from datetime import timedelta
 import tempfile
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group
@@ -15,10 +14,10 @@ from bem_patrimonial.models import (
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
-
 
 COMMAND_ENVIA_PATH = (
     "bem_patrimonial.management.commands."
@@ -133,9 +132,7 @@ class EnviaEmailMovimentacoesPendentesAceiteTestCase(TestCase):
 
 class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
     def setUp(self):
-        self.ua_origem = criar_ua(
-            nome="UA Origem", codigo=codigo_ua(0, 0, 0, 30), sigla="UA-O"
-        )
+        self.ua_origem = criar_ua(nome="UA Origem", codigo=codigo_ua(0, 0, 0, 30), sigla="UA-O")
         self.ua_destino = criar_ua(
             uo=self.ua_origem.unidade_orcamentaria,
             nome="UA Destino",
@@ -221,9 +218,7 @@ class NotificarMovimentacoesPendentesCommandTestCase(TestCase):
         kwargs = mock_envia.call_args.kwargs
         self.assertEqual(args[0], self.ua_destino)
         self.assertEqual(len(args[1]), 1)
-        self.assertEqual(
-            sorted(args[2]), sorted(["operador@test.com", "gestor@test.com"])
-        )
+        self.assertEqual(sorted(args[2]), sorted(["operador@test.com", "gestor@test.com"]))
         self.assertEqual(len(args[2]), len(set(args[2])))
         self.assertEqual(kwargs.get("dias_minimo"), 7)
         self.assertEqual(kwargs.get("dias_urgente"), 30)

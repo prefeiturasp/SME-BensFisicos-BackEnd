@@ -1,25 +1,25 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
-from django.test import TestCase, RequestFactory
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth.models import Group
+from django.test import RequestFactory, TestCase
 
+from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
+    MENSAGEM_SEM_PONTO_CENTRAL,
+    MovimentacaoBemPatrimonialForm,
+)
+from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
+    MovimentacaoBemPatrimonialAdmin,
+)
+from bem_patrimonial.constants import APROVADO
 from bem_patrimonial.models import (
     BemPatrimonial,
     MovimentacaoBemPatrimonial,
     MovimentacaoBensItem,
 )
-from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
-    MovimentacaoBemPatrimonialAdmin,
-)
-from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
-    MENSAGEM_SEM_PONTO_CENTRAL,
-    MovimentacaoBemPatrimonialForm,
-)
-from bem_patrimonial.constants import APROVADO
 from dados_comuns.models import UnidadeAdministrativa
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua, criar_uo
-from usuario.models import Usuario
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
+from usuario.models import Usuario
 
 
 class MovimentacaoEdicaoReadonlyTestCase(TestCase):
@@ -40,9 +40,7 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
         )
 
         self.grupo_gestor = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)[0]
-        self.grupo_operador = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )[0]
+        self.grupo_operador = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)[0]
 
         self.gestor = Usuario.objects.create_user(
             username="gestor",
@@ -90,9 +88,7 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _codigo_uo(self, a, b, c):
         return f"{int(a):02d}.{int(b):02d}.{int(c):02d}"
@@ -110,9 +106,7 @@ class MovimentacaoEdicaoReadonlyTestCase(TestCase):
         self.assertEqual(len(readonly_criacao), 0)
 
     def test_form_de_edicao_instancia_sem_keyerror_com_campos_readonly(self):
-        request = self.factory.get(
-            "/admin/bem_patrimonial/movimentacaobempatrimonial/1/change/"
-        )
+        request = self.factory.get("/admin/bem_patrimonial/movimentacaobempatrimonial/1/change/")
         request.user = self.gestor
 
         form_class = self.admin.get_form(request, obj=self.movimentacao)

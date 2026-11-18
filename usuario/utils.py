@@ -1,5 +1,6 @@
 from django.contrib.auth.models import Group, Permission
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
+
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 
 
 def atribuir_permissao(grupo, settings):
@@ -12,11 +13,7 @@ def atribuir_permissao(grupo, settings):
             for verb in verb_options:
                 if (verb + key == permission.codename) and verb in verbs_by_key:
                     grupo.permissions.add(permission)
-                    print(
-                        "Permissão adicionada ao grupo {} => {}".format(
-                            grupo, permission.codename
-                        )
-                    )
+                    print("Permissão adicionada ao grupo {} => {}".format(grupo, permission.codename))
 
 
 def setup_grupos_e_permissoes():

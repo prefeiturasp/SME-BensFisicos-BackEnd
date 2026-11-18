@@ -1,46 +1,43 @@
+import logging
 from datetime import datetime
+from urllib.parse import urlencode
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import SetPasswordForm
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import (
     LoginView,
     PasswordChangeView,
-    PasswordResetView,
     PasswordResetConfirmView,
+    PasswordResetView,
 )
-from dados_comuns.permissions import UsuarioPermission
-from dados_comuns.libs.pagination import SafePagination
-from rest_framework.filters import SearchFilter, OrderingFilter
-from rest_framework.exceptions import NotFound, PermissionDenied
-from django_filters.rest_framework import DjangoFilterBackend
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.tokens import default_token_generator
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.utils import ProgrammingError
-from django.shortcuts import get_object_or_404, redirect
 from django.http import HttpResponse
-from django.urls import reverse_lazy, reverse
-from urllib.parse import urlencode
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.generic import TemplateView
-from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
-from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
-from dados_comuns.historico_consulta import consultar_historico
-from dados_comuns.utils import dict_changes
-import logging
-from django.contrib.auth import get_user_model
-from rest_framework import viewsets, mixins, status
-from rest_framework.permissions import IsAdminUser
-from usuario.serializers import UsuarioSerializer
-from usuario.resources import UsuarioResource
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.response import Response
-from usuario.filters import UsuarioFilter
-from rest_framework.decorators import action
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
-    extend_schema,
     OpenApiResponse,
+    extend_schema,
 )
+from rest_framework import mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.response import Response
+
+from dados_comuns.api_serializers import HistoricoConsultaGrupoSerializer
+from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
+from dados_comuns.historico_consulta import consultar_historico
+from dados_comuns.libs.pagination import SafePagination
+from dados_comuns.models import HistoricoGeral, UnidadeAdministrativa
+from dados_comuns.permissions import UsuarioPermission
+from dados_comuns.utils import dict_changes
 from usuario.api_doc import (
     CREATE_USERS_DOC,
     DELETE_USERS_DOC,
@@ -51,7 +48,9 @@ from usuario.api_doc import (
     RETRIEVE_USERS_DOC,
     UPDATE_USERS_DOC,
 )
-from dados_comuns.escopo import filtrar_queryset_usuario_por_escopo
+from usuario.filters import UsuarioFilter
+from usuario.resources import UsuarioResource
+from usuario.serializers import UsuarioSerializer
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -98,10 +97,7 @@ class LoginPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
     def form_valid(self, form):
         resp = super().form_valid(form)
         updates = []
-        if (
-            hasattr(self.user_to_change, "must_change_password")
-            and self.user_to_change.must_change_password
-        ):
+        if hasattr(self.user_to_change, "must_change_password") and self.user_to_change.must_change_password:
             self.user_to_change.must_change_password = False
             updates.append("must_change_password")
         if hasattr(self.user_to_change, "last_password_change"):
@@ -187,17 +183,16 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
                 return user.unidade_administrativa.unidade_orcamentaria
         except ProgrammingError:
             logger.warning(
-                "Falha ao carregar Unidade Orçamentária ativa no selecionar_ua. "
-                "Verifique migrações pendentes."
+                "Falha ao carregar Unidade Orçamentária ativa no selecionar_ua. Verifique migrações pendentes."
             )
         return None
 
     def get_uas_disponiveis(self):
         user = self.request.user
         if user.is_superuser:
-            return UnidadeAdministrativa.objects.filter(
-                status=UnidadeAdministrativa.ATIVA
-            ).select_related("unidade_orcamentaria")
+            return UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA).select_related(
+                "unidade_orcamentaria"
+            )
         if user.is_gestor_patrimonio:
             uo_id = user.unidade_orcamentaria_id
             if uo_id:
@@ -205,9 +200,9 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
                     unidade_orcamentaria_id=uo_id,
                     status=UnidadeAdministrativa.ATIVA,
                 ).select_related("unidade_orcamentaria")
-        return user.unidades_administrativas.filter(
-            status=UnidadeAdministrativa.ATIVA
-        ).select_related("unidade_orcamentaria")
+        return user.unidades_administrativas.filter(status=UnidadeAdministrativa.ATIVA).select_related(
+            "unidade_orcamentaria"
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -220,9 +215,7 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
         ctx["uo_ativa"] = uo_ativa
         ctx["permite_visao_geral"] = permite_visao_geral and bool(uo_ativa)
         ctx["visao_geral_value"] = self.VISAO_GERAL_VALUE
-        ctx["visao_geral_selected"] = (
-            permite_visao_geral and not user.unidade_administrativa_id
-        )
+        ctx["visao_geral_selected"] = permite_visao_geral and not user.unidade_administrativa_id
         ctx["next"] = self.request.GET.get("next", reverse("admin:index"))
         ctx["error"] = None
         return ctx
@@ -259,16 +252,12 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
         user = request.user
         if not (user.is_superuser or user.is_gestor_patrimonio):
             ctx = self.get_context_data()
-            ctx["error"] = (
-                "A visão geral da UO é permitida apenas para gestor e superusuário."
-            )
+            ctx["error"] = "A visão geral da UO é permitida apenas para gestor e superusuário."
             return self.render_to_response(ctx)
         uo_ativa = self._obter_uo_ativa(user)
         if not uo_ativa:
             ctx = self.get_context_data()
-            ctx["error"] = (
-                "Não foi possível identificar a Unidade Orçamentária para visão geral."
-            )
+            ctx["error"] = "Não foi possível identificar a Unidade Orçamentária para visão geral."
             return self.render_to_response(ctx)
         if not uo_ativa.ativa:
             ctx = self.get_context_data()
@@ -289,19 +278,14 @@ class SelecionarUAView(LoginRequiredMixin, TemplateView):
         uas_disponiveis = self.get_uas_disponiveis()
         if not uas_disponiveis.filter(id=ua_id).exists():
             ctx = self.get_context_data()
-            ctx["error"] = (
-                "Você não tem permissão para acessar essa Unidade Administrativa."
-            )
+            ctx["error"] = "Você não tem permissão para acessar essa Unidade Administrativa."
             return self.render_to_response(ctx)
         ua = UnidadeAdministrativa.objects.get(id=ua_id)
         update_fields = []
         if user.unidade_administrativa_id != ua.id:
             user.unidade_administrativa = ua
             update_fields.append("unidade_administrativa")
-        if (
-            ua.unidade_orcamentaria_id
-            and user.unidade_orcamentaria_id != ua.unidade_orcamentaria_id
-        ):
+        if ua.unidade_orcamentaria_id and user.unidade_orcamentaria_id != ua.unidade_orcamentaria_id:
             user.unidade_orcamentaria = ua.unidade_orcamentaria
             update_fields.append("unidade_orcamentaria")
         self._save_user_ua_uo_historico(user, update_fields)
@@ -340,6 +324,7 @@ class UsuarioViewSet(
     """
     CRUD completo de usuários com controle explícito
     """
+
     serializer_class = UsuarioSerializer
     permission_classes = [UsuarioPermission]
     pagination_class = SafePagination
@@ -377,10 +362,9 @@ class UsuarioViewSet(
     # =========================================================
 
     def get_queryset(self):
-        qs = User.objects.select_related(
-            "unidade_orcamentaria",
-            "unidade_administrativa"
-        ).prefetch_related("groups", "unidades_administrativas")
+        qs = User.objects.select_related("unidade_orcamentaria", "unidade_administrativa").prefetch_related(
+            "groups", "unidades_administrativas"
+        )
         return filtrar_queryset_usuario_por_escopo(self.request.user, qs)
 
     # =========================================================
@@ -402,9 +386,7 @@ class UsuarioViewSet(
             return
 
         if getattr(user, "is_operador_inventario", False):
-            raise PermissionDenied(
-                "Operadores não possuem acesso ao gerenciamento de usuários."
-            )
+            raise PermissionDenied("Operadores não possuem acesso ao gerenciamento de usuários.")
 
         user_uo = getattr(user, "unidade_orcamentaria_id", None)
 
@@ -455,7 +437,7 @@ class UsuarioViewSet(
     # =========================================================
 
     @extend_schema(
-        tags=["Usuarios"],
+        tags=["Usuários"],
         summary="Exportar usuarios",
         description=EXPORT_USERS_DOC,
         responses={
@@ -472,9 +454,7 @@ class UsuarioViewSet(
         filename = f"usuarios_{timestamp}.xlsx"
         response = HttpResponse(
             dataset.xlsx,
-            content_type=(
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            ),
+            content_type=("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
         )
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
@@ -512,7 +492,7 @@ class UsuarioViewSet(
             valor_antigo="",
             valor_novo="",
             alterado_por=request.user,
-            justificativa="Usuário criado"
+            justificativa="Usuário criado",
         )
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -554,11 +534,7 @@ class UsuarioViewSet(
         instance = self.get_object()
         original = User.objects.get(pk=instance.pk)
 
-        serializer = self.get_serializer(
-            instance,
-            data=request.data,
-            partial=partial
-        )
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
 
         serializer.is_valid(raise_exception=True)
 
@@ -721,5 +697,3 @@ class UsuarioViewSet(
         instance = self.get_object()
         registros = consultar_historico(User, instance.pk)
         return Response(HistoricoConsultaGrupoSerializer(registros, many=True).data)
-
-

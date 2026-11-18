@@ -1,22 +1,13 @@
-from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
-from django.test import TestCase, RequestFactory
-from django.contrib.admin.sites import AdminSite
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.contrib import messages
 from unittest.mock import Mock, patch
 
-from bem_patrimonial.models import (
-    BemPatrimonial,
-    MovimentacaoBemPatrimonial,
-    MovimentacaoBensItem,
-)
-from bem_patrimonial.constants import (
-    APROVADO,
-    BLOQUEADO,
-    ENVIADA,
-    ACEITA,
-    CANCELADA,
-    REJEITADA,
+from django.contrib import messages
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import Group
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory, TestCase
+
+from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
+    obter_ua_ponto_central,
 )
 from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     MovimentacaoBemPatrimonialAdmin,
@@ -24,21 +15,29 @@ from bem_patrimonial.admins.movimentacao_bem_patrimonial import (
     cancelar_solicitacao,
     rejeitar_solicitacao,
 )
-from bem_patrimonial.admins.forms.movimentacao_bem_patrimonial_form import (
-    obter_ua_ponto_central,
+from bem_patrimonial.constants import (
+    ACEITA,
+    APROVADO,
+    BLOQUEADO,
+    CANCELADA,
+    ENVIADA,
+    REJEITADA,
 )
+from bem_patrimonial.models import (
+    BemPatrimonial,
+    MovimentacaoBemPatrimonial,
+    MovimentacaoBensItem,
+)
+from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua
 from dados_comuns.tests.factories import criar_ua, criar_uo
+from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
-from usuario.constants import GRUPO_OPERADOR_INVENTARIO, GRUPO_GESTOR_PATRIMONIO
-from django.contrib.auth.models import Group
 
 
 class SetupMovimentacaoData:
     def create_unidades_administrativas(self):
         ua_origem = criar_ua()
-        ua_destino = criar_ua(
-            uo=ua_origem.unidade_orcamentaria, nome="DRE Sul", codigo="DRE-SUL"
-        )
+        ua_destino = criar_ua(uo=ua_origem.unidade_orcamentaria, nome="DRE Sul", codigo="DRE-SUL")
         return ua_origem, ua_destino
 
     def create_usuarios(self, ua_origem, ua_destino):
@@ -90,9 +89,7 @@ class SetupMovimentacaoData:
             base = 1
             while True:
                 candidato = f"000.{str(base).zfill(12)}-0"
-                if not BemPatrimonial.objects.filter(
-                    numero_patrimonial=candidato
-                ).exists():
+                if not BemPatrimonial.objects.filter(numero_patrimonial=candidato).exists():
                     numero_patrimonial = candidato
                     break
                 base += 1
@@ -145,17 +142,13 @@ def codigo_uo(a, b, c):
 class BloqueioAutomaticoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
     def test_bem_bloqueado_ao_criar_movimentacao(self):
         self.assertEqual(self.bem.status, APROVADO)
@@ -196,17 +189,13 @@ class BloqueioAutomaticoTestCase(TestCase):
 class AprovacaoMovimentacaoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
@@ -251,17 +240,13 @@ class AprovacaoMovimentacaoTestCase(TestCase):
 class RejeicaoMovimentacaoTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
@@ -308,17 +293,13 @@ class RejeicaoMovimentacaoTestCase(TestCase):
 class PermissoesAdminActionsTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
         self.movimentacao = self.test_data.create_movimentacao_com_item(
             bem=self.bem,
@@ -329,9 +310,7 @@ class PermissoesAdminActionsTestCase(TestCase):
 
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
     def _create_request_with_messages(self, user):
         request = self.factory.post("/admin/")
@@ -435,9 +414,7 @@ class PermissoesAdminActionsTestCase(TestCase):
         )
 
         request = self._create_request_with_messages(self.operador_destino)
-        queryset = MovimentacaoBemPatrimonial.objects.filter(
-            pk__in=[self.movimentacao.pk, movimentacao2.pk]
-        )
+        queryset = MovimentacaoBemPatrimonial.objects.filter(pk__in=[self.movimentacao.pk, movimentacao2.pk])
 
         aprovar_solicitacao(self.admin, request, queryset)
 
@@ -457,9 +434,7 @@ class PermissoesAdminActionsTestCase(TestCase):
 
         storage = messages.get_messages(request)
         mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("já foi aprovada anteriormente" in msg for msg in mensagens)
-        )
+        self.assertTrue(any("já foi aprovada anteriormente" in msg for msg in mensagens))
 
     def test_nao_pode_rejeitar_movimentacao_ja_rejeitada(self):
         self.movimentacao.rejeitar_solicitacao(self.operador_destino)
@@ -472,9 +447,7 @@ class PermissoesAdminActionsTestCase(TestCase):
 
         storage = messages.get_messages(request)
         mensagens = [str(m) for m in storage]
-        self.assertTrue(
-            any("já foi rejeitada anteriormente" in msg for msg in mensagens)
-        )
+        self.assertTrue(any("já foi rejeitada anteriormente" in msg for msg in mensagens))
 
     def test_operador_fora_da_ua_destino_nao_pode_rejeitar(self):
         request = self._create_request_with_messages(self.operador_origem)
@@ -597,17 +570,13 @@ class PermissoesAdminActionsTestCase(TestCase):
 class IntegracaoCompletaTestCase(TestCase):
     def setUp(self):
         self.test_data = SetupMovimentacaoData()
-        self.ua_origem, self.ua_destino = (
-            self.test_data.create_unidades_administrativas()
-        )
+        self.ua_origem, self.ua_destino = self.test_data.create_unidades_administrativas()
         (
             self.operador_origem,
             self.operador_destino,
             self.gestor,
         ) = self.test_data.create_usuarios(self.ua_origem, self.ua_destino)
-        self.bem = self.test_data.create_bem_patrimonial(
-            self.operador_origem, self.ua_origem
-        )
+        self.bem = self.test_data.create_bem_patrimonial(self.operador_origem, self.ua_origem)
 
     def test_fluxo_completo_aprovacao(self):
         self.assertEqual(self.bem.status, APROVADO)
@@ -711,16 +680,10 @@ class PermissoesEntreUOsAdminActionsTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
         self.site = AdminSite()
-        self.admin = MovimentacaoBemPatrimonialAdmin(
-            MovimentacaoBemPatrimonial, self.site
-        )
+        self.admin = MovimentacaoBemPatrimonialAdmin(MovimentacaoBemPatrimonial, self.site)
 
-        self.grupo_operador, _ = Group.objects.get_or_create(
-            name=GRUPO_OPERADOR_INVENTARIO
-        )
-        self.grupo_gestor, _ = Group.objects.get_or_create(
-            name=GRUPO_GESTOR_PATRIMONIO
-        )
+        self.grupo_operador, _ = Group.objects.get_or_create(name=GRUPO_OPERADOR_INVENTARIO)
+        self.grupo_gestor, _ = Group.objects.get_or_create(name=GRUPO_GESTOR_PATRIMONIO)
 
         self.uo_origem = criar_uo(
             codigo=codigo_uo(1, 16, 20),
@@ -809,9 +772,7 @@ class PermissoesEntreUOsAdminActionsTestCase(TestCase):
 
         self.movimentacao = self._create_movimentacao(solicitado_por=self.operador_origem)
 
-    def _create_gestor(
-        self, username, email, unidade_orcamentaria, unidade_administrativa
-    ):
+    def _create_gestor(self, username, email, unidade_orcamentaria, unidade_administrativa):
         gestor = Usuario.objects.create_user(
             username=username,
             email=email,
@@ -900,9 +861,7 @@ class PermissoesEntreUOsAdminActionsTestCase(TestCase):
             "rejeitado_por",
         )
 
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
-    )
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada")
     def test_gestor_origem_pode_cancelar_movimentacao_entre_uos(self, mock_email):
         self._assert_acao_permitida(
             cancelar_solicitacao,
@@ -912,9 +871,7 @@ class PermissoesEntreUOsAdminActionsTestCase(TestCase):
         )
         mock_email.assert_called_once()
 
-    @patch(
-        "bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada"
-    )
+    @patch("bem_patrimonial.admins.movimentacao_bem_patrimonial.envia_email_solicitacao_movimentacao_cancelada")
     def test_gestor_destino_pode_cancelar_movimentacao_entre_uos(self, mock_email):
         self._assert_acao_permitida(
             cancelar_solicitacao,

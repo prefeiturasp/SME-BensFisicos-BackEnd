@@ -1,5 +1,6 @@
-from dados_comuns.models import UnidadeAdministrativa
 from django.db.models import Q
+
+from dados_comuns.models import UnidadeAdministrativa
 
 
 def usuario_e_super_admin(usuario):
@@ -20,9 +21,7 @@ def uas_acessiveis_para_importacao(usuario, queryset_ua=None):
     as UAs que o frontend ofereceu na importação.
     """
     if queryset_ua is None:
-        queryset_ua = UnidadeAdministrativa.objects.filter(
-            status=UnidadeAdministrativa.ATIVA
-        )
+        queryset_ua = UnidadeAdministrativa.objects.filter(status=UnidadeAdministrativa.ATIVA)
 
     ua_id = getattr(usuario, "unidade_administrativa_id", None)
     if ua_id:
@@ -129,9 +128,7 @@ def validar_objeto_no_escopo(usuario, objeto, campo_ua="unidade_administrativa")
     # 2.2) gestor sem UA -> objeto deve pertencer à UO dele
     if is_gestor and uo_id:
         ua_obj = getattr(objeto, campo_ua, None)
-        return bool(
-            ua_obj and getattr(ua_obj, "unidade_orcamentaria_id", None) == uo_id
-        )
+        return bool(ua_obj and getattr(ua_obj, "unidade_orcamentaria_id", None) == uo_id)
 
     return False
 
@@ -187,17 +184,13 @@ def filtrar_queryset_movimentacao_por_escopo(usuario, queryset):
     ua_ids = list(filtrar_ua_origem_por_escopo(usuario).values_list("id", flat=True))
     if ua_ids:
         return queryset.filter(
-            Q(unidade_administrativa_origem_id__in=ua_ids)
-            | Q(unidade_administrativa_destino_id__in=ua_ids)
+            Q(unidade_administrativa_origem_id__in=ua_ids) | Q(unidade_administrativa_destino_id__in=ua_ids)
         )
 
-    ua_uo_ids = list(
-        filtrar_ua_destino_por_uo_do_usuario(usuario).values_list("id", flat=True)
-    )
+    ua_uo_ids = list(filtrar_ua_destino_por_uo_do_usuario(usuario).values_list("id", flat=True))
     if ua_uo_ids:
         return queryset.filter(
-            Q(unidade_administrativa_origem_id__in=ua_uo_ids)
-            | Q(unidade_administrativa_destino_id__in=ua_uo_ids)
+            Q(unidade_administrativa_origem_id__in=ua_uo_ids) | Q(unidade_administrativa_destino_id__in=ua_uo_ids)
         )
 
     return queryset.none()
@@ -214,10 +207,7 @@ def filtrar_queryset_transferencia_por_escopo(usuario, queryset):
     if not (is_gestor and uo_id):
         return queryset.none()
 
-    return queryset.filter(
-        Q(unidade_orcamentaria_origem_id=uo_id)
-        | Q(unidade_orcamentaria_destino_id=uo_id)
-    )
+    return queryset.filter(Q(unidade_orcamentaria_origem_id=uo_id) | Q(unidade_orcamentaria_destino_id=uo_id))
 
 
 def filtrar_queryset_bem_por_escopo_com_transferencia(usuario, queryset):
@@ -270,6 +260,5 @@ def validar_bem_no_escopo_com_transferencia(usuario, bem):
         return False
 
     return bem.transferencias.filter(
-        Q(unidade_orcamentaria_origem_id=uo_id)
-        | Q(unidade_orcamentaria_destino_id=uo_id)
+        Q(unidade_orcamentaria_origem_id=uo_id) | Q(unidade_orcamentaria_destino_id=uo_id)
     ).exists()
