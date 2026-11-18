@@ -30,13 +30,14 @@ import openpyxl
 from django.contrib.auth.models import Group
 from rest_framework import status
 from rest_framework.test import APIClient, APITransactionTestCase
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from bem_patrimonial import constants as bem_constants
 from bem_patrimonial.models import BemPatrimonial
 from dados_comuns.tests.auth_test_utils import auth_kwargs, codigo_ua, codigo_uo
 from dados_comuns.tests.factories import criar_ua, criar_uo
 from inventario import constants as inv_constants
-from inventario.models import ConciliacaoUA
+from inventario.models import ConciliacaoUA, ItemConciliacao
 from usuario.constants import GRUPO_GESTOR_PATRIMONIO, GRUPO_OPERADOR_INVENTARIO
 from usuario.models import Usuario
 
@@ -117,6 +118,30 @@ class ImportacaoBensComConciliacaoEmAbertoTestCase(APITransactionTestCase):
         self.client.post("/api/bens/importar/", {"arquivo": arquivo}, format="multipart")
 
         self.assertFalse(BemPatrimonial.objects.filter(numero_patrimonial="001.000000002-0").exists())
+
+    def test_create_multi_grava_item_conciliacao_com_usuario_autenticado(self):
+        client = APIClient()
+        token = str(RefreshToken.for_user(self.usuario).access_token)
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        response = client.post(
+            "/api/bens/multi/",
+            {
+                "unidade_administrativa": self.ua.id,
+                "nome": "Bem Multi Auditoria",
+                "descricao": "Descrição",
+                "valor_unitario": "10,00",
+                "marca": "Marca",
+                "modelo": "Modelo",
+                "multi_payload": [{"numero_patrimonial": "001.000000010-0", "localizacao": "Sala"}],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        bem = BemPatrimonial.objects.get(numero_patrimonial="001.000000010-0")
+        item = ItemConciliacao.objects.get(conciliacao=self.conciliacao_aberta, bem=bem)
+        self.assertEqual(item.atualizado_por, self.usuario)
 
     def test_importar_bloqueada_mesmo_com_multiplas_conciliacoes_abertas_para_a_ua(self):
         ConciliacaoUA.objects.create(

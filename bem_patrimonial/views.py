@@ -384,8 +384,8 @@ class BemPatrimonialViewSet(viewsets.ModelViewSet):
         multi_payload = vdata.pop("multi_payload")
         base = vdata
 
-        with transaction.atomic():
-            with audit_as(request.user):
+        with audit_as(request.user):
+            with transaction.atomic():
                 bens = []
                 for item in multi_payload:
                     sem = item.get("sem_numeracao", False)
